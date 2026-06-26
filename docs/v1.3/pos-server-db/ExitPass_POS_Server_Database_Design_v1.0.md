@@ -10,7 +10,7 @@
 | Version | v1.0 |
 | Product scope | ExitPass POS Server fiscal database design for ExitPass v1.3 |
 | Repository | `ExitPass-PoSServer` |
-| Status | Draft for review |
+| Status | Approved baseline |
 | Output format | Markdown only |
 | BRD baseline | `docs/v1.3/pos-invoicing/ExitPass_POS_Invoicing_BRD_v1.0.md` |
 | System Design baseline | `docs/v1.3/pos-server/ExitPass_POS_Server_System_Design_v1.0.md` |
@@ -21,13 +21,13 @@
 
 | Version | Status | Notes |
 | --- | --- | --- |
-| v1.0 | Draft for review | First POS Server Database Design draft, aligned to the ExitPass Database Design v1.2 writing pattern while preserving POS Server-specific approved requirements. |
+| v1.0 | Approved baseline | Approved logical database design baseline for ExitPass POS Server v1.0. |
 
 ### Approval and Baseline Status
 
-This document is not yet an approved database baseline. It is a logical database design draft for review.
+This document is approved as the POS Server Database Design v1.0 logical database design baseline. It governs POS Server database persistence semantics for downstream physical database design, state-based database object artifacts, Engineering Pack work, BIR/accreditation support, test data planning, validation planning, and implementation planning.
 
-After approval, this document is intended to govern POS Server database persistence semantics for downstream POS Server database artifacts, Engineering Pack work, BIR/accreditation support, test data planning, and implementation planning.
+Approval of this logical database design does not create or approve SQL DDL, physical table names, physical column names, physical indexes, physical constraints, physical schemas, enum implementation, Atlas/state files, migrations, endpoint DTOs, event payloads, final RBAC matrix, or the final BIR/accreditation package.
 
 ### Baseline Scope Statement
 
