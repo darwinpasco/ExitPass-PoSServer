@@ -1,0 +1,28 @@
+# ExitPass POS Server Physical DB Gate Readiness Matrix
+
+| # | Gate item | Status | Resolution / default | Owner | Blocks `db/` folder creation | Blocks SQL/object artifacts | Blocks implementation | Blocks accreditation | Next action |
+| ---: | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| 1 | Target database engine confirmed | Resolved as planning default; version pending | PostgreSQL default; version/features/extensions/hosting pending. | Engineering / Operations | No | Yes | Yes | No | Confirm PostgreSQL version/features. |
+| 2 | Schema/domain decomposition approved | Resolved as planning default | Use candidate domains from approved logical design; names provisional. | Physical DB Design | No | Yes | Yes | No | Confirm final schema names. |
+| 3 | Naming standards approved | Resolved as planning default | Lowercase, snake_case by default, plural tables, explicit key/constraint/index names, `_id` internal IDs, `_ref` external refs. | Physical DB Design | No | Yes | Yes | No | Confirm naming standards in physical design. |
+| 4 | Object-level folder structure approved | Resolved | Approved future `db/` layout; do not create in this package. | Physical DB Design / Engineering | No | No | No | No | Create skeleton only in separate bootstrap task. |
+| 5 | State-based versioning workflow approved | Resolved | Edit repo state, rebuild, validate, drift-check, evidence, authority review, merge reviewed changes only. | Engineering / CI/CD | No | No | Yes | No | Select tooling later. |
+| 6 | Rebuild script plan approved | Resolved | Clean DB, apply state in manifest order, load approved data, validate, drift-check, capture evidence. | Engineering | No | No | Yes | No | Implement scripts later. |
+| 7 | Drift-check plan approved | Resolved | Repository state is source of truth; report drift; no auto-promotion; optional Atlas later. | Engineering / CI/CD | No | No | Yes | No | Choose drift tooling later. |
+| 8 | Validation script plan approved | Resolved | Validate rebuild, inventory, constraints, codes, authority, idempotency, numbering, Digital SI URL, reports, audit/recovery, security/privacy. | Engineering / QA | No | No | Yes | May support | Implement scripts later. |
+| 9 | Seed/reference data separation approved | Resolved | Separate object definitions, seeds, reference data, samples/accreditation, env data, secrets, external docs. | Engineering / Compliance | No | No | Yes | May support | Enforce in folder bootstrap. |
+| 10 | Enum versus controlled-code strategy approved | Resolved as strategy | Stable lifecycle states may use enum or state tables; evolving classifications use controlled code sets. | Physical DB Design / BIR accounting | No | Yes | Yes | May affect | Decide per domain. |
+| 11 | Idempotency uniqueness strategy approved | Resolved as placeholder policy | Support key, scope, semantic identity/hash, linked operation, replay, conflicts, timeout/completion unknown, duplicate prevention. | API / Physical DB Design | No | Yes | Yes | No | Define constraints/indexes in physical design. |
+| 12 | Fiscal numbering/counter strategy confirmed or placeholder approved | Resolved as placeholder policy | Site POS Server SI sequence, adjustment family sequence, display number separate from internal ID, gap audit, no reuse, reset/Z rules. | BIR accounting / Physical DB Design | No | Yes | Yes | Yes | Confirm with BIR/accounting before production issuance. |
+| 13 | Retention/partitioning strategy reviewed | Pending confirmation | Use approved retention categories; partition likely high-volume audit/access/export/status/event records. | BIR accounting / Security / Operations | No | Yes | Yes | Yes | Confirm periods and partition keys. |
+| 14 | Digital SI URL security model reviewed | Resolved as posture; details pending | Opaque token/reference, read-only access, lifecycle, minimum exposure, access audit where required. | Security / Privacy | No | Yes | Yes | May affect | Confirm token/auth/expiry/access audit. |
+| 15 | BIR/accreditation output/export expectations reviewed | Resolved as minimum target | Support SI, X/Z, EJ, POSLog, BIR Summary/Annex E, audit, JSON/PDF/print, reprints, validation evidence, identity, recovery/counter evidence. | BIR accreditation / Engineering | No | Yes | Yes | Yes | Confirm final examiner package. |
+| 16 | ARTS POSLog profile/schema mapping reviewed | Resolved as posture; details pending | ARTS POSLog 6.x default reference; preserve BIR outputs and local/BIR mappings. | Engineering / BIR accreditation | No | Yes | Yes | Yes | Confirm accepted profile/mapping. |
+| 17 | Tamper-evident anchoring approach reviewed | Resolved as posture; mechanism pending | Append-only audit chain, hash chaining where practical, latest EJ hash, timestamp, counters/GTA, snapshots, external anchors where practical, supervised recovery. | Security / Engineering / Operations | No | Yes | Yes | May affect | Confirm final mechanism. |
+| 18 | No local drift promotion rule confirmed | Resolved | Local drift must become reviewed repo artifacts before baseline. | Engineering / CI/CD | No | No | Yes | No | Enforce in PR process. |
+
+## Readiness Summary
+
+- `db/` folder skeleton creation is conditionally ready as a separate bootstrap task after stakeholder acceptance of this package.
+- SQL/object artifact creation is not ready until PostgreSQL details, schema names, naming, numbering, security, retention, ARTS mapping, and anchoring decisions are confirmed or explicitly handled by placeholder policies.
+- Implementation and accreditation work remain blocked by the pending confirmations identified above.
