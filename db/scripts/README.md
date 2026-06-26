@@ -12,7 +12,7 @@ Repository SQL is the source of truth. Local database drift is reported only and
 
 ## Modes
 
-| Mode | Requires `psql` | Purpose |
+| Mode | Requires `psql` or Docker | Purpose |
 | --- | --- | --- |
 | `Static` | No | Validates manifest completeness, prohibited SQL patterns, naming posture, and detectable identifier length. |
 | `Rebuild` | Yes | Applies SQL files from the manifest to an explicit PostgreSQL target in deterministic order. |
@@ -34,14 +34,66 @@ Optional database name evidence/safety context:
 .\db\scripts\Invoke-PosDbChecks.ps1 -Mode Inventory -ConnectionString $env:POSSERVER_DB_URL -DatabaseName posserver_validation_local -EvidenceDir .\db\validation\evidence\local-inventory
 ```
 
+## Docker psql Usage
+
+Use Docker mode when the machine has Docker but does not have a local PostgreSQL client installed.
+
+Start a disposable PostgreSQL database:
+
+```powershell
+docker run --name posserver-validation-db `
+  -e POSTGRES_PASSWORD=postgres `
+  -e POSTGRES_DB=posserver_validation_local `
+  -p 55432:5432 `
+  -d postgres:16-alpine
+```
+
+Set a connection string that the Docker psql client container can use. On Docker Desktop for Windows, `host.docker.internal` usually resolves from the client container back to the Windows host port mapping:
+
+```powershell
+$env:POSSERVER_DB_URL = 'postgresql://postgres:postgres@host.docker.internal:55432/posserver_validation_local'
+```
+
+Run all checks through Docker psql:
+
+```powershell
+.\db\scripts\Invoke-PosDbChecks.ps1 `
+  -Mode All `
+  -UseDockerPsql `
+  -ConnectionString $env:POSSERVER_DB_URL `
+  -DatabaseName posserver_validation_local `
+  -EvidenceDir .\db\validation\evidence\docker-all
+```
+
+If the PostgreSQL database is on a Docker network, use a network alias in the connection string and pass the network name:
+
+```powershell
+.\db\scripts\Invoke-PosDbChecks.ps1 `
+  -Mode All `
+  -UseDockerPsql `
+  -DockerNetwork posserver-validation-net `
+  -ConnectionString 'postgresql://postgres:postgres@posserver-validation-db:5432/posserver_validation_local' `
+  -DatabaseName posserver_validation_local `
+  -EvidenceDir .\db\validation\evidence\docker-network-all
+```
+
+Docker mode defaults:
+
+- `-DockerImage postgres:16-alpine`
+- `-DockerHostAlias host.docker.internal`
+- `-DockerContainerName posserver-db-checks-psql`
+
+The script mounts the repository read-only at `/work` inside the psql client container, sets Docker `--entrypoint psql`, and applies manifest files using container-visible paths. Docker mode does not run the PostgreSQL image's default server command.
+
 ## Required Environment
 
 - PowerShell
 - No external PowerShell modules
-- `psql` on `PATH` only for `Rebuild`, `Inventory`, `Drift`, or DB-dependent `All` checks
+- local `psql` on `PATH` for DB-dependent checks without `-UseDockerPsql`
+- Docker for DB-dependent checks with `-UseDockerPsql`
 - An explicit PostgreSQL connection string for DB-dependent checks
 
-The script does not require Atlas or Docker.
+The script does not require Atlas. Docker is required only when `-UseDockerPsql` is provided.
 
 ## No Production / Shared DB Warning
 
@@ -50,6 +102,8 @@ Use only disposable or explicitly approved local validation databases.
 The script refuses obvious production/shared target names such as names containing `prod`, `production`, `live`, `shared`, `authority`, or `central_pms`. The check is conservative and does not replace operator judgment.
 
 The script does not create or drop databases. Prepare the disposable database outside this script, then pass its connection string.
+
+Do not pass production/shared database connection strings to local or Docker mode.
 
 ## Evidence Output
 
@@ -69,6 +123,8 @@ For each mode, the script writes:
 - Inventory checks compare expected schemas/tables and report functions, triggers, extensions, and sequences; they do not validate every column definition yet.
 - Drift checks report drift only. They never update repository SQL or validation configuration.
 - Rebuild mode applies SQL to the provided target but does not create/drop the database.
+- Docker mode depends on Docker being installed/running and on the selected Docker image being pullable or already available.
+- Docker mode does not hide secrets from Docker itself; do not use production credentials. The script avoids printing the connection string in summaries and evidence.
 - CI integration is intentionally deferred.
 
 ## Next Steps

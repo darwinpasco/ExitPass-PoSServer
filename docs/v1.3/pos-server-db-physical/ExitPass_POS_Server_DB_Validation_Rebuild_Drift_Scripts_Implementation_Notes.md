@@ -6,6 +6,8 @@ This document records the first executable POS Server database validation, rebui
 
 The package is intended to validate the current repository SQL state for slices 1 through 8 without adding new database objects, modifying existing object SQL, creating Atlas or migration artifacts, creating seed/reference/sample data, or adding CI workflows.
 
+This implementation now supports both local `psql` execution and Docker-based `psql` execution for development environments that use Docker instead of a locally installed PostgreSQL client.
+
 Repository SQL under `db/state` remains the source of truth. Local database state may be checked and reported, but must not be promoted into repository artifacts.
 
 ## 2. Implemented Files
@@ -25,9 +27,9 @@ Repository SQL under `db/state` remains the source of truth. Local database stat
 | Mode | Requires `psql` | Summary |
 | --- | --- | --- |
 | `Static` | No | Validates manifest completeness, SQL inventory coverage, prohibited patterns, naming posture, quoted identifiers, schema qualification, and detectable PostgreSQL identifier length. |
-| `Rebuild` | Yes | Applies all SQL files from `db/rebuild/pos_sql_apply_order.txt` to an explicitly provided PostgreSQL connection. |
-| `Inventory` | Yes | Queries PostgreSQL catalog/information schema for schemas, tables, constraints, indexes, functions, triggers, extensions, and sequences, then compares schemas/tables to expected inventory. |
-| `Drift` | Yes | Compares database inventory to repository expected inventory and reports drift only. |
+| `Rebuild` | Yes, local or Docker | Applies all SQL files from `db/rebuild/pos_sql_apply_order.txt` to an explicitly provided PostgreSQL connection. |
+| `Inventory` | Yes, local or Docker | Queries PostgreSQL catalog/information schema for schemas, tables, constraints, indexes, functions, triggers, extensions, and sequences, then compares schemas/tables to expected inventory. |
+| `Drift` | Yes, local or Docker | Compares database inventory to repository expected inventory and reports drift only. |
 | `All` | Static without connection string; all modes with connection string | Runs Static first, then DB-dependent checks only when an explicit connection string is provided. |
 
 ## 4. Validated Items
@@ -75,15 +77,18 @@ The first implementation does not yet validate:
 
 These are future increments after the base validation/rebuild/drift workflow is stable.
 
-## 6. `psql` Dependency
+## 6. `psql` / Docker Dependency
 
 `Static` mode does not require `psql`.
 
 `Rebuild`, `Inventory`, `Drift`, and DB-dependent `All` checks require:
 
-- PostgreSQL client `psql` on `PATH`
+- PostgreSQL client `psql` on `PATH`; or
+- Docker with `-UseDockerPsql`, using a PostgreSQL client image such as `postgres:16-alpine`
 - explicit `-ConnectionString`
 - disposable or explicitly approved non-production database target
+
+Docker mode mounts the repository read-only at `/work` inside the client container, uses Docker `--entrypoint psql`, and translates manifest paths to container-visible paths before applying SQL files. It does not run the PostgreSQL image's default server command. The default Docker image is `postgres:16-alpine`, and the default host alias guidance is `host.docker.internal`.
 
 The script does not install PostgreSQL, Docker, Atlas, or external PowerShell modules.
 
@@ -98,6 +103,8 @@ This package does not create:
 - generated schema state files
 
 Atlas and CI remain future workstreams after the local validation package is stable.
+
+Docker support does not add CI workflow files and does not change the no-Atlas posture.
 
 ## 8. Source-of-Truth Rule
 
@@ -140,10 +147,12 @@ Known limitations:
 - inventory comparison is schema/table-focused
 - DB rebuild mode assumes the caller prepares an empty disposable database
 - production/shared target detection is conservative but not exhaustive
+- Docker mode depends on Docker availability, image availability, and valid host/network addressing from the psql client container
+- Docker mode does not make production credentials safe; operators must use disposable local validation credentials only
 - column-level and constraint-expression validation require a future machine-readable model
 
 ## 12. Recommended Next Step
 
-Run `Static` mode in each DB artifact branch and run `All` mode against a disposable local PostgreSQL database before future SQL object changes.
+Run `Static` mode in each DB artifact branch and run `All` mode against a disposable PostgreSQL database before future SQL object changes. Use local `psql` when available or `-UseDockerPsql` when the development environment uses Docker.
 
 After this package is reviewed, the next recommended implementation increment is column/constraint/foreign-key inventory validation, followed by controlled-code seed/reference data as a separate approved task.
