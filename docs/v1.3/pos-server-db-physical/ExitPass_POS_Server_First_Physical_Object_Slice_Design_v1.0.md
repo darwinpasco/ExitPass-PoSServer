@@ -7,7 +7,7 @@
 | Title | ExitPass POS Server First Physical Object Slice Design |
 | Version | v1.0 |
 | Repository | `ExitPass-PoSServer` |
-| Status | Draft for review |
+| Status | Approved baseline |
 | Output format | Markdown only |
 | Approved BRD baseline | `docs/v1.3/pos-invoicing/ExitPass_POS_Invoicing_BRD_v1.0.md` |
 | Approved System Design baseline | `docs/v1.3/pos-server/ExitPass_POS_Server_System_Design_v1.0.md` |
@@ -18,7 +18,19 @@
 | Approved Schema/Naming Standards baseline | `docs/v1.3/pos-server-db-physical/ExitPass_POS_Server_Physical_DB_Schema_Naming_Standards_v1.0.md` |
 | Approved Physical Object Design baseline | `docs/v1.3/pos-server-db-physical/ExitPass_POS_Server_Physical_Object_Design_v1.0.md` |
 | Approved First Slice Planning baseline | `docs/v1.3/pos-server-db-physical/ExitPass_POS_Server_First_Physical_Object_Slice_Source_Analysis.md` |
-| Physical artifact status | No SQL, DDL, Atlas files, migrations, physical database object files, seed/reference/sample data, scripts, CI workflows, source code, DOCX files, or diagrams are created by this draft. |
+| Physical artifact status | No SQL, DDL, Atlas files, migrations, physical database object files, seed/reference/sample data, scripts, CI workflows, source code, DOCX files, or diagrams are created or authorized by this approved baseline. |
+
+## Approval / Baseline Status
+
+This document is approved as the First Physical Object Slice Design v1.0 baseline. It governs future first-slice physical object artifact tasks for foundation/configuration/controlled-code posture, fiscal identity / Site POS Server boundary, channel/terminal registry, and Central PMS reference naming posture.
+
+Approval of this design baseline does not authorize creating SQL files, DDL, Atlas files, migrations, physical database object files, seed/reference/sample data, validation scripts, rebuild scripts, drift scripts, CI workflows, source code, DOCX files, or diagrams.
+
+The approved first-slice design scope remains limited to foundation / configuration / controlled-code posture, fiscal identity / Site POS Server boundary, channel/terminal registry, and Central PMS reference naming posture.
+
+The excluded areas remain out of scope: fiscal document issuance, Sales Invoice issuance objects, SI/adjustment numbering implementation, fiscal counters, idempotency physical constraints/indexes, Digital SI URL token/access objects, reprints, adjustments, reports, exports, audit trail physical objects, recovery/anchoring physical objects, optional events/outbox, validation/rebuild/drift scripts, and CI workflows.
+
+Any future SQL/object artifact task must be separate and must include explicit checks for PostgreSQL assumptions, first-slice object names, enum versus controlled-code decisions, Central PMS reference-only naming, authority-boundary validation, and no local drift promotion.
 
 ## 2. Purpose and Scope
 
