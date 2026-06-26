@@ -1,0 +1,158 @@
+{
+  "source_of_truth": "Repository SQL files under db/state are the POS Server database source of truth. Local database drift must be reported and must not be promoted into repository artifacts.",
+  "expected_schemas": [
+    "pos"
+  ],
+  "expected_table_count": 51,
+  "expected_tables": [
+    "pos.access_audit",
+    "pos.annex_e_reports",
+    "pos.bir_sales_summary_reports",
+    "pos.channel_terminal_capabilities",
+    "pos.channel_terminal_status_history",
+    "pos.channel_terminals",
+    "pos.configuration_audit",
+    "pos.continuity_check_results",
+    "pos.controlled_code_sets",
+    "pos.controlled_codes",
+    "pos.digital_si_url_access_events",
+    "pos.digital_si_urls",
+    "pos.electronic_journal_records",
+    "pos.export_schema_profile_refs",
+    "pos.export_validation_results",
+    "pos.fiscal_action_audit",
+    "pos.fiscal_adjustment_status_history",
+    "pos.fiscal_adjustments",
+    "pos.fiscal_anchor_refs",
+    "pos.fiscal_counter_states",
+    "pos.fiscal_discount_privilege_details",
+    "pos.fiscal_document_lines",
+    "pos.fiscal_document_links",
+    "pos.fiscal_document_status_history",
+    "pos.fiscal_documents",
+    "pos.fiscal_export_package_items",
+    "pos.fiscal_export_packages",
+    "pos.fiscal_export_requests",
+    "pos.fiscal_identities",
+    "pos.fiscal_lock_states",
+    "pos.fiscal_operation_exceptions",
+    "pos.fiscal_operation_retries",
+    "pos.fiscal_report_output_refs",
+    "pos.fiscal_report_requests",
+    "pos.fiscal_report_scopes",
+    "pos.fiscal_sequence_gap_audit",
+    "pos.fiscal_sequence_policies",
+    "pos.fiscal_sequence_states",
+    "pos.fiscal_state_snapshots",
+    "pos.fiscal_tax_details",
+    "pos.fiscal_tenders",
+    "pos.fiscal_totals",
+    "pos.idempotency_records",
+    "pos.privileged_action_audit",
+    "pos.recovery_requests",
+    "pos.reprint_output_refs",
+    "pos.reprint_requests",
+    "pos.security_reference_contexts",
+    "pos.site_pos_server_fiscal_identity_history",
+    "pos.site_pos_servers",
+    "pos.x_z_reports"
+  ],
+  "object_families": {
+    "slice_1_foundation_identity_channel": [
+      "pos.controlled_code_sets",
+      "pos.controlled_codes",
+      "pos.site_pos_servers",
+      "pos.fiscal_identities",
+      "pos.site_pos_server_fiscal_identity_history",
+      "pos.channel_terminals",
+      "pos.channel_terminal_capabilities",
+      "pos.channel_terminal_status_history"
+    ],
+    "slice_2_fiscal_document_core": [
+      "pos.fiscal_documents",
+      "pos.fiscal_document_status_history",
+      "pos.fiscal_document_links"
+    ],
+    "slice_3_fiscal_details": [
+      "pos.fiscal_document_lines",
+      "pos.fiscal_tenders",
+      "pos.fiscal_tax_details",
+      "pos.fiscal_discount_privilege_details",
+      "pos.fiscal_totals"
+    ],
+    "slice_4_numbering_counters_idempotency_retry": [
+      "pos.fiscal_sequence_policies",
+      "pos.fiscal_sequence_states",
+      "pos.fiscal_sequence_gap_audit",
+      "pos.fiscal_counter_states",
+      "pos.fiscal_state_snapshots",
+      "pos.fiscal_lock_states",
+      "pos.idempotency_records",
+      "pos.fiscal_operation_retries",
+      "pos.fiscal_operation_exceptions"
+    ],
+    "slice_5_digital_si_reprints_adjustments": [
+      "pos.digital_si_urls",
+      "pos.digital_si_url_access_events",
+      "pos.reprint_requests",
+      "pos.reprint_output_refs",
+      "pos.fiscal_adjustments",
+      "pos.fiscal_adjustment_status_history"
+    ],
+    "slice_6_reports": [
+      "pos.fiscal_report_requests",
+      "pos.fiscal_report_scopes",
+      "pos.x_z_reports",
+      "pos.bir_sales_summary_reports",
+      "pos.annex_e_reports",
+      "pos.fiscal_report_output_refs"
+    ],
+    "slice_7_ej_poslog_json_exports": [
+      "pos.electronic_journal_records",
+      "pos.fiscal_export_requests",
+      "pos.fiscal_export_packages",
+      "pos.fiscal_export_package_items",
+      "pos.export_validation_results",
+      "pos.export_schema_profile_refs"
+    ],
+    "slice_8_audit_recovery_anchoring_security": [
+      "pos.fiscal_action_audit",
+      "pos.privileged_action_audit",
+      "pos.configuration_audit",
+      "pos.access_audit",
+      "pos.recovery_requests",
+      "pos.continuity_check_results",
+      "pos.fiscal_anchor_refs",
+      "pos.security_reference_contexts"
+    ]
+  },
+  "not_expected_yet": {
+    "views": [],
+    "functions": [],
+    "triggers": [],
+    "extensions": [],
+    "sequences": [],
+    "atlas": [],
+    "migrations": [],
+    "seed_reference_sample_data": [],
+    "ci_workflows": []
+  },
+  "prohibited_families": [
+    "POS-owned payment finality lifecycle",
+    "POS-owned PaymentAttempt lifecycle",
+    "POS-owned PaymentConfirmation lifecycle",
+    "POS-owned ExitAuthorization",
+    "gate execution authority",
+    "independent terminal fiscal authority",
+    "offline fiscal issuance approval",
+    "outbox/event publication lifecycle",
+    "raw credential/token/evidence/key storage",
+    "generated payload or binary storage",
+    "Atlas/migration artifacts"
+  ],
+  "notes": [
+    "Expected inventory includes schemas and tables only.",
+    "Reference-only fields such as payment_finality_ref, central_pms_payment_attempt_ref, central_pms_payment_confirmation_ref, vendor_ack_ref, and evidence_ref are allowed as references.",
+    "Database inventory drift must be reported only; this package does not promote local database state."
+  ]
+}
