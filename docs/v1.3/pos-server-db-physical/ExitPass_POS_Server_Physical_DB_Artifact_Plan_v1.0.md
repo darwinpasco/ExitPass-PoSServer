@@ -1,4 +1,4 @@
-﻿# ExitPass POS Server Physical DB Artifact Plan v1.0
+# ExitPass POS Server Physical DB Artifact Plan v1.0
 
 ## 1. Document Control
 
@@ -10,19 +10,25 @@
 | Version | v1.0 |
 | Repository | `ExitPass-PoSServer` |
 | Product scope | POS Server physical database artifact and state-based object layout planning for ExitPass v1.3 |
-| Status | Draft for review |
+| Status | Approved baseline |
 | Output format | Markdown only |
 | Approved BRD baseline | `docs/v1.3/pos-invoicing/ExitPass_POS_Invoicing_BRD_v1.0.md` |
 | Approved System Design baseline | `docs/v1.3/pos-server/ExitPass_POS_Server_System_Design_v1.0.md` |
 | Approved API Contract baseline | `docs/v1.3/pos-server-api/ExitPass_POS_Server_API_Contract_v1.0.md` |
 | Approved Database Design baseline | `docs/v1.3/pos-server-db/ExitPass_POS_Server_Database_Design_v1.0.md` |
-| Physical artifact status | No SQL, Atlas, migrations, physical object files, `db/` folder, seed data, validation scripts, rebuild scripts, drift scripts, or CI workflows are created by this draft. |
+| Physical artifact status | No SQL, Atlas, migrations, physical object files, `db/` folder, seed data, validation scripts, rebuild scripts, drift scripts, or CI workflows are created by this plan. |
 
 ### Version History
 
 | Version | Status | Notes |
 | --- | --- | --- |
-| v1.0 | Draft for review | First POS Server Physical DB Artifact Plan draft based on the approved logical Database Design and physical artifact planning package. |
+| v1.0 | Approved baseline | Approved baseline for POS Server physical database artifact and state-based object layout planning. |
+
+### Approval / Baseline Status
+
+This document is approved as the POS Server Physical DB Artifact Plan v1.0 baseline. It governs future physical database artifact planning, state-based object layout, object-level SQL organization, rebuild planning, validation planning, drift-check planning, CI/PR evidence planning, and seed/reference/sample/accreditation artifact planning.
+
+Approval of this plan does not create or approve SQL files, DDL, Atlas files, migrations, physical schemas, physical database object files, seed/reference/sample data, validation scripts, rebuild scripts, drift scripts, CI workflows, an actual `db/` folder, source code, DOCX files, or diagrams.
 
 ### Baseline Scope Statement
 
