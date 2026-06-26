@@ -7,12 +7,20 @@
 | Document title | ExitPass POS Server Physical DB Gate Resolution v1.0 |
 | Repository | `ExitPass-PoSServer` |
 | Branch | `docs/v1.3-pos-server-physical-db-gate-resolution` |
-| Status | Draft gate-resolution package |
+| Status | Approved baseline |
 | Output format | Markdown only |
 | Approved Physical DB Artifact Plan | `docs/v1.3/pos-server-db-physical/ExitPass_POS_Server_Physical_DB_Artifact_Plan_v1.0.md` |
 | Physical artifact status | No SQL, Atlas, migrations, physical object files, `db/` folder, seed/reference/sample data, scripts, or CI workflows are created by this package. |
 
-## 2. Purpose and Scope
+## 2. Approval / Baseline Status
+
+This document is approved as the POS Server Physical DB Gate Resolution v1.0 baseline. It governs the next narrowly scoped physical database bootstrap task and records the approved gate classifications, placeholder policies, pending confirmations, repository boundary, authority boundary, and physical artifact readiness posture.
+
+This approval authorizes only a future separate bootstrap task that may create the approved empty `db/` folder skeleton and `db/README.md`.
+
+This approval does not authorize creating SQL files, DDL, Atlas files, migrations, physical schemas, physical database object files, seed/reference/sample data, validation scripts, rebuild scripts, drift scripts, CI workflows, source code, DOCX files, or diagrams.
+
+## 3. Purpose and Scope
 
 This document resolves or classifies the Physical Design Gate items required before future POS Server physical database artifacts are created.
 
@@ -27,7 +35,7 @@ Out of scope:
 
 - SQL, DDL, Atlas files, migrations, physical object files, actual `db/` folders, seed/reference/sample data, validation/rebuild/drift scripts, CI workflows, source code, DOCX files, and diagrams.
 
-## 3. Approved Baseline References
+## 4. Approved Baseline References
 
 | Reference | Role |
 | --- | --- |
@@ -39,7 +47,7 @@ Out of scope:
 | Physical DB Artifact planning package | Source analysis, decision log, open questions, layout, validation, and outline. |
 | Repository Boundary | Confirms POS Server repository and Central PMS authority boundary. |
 
-## 4. Gate Resolution Summary
+## 5. Gate Resolution Summary
 
 | Category | Count | Summary |
 | --- | ---: | --- |
@@ -49,7 +57,7 @@ Out of scope:
 | Pending confirmation | 3 | Retention/partitioning, BIR/accreditation outputs, tamper-evident anchoring mechanism. |
 | Blocks immediate physical object creation | 10 | Items needing final confirmation or placeholder approval before SQL/object files. |
 
-## 5. Resolved Gate Items
+## 6. Resolved Gate Items
 
 The following gate items are resolved enough to guide future planning tasks:
 
@@ -61,7 +69,7 @@ The following gate items are resolved enough to guide future planning tasks:
 - Seed/reference data separation is approved.
 - No local drift promotion rule is confirmed.
 
-## 6. Placeholder Policies
+## 7. Placeholder Policies
 
 ### Fiscal Numbering and Counters
 
@@ -82,7 +90,7 @@ Use this placeholder policy until BIR/accounting confirms final details:
 
 Physical design must support idempotency key, idempotency scope, semantic request identity/hash, linked fiscal operation, replay result, conflict status, timeout/completion-unknown state, and duplicate fiscal document prevention. Exact unique constraints and indexes remain downstream.
 
-## 7. Pending Confirmation Items
+## 8. Pending Confirmation Items
 
 | Item | Pending confirmation | Owner/dependency |
 | --- | --- | --- |
@@ -95,7 +103,7 @@ Physical design must support idempotency key, idempotency scope, semantic reques
 | ARTS POSLog mapping | Final accepted profile/schema mapping. | Engineering / BIR accreditation |
 | Tamper-evident anchoring | Final hash chain/external anchor/recovery mechanism. | Security / Engineering / Operations |
 
-## 8. Physical Artifact Creation Readiness
+## 9. Physical Artifact Creation Readiness
 
 | Artifact category | Readiness | Rationale |
 | --- | --- | --- |
@@ -106,7 +114,7 @@ Physical design must support idempotency key, idempotency scope, semantic reques
 | CI workflows | Not ready. | CI runner, service images, evidence publishing, and failure rules remain pending. |
 | Accreditation/sample artifacts | Not ready. | Examiner package expectations and sample data policy remain pending. |
 
-## 9. Authority Boundary Confirmation
+## 10. Authority Boundary Confirmation
 
 This gate package preserves the approved authority model:
 
@@ -121,14 +129,14 @@ This gate package preserves the approved authority model:
 - Offline fiscal issuance is disabled by default unless BIR/accounting approves a compliant model.
 - ARTS POSLog is a structured export reference only and does not replace BIR outputs.
 
-## 10. Repository Boundary Confirmation
+## 11. Repository Boundary Confirmation
 
 POS Server app and database artifacts remain inside `ExitPass-PoSServer`. The future `db/` boundary is a folder boundary only. A separate DB repository is deferred and remains a future option only if independent ownership, independent versioning, or compliance change control requires it.
 
-## 11. Out of Scope
+## 12. Out of Scope
 
 This package does not create or approve actual SQL, DDL, Atlas files, migrations, physical schemas, physical database object files, actual `db/` folders, seed/reference/sample data, validation scripts, rebuild scripts, drift scripts, CI workflows, application code, DOCX files, diagrams, final accreditation package, or offline fiscal issuance approval.
 
-## 12. Recommended Next Step
+## 13. Recommended Next Step
 
 Create a narrowly scoped physical DB artifact bootstrap task that creates only the approved `db/` folder skeleton and `db/README.md`, with no SQL/object files, after stakeholder acceptance of this gate-resolution package.
