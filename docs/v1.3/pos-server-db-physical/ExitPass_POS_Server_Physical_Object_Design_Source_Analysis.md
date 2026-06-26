@@ -1,4 +1,4 @@
-﻿# ExitPass POS Server Physical Object Design Source Analysis
+# ExitPass POS Server Physical Object Design Source Analysis
 
 ## 1. Purpose
 
@@ -6,7 +6,19 @@ This source analysis prepares for future POS Server physical object design. It t
 
 This document does not create SQL, DDL, Atlas files, migrations, physical database object files, seed/reference/sample data, scripts, CI workflows, source code, DOCX files, or diagrams.
 
-## 2. Sources Reviewed
+## 2. Approval / Baseline Status
+
+Status: Approved baseline.
+
+This physical object design planning package is approved as the planning baseline for drafting `ExitPass_POS_Server_Physical_Object_Design_v1.0.md`. It governs sequencing, object grouping, dependency mapping, validation impact, and planning boundaries for future physical object design work.
+
+Approval of this planning package does not authorize SQL files, DDL, Atlas files, migrations, physical database object files, seed/reference/sample data, validation scripts, rebuild scripts, drift scripts, CI workflows, source code, DOCX files, or diagrams.
+
+The following P2 items from the approval-readiness review must be carried forward into the future Physical Object Design v1.0 draft:
+
+- explicit first-slice recommendation;
+- affected-object-area mapping for open questions.
+## 3. Sources Reviewed
 
 | Source | Relevance |
 | --- | --- |
@@ -20,7 +32,7 @@ This document does not create SQL, DDL, Atlas files, migrations, physical databa
 | Gate readiness/open questions/impact map | Pending confirmations and physical artifact blockers. |
 | `db/README.md` | Bootstrap boundary and prohibited content. |
 
-## 3. Approved Baseline Inputs
+## 4. Approved Baseline Inputs
 
 | Area | Baseline input for object design planning |
 | --- | --- |
@@ -31,7 +43,7 @@ This document does not create SQL, DDL, Atlas files, migrations, physical databa
 | Fiscal ownership | POS Server owns fiscal issuance and fiscal records only. |
 | Artifact posture | Future state-based artifacts are repository-owned source of truth; no local drift promotion. |
 
-## 4. Design Areas To Plan
+## 5. Design Areas To Plan
 
 - Foundation and controlled codes.
 - Fiscal identity and Site POS Server boundary.
@@ -50,7 +62,7 @@ This document does not create SQL, DDL, Atlas files, migrations, physical databa
 - Optional events/outbox if approved later.
 - Integration references.
 
-## 5. Gate Inputs
+## 6. Gate Inputs
 
 | Gate item | Planning effect |
 | --- | --- |
@@ -65,6 +77,6 @@ This document does not create SQL, DDL, Atlas files, migrations, physical databa
 | ARTS POSLog mapping | Plan schema/profile/version references; defer final mapping. |
 | Tamper-evident anchoring | Plan continuity and hash/anchor areas; defer final mechanism. |
 
-## 6. Out of Scope
+## 7. Out of Scope
 
 This planning package does not decide final physical tables, columns, constraints, indexes, enum implementation, SQL DDL, migration approach, Atlas state, scripts, seed/reference/sample data, CI workflows, or implementation code.
