@@ -1,0 +1,117 @@
+{
+  "case_insensitive": true,
+  "source_of_truth": "Static checks scan repository SQL files under db/state. Database inventory checks compare live/disposable database state to pos_expected_inventory.json.",
+  "allow_reference_only_names": [
+    "payment_finality_ref",
+    "central_pms_payment_attempt_ref",
+    "central_pms_payment_confirmation_ref",
+    "vendor_ack_ref",
+    "evidence_ref"
+  ],
+  "patterns": [
+    {
+      "id": "P001",
+      "severity": "P0",
+      "description": "Database functions are not approved in the current repository SQL state.",
+      "regex": "\\bCREATE\\s+(OR\\s+REPLACE\\s+)?FUNCTION\\b"
+    },
+    {
+      "id": "P002",
+      "severity": "P0",
+      "description": "Database triggers are not approved in the current repository SQL state.",
+      "regex": "\\bCREATE\\s+(OR\\s+REPLACE\\s+)?TRIGGER\\b"
+    },
+    {
+      "id": "P003",
+      "severity": "P0",
+      "description": "Database extensions are not approved in the current repository SQL state.",
+      "regex": "\\bCREATE\\s+EXTENSION\\b"
+    },
+    {
+      "id": "P004",
+      "severity": "P0",
+      "description": "PostgreSQL sequence objects are not approved in the current repository SQL state.",
+      "regex": "\\bCREATE\\s+SEQUENCE\\b"
+    },
+    {
+      "id": "P005",
+      "severity": "P0",
+      "description": "Materialized views are not approved in the current repository SQL state.",
+      "regex": "\\bCREATE\\s+MATERIALIZED\\s+VIEW\\b"
+    },
+    {
+      "id": "P006",
+      "severity": "P0",
+      "description": "Outbox/event publication tables are not approved yet.",
+      "regex": "\\bCREATE\\s+TABLE\\s+(IF\\s+NOT\\s+EXISTS\\s+)?pos\\.[a-z0-9_]*(outbox|event_publication|event_delivery|published_event|integration_event|domain_event)[a-z0-9_]*\\b"
+    },
+    {
+      "id": "P007",
+      "severity": "P0",
+      "description": "POS-owned payment finality lifecycle objects are prohibited.",
+      "regex": "\\bCREATE\\s+TABLE\\s+(IF\\s+NOT\\s+EXISTS\\s+)?pos\\.(payment_finality|payment_finalities|payment_finality_states|payment_statuses)\\b"
+    },
+    {
+      "id": "P008",
+      "severity": "P0",
+      "description": "POS-owned PaymentAttempt lifecycle objects are prohibited.",
+      "regex": "\\bCREATE\\s+TABLE\\s+(IF\\s+NOT\\s+EXISTS\\s+)?pos\\.(payment_attempts|payment_attempt_status_history|payment_attempt_lifecycle)\\b"
+    },
+    {
+      "id": "P009",
+      "severity": "P0",
+      "description": "POS-owned PaymentConfirmation lifecycle objects are prohibited.",
+      "regex": "\\bCREATE\\s+TABLE\\s+(IF\\s+NOT\\s+EXISTS\\s+)?pos\\.(payment_confirmations|payment_confirmation_status_history|payment_confirmation_lifecycle)\\b"
+    },
+    {
+      "id": "P010",
+      "severity": "P0",
+      "description": "POS-owned ExitAuthorization objects are prohibited.",
+      "regex": "\\bCREATE\\s+TABLE\\s+(IF\\s+NOT\\s+EXISTS\\s+)?pos\\.(exit_authorizations|exit_authorization_status_history|exit_authorization_lifecycle)\\b"
+    },
+    {
+      "id": "P011",
+      "severity": "P0",
+      "description": "Gate execution authority objects are prohibited.",
+      "regex": "\\bCREATE\\s+TABLE\\s+(IF\\s+NOT\\s+EXISTS\\s+)?pos\\.(gate_authorizations|gate_executions|gate_open_commands|gate_release_commands)\\b"
+    },
+    {
+      "id": "P012",
+      "severity": "P0",
+      "description": "Independent terminal fiscal authority objects are prohibited.",
+      "regex": "\\bCREATE\\s+TABLE\\s+(IF\\s+NOT\\s+EXISTS\\s+)?pos\\.(terminal_fiscal_authorities|terminal_fiscal_authority|independent_terminal_authorities)\\b"
+    },
+    {
+      "id": "P013",
+      "severity": "P0",
+      "description": "Offline fiscal issuance approval objects are prohibited.",
+      "regex": "\\bCREATE\\s+TABLE\\s+(IF\\s+NOT\\s+EXISTS\\s+)?pos\\.(offline_fiscal_issuance|offline_issuance_approvals|offline_fiscal_approval)\\b"
+    },
+    {
+      "id": "P014",
+      "severity": "P0",
+      "description": "Raw credential/token/evidence/key storage tables are prohibited.",
+      "regex": "\\bCREATE\\s+TABLE\\s+(IF\\s+NOT\\s+EXISTS\\s+)?pos\\.[a-z0-9_]*(raw_credential|raw_credentials|raw_token|raw_tokens|raw_evidence|raw_identity|private_key|secret|credential_store|key_store)[a-z0-9_]*\\b"
+    },
+    {
+      "id": "P015",
+      "severity": "P0",
+      "description": "Generated payload or binary storage tables are prohibited.",
+      "regex": "\\bCREATE\\s+TABLE\\s+(IF\\s+NOT\\s+EXISTS\\s+)?pos\\.[a-z0-9_]*(payload_storage|payloads|binary_storage|binaries|generated_files|file_contents|pdf_binary|qr_image)[a-z0-9_]*\\b"
+    }
+  ],
+  "artifact_patterns": [
+    {
+      "id": "A001",
+      "severity": "P0",
+      "description": "Atlas artifacts are not approved yet.",
+      "regex": "(^|/)(atlas\\.hcl|atlas/|\\.atlas/)"
+    },
+    {
+      "id": "A002",
+      "severity": "P0",
+      "description": "Migration artifacts are not approved yet.",
+      "regex": "(^|/)(migrations?|db/migrations?)(/|$)"
+    }
+  ]
+}
