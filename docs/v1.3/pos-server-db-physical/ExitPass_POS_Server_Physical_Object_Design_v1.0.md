@@ -7,7 +7,7 @@
 | Title | ExitPass POS Server Physical Object Design |
 | Version | v1.0 |
 | Repository | `ExitPass-PoSServer` |
-| Status | Draft for review |
+| Status | Approved baseline |
 | Output format | Markdown only |
 | Approved BRD baseline | `docs/v1.3/pos-invoicing/ExitPass_POS_Invoicing_BRD_v1.0.md` |
 | Approved System Design baseline | `docs/v1.3/pos-server/ExitPass_POS_Server_System_Design_v1.0.md` |
@@ -16,13 +16,15 @@
 | Approved Physical DB Artifact Plan baseline | `docs/v1.3/pos-server-db-physical/ExitPass_POS_Server_Physical_DB_Artifact_Plan_v1.0.md` |
 | Approved Gate Resolution baseline | `docs/v1.3/pos-server-db-physical/ExitPass_POS_Server_Physical_DB_Gate_Resolution_v1.0.md` |
 | Approved Schema/Naming Standards baseline | `docs/v1.3/pos-server-db-physical/ExitPass_POS_Server_Physical_DB_Schema_Naming_Standards_v1.0.md` |
-| Physical artifact status | No SQL, Atlas, migrations, physical object files, seed/reference/sample data, scripts, CI workflows, source code, DOCX files, or diagrams are created by this draft. |
+| Physical artifact status | No SQL, Atlas, migrations, physical object files, seed/reference/sample data, scripts, CI workflows, source code, DOCX files, or diagrams are created by this document. |
 
 ## 2. Approval / Baseline Status
 
-This document is a draft for review. It proposes a physical object design at documentation level only. Approval of this draft, if granted later, must not authorize SQL/object artifact creation unless a separate task explicitly approves those artifacts.
+This document is approved as the POS Server Physical Object Design v1.0 baseline. It governs future physical object artifact tasks, object sequencing, candidate object grouping, dependency handling, validation implications, drift-check implications, authority-boundary safeguards, and open-question tracking.
 
-All proposed object names remain provisional until a future SQL/object artifact task creates actual files under `db/state`.
+Approval of this design baseline does not authorize creating SQL files, DDL, Atlas files, migrations, physical database object files, seed/reference/sample data, validation scripts, rebuild scripts, drift scripts, CI workflows, source code, DOCX files, or diagrams.
+
+All proposed object names remain provisional until a future SQL/object artifact task creates actual files under `db/state`. Future SQL/object artifact creation remains a separate task and remains gated by PostgreSQL version/features/extensions/hosting, final physical object artifact task approval, idempotency uniqueness, fiscal numbering/counter strategy, retention/partitioning, Digital SI URL security, ARTS POSLog mapping, tamper-evident anchoring, and CI/rebuild/validation/drift tooling.
 
 ## 3. Purpose and Scope
 
@@ -57,7 +59,7 @@ Out of scope:
 
 ## 4. Approved Baseline References
 
-| Source | Role in this draft |
+| Source | Role in this document |
 | --- | --- |
 | POS/Invoicing BRD v1.0 | Business and fiscal scope baseline. |
 | POS Server System Design v1.0 | Architecture, authority, operational, audit, and recovery baseline. |
@@ -76,7 +78,7 @@ POS Server database artifacts belong inside `ExitPass-PoSServer`. The `db/` fold
 
 Future state-based database artifacts remain the repository-owned source of truth. Local database drift must not become baseline unless expressed as reviewed repository artifacts and merged through pull request review.
 
-This draft does not modify `db/README.md` and does not create files under `db/state`, `db/reference-data`, `db/validation`, `db/rebuild`, `db/drift`, `db/samples`, or `db/accreditation`.
+This document does not modify `db/README.md` and does not create files under `db/state`, `db/reference-data`, `db/validation`, `db/rebuild`, `db/drift`, `db/samples`, or `db/accreditation`.
 
 ## 6. Authority Boundary
 
@@ -97,7 +99,7 @@ The physical object design must preserve these authority rules:
 
 ## 7. Physical Design Gate Status
 
-| Gate item | Current posture for this draft | SQL/object artifact readiness |
+| Gate item | Current posture for this document | SQL/object artifact readiness |
 | --- | --- | --- |
 | PostgreSQL version/features/extensions/hosting | PostgreSQL is default engine; final details pending. | Blocked. |
 | Schema/domain decomposition | Primary `pos` schema posture approved; object areas proposed. | Blocked until artifact task. |
@@ -127,7 +129,7 @@ Approved naming baseline:
 - Central PMS records named as references only;
 - no names implying POS Server owns payment finality, PaymentAttempt lifecycle, PaymentConfirmation lifecycle, ExitAuthorization, gate execution, vendor authority, or independent terminal fiscal authority.
 
-Candidate names in this draft are examples only.
+Candidate names in this document are examples only.
 
 ## 9. Physical Object Design Principles
 
@@ -503,7 +505,7 @@ Future drift checks must compare live/test database state to reviewed repository
 
 | Question | Current posture | Affected object area(s) | Blocker status | Target resolution step |
 | --- | --- | --- | --- | --- |
-| Final physical object list. | This draft proposes object groups only. | All object areas. | Blocks final artifacts. | Resolve in future object-specific artifact tasks. |
+| Final physical object list. | This document proposes object groups only. | All object areas. | Blocks final artifacts. | Resolve in future object-specific artifact tasks. |
 | Final column groups and nullable/required rules. | Logical attributes exist; physical columns pending. | All table-like objects. | Blocks final artifacts. | Resolve per object group. |
 | Final constraints/indexes. | Placeholder uniqueness/counter policies exist. | Idempotency, fiscal documents, numbering, references, reports. | Blocks final artifacts. | Resolve in physical artifact design. |
 | Enum vs controlled-code per domain. | Strategy exists; storage per domain pending. | Foundation, statuses, reasons, BIR classifications, adjustment types. | Blocks type/reference-data artifacts. | Resolve before type/reference-data artifacts. |
@@ -545,7 +547,7 @@ Future drift checks must compare live/test database state to reviewed repository
 
 | Risk | Mitigation |
 | --- | --- |
-| Premature SQL/object creation | Keep this draft documentation-only and require separate artifact task. |
+| Premature SQL/object creation | Keep this document documentation-only and require separate artifact task. |
 | POS-owned payment finality naming | Use `payment_finality_ref` or `central_pms_payment_finality_ref`; validate no POS-owned lifecycle objects. |
 | POS-owned PaymentAttempt or PaymentConfirmation lifecycle naming | Use `central_pms_payment_attempt_ref` and `central_pms_payment_confirmation_ref`. |
 | POS-owned ExitAuthorization naming | Do not create POS-owned ExitAuthorization objects; use reference-only naming only if approved. |
@@ -560,7 +562,7 @@ Future drift checks must compare live/test database state to reviewed repository
 
 ## 35. Non-Decisions
 
-This draft does not decide or create:
+This document does not decide or create:
 
 - SQL DDL;
 - Atlas files;
