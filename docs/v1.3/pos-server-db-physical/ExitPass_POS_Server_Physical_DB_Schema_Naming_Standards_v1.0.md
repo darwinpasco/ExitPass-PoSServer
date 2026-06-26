@@ -1,4 +1,4 @@
-﻿# ExitPass POS Server Physical DB Schema and Naming Standards v1.0
+# ExitPass POS Server Physical DB Schema and Naming Standards v1.0
 
 ## 1. Document Control
 
@@ -8,11 +8,18 @@
 | Version | v1.0 |
 | Repository | `ExitPass-PoSServer` |
 | Product scope | POS Server future physical database artifact naming and schema/domain standards for ExitPass v1.3 |
-| Status | Decision package for review |
+| Status | Approved baseline |
 | Output format | Markdown only |
 | Physical artifact status | No SQL, DDL, Atlas files, migrations, physical database object files, seed/reference/sample data, scripts, CI workflows, source code, DOCX files, or diagrams are created by this package. |
 
-## 2. Purpose and Scope
+## 2. Approval / Baseline Status
+
+This document is approved as the POS Server Physical DB Schema and Naming Standards v1.0 baseline. It governs future physical schema/domain naming, object naming, column naming, key/constraint/index naming, object-file naming, status/controlled-code naming, and authority-boundary naming safeguards for POS Server physical database artifact work.
+
+Approval of this naming baseline does not authorize creating SQL files, DDL, Atlas files, migrations, physical database object files, seed/reference/sample data, validation scripts, rebuild scripts, drift scripts, CI workflows, source code, DOCX files, or diagrams.
+
+Future SQL/object artifact creation remains gated by PostgreSQL version/features/extensions/hosting, final physical object design, idempotency uniqueness, fiscal numbering/counter strategy, retention/partitioning, Digital SI URL security, ARTS POSLog mapping, tamper-evident anchoring, and CI/rebuild/validation/drift tooling.
+## 3. Purpose and Scope
 
 This document resolves the physical schema/domain decomposition posture and naming standards needed before future POS Server database object artifacts are created.
 
@@ -20,7 +27,7 @@ In scope: schema/domain decomposition, schema names, table names, column names, 
 
 Out of scope: SQL, DDL, Atlas files, migrations, physical database object files, seed/reference/sample data, validation/rebuild/drift scripts, CI workflows, source code, final object definitions, and final PostgreSQL deployment details.
 
-## 3. Approved Baseline References
+## 4. Approved Baseline References
 
 | Source | Use |
 | --- | --- |
@@ -34,7 +41,7 @@ Out of scope: SQL, DDL, Atlas files, migrations, physical database object files,
 | Physical DB Artifact Layout and Validation Plans | Folder, workflow, and validation inputs. |
 | Repository Boundary and `db/README.md` | Repository, authority, and bootstrap boundaries. |
 
-## 4. Schema / Domain Decomposition Recommendation
+## 5. Schema / Domain Decomposition Recommendation
 
 The physical naming plan uses the approved logical domains as naming and validation categories:
 
@@ -56,7 +63,7 @@ The physical naming plan uses the approved logical domains as naming and validat
 | Optional events/outbox | Event publication support if approved later. | Use `outbox` only if approved. |
 | Integration references | Central PMS and vendor context references. | Use `_ref` and explicit source prefixes. |
 
-## 5. Recommended Schema Strategy
+## 6. Recommended Schema Strategy
 
 Recommended strategy: a hybrid approach with one primary PostgreSQL schema and domain-based object naming and folder organization.
 
@@ -73,7 +80,7 @@ Decision posture:
 - Additional schemas require explicit approval based on security, retention, volume, extension, or operational needs.
 - This package creates no schema SQL.
 
-## 6. Naming Principles
+## 7. Naming Principles
 
 | Principle | Standard |
 | --- | --- |
@@ -87,7 +94,7 @@ Decision posture:
 | Stability | Names should be stable for state-based diffs and drift checks. |
 | Searchability | Names should include useful domain context. |
 
-## 7. Schema Naming Standards
+## 8. Schema Naming Standards
 
 | Item | Standard |
 | --- | --- |
@@ -97,7 +104,7 @@ Decision posture:
 | Naming style | Lowercase `snake_case`; no quoted identifiers. |
 | Traceability | Schema documentation must map to approved logical database areas and gate decisions. |
 
-## 8. Table Naming Standards
+## 9. Table Naming Standards
 
 Future table names are not finalized by this package. When table artifacts are approved, use these standards:
 
@@ -115,7 +122,7 @@ Future table names are not finalized by this package. When table artifacts are a
 
 Examples are illustrative only: `fiscal_documents`, `fiscal_document_lines`, `channel_terminals`, `central_pms_payment_refs`, `fiscal_document_status_history`, and `digital_si_urls`.
 
-## 9. Column Naming Standards
+## 10. Column Naming Standards
 
 | Column family | Standard |
 | --- | --- |
@@ -143,7 +150,7 @@ Authority-sensitive reference examples:
 | `central_pms_exit_authorization_ref` only if approved as reference | `exit_authorization_id` as POS-owned authority. |
 | `vendor_ack_ref` | `vendor_authorization_id`. |
 
-## 10. Key, Constraint, Index, Sequence, Function, Trigger, View, and Type Naming Standards
+## 11. Key, Constraint, Index, Sequence, Function, Trigger, View, and Type Naming Standards
 
 | Object family | Naming standard |
 | --- | --- |
@@ -162,7 +169,7 @@ Authority-sensitive reference examples:
 
 Names must state purpose, especially for idempotency, fiscal numbering, recovery, authority-boundary, and Digital SI URL safety rules.
 
-## 11. Object File Naming Standards
+## 12. Object File Naming Standards
 
 Future object files under `db/state` must be deterministic and reviewable. This package creates no object files.
 
@@ -184,7 +191,7 @@ Future object files under `db/state` must be deterministic and reviewable. This 
 
 Ordering rules: extensions and schemas first, then types/sequences, tables, views/functions/triggers/policies, and controlled seed/reference data as approved. A future manifest may define deterministic ordering but must remain reviewable.
 
-## 12. Status and Controlled-Code Naming Standards
+## 13. Status and Controlled-Code Naming Standards
 
 | Value family | Naming standard |
 | --- | --- |
@@ -199,7 +206,7 @@ Ordering rules: extensions and schemas first, then types/sequences, tables, view
 
 Enum vs controlled-code storage remains downstream per domain. Stable lifecycle states may use PostgreSQL enums or controlled state tables. Evolving classifications, operational reasons, BIR/report classifications, and accreditation-related values should favor controlled-code governance unless proven stable enough for enum storage.
 
-## 13. Authority-Boundary Naming Safeguards
+## 14. Authority-Boundary Naming Safeguards
 
 Physical schema, object, column, file, and script names must not imply POS Server owns payment finality, PaymentAttempt lifecycle, PaymentConfirmation lifecycle, ExitAuthorization, gate execution, vendor PMS authority, or independent terminal fiscal authority.
 
@@ -224,7 +231,7 @@ Physical schema, object, column, file, and script names must not imply POS Serve
 | `terminal_fiscal_issuers` | Could imply terminal/channel independent fiscal authority. |
 | `qr_invoices` | Confuses QR presentation with fiscal issuance and Digital SI URL. |
 
-## 14. Examples and Anti-Examples
+## 15. Examples and Anti-Examples
 
 Examples are illustrative only and do not create final object names.
 
@@ -241,7 +248,7 @@ Examples are illustrative only and do not create final object names.
 | Sequence | `seq_si_number` after approval | `seq_exit_authorization` |
 | Vendor acknowledgement | `vendor_ack_ref` | `vendor_authority_id` |
 
-## 15. Open Questions
+## 16. Open Questions
 
 | Owner / dependency | Question | Current posture | Blocks SQL/object artifacts? | Target resolution step |
 | --- | --- | --- | --- | --- |
@@ -255,10 +262,10 @@ Examples are illustrative only and do not create final object names.
 | Accreditation | ARTS POSLog profile/schema mapping and BIR sample package naming. | BIR terminology preserved. | Yes for accreditation artifacts | Confirm during package work. |
 | Vendor/supplier | Supplier/accreditation metadata names and source references. | Use supplier/vendor refs. | May block supplier artifacts | Confirm with supplier/accreditation package. |
 
-## 16. Out of Scope
+## 17. Out of Scope
 
 This package does not create or approve final SQL DDL, final physical object files, final table/column lists, final constraints/indexes, final enum/type implementation, final Atlas or migration approach, seed/reference/sample data, validation/rebuild/drift scripts, CI workflows, final BIR/accreditation package, offline fiscal issuance approval, or source code.
 
-## 17. Recommended Next Step
+## 18. Recommended Next Step
 
 Proceed to approval-readiness review for this schema and naming standards package. After approval, use this package as the naming baseline for future physical object design while preserving the remaining gates for PostgreSQL details, object definitions, idempotency uniqueness, fiscal numbering, retention, Digital SI URL security, ARTS POSLog mapping, tamper-evident anchoring, and CI/rebuild/validation/drift tooling.
