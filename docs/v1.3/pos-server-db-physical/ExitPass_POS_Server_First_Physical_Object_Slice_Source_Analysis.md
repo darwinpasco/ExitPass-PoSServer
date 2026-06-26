@@ -1,4 +1,4 @@
-﻿# ExitPass POS Server First Physical Object Slice Source Analysis
+# ExitPass POS Server First Physical Object Slice Source Analysis
 
 ## 1. Purpose
 
@@ -6,7 +6,17 @@ This source analysis supports the first physical object slice artifact planning 
 
 This package does not create SQL, DDL, Atlas files, migrations, physical database object files, seed/reference/sample data, validation/rebuild/drift scripts, CI workflows, source code, DOCX files, or diagrams.
 
-## 2. Sources Inspected
+## 2. Approval / Baseline Status
+
+This First Physical Object Slice Planning Package is approved as the planning baseline for drafting `ExitPass_POS_Server_First_Physical_Object_Slice_Design_v1.0.md`.
+
+Approval of this planning package does not authorize SQL files, DDL, Atlas files, migrations, physical database object files, seed/reference/sample data, validation scripts, rebuild scripts, drift scripts, CI workflows, source code, DOCX files, or diagrams.
+
+The approved first-slice planning scope remains limited to foundation / configuration / controlled-code posture, fiscal identity / Site POS Server boundary, channel/terminal registry, and Central PMS reference naming posture.
+
+Excluded areas remain out of scope: fiscal document issuance, Sales Invoice issuance objects, SI/adjustment numbering implementation, fiscal counters, idempotency physical constraints/indexes, Digital SI URL token/access objects, reprints, adjustments, reports, exports, audit trail physical objects, recovery/anchoring physical objects, optional events/outbox, validation/rebuild/drift scripts, and CI workflows.
+
+## 3. Sources Inspected
 
 | Source | Use in this planning package |
 | --- | --- |
@@ -24,7 +34,7 @@ This package does not create SQL, DDL, Atlas files, migrations, physical databas
 | Schema/naming decision/open questions | Naming safeguards and remaining physical naming questions. |
 | `docs/REPOSITORY_BOUNDARY.md` and `db/README.md` | Repository and `db/` folder boundary. |
 
-## 3. Approved Baselines
+## 4. Approved Baselines
 
 The first slice inherits these approved decisions:
 
@@ -36,7 +46,7 @@ The first slice inherits these approved decisions:
 - Future names use lowercase `snake_case`, no quoted identifiers, `_id` for internal identifiers, and `_ref` or explicit source prefixes for external references.
 - Central PMS authority records must be named as references only.
 
-## 4. First-Slice Rationale
+## 5. First-Slice Rationale
 
 | Rationale | Planning impact |
 | --- | --- |
@@ -47,7 +57,7 @@ The first slice inherits these approved decisions:
 | Avoids fiscal issuance side effects | The first slice does not create Sales Invoice issuance, fiscal document creation, numbering, or counters. |
 | Avoids payment or exit authority leakage | The first slice prohibits POS-owned payment finality, PaymentAttempt lifecycle, PaymentConfirmation lifecycle, and ExitAuthorization lifecycle names. |
 
-## 5. Included Areas
+## 6. Included Areas
 
 The first future physical object artifact slice should cover planning for these areas only:
 
@@ -58,11 +68,11 @@ The first future physical object artifact slice should cover planning for these 
 
 All names remain provisional until a later approved SQL/object artifact task.
 
-## 6. Excluded Areas
+## 7. Excluded Areas
 
 The first slice must not include object artifact planning for fiscal document issuance, Sales Invoice issuance objects, SI/adjustment numbering implementation, fiscal counters, idempotency physical constraints/indexes, Digital SI URL token/access objects, reprints, adjustments, reports, exports, audit trail physical objects, recovery/anchoring physical objects, optional events/outbox, validation/rebuild/drift scripts, or CI workflows.
 
-## 7. Readiness Summary
+## 8. Readiness Summary
 
 | First-slice area | Planning readiness | SQL/object artifact readiness | Notes |
 | --- | --- | --- | --- |
@@ -71,6 +81,6 @@ The first slice must not include object artifact planning for fiscal document is
 | Channel/terminal registry | Ready for planning. | Ready only after final fields and capabilities are confirmed. | WebPay remains a logical channel/terminal under Site POS Server. |
 | Central PMS reference naming posture | Ready for planning. | Ready as naming posture; object artifacts remain future task. | References only; no Central PMS lifecycle ownership. |
 
-## 8. Out of Scope
+## 9. Out of Scope
 
 This planning package does not create or authorize SQL files, DDL, Atlas files, migrations, physical database object files, seed/reference/sample data files, validation/rebuild/drift scripts, CI workflows, source code, DOCX files, diagrams, changes to approved baselines, or changes to `db/README.md`.
