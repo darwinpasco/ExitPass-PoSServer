@@ -6,7 +6,8 @@ Runs POS Server database repository validation, optional rebuild, inventory, and
 This script validates the POS Server database SQL state under db/state using the repository
 manifest and inventory configuration. Static checks do not require PostgreSQL. Rebuild,
 Inventory, and Drift modes require psql and an explicit connection string for a disposable
-or otherwise approved non-production database.
+or otherwise approved non-production database. psql may be local on PATH or executed through
+Docker with -UseDockerPsql.
 
 Repository SQL is the source of truth. Drift is reported only and is never promoted back
 into repository artifacts by this script.
@@ -24,11 +25,29 @@ Optional database name used for conservative safety checks and evidence context.
 .PARAMETER EvidenceDir
 Optional directory for JSON and text evidence output. If omitted, no evidence files are written.
 
+.PARAMETER UseDockerPsql
+Run psql through a disposable Docker PostgreSQL client container instead of local psql.
+
+.PARAMETER DockerImage
+Docker image to use for psql execution when -UseDockerPsql is provided.
+
+.PARAMETER DockerNetwork
+Optional Docker network for the psql client container.
+
+.PARAMETER DockerHostAlias
+Host alias documented for Docker connection strings. Defaults to host.docker.internal.
+
+.PARAMETER DockerContainerName
+Container name for the disposable psql client container.
+
 .EXAMPLE
 .\db\scripts\Invoke-PosDbChecks.ps1 -Mode Static -EvidenceDir .\db\validation\evidence\local-static
 
 .EXAMPLE
 .\db\scripts\Invoke-PosDbChecks.ps1 -Mode All -ConnectionString $env:POSSERVER_DB_URL -EvidenceDir .\db\validation\evidence\local-all
+
+.EXAMPLE
+.\db\scripts\Invoke-PosDbChecks.ps1 -Mode All -UseDockerPsql -ConnectionString $env:POSSERVER_DB_URL -EvidenceDir .\db\validation\evidence\docker-all
 #>
 
 [CmdletBinding()]
@@ -44,7 +63,25 @@ param(
     [string] $DatabaseName,
 
     [Parameter()]
-    [string] $EvidenceDir
+    [string] $EvidenceDir,
+
+    [Parameter()]
+    [switch] $UseDockerPsql,
+
+    [Parameter()]
+    [ValidateNotNullOrEmpty()]
+    [string] $DockerImage = 'postgres:16-alpine',
+
+    [Parameter()]
+    [string] $DockerNetwork,
+
+    [Parameter()]
+    [ValidateNotNullOrEmpty()]
+    [string] $DockerHostAlias = 'host.docker.internal',
+
+    [Parameter()]
+    [ValidateNotNullOrEmpty()]
+    [string] $DockerContainerName = 'posserver-db-checks-psql'
 )
 
 Set-StrictMode -Version Latest
@@ -200,6 +237,27 @@ function Assert-PsqlAvailable {
     }
 }
 
+function Assert-DockerAvailable {
+    $command = Get-Command docker -ErrorAction SilentlyContinue
+    if (-not $command) {
+        throw 'docker was not found on PATH. Install Docker, start Docker Desktop, or run without -UseDockerPsql with local psql.'
+    }
+
+    $output = & docker version --format '{{.Client.Version}}' 2>&1
+    if ($LASTEXITCODE -ne 0) {
+        throw "Docker is unavailable or not running. Docker output: $($output -join [Environment]::NewLine)"
+    }
+}
+
+function Assert-PsqlRunnerAvailable {
+    if ($UseDockerPsql) {
+        Assert-DockerAvailable
+    }
+    else {
+        Assert-PsqlAvailable
+    }
+}
+
 function Assert-ConnectionStringProvided {
     if ([string]::IsNullOrWhiteSpace($ConnectionString)) {
         throw 'A PostgreSQL connection string is required for this mode.'
@@ -213,11 +271,85 @@ function Assert-DisposableDatabaseTarget {
     }
 }
 
+function ConvertTo-ContainerPath {
+    param([string] $RelativePath)
+
+    $normalized = $RelativePath.Replace('\', '/').TrimStart('/')
+    return "/work/$normalized"
+}
+
+function Get-DockerPsqlBaseArgs {
+    $volumeSpec = "${RepoRoot}:/work:ro"
+    $args = New-Object System.Collections.Generic.List[string]
+    $args.Add('run')
+    $args.Add('--rm')
+    $args.Add('--name')
+    $args.Add($DockerContainerName)
+    $args.Add('--volume')
+    $args.Add($volumeSpec)
+    $args.Add('--workdir')
+    $args.Add('/work')
+    $args.Add('--entrypoint')
+    $args.Add('psql')
+
+    if (-not [string]::IsNullOrWhiteSpace($DockerNetwork)) {
+        $args.Add('--network')
+        $args.Add($DockerNetwork)
+    }
+
+    if (-not [string]::IsNullOrWhiteSpace($DockerHostAlias)) {
+        $args.Add('--add-host')
+        $args.Add("${DockerHostAlias}:host-gateway")
+    }
+
+    $args.Add($DockerImage)
+    return ,$args
+}
+
+function Invoke-DockerPsqlCommand {
+    param(
+        [string] $Sql,
+        [string] $FilePath
+    )
+
+    $dockerArgs = Get-DockerPsqlBaseArgs
+    $dockerArgs.Add($ConnectionString)
+    $dockerArgs.Add('-v')
+    $dockerArgs.Add('ON_ERROR_STOP=1')
+
+    if (-not [string]::IsNullOrWhiteSpace($Sql)) {
+        $dockerArgs.Add('-t')
+        $dockerArgs.Add('-A')
+        $dockerArgs.Add('-c')
+        $dockerArgs.Add($Sql)
+    }
+    elseif (-not [string]::IsNullOrWhiteSpace($FilePath)) {
+        $repoRelative = ConvertTo-RepoRelativePath $FilePath
+        $containerPath = ConvertTo-ContainerPath $repoRelative
+        $dockerArgs.Add('-f')
+        $dockerArgs.Add($containerPath)
+    }
+    else {
+        throw 'Invoke-DockerPsqlCommand requires either Sql or FilePath.'
+    }
+
+    $output = & docker @($dockerArgs.ToArray()) 2>&1
+    if ($LASTEXITCODE -ne 0) {
+        throw "Docker psql execution failed. Verify Docker is running, image '$DockerImage' is available, and the connection string targets a disposable database. Output: $($output -join [Environment]::NewLine)"
+    }
+
+    return $output
+}
+
 function Invoke-PsqlCommand {
     param(
         [string] $Sql,
         [string] $FilePath
     )
+
+    if ($UseDockerPsql) {
+        return Invoke-DockerPsqlCommand -Sql $Sql -FilePath $FilePath
+    }
 
     if (-not [string]::IsNullOrWhiteSpace($Sql)) {
         $output = & psql $ConnectionString -v ON_ERROR_STOP=1 -t -A -c $Sql 2>&1
@@ -238,7 +370,7 @@ function Invoke-PsqlCommand {
 
 function Get-DatabaseInventory {
     Assert-ConnectionStringProvided
-    Assert-PsqlAvailable
+    Assert-PsqlRunnerAvailable
 
     $query = @"
 select jsonb_pretty(jsonb_build_object(
@@ -525,7 +657,7 @@ function Invoke-StaticChecks {
 
 function Invoke-RebuildChecks {
     Assert-ConnectionStringProvided
-    Assert-PsqlAvailable
+    Assert-PsqlRunnerAvailable
     Assert-DisposableDatabaseTarget
 
     $result = New-CheckResult -Name 'Rebuild'
@@ -546,6 +678,16 @@ function Invoke-RebuildChecks {
     $result.details.applied_files = $appliedFiles.ToArray()
     $result.details.applied_file_count = $appliedFiles.Count
     $result.details.production_safety = 'Script does not create or drop databases and refuses obvious production/shared target names.'
+    $result.details.psql_runner = if ($UseDockerPsql) { 'docker' } else { 'local' }
+    if ($UseDockerPsql) {
+        $result.details.docker = [ordered]@{
+            image = $DockerImage
+            network = $DockerNetwork
+            host_alias = $DockerHostAlias
+            container_name = $DockerContainerName
+            workdir = '/work'
+        }
+    }
     $summary.Add("Applied files: $($appliedFiles.Count)")
 
     return Complete-Result -Result $result -SummaryLines $summary.ToArray()
@@ -564,6 +706,16 @@ function Invoke-InventoryChecks {
 
     $inventory = Get-DatabaseInventory
     Compare-Inventory -Result $result -Inventory $inventory -ModeName $ResultMode
+    $result.details.psql_runner = if ($UseDockerPsql) { 'docker' } else { 'local' }
+    if ($UseDockerPsql) {
+        $result.details.docker = [ordered]@{
+            image = $DockerImage
+            network = $DockerNetwork
+            host_alias = $DockerHostAlias
+            container_name = $DockerContainerName
+            workdir = '/work'
+        }
+    }
 
     $summary.Add("Expected tables: $($result.details.inventory.expected_table_count)")
     $summary.Add("Actual tables: $($result.details.inventory.actual_table_count)")
