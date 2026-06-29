@@ -1,0 +1,65 @@
+name: POS DB Validation
+
+on:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  pos-db-validation:
+    name: Static and controlled-code load validation
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: posserver_controlled_code_ci_validation
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d posserver_controlled_code_ci_validation"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+
+    env:
+      POSSERVER_CI_DB_NAME: posserver_controlled_code_ci_validation
+      POSSERVER_CI_DB_URL: postgresql://postgres:postgres@localhost:5432/posserver_controlled_code_ci_validation
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install PostgreSQL client
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes postgresql-client
+
+      - name: Run POS DB Static validation
+        shell: pwsh
+        run: |
+          ./db/scripts/Invoke-PosDbChecks.ps1 `
+            -Mode Static `
+            -EvidenceDir ./db/validation/evidence/ci-static
+
+      - name: Run controlled-code load validation
+        shell: pwsh
+        run: |
+          ./db/scripts/Invoke-PosDbChecks.ps1 `
+            -Mode ControlledCodeLoad `
+            -ConnectionString $env:POSSERVER_CI_DB_URL `
+            -DatabaseName $env:POSSERVER_CI_DB_NAME `
+            -EvidenceDir ./db/validation/evidence/ci-controlled-code-load
+
+      - name: Upload POS DB validation evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: pos-db-validation-evidence
+          path: db/validation/evidence/
+          if-no-files-found: ignore

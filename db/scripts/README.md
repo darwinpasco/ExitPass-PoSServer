@@ -47,6 +47,30 @@ Controlled-code load validation against a disposable local database:
   -EvidenceDir .\db\validation\evidence\controlled-code-load
 ```
 
+## Pre-PR Validation
+
+Run Static before opening a database artifact or reference-data PR:
+
+```powershell
+.\db\scripts\Invoke-PosDbChecks.ps1 `
+  -Mode Static `
+  -EvidenceDir .\db\validation\evidence\local-static
+```
+
+Run controlled-code load validation when controlled-code JSON source or generated SQL changes. Use a disposable PostgreSQL database only:
+
+```powershell
+$env:POSSERVER_DB_URL = 'postgresql://postgres:postgres@localhost:5432/posserver_controlled_code_local_validation'
+
+.\db\scripts\Invoke-PosDbChecks.ps1 `
+  -Mode ControlledCodeLoad `
+  -ConnectionString $env:POSSERVER_DB_URL `
+  -DatabaseName posserver_controlled_code_local_validation `
+  -EvidenceDir .\db\validation\evidence\local-controlled-code-load
+```
+
+Do not use production, shared, authority, or Central PMS databases. `ControlledCodeLoad` resets the explicitly named disposable database.
+
 ## Docker psql Usage
 
 Use Docker mode when the machine has Docker but does not have a local PostgreSQL client installed.
@@ -121,6 +145,25 @@ The script mounts the repository read-only at `/work` inside the psql client con
 
 The script does not require Atlas. Docker is required only when `-UseDockerPsql` is provided.
 
+## CI Validation
+
+The repository includes `.github/workflows/pos-db-validation.yml`.
+
+The workflow runs on `pull_request` and `workflow_dispatch` and performs:
+
+- `Static` validation
+- `ControlledCodeLoad` validation against a CI-local PostgreSQL 16 service database named `posserver_controlled_code_ci_validation`
+- evidence upload as the `pos-db-validation-evidence` workflow artifact
+
+CI uses only local workflow credentials:
+
+- user: `postgres`
+- password: `postgres`
+- database: `posserver_controlled_code_ci_validation`
+- connection string: `postgresql://postgres:postgres@localhost:5432/posserver_controlled_code_ci_validation`
+
+The workflow does not require repository secrets, does not connect to live/shared databases, and does not commit generated evidence files.
+
 ## No Production / Shared DB Warning
 
 Use only disposable or explicitly approved local validation databases.
@@ -154,7 +197,7 @@ For each mode, the script writes:
 - ControlledCodeLoad mode validates controlled-code reference data by rebuilding schema, applying generated SQL files in deterministic filename order, repeating the latest generated SQL file for idempotency, and comparing loaded code-set/code-key inventory to JSON source.
 - Docker mode depends on Docker being installed/running and on the selected Docker image being pullable or already available.
 - Docker mode does not hide secrets from Docker itself; do not use production credentials. The script avoids printing the connection string in summaries and evidence.
-- CI integration is intentionally deferred.
+- CI validation currently covers Static and ControlledCodeLoad only. Rebuild, Inventory, Drift, and deeper column/constraint checks remain local/manual or future CI increments.
 
 ## Next Steps
 
@@ -164,4 +207,4 @@ Recommended follow-up work:
 2. Run Rebuild, Inventory, and Drift modes against a disposable PostgreSQL database.
 3. Extend inventory validation to column-level and foreign-key-level checks after the base workflow is stable.
 4. Run ControlledCodeLoad after controlled-code JSON/generated SQL changes.
-5. Extend controlled-code workflow into CI after local checks are stable and repeatable.
+5. Expand CI later to include deeper inventory, column, constraint, and drift evidence if approved.
