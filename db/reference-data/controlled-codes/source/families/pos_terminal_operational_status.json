@@ -1,0 +1,115 @@
+{
+  "schema_version": "1.0",
+  "source_key": "controlled_codes.pos_terminal_operational_status.v1",
+  "source_name": "POS Terminal Operational Status Controlled Codes",
+  "source_description": "Low-risk operational posture statuses for POS channel and terminal endpoints.",
+  "governance_owner": "Operations",
+  "source_ref": "ExitPass_POS_Server_Controlled_Code_Value_Approval_Matrix.md; db/controlled-code-source-values-slice-2",
+  "code_sets": [
+    {
+      "code_set_key": "pos_terminal_operational_status",
+      "display_name": "POS Terminal Operational Status",
+      "description": "Operational posture for channel and terminal endpoints under the Site POS Server. Values do not create independent terminal fiscal authority or offline fiscal issuance approval.",
+      "governance_owner": "Operations",
+      "source_ref": "ExitPass_POS_Server_Controlled_Code_Value_Approval_Matrix.md; db/controlled-code-source-values-slice-2",
+      "is_active": true,
+      "effective_start_at": "2026-06-29T00:00:00Z",
+      "effective_end_at": null,
+      "codes": [
+        {
+          "code_key": "active",
+          "display_name": "Active",
+          "description": "Endpoint is available for normal operational use under the Site POS Server boundary.",
+          "source_ref": "db/controlled-code-source-values-slice-2",
+          "sort_order": 10,
+          "is_active": true,
+          "is_deprecated": false,
+          "effective_start_at": "2026-06-29T00:00:00Z",
+          "effective_end_at": null,
+          "replaced_by_code_key": null,
+          "metadata": {
+            "posture": "operational_lifecycle"
+          }
+        },
+        {
+          "code_key": "degraded",
+          "display_name": "Degraded",
+          "description": "Endpoint is available with reduced or impaired operational capability.",
+          "source_ref": "db/controlled-code-source-values-slice-2",
+          "sort_order": 20,
+          "is_active": true,
+          "is_deprecated": false,
+          "effective_start_at": "2026-06-29T00:00:00Z",
+          "effective_end_at": null,
+          "replaced_by_code_key": null,
+          "metadata": {
+            "posture": "operational_lifecycle"
+          }
+        },
+        {
+          "code_key": "offline",
+          "display_name": "Offline",
+          "description": "Endpoint is unavailable for normal operational use. This value does not approve offline fiscal issuance.",
+          "source_ref": "db/controlled-code-source-values-slice-2",
+          "sort_order": 30,
+          "is_active": true,
+          "is_deprecated": false,
+          "effective_start_at": "2026-06-29T00:00:00Z",
+          "effective_end_at": null,
+          "replaced_by_code_key": null,
+          "metadata": {
+            "posture": "operational_lifecycle"
+          }
+        },
+        {
+          "code_key": "maintenance",
+          "display_name": "Maintenance",
+          "description": "Endpoint is in planned or controlled maintenance posture.",
+          "source_ref": "db/controlled-code-source-values-slice-2",
+          "sort_order": 40,
+          "is_active": true,
+          "is_deprecated": false,
+          "effective_start_at": "2026-06-29T00:00:00Z",
+          "effective_end_at": null,
+          "replaced_by_code_key": null,
+          "metadata": {
+            "posture": "operational_lifecycle"
+          }
+        },
+        {
+          "code_key": "suspended",
+          "display_name": "Suspended",
+          "description": "Endpoint is temporarily unavailable for normal operational use.",
+          "source_ref": "db/controlled-code-source-values-slice-2",
+          "sort_order": 50,
+          "is_active": true,
+          "is_deprecated": false,
+          "effective_start_at": "2026-06-29T00:00:00Z",
+          "effective_end_at": null,
+          "replaced_by_code_key": null,
+          "metadata": {
+            "posture": "operational_lifecycle"
+          }
+        },
+        {
+          "code_key": "retired",
+          "display_name": "Retired",
+          "description": "Endpoint is retained for history but no longer intended for new operational use.",
+          "source_ref": "db/controlled-code-source-values-slice-2",
+          "sort_order": 60,
+          "is_active": true,
+          "is_deprecated": false,
+          "effective_start_at": "2026-06-29T00:00:00Z",
+          "effective_end_at": null,
+          "replaced_by_code_key": null,
+          "metadata": {
+            "posture": "operational_lifecycle"
+          }
+        }
+      ]
+    }
+  ],
+  "notes": [
+    "Values are operational posture only and do not create independent terminal fiscal authority."
+  ]
+}
