@@ -6,6 +6,10 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ExitPass.PosServer.Runtime"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ExitPass.PosServer.Runtime.Tests", "tests\ExitPass.PosServer.Runtime.Tests\ExitPass.PosServer.Runtime.Tests.csproj", "{9B7F1215-7715-46CB-9246-76E7BC66879C}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ExitPass.PosServer.Api", "src\ExitPass.PosServer.Api\ExitPass.PosServer.Api.csproj", "{AA514E80-CAB7-4B62-8B50-FE30FE32C0D2}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ExitPass.PosServer.Api.Tests", "tests\ExitPass.PosServer.Api.Tests\ExitPass.PosServer.Api.Tests.csproj", "{0C0BAE1D-10C2-4237-96BA-8C20E6FD5F78}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -20,6 +24,14 @@ Global
 		{9B7F1215-7715-46CB-9246-76E7BC66879C}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{9B7F1215-7715-46CB-9246-76E7BC66879C}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{9B7F1215-7715-46CB-9246-76E7BC66879C}.Release|Any CPU.Build.0 = Release|Any CPU
+		{AA514E80-CAB7-4B62-8B50-FE30FE32C0D2}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{AA514E80-CAB7-4B62-8B50-FE30FE32C0D2}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{AA514E80-CAB7-4B62-8B50-FE30FE32C0D2}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{AA514E80-CAB7-4B62-8B50-FE30FE32C0D2}.Release|Any CPU.Build.0 = Release|Any CPU
+		{0C0BAE1D-10C2-4237-96BA-8C20E6FD5F78}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{0C0BAE1D-10C2-4237-96BA-8C20E6FD5F78}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{0C0BAE1D-10C2-4237-96BA-8C20E6FD5F78}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{0C0BAE1D-10C2-4237-96BA-8C20E6FD5F78}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
