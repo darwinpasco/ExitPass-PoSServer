@@ -1,0 +1,115 @@
+{
+  "schema_version": "1.0",
+  "source_key": "controlled_codes.fiscal_operation_queue_status.v1",
+  "source_name": "Fiscal Operation Queue Status Controlled Codes",
+  "source_description": "Low-risk queue lifecycle statuses for fiscal operation work tracking.",
+  "governance_owner": "Engineering",
+  "source_ref": "ExitPass_POS_Server_Controlled_Code_Value_Approval_Matrix.md; db/controlled-code-source-values-slice-2",
+  "code_sets": [
+    {
+      "code_set_key": "fiscal_operation_queue_status",
+      "display_name": "Fiscal Operation Queue Status",
+      "description": "Technical queue lifecycle posture for fiscal operation work tracking. Values do not implement queue execution or fiscal issuance behavior.",
+      "governance_owner": "Engineering",
+      "source_ref": "ExitPass_POS_Server_Controlled_Code_Value_Approval_Matrix.md; db/controlled-code-source-values-slice-2",
+      "is_active": true,
+      "effective_start_at": "2026-06-29T00:00:00Z",
+      "effective_end_at": null,
+      "codes": [
+        {
+          "code_key": "queued",
+          "display_name": "Queued",
+          "description": "Operation work item is waiting for future handling.",
+          "source_ref": "db/controlled-code-source-values-slice-2",
+          "sort_order": 10,
+          "is_active": true,
+          "is_deprecated": false,
+          "effective_start_at": "2026-06-29T00:00:00Z",
+          "effective_end_at": null,
+          "replaced_by_code_key": null,
+          "metadata": {
+            "posture": "queue_lifecycle"
+          }
+        },
+        {
+          "code_key": "locked",
+          "display_name": "Locked",
+          "description": "Operation work item is reserved for local processing posture.",
+          "source_ref": "db/controlled-code-source-values-slice-2",
+          "sort_order": 20,
+          "is_active": true,
+          "is_deprecated": false,
+          "effective_start_at": "2026-06-29T00:00:00Z",
+          "effective_end_at": null,
+          "replaced_by_code_key": null,
+          "metadata": {
+            "posture": "queue_lifecycle"
+          }
+        },
+        {
+          "code_key": "processing",
+          "display_name": "Processing",
+          "description": "Operation work item is being handled for local lifecycle tracking.",
+          "source_ref": "db/controlled-code-source-values-slice-2",
+          "sort_order": 30,
+          "is_active": true,
+          "is_deprecated": false,
+          "effective_start_at": "2026-06-29T00:00:00Z",
+          "effective_end_at": null,
+          "replaced_by_code_key": null,
+          "metadata": {
+            "posture": "queue_lifecycle"
+          }
+        },
+        {
+          "code_key": "completed",
+          "display_name": "Completed",
+          "description": "Operation work item completed its local queue lifecycle posture.",
+          "source_ref": "db/controlled-code-source-values-slice-2",
+          "sort_order": 40,
+          "is_active": true,
+          "is_deprecated": false,
+          "effective_start_at": "2026-06-29T00:00:00Z",
+          "effective_end_at": null,
+          "replaced_by_code_key": null,
+          "metadata": {
+            "posture": "queue_lifecycle"
+          }
+        },
+        {
+          "code_key": "failed",
+          "display_name": "Failed",
+          "description": "Operation work item did not complete because of an error or failed condition.",
+          "source_ref": "db/controlled-code-source-values-slice-2",
+          "sort_order": 50,
+          "is_active": true,
+          "is_deprecated": false,
+          "effective_start_at": "2026-06-29T00:00:00Z",
+          "effective_end_at": null,
+          "replaced_by_code_key": null,
+          "metadata": {
+            "posture": "queue_lifecycle"
+          }
+        },
+        {
+          "code_key": "cancelled",
+          "display_name": "Cancelled",
+          "description": "Operation work item handling was stopped before completion.",
+          "source_ref": "db/controlled-code-source-values-slice-2",
+          "sort_order": 60,
+          "is_active": true,
+          "is_deprecated": false,
+          "effective_start_at": "2026-06-29T00:00:00Z",
+          "effective_end_at": null,
+          "replaced_by_code_key": null,
+          "metadata": {
+            "posture": "queue_lifecycle"
+          }
+        }
+      ]
+    }
+  ],
+  "notes": [
+    "Values are queue lifecycle posture only and do not implement execution behavior."
+  ]
+}

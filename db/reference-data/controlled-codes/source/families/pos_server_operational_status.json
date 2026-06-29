@@ -1,0 +1,100 @@
+{
+  "schema_version": "1.0",
+  "source_key": "controlled_codes.pos_server_operational_status.v1",
+  "source_name": "POS Server Operational Status Controlled Codes",
+  "source_description": "Low-risk operational posture statuses for the Site POS Server boundary.",
+  "governance_owner": "Operations",
+  "source_ref": "ExitPass_POS_Server_Controlled_Code_Value_Approval_Matrix.md; db/controlled-code-source-values-slice-2",
+  "code_sets": [
+    {
+      "code_set_key": "pos_server_operational_status",
+      "display_name": "POS Server Operational Status",
+      "description": "Operational posture for the Site POS Server. Values do not create fiscal issuance approval, payment authority, exit authority, or gate execution authority.",
+      "governance_owner": "Operations",
+      "source_ref": "ExitPass_POS_Server_Controlled_Code_Value_Approval_Matrix.md; db/controlled-code-source-values-slice-2",
+      "is_active": true,
+      "effective_start_at": "2026-06-29T00:00:00Z",
+      "effective_end_at": null,
+      "codes": [
+        {
+          "code_key": "active",
+          "display_name": "Active",
+          "description": "Site POS Server is available for normal operational use within its approved system boundary.",
+          "source_ref": "db/controlled-code-source-values-slice-2",
+          "sort_order": 10,
+          "is_active": true,
+          "is_deprecated": false,
+          "effective_start_at": "2026-06-29T00:00:00Z",
+          "effective_end_at": null,
+          "replaced_by_code_key": null,
+          "metadata": {
+            "posture": "operational_lifecycle"
+          }
+        },
+        {
+          "code_key": "degraded",
+          "display_name": "Degraded",
+          "description": "Site POS Server is available with reduced or impaired operational capability.",
+          "source_ref": "db/controlled-code-source-values-slice-2",
+          "sort_order": 20,
+          "is_active": true,
+          "is_deprecated": false,
+          "effective_start_at": "2026-06-29T00:00:00Z",
+          "effective_end_at": null,
+          "replaced_by_code_key": null,
+          "metadata": {
+            "posture": "operational_lifecycle"
+          }
+        },
+        {
+          "code_key": "maintenance",
+          "display_name": "Maintenance",
+          "description": "Site POS Server is in planned or controlled maintenance posture.",
+          "source_ref": "db/controlled-code-source-values-slice-2",
+          "sort_order": 30,
+          "is_active": true,
+          "is_deprecated": false,
+          "effective_start_at": "2026-06-29T00:00:00Z",
+          "effective_end_at": null,
+          "replaced_by_code_key": null,
+          "metadata": {
+            "posture": "operational_lifecycle"
+          }
+        },
+        {
+          "code_key": "suspended",
+          "display_name": "Suspended",
+          "description": "Site POS Server is temporarily unavailable for normal operational use.",
+          "source_ref": "db/controlled-code-source-values-slice-2",
+          "sort_order": 40,
+          "is_active": true,
+          "is_deprecated": false,
+          "effective_start_at": "2026-06-29T00:00:00Z",
+          "effective_end_at": null,
+          "replaced_by_code_key": null,
+          "metadata": {
+            "posture": "operational_lifecycle"
+          }
+        },
+        {
+          "code_key": "retired",
+          "display_name": "Retired",
+          "description": "Site POS Server is retained for history but no longer intended for new operational use.",
+          "source_ref": "db/controlled-code-source-values-slice-2",
+          "sort_order": 50,
+          "is_active": true,
+          "is_deprecated": false,
+          "effective_start_at": "2026-06-29T00:00:00Z",
+          "effective_end_at": null,
+          "replaced_by_code_key": null,
+          "metadata": {
+            "posture": "operational_lifecycle"
+          }
+        }
+      ]
+    }
+  ],
+  "notes": [
+    "Values are operational posture only and do not create fiscal, payment, exit, or gate authority."
+  ]
+}

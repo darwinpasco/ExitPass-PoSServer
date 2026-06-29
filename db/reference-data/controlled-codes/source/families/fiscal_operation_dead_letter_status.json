@@ -1,0 +1,130 @@
+{
+  "schema_version": "1.0",
+  "source_key": "controlled_codes.fiscal_operation_dead_letter_status.v1",
+  "source_name": "Fiscal Operation Dead Letter Status Controlled Codes",
+  "source_description": "Low-risk lifecycle statuses for fiscal operation dead-letter review posture.",
+  "governance_owner": "Engineering",
+  "source_ref": "ExitPass_POS_Server_Controlled_Code_Value_Approval_Matrix.md; db/controlled-code-source-values-slice-2",
+  "code_sets": [
+    {
+      "code_set_key": "fiscal_operation_dead_letter_status",
+      "display_name": "Fiscal Operation Dead Letter Status",
+      "description": "Technical lifecycle posture for fiscal operation dead-letter records. Values do not implement recovery automation, retry execution, or fiscal issuance behavior.",
+      "governance_owner": "Engineering",
+      "source_ref": "ExitPass_POS_Server_Controlled_Code_Value_Approval_Matrix.md; db/controlled-code-source-values-slice-2",
+      "is_active": true,
+      "effective_start_at": "2026-06-29T00:00:00Z",
+      "effective_end_at": null,
+      "codes": [
+        {
+          "code_key": "open",
+          "display_name": "Open",
+          "description": "Dead-letter record is open for local review or handling.",
+          "source_ref": "db/controlled-code-source-values-slice-2",
+          "sort_order": 10,
+          "is_active": true,
+          "is_deprecated": false,
+          "effective_start_at": "2026-06-29T00:00:00Z",
+          "effective_end_at": null,
+          "replaced_by_code_key": null,
+          "metadata": {
+            "posture": "technical_lifecycle"
+          }
+        },
+        {
+          "code_key": "under_review",
+          "display_name": "Under Review",
+          "description": "Dead-letter record is under local review.",
+          "source_ref": "db/controlled-code-source-values-slice-2",
+          "sort_order": 20,
+          "is_active": true,
+          "is_deprecated": false,
+          "effective_start_at": "2026-06-29T00:00:00Z",
+          "effective_end_at": null,
+          "replaced_by_code_key": null,
+          "metadata": {
+            "posture": "technical_lifecycle"
+          }
+        },
+        {
+          "code_key": "retry_requested",
+          "display_name": "Retry Requested",
+          "description": "Retry handling has been requested for review posture only; this value does not execute retry behavior.",
+          "source_ref": "db/controlled-code-source-values-slice-2",
+          "sort_order": 30,
+          "is_active": true,
+          "is_deprecated": false,
+          "effective_start_at": "2026-06-29T00:00:00Z",
+          "effective_end_at": null,
+          "replaced_by_code_key": null,
+          "metadata": {
+            "posture": "technical_lifecycle"
+          }
+        },
+        {
+          "code_key": "resolved",
+          "display_name": "Resolved",
+          "description": "Dead-letter record has been resolved for local lifecycle tracking.",
+          "source_ref": "db/controlled-code-source-values-slice-2",
+          "sort_order": 40,
+          "is_active": true,
+          "is_deprecated": false,
+          "effective_start_at": "2026-06-29T00:00:00Z",
+          "effective_end_at": null,
+          "replaced_by_code_key": null,
+          "metadata": {
+            "posture": "technical_lifecycle"
+          }
+        },
+        {
+          "code_key": "rejected",
+          "display_name": "Rejected",
+          "description": "Dead-letter disposition or proposed handling was rejected during local review.",
+          "source_ref": "db/controlled-code-source-values-slice-2",
+          "sort_order": 50,
+          "is_active": true,
+          "is_deprecated": false,
+          "effective_start_at": "2026-06-29T00:00:00Z",
+          "effective_end_at": null,
+          "replaced_by_code_key": null,
+          "metadata": {
+            "posture": "technical_lifecycle"
+          }
+        },
+        {
+          "code_key": "closed",
+          "display_name": "Closed",
+          "description": "Dead-letter record has been closed for local lifecycle tracking.",
+          "source_ref": "db/controlled-code-source-values-slice-2",
+          "sort_order": 60,
+          "is_active": true,
+          "is_deprecated": false,
+          "effective_start_at": "2026-06-29T00:00:00Z",
+          "effective_end_at": null,
+          "replaced_by_code_key": null,
+          "metadata": {
+            "posture": "technical_lifecycle"
+          }
+        },
+        {
+          "code_key": "cancelled",
+          "display_name": "Cancelled",
+          "description": "Dead-letter handling was stopped before completion.",
+          "source_ref": "db/controlled-code-source-values-slice-2",
+          "sort_order": 70,
+          "is_active": true,
+          "is_deprecated": false,
+          "effective_start_at": "2026-06-29T00:00:00Z",
+          "effective_end_at": null,
+          "replaced_by_code_key": null,
+          "metadata": {
+            "posture": "technical_lifecycle"
+          }
+        }
+      ]
+    }
+  ],
+  "notes": [
+    "Values are dead-letter lifecycle posture only and do not implement retry, recovery, or issuance behavior."
+  ]
+}
