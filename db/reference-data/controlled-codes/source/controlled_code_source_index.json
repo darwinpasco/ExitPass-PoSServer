@@ -1,0 +1,55 @@
+{
+  "schema_version": "1.0",
+  "source_key": "controlled_code_source_index.v1",
+  "source_name": "POS Server Controlled-Code Source Index",
+  "source_description": "Deterministic index of controlled-code source family files for low-risk source values slice 1.",
+  "governance_owner": "Engineering",
+  "source_ref": "ExitPass_POS_Server_Controlled_Code_Source_Schema.md; ExitPass_POS_Server_Controlled_Code_UUID_Namespace_Decision.md; ExitPass_POS_Server_Controlled_Code_Value_Approval_Matrix.md; db/controlled-code-source-values-slice-1",
+  "uuid_namespace": "d07a7416-af9c-556d-86cc-7061335f7c11",
+  "uuid_name_inputs": {
+    "code_set": "pos.controlled_code_sets:<code_set_key>",
+    "code": "pos.controlled_codes:<code_set_key>:<code_key>"
+  },
+  "family_sources": [
+    {
+      "code_set_key": "channel_terminal_health_status",
+      "path": "families/channel_terminal_health_status.json",
+      "governance_owner": "Operations"
+    },
+    {
+      "code_set_key": "configuration_action",
+      "path": "families/configuration_action.json",
+      "governance_owner": "Engineering"
+    },
+    {
+      "code_set_key": "fiscal_action_audit_result",
+      "path": "families/fiscal_action_audit_result.json",
+      "governance_owner": "Engineering"
+    },
+    {
+      "code_set_key": "fiscal_export_status",
+      "path": "families/fiscal_export_status.json",
+      "governance_owner": "Engineering"
+    },
+    {
+      "code_set_key": "fiscal_operation_exception_status",
+      "path": "families/fiscal_operation_exception_status.json",
+      "governance_owner": "Engineering"
+    },
+    {
+      "code_set_key": "fiscal_operation_retry_status",
+      "path": "families/fiscal_operation_retry_status.json",
+      "governance_owner": "Engineering"
+    },
+    {
+      "code_set_key": "fiscal_report_status",
+      "path": "families/fiscal_report_status.json",
+      "governance_owner": "Engineering"
+    }
+  ],
+  "notes": [
+    "This index contains source metadata only and does not create generated SQL or database rows.",
+    "Family sources are listed in deterministic code_set_key order.",
+    "This slice is limited to low-risk lifecycle, operational, audit-result, and observability posture."
+  ]
+}

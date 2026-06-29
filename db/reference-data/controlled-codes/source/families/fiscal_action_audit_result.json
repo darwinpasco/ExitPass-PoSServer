@@ -1,0 +1,85 @@
+{
+  "schema_version": "1.0",
+  "source_key": "controlled_codes.fiscal_action_audit_result.v1",
+  "source_name": "Fiscal Action Audit Result Controlled Codes",
+  "source_description": "Low-risk result posture for fiscal action audit evidence.",
+  "governance_owner": "Engineering",
+  "source_ref": "ExitPass_POS_Server_Controlled_Code_Value_Approval_Matrix.md; db/controlled-code-source-values-slice-1",
+  "code_sets": [
+    {
+      "code_set_key": "fiscal_action_audit_result",
+      "display_name": "Fiscal Action Audit Result",
+      "description": "Result categories for evidence-only fiscal action audit rows. Values do not create authority, approval workflow, or event publication.",
+      "governance_owner": "Engineering",
+      "source_ref": "ExitPass_POS_Server_Controlled_Code_Value_Approval_Matrix.md; db/controlled-code-source-values-slice-1",
+      "is_active": true,
+      "effective_start_at": "2026-06-29T00:00:00Z",
+      "effective_end_at": null,
+      "codes": [
+        {
+          "code_key": "success",
+          "display_name": "Success",
+          "description": "The audited fiscal action completed for its local evidence posture.",
+          "source_ref": "db/controlled-code-source-values-slice-1",
+          "sort_order": 10,
+          "is_active": true,
+          "is_deprecated": false,
+          "effective_start_at": "2026-06-29T00:00:00Z",
+          "effective_end_at": null,
+          "replaced_by_code_key": null
+        },
+        {
+          "code_key": "failed",
+          "display_name": "Failed",
+          "description": "The audited fiscal action did not complete because of an error or failed condition.",
+          "source_ref": "db/controlled-code-source-values-slice-1",
+          "sort_order": 20,
+          "is_active": true,
+          "is_deprecated": false,
+          "effective_start_at": "2026-06-29T00:00:00Z",
+          "effective_end_at": null,
+          "replaced_by_code_key": null
+        },
+        {
+          "code_key": "denied",
+          "display_name": "Denied",
+          "description": "The audited fiscal action was not permitted by local validation or policy. This value does not imply exit, gate, or payment authority.",
+          "source_ref": "db/controlled-code-source-values-slice-1",
+          "sort_order": 30,
+          "is_active": true,
+          "is_deprecated": false,
+          "effective_start_at": "2026-06-29T00:00:00Z",
+          "effective_end_at": null,
+          "replaced_by_code_key": null
+        },
+        {
+          "code_key": "rejected",
+          "display_name": "Rejected",
+          "description": "The audited fiscal action was rejected during local validation or review.",
+          "source_ref": "db/controlled-code-source-values-slice-1",
+          "sort_order": 40,
+          "is_active": true,
+          "is_deprecated": false,
+          "effective_start_at": "2026-06-29T00:00:00Z",
+          "effective_end_at": null,
+          "replaced_by_code_key": null
+        },
+        {
+          "code_key": "no_op",
+          "display_name": "No Op",
+          "description": "The audited fiscal action resulted in no state change.",
+          "source_ref": "db/controlled-code-source-values-slice-1",
+          "sort_order": 50,
+          "is_active": true,
+          "is_deprecated": false,
+          "effective_start_at": "2026-06-29T00:00:00Z",
+          "effective_end_at": null,
+          "replaced_by_code_key": null
+        }
+      ]
+    }
+  ],
+  "notes": [
+    "Values are audit-result posture only and do not create authority or workflow."
+  ]
+}

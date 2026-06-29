@@ -1,0 +1,97 @@
+{
+  "schema_version": "1.0",
+  "source_key": "controlled_codes.fiscal_operation_retry_status.v1",
+  "source_name": "Fiscal Operation Retry Status Controlled Codes",
+  "source_description": "Low-risk lifecycle statuses for fiscal operation retry posture.",
+  "governance_owner": "Engineering",
+  "source_ref": "ExitPass_POS_Server_Controlled_Code_Value_Approval_Matrix.md; db/controlled-code-source-values-slice-1",
+  "code_sets": [
+    {
+      "code_set_key": "fiscal_operation_retry_status",
+      "display_name": "Fiscal Operation Retry Status",
+      "description": "Lifecycle posture for retry attempts around fiscal side-effect protection. Values do not implement retry execution behavior.",
+      "governance_owner": "Engineering",
+      "source_ref": "ExitPass_POS_Server_Controlled_Code_Value_Approval_Matrix.md; db/controlled-code-source-values-slice-1",
+      "is_active": true,
+      "effective_start_at": "2026-06-29T00:00:00Z",
+      "effective_end_at": null,
+      "codes": [
+        {
+          "code_key": "pending",
+          "display_name": "Pending",
+          "description": "Retry attempt is recorded and waiting for future handling.",
+          "source_ref": "db/controlled-code-source-values-slice-1",
+          "sort_order": 10,
+          "is_active": true,
+          "is_deprecated": false,
+          "effective_start_at": "2026-06-29T00:00:00Z",
+          "effective_end_at": null,
+          "replaced_by_code_key": null
+        },
+        {
+          "code_key": "in_progress",
+          "display_name": "In Progress",
+          "description": "Retry attempt is in progress for lifecycle tracking only.",
+          "source_ref": "db/controlled-code-source-values-slice-1",
+          "sort_order": 20,
+          "is_active": true,
+          "is_deprecated": false,
+          "effective_start_at": "2026-06-29T00:00:00Z",
+          "effective_end_at": null,
+          "replaced_by_code_key": null
+        },
+        {
+          "code_key": "succeeded",
+          "display_name": "Succeeded",
+          "description": "Retry attempt completed successfully for local lifecycle tracking.",
+          "source_ref": "db/controlled-code-source-values-slice-1",
+          "sort_order": 30,
+          "is_active": true,
+          "is_deprecated": false,
+          "effective_start_at": "2026-06-29T00:00:00Z",
+          "effective_end_at": null,
+          "replaced_by_code_key": null
+        },
+        {
+          "code_key": "failed",
+          "display_name": "Failed",
+          "description": "Retry attempt did not complete because of an error or failed condition.",
+          "source_ref": "db/controlled-code-source-values-slice-1",
+          "sort_order": 40,
+          "is_active": true,
+          "is_deprecated": false,
+          "effective_start_at": "2026-06-29T00:00:00Z",
+          "effective_end_at": null,
+          "replaced_by_code_key": null
+        },
+        {
+          "code_key": "exhausted",
+          "display_name": "Exhausted",
+          "description": "Retry attempts have reached the approved local retry limit for the operation posture.",
+          "source_ref": "db/controlled-code-source-values-slice-1",
+          "sort_order": 50,
+          "is_active": true,
+          "is_deprecated": false,
+          "effective_start_at": "2026-06-29T00:00:00Z",
+          "effective_end_at": null,
+          "replaced_by_code_key": null
+        },
+        {
+          "code_key": "cancelled",
+          "display_name": "Cancelled",
+          "description": "Retry attempt was stopped before completion.",
+          "source_ref": "db/controlled-code-source-values-slice-1",
+          "sort_order": 60,
+          "is_active": true,
+          "is_deprecated": false,
+          "effective_start_at": "2026-06-29T00:00:00Z",
+          "effective_end_at": null,
+          "replaced_by_code_key": null
+        }
+      ]
+    }
+  ],
+  "notes": [
+    "Values are lifecycle posture only and do not implement retry execution."
+  ]
+}
