@@ -1,0 +1,100 @@
+{
+  "schema_version": "1.0",
+  "source_key": "controlled_codes.reference_data_artifact_type.v1",
+  "source_name": "Reference Data Artifact Type Controlled Codes",
+  "source_description": "Low-risk artifact type posture for reference-data generation and validation evidence.",
+  "governance_owner": "Engineering",
+  "source_ref": "ExitPass_POS_Server_Controlled_Code_Value_Approval_Matrix.md; db/controlled-code-source-values-slice-3",
+  "code_sets": [
+    {
+      "code_set_key": "reference_data_artifact_type",
+      "display_name": "Reference Data Artifact Type",
+      "description": "Artifact type posture for reference-data source, generated artifacts, evidence, and review documents. Values do not approve production deployment or regulatory use.",
+      "governance_owner": "Engineering",
+      "source_ref": "ExitPass_POS_Server_Controlled_Code_Value_Approval_Matrix.md; db/controlled-code-source-values-slice-3",
+      "is_active": true,
+      "effective_start_at": "2026-06-29T00:00:00Z",
+      "effective_end_at": null,
+      "codes": [
+        {
+          "code_key": "source_json",
+          "display_name": "Source JSON",
+          "description": "JSON source artifact for controlled-code reference data.",
+          "source_ref": "db/controlled-code-source-values-slice-3",
+          "sort_order": 10,
+          "is_active": true,
+          "is_deprecated": false,
+          "effective_start_at": "2026-06-29T00:00:00Z",
+          "effective_end_at": null,
+          "replaced_by_code_key": null,
+          "metadata": {
+            "posture": "artifact_type"
+          }
+        },
+        {
+          "code_key": "generated_sql",
+          "display_name": "Generated SQL",
+          "description": "Generated SQL artifact derived from approved JSON source. This value does not indicate deployment approval.",
+          "source_ref": "db/controlled-code-source-values-slice-3",
+          "sort_order": 20,
+          "is_active": true,
+          "is_deprecated": false,
+          "effective_start_at": "2026-06-29T00:00:00Z",
+          "effective_end_at": null,
+          "replaced_by_code_key": null,
+          "metadata": {
+            "posture": "artifact_type"
+          }
+        },
+        {
+          "code_key": "load_evidence",
+          "display_name": "Load Evidence",
+          "description": "Evidence artifact from disposable reference-data load validation.",
+          "source_ref": "db/controlled-code-source-values-slice-3",
+          "sort_order": 30,
+          "is_active": true,
+          "is_deprecated": false,
+          "effective_start_at": "2026-06-29T00:00:00Z",
+          "effective_end_at": null,
+          "replaced_by_code_key": null,
+          "metadata": {
+            "posture": "artifact_type"
+          }
+        },
+        {
+          "code_key": "technical_review",
+          "display_name": "Technical Review",
+          "description": "Technical review artifact for reference-data source, generated SQL, or validation posture.",
+          "source_ref": "db/controlled-code-source-values-slice-3",
+          "sort_order": 40,
+          "is_active": true,
+          "is_deprecated": false,
+          "effective_start_at": "2026-06-29T00:00:00Z",
+          "effective_end_at": null,
+          "replaced_by_code_key": null,
+          "metadata": {
+            "posture": "artifact_type"
+          }
+        },
+        {
+          "code_key": "validation_report",
+          "display_name": "Validation Report",
+          "description": "Validation report artifact for reference-data generation, loading, inventory, or comparison checks.",
+          "source_ref": "db/controlled-code-source-values-slice-3",
+          "sort_order": 50,
+          "is_active": true,
+          "is_deprecated": false,
+          "effective_start_at": "2026-06-29T00:00:00Z",
+          "effective_end_at": null,
+          "replaced_by_code_key": null,
+          "metadata": {
+            "posture": "artifact_type"
+          }
+        }
+      ]
+    }
+  ],
+  "notes": [
+    "Values describe reference-data artifact types only and do not approve artifact use."
+  ]
+}

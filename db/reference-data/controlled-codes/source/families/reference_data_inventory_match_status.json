@@ -1,0 +1,100 @@
+{
+  "schema_version": "1.0",
+  "source_key": "controlled_codes.reference_data_inventory_match_status.v1",
+  "source_name": "Reference Data Inventory Match Status Controlled Codes",
+  "source_description": "Low-risk inventory comparison statuses for reference-data validation posture.",
+  "governance_owner": "Engineering",
+  "source_ref": "ExitPass_POS_Server_Controlled_Code_Value_Approval_Matrix.md; db/controlled-code-source-values-slice-3",
+  "code_sets": [
+    {
+      "code_set_key": "reference_data_inventory_match_status",
+      "display_name": "Reference Data Inventory Match Status",
+      "description": "Inventory comparison posture for reference-data source and target checks. Values do not approve production deployment or business correctness.",
+      "governance_owner": "Engineering",
+      "source_ref": "ExitPass_POS_Server_Controlled_Code_Value_Approval_Matrix.md; db/controlled-code-source-values-slice-3",
+      "is_active": true,
+      "effective_start_at": "2026-06-29T00:00:00Z",
+      "effective_end_at": null,
+      "codes": [
+        {
+          "code_key": "not_checked",
+          "display_name": "Not Checked",
+          "description": "Inventory comparison has not been performed.",
+          "source_ref": "db/controlled-code-source-values-slice-3",
+          "sort_order": 10,
+          "is_active": true,
+          "is_deprecated": false,
+          "effective_start_at": "2026-06-29T00:00:00Z",
+          "effective_end_at": null,
+          "replaced_by_code_key": null,
+          "metadata": {
+            "posture": "inventory_validation"
+          }
+        },
+        {
+          "code_key": "matched",
+          "display_name": "Matched",
+          "description": "Compared source and target inventory matched for the configured technical check.",
+          "source_ref": "db/controlled-code-source-values-slice-3",
+          "sort_order": 20,
+          "is_active": true,
+          "is_deprecated": false,
+          "effective_start_at": "2026-06-29T00:00:00Z",
+          "effective_end_at": null,
+          "replaced_by_code_key": null,
+          "metadata": {
+            "posture": "inventory_validation"
+          }
+        },
+        {
+          "code_key": "missing_in_source",
+          "display_name": "Missing In Source",
+          "description": "Inventory item exists in the compared target but is missing from source.",
+          "source_ref": "db/controlled-code-source-values-slice-3",
+          "sort_order": 30,
+          "is_active": true,
+          "is_deprecated": false,
+          "effective_start_at": "2026-06-29T00:00:00Z",
+          "effective_end_at": null,
+          "replaced_by_code_key": null,
+          "metadata": {
+            "posture": "inventory_validation"
+          }
+        },
+        {
+          "code_key": "missing_in_target",
+          "display_name": "Missing In Target",
+          "description": "Inventory item exists in source but is missing from the compared target.",
+          "source_ref": "db/controlled-code-source-values-slice-3",
+          "sort_order": 40,
+          "is_active": true,
+          "is_deprecated": false,
+          "effective_start_at": "2026-06-29T00:00:00Z",
+          "effective_end_at": null,
+          "replaced_by_code_key": null,
+          "metadata": {
+            "posture": "inventory_validation"
+          }
+        },
+        {
+          "code_key": "mismatch",
+          "display_name": "Mismatch",
+          "description": "Inventory item exists in both source and target but differs in the compared technical attributes.",
+          "source_ref": "db/controlled-code-source-values-slice-3",
+          "sort_order": 50,
+          "is_active": true,
+          "is_deprecated": false,
+          "effective_start_at": "2026-06-29T00:00:00Z",
+          "effective_end_at": null,
+          "replaced_by_code_key": null,
+          "metadata": {
+            "posture": "inventory_validation"
+          }
+        }
+      ]
+    }
+  ],
+  "notes": [
+    "Values describe source/target inventory comparison posture only."
+  ]
+}

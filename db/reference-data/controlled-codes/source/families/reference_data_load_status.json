@@ -1,0 +1,100 @@
+{
+  "schema_version": "1.0",
+  "source_key": "controlled_codes.reference_data_load_status.v1",
+  "source_name": "Reference Data Load Status Controlled Codes",
+  "source_description": "Low-risk lifecycle statuses for reference-data load validation posture.",
+  "governance_owner": "Engineering",
+  "source_ref": "ExitPass_POS_Server_Controlled_Code_Value_Approval_Matrix.md; db/controlled-code-source-values-slice-3",
+  "code_sets": [
+    {
+      "code_set_key": "reference_data_load_status",
+      "display_name": "Reference Data Load Status",
+      "description": "Lifecycle posture for reference-data load validation. Values do not approve production deployment or regulatory use.",
+      "governance_owner": "Engineering",
+      "source_ref": "ExitPass_POS_Server_Controlled_Code_Value_Approval_Matrix.md; db/controlled-code-source-values-slice-3",
+      "is_active": true,
+      "effective_start_at": "2026-06-29T00:00:00Z",
+      "effective_end_at": null,
+      "codes": [
+        {
+          "code_key": "requested",
+          "display_name": "Requested",
+          "description": "Reference-data load validation has been requested.",
+          "source_ref": "db/controlled-code-source-values-slice-3",
+          "sort_order": 10,
+          "is_active": true,
+          "is_deprecated": false,
+          "effective_start_at": "2026-06-29T00:00:00Z",
+          "effective_end_at": null,
+          "replaced_by_code_key": null,
+          "metadata": {
+            "posture": "load_lifecycle"
+          }
+        },
+        {
+          "code_key": "processing",
+          "display_name": "Processing",
+          "description": "Reference-data load validation is in progress for local workflow tracking.",
+          "source_ref": "db/controlled-code-source-values-slice-3",
+          "sort_order": 20,
+          "is_active": true,
+          "is_deprecated": false,
+          "effective_start_at": "2026-06-29T00:00:00Z",
+          "effective_end_at": null,
+          "replaced_by_code_key": null,
+          "metadata": {
+            "posture": "load_lifecycle"
+          }
+        },
+        {
+          "code_key": "loaded",
+          "display_name": "Loaded",
+          "description": "Reference data loaded in the current validation context. This value does not approve production deployment.",
+          "source_ref": "db/controlled-code-source-values-slice-3",
+          "sort_order": 30,
+          "is_active": true,
+          "is_deprecated": false,
+          "effective_start_at": "2026-06-29T00:00:00Z",
+          "effective_end_at": null,
+          "replaced_by_code_key": null,
+          "metadata": {
+            "posture": "load_lifecycle"
+          }
+        },
+        {
+          "code_key": "failed",
+          "display_name": "Failed",
+          "description": "Reference-data load validation did not complete because of an error or failed condition.",
+          "source_ref": "db/controlled-code-source-values-slice-3",
+          "sort_order": 40,
+          "is_active": true,
+          "is_deprecated": false,
+          "effective_start_at": "2026-06-29T00:00:00Z",
+          "effective_end_at": null,
+          "replaced_by_code_key": null,
+          "metadata": {
+            "posture": "load_lifecycle"
+          }
+        },
+        {
+          "code_key": "cancelled",
+          "display_name": "Cancelled",
+          "description": "Reference-data load validation was stopped before completion.",
+          "source_ref": "db/controlled-code-source-values-slice-3",
+          "sort_order": 50,
+          "is_active": true,
+          "is_deprecated": false,
+          "effective_start_at": "2026-06-29T00:00:00Z",
+          "effective_end_at": null,
+          "replaced_by_code_key": null,
+          "metadata": {
+            "posture": "load_lifecycle"
+          }
+        }
+      ]
+    }
+  ],
+  "notes": [
+    "Values describe load validation lifecycle only and do not represent production deployment approval."
+  ]
+}
