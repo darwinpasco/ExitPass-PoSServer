@@ -1,0 +1,27 @@
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 17
+VisualStudioVersion = 17.0.31903.59
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ExitPass.PosServer.Runtime", "src\ExitPass.PosServer.Runtime\ExitPass.PosServer.Runtime.csproj", "{3D7BFF5B-1F51-46CF-B921-7DF20F807AE7}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ExitPass.PosServer.Runtime.Tests", "tests\ExitPass.PosServer.Runtime.Tests\ExitPass.PosServer.Runtime.Tests.csproj", "{9B7F1215-7715-46CB-9246-76E7BC66879C}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{3D7BFF5B-1F51-46CF-B921-7DF20F807AE7}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{3D7BFF5B-1F51-46CF-B921-7DF20F807AE7}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{3D7BFF5B-1F51-46CF-B921-7DF20F807AE7}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{3D7BFF5B-1F51-46CF-B921-7DF20F807AE7}.Release|Any CPU.Build.0 = Release|Any CPU
+		{9B7F1215-7715-46CB-9246-76E7BC66879C}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{9B7F1215-7715-46CB-9246-76E7BC66879C}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{9B7F1215-7715-46CB-9246-76E7BC66879C}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{9B7F1215-7715-46CB-9246-76E7BC66879C}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+EndGlobal
