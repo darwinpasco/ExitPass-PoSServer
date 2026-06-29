@@ -1,0 +1,85 @@
+{
+  "schema_version": "1.0",
+  "source_key": "controlled_codes.channel_terminal_health_status.v1",
+  "source_name": "Channel Terminal Health Status Controlled Codes",
+  "source_description": "Low-risk observability-only health statuses for channel and terminal endpoints under the Site POS Server.",
+  "governance_owner": "Operations",
+  "source_ref": "ExitPass_POS_Server_Controlled_Code_Value_Approval_Matrix.md; db/controlled-code-source-values-slice-1",
+  "code_sets": [
+    {
+      "code_set_key": "channel_terminal_health_status",
+      "display_name": "Channel Terminal Health Status",
+      "description": "Observability-only health posture for channel and terminal endpoints. Values do not approve offline fiscal issuance or independent terminal fiscal authority.",
+      "governance_owner": "Operations",
+      "source_ref": "ExitPass_POS_Server_Controlled_Code_Value_Approval_Matrix.md; db/controlled-code-source-values-slice-1",
+      "is_active": true,
+      "effective_start_at": "2026-06-29T00:00:00Z",
+      "effective_end_at": null,
+      "codes": [
+        {
+          "code_key": "online",
+          "display_name": "Online",
+          "description": "Endpoint is reachable for normal operational observation. This value does not grant fiscal issuance authority.",
+          "source_ref": "db/controlled-code-source-values-slice-1",
+          "sort_order": 10,
+          "is_active": true,
+          "is_deprecated": false,
+          "effective_start_at": "2026-06-29T00:00:00Z",
+          "effective_end_at": null,
+          "replaced_by_code_key": null,
+          "metadata": {
+            "posture": "observability_only"
+          }
+        },
+        {
+          "code_key": "degraded",
+          "display_name": "Degraded",
+          "description": "Endpoint is reachable but operating with reduced capability or impaired health.",
+          "source_ref": "db/controlled-code-source-values-slice-1",
+          "sort_order": 20,
+          "is_active": true,
+          "is_deprecated": false,
+          "effective_start_at": "2026-06-29T00:00:00Z",
+          "effective_end_at": null,
+          "replaced_by_code_key": null,
+          "metadata": {
+            "posture": "observability_only"
+          }
+        },
+        {
+          "code_key": "offline",
+          "display_name": "Offline",
+          "description": "Endpoint is not currently reachable for operational observation. This value does not approve offline fiscal issuance.",
+          "source_ref": "db/controlled-code-source-values-slice-1",
+          "sort_order": 30,
+          "is_active": true,
+          "is_deprecated": false,
+          "effective_start_at": "2026-06-29T00:00:00Z",
+          "effective_end_at": null,
+          "replaced_by_code_key": null,
+          "metadata": {
+            "posture": "observability_only"
+          }
+        },
+        {
+          "code_key": "unknown",
+          "display_name": "Unknown",
+          "description": "Endpoint health has not yet been observed or cannot currently be determined.",
+          "source_ref": "db/controlled-code-source-values-slice-1",
+          "sort_order": 40,
+          "is_active": true,
+          "is_deprecated": false,
+          "effective_start_at": "2026-06-29T00:00:00Z",
+          "effective_end_at": null,
+          "replaced_by_code_key": null,
+          "metadata": {
+            "posture": "observability_only"
+          }
+        }
+      ]
+    }
+  ],
+  "notes": [
+    "Values are operational observability posture only."
+  ]
+}

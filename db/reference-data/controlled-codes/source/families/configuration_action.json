@@ -1,0 +1,85 @@
+{
+  "schema_version": "1.0",
+  "source_key": "controlled_codes.configuration_action.v1",
+  "source_name": "Configuration Action Controlled Codes",
+  "source_description": "Low-risk configuration action posture for configuration audit evidence.",
+  "governance_owner": "Engineering",
+  "source_ref": "ExitPass_POS_Server_Controlled_Code_Value_Approval_Matrix.md; db/controlled-code-source-values-slice-1",
+  "code_sets": [
+    {
+      "code_set_key": "configuration_action",
+      "display_name": "Configuration Action",
+      "description": "Configuration action categories for evidence and review posture. Values do not perform configuration changes.",
+      "governance_owner": "Engineering",
+      "source_ref": "ExitPass_POS_Server_Controlled_Code_Value_Approval_Matrix.md; db/controlled-code-source-values-slice-1",
+      "is_active": true,
+      "effective_start_at": "2026-06-29T00:00:00Z",
+      "effective_end_at": null,
+      "codes": [
+        {
+          "code_key": "create",
+          "display_name": "Create",
+          "description": "A configuration record was created or proposed for creation.",
+          "source_ref": "db/controlled-code-source-values-slice-1",
+          "sort_order": 10,
+          "is_active": true,
+          "is_deprecated": false,
+          "effective_start_at": "2026-06-29T00:00:00Z",
+          "effective_end_at": null,
+          "replaced_by_code_key": null
+        },
+        {
+          "code_key": "update",
+          "display_name": "Update",
+          "description": "A configuration record was changed or proposed for change.",
+          "source_ref": "db/controlled-code-source-values-slice-1",
+          "sort_order": 20,
+          "is_active": true,
+          "is_deprecated": false,
+          "effective_start_at": "2026-06-29T00:00:00Z",
+          "effective_end_at": null,
+          "replaced_by_code_key": null
+        },
+        {
+          "code_key": "activate",
+          "display_name": "Activate",
+          "description": "A configuration record was marked available for new operational use.",
+          "source_ref": "db/controlled-code-source-values-slice-1",
+          "sort_order": 30,
+          "is_active": true,
+          "is_deprecated": false,
+          "effective_start_at": "2026-06-29T00:00:00Z",
+          "effective_end_at": null,
+          "replaced_by_code_key": null
+        },
+        {
+          "code_key": "suspend",
+          "display_name": "Suspend",
+          "description": "A configuration record was temporarily marked unavailable for new operational use.",
+          "source_ref": "db/controlled-code-source-values-slice-1",
+          "sort_order": 40,
+          "is_active": true,
+          "is_deprecated": false,
+          "effective_start_at": "2026-06-29T00:00:00Z",
+          "effective_end_at": null,
+          "replaced_by_code_key": null
+        },
+        {
+          "code_key": "retire",
+          "display_name": "Retire",
+          "description": "A configuration record was marked retired from new operational use while preserving history.",
+          "source_ref": "db/controlled-code-source-values-slice-1",
+          "sort_order": 50,
+          "is_active": true,
+          "is_deprecated": false,
+          "effective_start_at": "2026-06-29T00:00:00Z",
+          "effective_end_at": null,
+          "replaced_by_code_key": null
+        }
+      ]
+    }
+  ],
+  "notes": [
+    "Values describe configuration audit posture only and do not implement changes."
+  ]
+}

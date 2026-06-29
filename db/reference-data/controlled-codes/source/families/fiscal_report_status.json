@@ -1,0 +1,85 @@
+{
+  "schema_version": "1.0",
+  "source_key": "controlled_codes.fiscal_report_status.v1",
+  "source_name": "Fiscal Report Status Controlled Codes",
+  "source_description": "Low-risk report request lifecycle statuses that do not define BIR report content or formulas.",
+  "governance_owner": "Engineering",
+  "source_ref": "ExitPass_POS_Server_Controlled_Code_Value_Approval_Matrix.md; db/controlled-code-source-values-slice-1",
+  "code_sets": [
+    {
+      "code_set_key": "fiscal_report_status",
+      "display_name": "Fiscal Report Status",
+      "description": "Lifecycle status posture for fiscal report requests. Values do not define report formulas, layouts, X/Z behavior, or BIR output content.",
+      "governance_owner": "Engineering",
+      "source_ref": "ExitPass_POS_Server_Controlled_Code_Value_Approval_Matrix.md; db/controlled-code-source-values-slice-1",
+      "is_active": true,
+      "effective_start_at": "2026-06-29T00:00:00Z",
+      "effective_end_at": null,
+      "codes": [
+        {
+          "code_key": "requested",
+          "display_name": "Requested",
+          "description": "Report request has been recorded but processing has not started.",
+          "source_ref": "db/controlled-code-source-values-slice-1",
+          "sort_order": 10,
+          "is_active": true,
+          "is_deprecated": false,
+          "effective_start_at": "2026-06-29T00:00:00Z",
+          "effective_end_at": null,
+          "replaced_by_code_key": null
+        },
+        {
+          "code_key": "processing",
+          "display_name": "Processing",
+          "description": "Report request is being processed for lifecycle tracking only.",
+          "source_ref": "db/controlled-code-source-values-slice-1",
+          "sort_order": 20,
+          "is_active": true,
+          "is_deprecated": false,
+          "effective_start_at": "2026-06-29T00:00:00Z",
+          "effective_end_at": null,
+          "replaced_by_code_key": null
+        },
+        {
+          "code_key": "completed",
+          "display_name": "Completed",
+          "description": "Report request completed its local lifecycle posture.",
+          "source_ref": "db/controlled-code-source-values-slice-1",
+          "sort_order": 30,
+          "is_active": true,
+          "is_deprecated": false,
+          "effective_start_at": "2026-06-29T00:00:00Z",
+          "effective_end_at": null,
+          "replaced_by_code_key": null
+        },
+        {
+          "code_key": "failed",
+          "display_name": "Failed",
+          "description": "Report request did not complete because of an error or failed condition.",
+          "source_ref": "db/controlled-code-source-values-slice-1",
+          "sort_order": 40,
+          "is_active": true,
+          "is_deprecated": false,
+          "effective_start_at": "2026-06-29T00:00:00Z",
+          "effective_end_at": null,
+          "replaced_by_code_key": null
+        },
+        {
+          "code_key": "cancelled",
+          "display_name": "Cancelled",
+          "description": "Report request was stopped before completion.",
+          "source_ref": "db/controlled-code-source-values-slice-1",
+          "sort_order": 50,
+          "is_active": true,
+          "is_deprecated": false,
+          "effective_start_at": "2026-06-29T00:00:00Z",
+          "effective_end_at": null,
+          "replaced_by_code_key": null
+        }
+      ]
+    }
+  ],
+  "notes": [
+    "Values are lifecycle-only and do not define BIR formulas, report layouts, or X/Z report kinds."
+  ]
+}
