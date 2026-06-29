@@ -1,0 +1,100 @@
+{
+  "schema_version": "1.0",
+  "source_key": "controlled_codes.reference_data_validation_status.v1",
+  "source_name": "Reference Data Validation Status Controlled Codes",
+  "source_description": "Low-risk lifecycle statuses for reference-data validation posture.",
+  "governance_owner": "Engineering",
+  "source_ref": "ExitPass_POS_Server_Controlled_Code_Value_Approval_Matrix.md; db/controlled-code-source-values-slice-3",
+  "code_sets": [
+    {
+      "code_set_key": "reference_data_validation_status",
+      "display_name": "Reference Data Validation Status",
+      "description": "Lifecycle posture for technical reference-data validation. Values do not represent business, fiscal, legal, BIR, security, or production approval.",
+      "governance_owner": "Engineering",
+      "source_ref": "ExitPass_POS_Server_Controlled_Code_Value_Approval_Matrix.md; db/controlled-code-source-values-slice-3",
+      "is_active": true,
+      "effective_start_at": "2026-06-29T00:00:00Z",
+      "effective_end_at": null,
+      "codes": [
+        {
+          "code_key": "requested",
+          "display_name": "Requested",
+          "description": "Validation has been requested for technical reference-data workflow posture.",
+          "source_ref": "db/controlled-code-source-values-slice-3",
+          "sort_order": 10,
+          "is_active": true,
+          "is_deprecated": false,
+          "effective_start_at": "2026-06-29T00:00:00Z",
+          "effective_end_at": null,
+          "replaced_by_code_key": null,
+          "metadata": {
+            "posture": "validation_lifecycle"
+          }
+        },
+        {
+          "code_key": "processing",
+          "display_name": "Processing",
+          "description": "Validation is in progress for local workflow tracking.",
+          "source_ref": "db/controlled-code-source-values-slice-3",
+          "sort_order": 20,
+          "is_active": true,
+          "is_deprecated": false,
+          "effective_start_at": "2026-06-29T00:00:00Z",
+          "effective_end_at": null,
+          "replaced_by_code_key": null,
+          "metadata": {
+            "posture": "validation_lifecycle"
+          }
+        },
+        {
+          "code_key": "passed",
+          "display_name": "Passed",
+          "description": "Validation passed the configured technical checks. This value does not indicate business, fiscal, legal, BIR, security, or production approval.",
+          "source_ref": "db/controlled-code-source-values-slice-3",
+          "sort_order": 30,
+          "is_active": true,
+          "is_deprecated": false,
+          "effective_start_at": "2026-06-29T00:00:00Z",
+          "effective_end_at": null,
+          "replaced_by_code_key": null,
+          "metadata": {
+            "posture": "validation_lifecycle"
+          }
+        },
+        {
+          "code_key": "failed",
+          "display_name": "Failed",
+          "description": "Validation did not pass the configured technical checks.",
+          "source_ref": "db/controlled-code-source-values-slice-3",
+          "sort_order": 40,
+          "is_active": true,
+          "is_deprecated": false,
+          "effective_start_at": "2026-06-29T00:00:00Z",
+          "effective_end_at": null,
+          "replaced_by_code_key": null,
+          "metadata": {
+            "posture": "validation_lifecycle"
+          }
+        },
+        {
+          "code_key": "cancelled",
+          "display_name": "Cancelled",
+          "description": "Validation was stopped before completion.",
+          "source_ref": "db/controlled-code-source-values-slice-3",
+          "sort_order": 50,
+          "is_active": true,
+          "is_deprecated": false,
+          "effective_start_at": "2026-06-29T00:00:00Z",
+          "effective_end_at": null,
+          "replaced_by_code_key": null,
+          "metadata": {
+            "posture": "validation_lifecycle"
+          }
+        }
+      ]
+    }
+  ],
+  "notes": [
+    "Values describe technical validation lifecycle only and do not represent regulatory, security, or deployment approval."
+  ]
+}

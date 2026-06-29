@@ -1,0 +1,85 @@
+{
+  "schema_version": "1.0",
+  "source_key": "controlled_codes.reference_data_validation_issue_severity.v1",
+  "source_name": "Reference Data Validation Issue Severity Controlled Codes",
+  "source_description": "Low-risk severity posture for technical reference-data validation issues.",
+  "governance_owner": "Engineering",
+  "source_ref": "ExitPass_POS_Server_Controlled_Code_Value_Approval_Matrix.md; db/controlled-code-source-values-slice-3",
+  "code_sets": [
+    {
+      "code_set_key": "reference_data_validation_issue_severity",
+      "display_name": "Reference Data Validation Issue Severity",
+      "description": "Technical severity posture for reference-data validation issues. Values do not encode business, fiscal, legal, BIR, or security approval decisions.",
+      "governance_owner": "Engineering",
+      "source_ref": "ExitPass_POS_Server_Controlled_Code_Value_Approval_Matrix.md; db/controlled-code-source-values-slice-3",
+      "is_active": true,
+      "effective_start_at": "2026-06-29T00:00:00Z",
+      "effective_end_at": null,
+      "codes": [
+        {
+          "code_key": "info",
+          "display_name": "Info",
+          "description": "Informational validation observation.",
+          "source_ref": "db/controlled-code-source-values-slice-3",
+          "sort_order": 10,
+          "is_active": true,
+          "is_deprecated": false,
+          "effective_start_at": "2026-06-29T00:00:00Z",
+          "effective_end_at": null,
+          "replaced_by_code_key": null,
+          "metadata": {
+            "posture": "validation_severity"
+          }
+        },
+        {
+          "code_key": "warning",
+          "display_name": "Warning",
+          "description": "Validation observation that should be reviewed but does not by itself block local technical processing.",
+          "source_ref": "db/controlled-code-source-values-slice-3",
+          "sort_order": 20,
+          "is_active": true,
+          "is_deprecated": false,
+          "effective_start_at": "2026-06-29T00:00:00Z",
+          "effective_end_at": null,
+          "replaced_by_code_key": null,
+          "metadata": {
+            "posture": "validation_severity"
+          }
+        },
+        {
+          "code_key": "error",
+          "display_name": "Error",
+          "description": "Validation issue indicating a technical failure or inconsistency.",
+          "source_ref": "db/controlled-code-source-values-slice-3",
+          "sort_order": 30,
+          "is_active": true,
+          "is_deprecated": false,
+          "effective_start_at": "2026-06-29T00:00:00Z",
+          "effective_end_at": null,
+          "replaced_by_code_key": null,
+          "metadata": {
+            "posture": "validation_severity"
+          }
+        },
+        {
+          "code_key": "blocker",
+          "display_name": "Blocker",
+          "description": "Validation issue that blocks the current local technical workflow until resolved.",
+          "source_ref": "db/controlled-code-source-values-slice-3",
+          "sort_order": 40,
+          "is_active": true,
+          "is_deprecated": false,
+          "effective_start_at": "2026-06-29T00:00:00Z",
+          "effective_end_at": null,
+          "replaced_by_code_key": null,
+          "metadata": {
+            "posture": "validation_severity"
+          }
+        }
+      ]
+    }
+  ],
+  "notes": [
+    "Values describe technical issue severity only and do not grant approval."
+  ]
+}
