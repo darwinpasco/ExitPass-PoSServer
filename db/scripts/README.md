@@ -10,6 +10,8 @@ The script validates repository SQL under `db/state` against:
 
 Repository SQL is the source of truth. Local database drift is reported only and must not be promoted into repository artifacts.
 
+Controlled-code JSON source under `db/reference-data/controlled-codes/source/` is the source of truth for controlled-code reference data. Generated controlled-code SQL under `db/reference-data/controlled-codes/generated/sql/` is validated only through the opt-in `ControlledCodeLoad` mode.
+
 ## Modes
 
 | Mode | Requires `psql` or Docker | Purpose |
@@ -18,6 +20,7 @@ Repository SQL is the source of truth. Local database drift is reported only and
 | `Rebuild` | Yes | Applies SQL files from the manifest to an explicit PostgreSQL target in deterministic order. |
 | `Inventory` | Yes | Reads PostgreSQL catalog inventory and compares schemas/tables to the expected repository inventory. |
 | `Drift` | Yes | Reports database inventory drift from repository expected inventory without modifying repository files. |
+| `ControlledCodeLoad` | Yes | Resets an explicitly named disposable database, rebuilds schema, applies generated controlled-code SQL in deterministic order, repeats the latest generated SQL file, and validates loaded inventory against JSON source. |
 | `All` | Static only without connection string; all checks with connection string | Runs Static, then DB-dependent checks when `-ConnectionString` is provided. |
 
 ## Examples
@@ -32,6 +35,16 @@ Optional database name evidence/safety context:
 
 ```powershell
 .\db\scripts\Invoke-PosDbChecks.ps1 -Mode Inventory -ConnectionString $env:POSSERVER_DB_URL -DatabaseName posserver_validation_local -EvidenceDir .\db\validation\evidence\local-inventory
+```
+
+Controlled-code load validation against a disposable local database:
+
+```powershell
+.\db\scripts\Invoke-PosDbChecks.ps1 `
+  -Mode ControlledCodeLoad `
+  -ConnectionString $env:POSSERVER_DB_URL `
+  -DatabaseName posserver_controlled_code_workflow_validation_local `
+  -EvidenceDir .\db\validation\evidence\controlled-code-load
 ```
 
 ## Docker psql Usage
@@ -63,6 +76,19 @@ Run all checks through Docker psql:
   -ConnectionString $env:POSSERVER_DB_URL `
   -DatabaseName posserver_validation_local `
   -EvidenceDir .\db\validation\evidence\docker-all
+```
+
+Run controlled-code load validation through Docker psql:
+
+```powershell
+$env:POSSERVER_DB_URL = 'postgresql://exitpass:<password>@host.docker.internal:5433/posserver_controlled_code_workflow_validation_local'
+
+.\db\scripts\Invoke-PosDbChecks.ps1 `
+  -Mode ControlledCodeLoad `
+  -UseDockerPsql `
+  -ConnectionString $env:POSSERVER_DB_URL `
+  -DatabaseName posserver_controlled_code_workflow_validation_local `
+  -EvidenceDir .\db\validation\evidence\controlled-code-load
 ```
 
 If the PostgreSQL database is on a Docker network, use a network alias in the connection string and pass the network name:
@@ -101,7 +127,9 @@ Use only disposable or explicitly approved local validation databases.
 
 The script refuses obvious production/shared target names such as names containing `prod`, `production`, `live`, `shared`, `authority`, or `central_pms`. The check is conservative and does not replace operator judgment.
 
-The script does not create or drop databases. Prepare the disposable database outside this script, then pass its connection string.
+`Static`, `Rebuild`, `Inventory`, `Drift`, and `All` do not create or drop databases. Prepare the disposable database outside those modes, then pass its connection string.
+
+`ControlledCodeLoad` is intentionally different: it resets only the explicitly named disposable validation database passed through `-DatabaseName`. The name must look local/validation/disposable/test-oriented and must not look production/shared/authority-owned.
 
 Do not pass production/shared database connection strings to local or Docker mode.
 
@@ -123,6 +151,7 @@ For each mode, the script writes:
 - Inventory checks compare expected schemas/tables and report functions, triggers, extensions, and sequences; they do not validate every column definition yet.
 - Drift checks report drift only. They never update repository SQL or validation configuration.
 - Rebuild mode applies SQL to the provided target but does not create/drop the database.
+- ControlledCodeLoad mode validates controlled-code reference data by rebuilding schema, applying generated SQL files in deterministic filename order, repeating the latest generated SQL file for idempotency, and comparing loaded code-set/code-key inventory to JSON source.
 - Docker mode depends on Docker being installed/running and on the selected Docker image being pullable or already available.
 - Docker mode does not hide secrets from Docker itself; do not use production credentials. The script avoids printing the connection string in summaries and evidence.
 - CI integration is intentionally deferred.
@@ -134,5 +163,5 @@ Recommended follow-up work:
 1. Run Static mode locally for each DB artifact PR.
 2. Run Rebuild, Inventory, and Drift modes against a disposable PostgreSQL database.
 3. Extend inventory validation to column-level and foreign-key-level checks after the base workflow is stable.
-4. Add controlled-code seed/reference data in a separate approved task.
-5. Add CI workflow integration after local checks are stable and repeatable.
+4. Run ControlledCodeLoad after controlled-code JSON/generated SQL changes.
+5. Extend controlled-code workflow into CI after local checks are stable and repeatable.

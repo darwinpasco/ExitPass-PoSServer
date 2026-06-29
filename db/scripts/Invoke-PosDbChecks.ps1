@@ -13,14 +13,14 @@ Repository SQL is the source of truth. Drift is reported only and is never promo
 into repository artifacts by this script.
 
 .PARAMETER Mode
-Check mode to run: Static, Rebuild, Inventory, Drift, or All.
+Check mode to run: Static, Rebuild, Inventory, Drift, ControlledCodeLoad, or All.
 
 .PARAMETER ConnectionString
-Explicit PostgreSQL connection string used by Rebuild, Inventory, and Drift modes.
+Explicit PostgreSQL connection string used by Rebuild, Inventory, Drift, and ControlledCodeLoad modes.
 Do not pass production or shared authority database connection strings.
 
 .PARAMETER DatabaseName
-Optional database name used for conservative safety checks and evidence context.
+Optional database name used for conservative safety checks and evidence context. Required by ControlledCodeLoad because that mode resets a disposable validation database.
 
 .PARAMETER EvidenceDir
 Optional directory for JSON and text evidence output. If omitted, no evidence files are written.
@@ -48,12 +48,15 @@ Container name for the disposable psql client container.
 
 .EXAMPLE
 .\db\scripts\Invoke-PosDbChecks.ps1 -Mode All -UseDockerPsql -ConnectionString $env:POSSERVER_DB_URL -EvidenceDir .\db\validation\evidence\docker-all
+
+.EXAMPLE
+.\db\scripts\Invoke-PosDbChecks.ps1 -Mode ControlledCodeLoad -UseDockerPsql -ConnectionString $env:POSSERVER_DB_URL -DatabaseName posserver_controlled_code_workflow_validation_local -EvidenceDir .\db\validation\evidence\controlled-code-load
 #>
 
 [CmdletBinding()]
 param(
     [Parameter()]
-    [ValidateSet('Static', 'Rebuild', 'Inventory', 'Drift', 'All')]
+    [ValidateSet('Static', 'Rebuild', 'Inventory', 'Drift', 'ControlledCodeLoad', 'All')]
     [string] $Mode = 'Static',
 
     [Parameter()]
@@ -92,7 +95,11 @@ $RepoRoot = (Resolve-Path (Join-Path $ScriptRoot '..\..')).Path
 $ManifestPath = Join-Path $RepoRoot 'db\rebuild\pos_sql_apply_order.txt'
 $ExpectedInventoryPath = Join-Path $RepoRoot 'db\validation\pos_expected_inventory.json'
 $ProhibitedPatternsPath = Join-Path $RepoRoot 'db\validation\pos_prohibited_patterns.json'
+$ControlledCodeSourceRoot = Join-Path $RepoRoot 'db\reference-data\controlled-codes\source'
+$ControlledCodeSourceIndexPath = Join-Path $ControlledCodeSourceRoot 'controlled_code_source_index.json'
+$ControlledCodeGeneratedSqlRoot = Join-Path $RepoRoot 'db\reference-data\controlled-codes\generated\sql'
 $RunStamp = (Get-Date).ToUniversalTime().ToString('yyyyMMddTHHmmssZ')
+$script:PsqlDiagnostics = New-Object System.Collections.Generic.List[object]
 
 function New-CheckResult {
     param([string] $Name)
@@ -271,6 +278,49 @@ function Assert-DisposableDatabaseTarget {
     }
 }
 
+function Assert-ControlledCodeDisposableDatabaseTarget {
+    Assert-ConnectionStringProvided
+    Assert-DisposableDatabaseTarget
+
+    if ([string]::IsNullOrWhiteSpace($DatabaseName)) {
+        throw 'ControlledCodeLoad requires -DatabaseName so the disposable validation database can be reset explicitly.'
+    }
+    if ($DatabaseName -notmatch '^[A-Za-z0-9_]+$') {
+        throw 'ControlledCodeLoad database names may contain only letters, numbers, and underscores.'
+    }
+    if ($DatabaseName -notmatch '(?i)(validation|local|disposable|test)') {
+        throw 'ControlledCodeLoad refuses to reset a database unless its name clearly indicates validation/local/disposable/test use.'
+    }
+}
+
+function ConvertTo-SqlLiteral {
+    param([string] $Value)
+
+    return "'" + $Value.Replace("'", "''") + "'"
+}
+
+function ConvertTo-SqlIdentifier {
+    param([string] $Identifier)
+
+    return '"' + $Identifier.Replace('"', '""') + '"'
+}
+
+function ConvertTo-TemplateConnectionString {
+    param([string] $InputConnectionString)
+
+    if ($InputConnectionString -match '^\s*postgres(?:ql)?://') {
+        $builder = [System.UriBuilder]::new($InputConnectionString)
+        $builder.Path = 'template1'
+        return $builder.Uri.AbsoluteUri
+    }
+
+    if ($InputConnectionString -match '(?i)(^|[\s;])dbname\s*=') {
+        return [regex]::Replace($InputConnectionString, '(?i)(dbname\s*=\s*)([^\s;]+)', '${1}template1', 1)
+    }
+
+    throw 'Unable to derive a template1 maintenance connection string from -ConnectionString. Use a PostgreSQL URI or keyword connection string with dbname.'
+}
+
 function ConvertTo-ContainerPath {
     param([string] $RelativePath)
 
@@ -306,14 +356,71 @@ function Get-DockerPsqlBaseArgs {
     return ,$args
 }
 
+function New-BackslashString {
+    param([int] $Count)
+
+    if ($Count -le 0) {
+        return ''
+    }
+
+    return New-Object string ([char]92, $Count)
+}
+
+function ConvertTo-NativeArgument {
+    param([string] $Argument)
+
+    if ($null -eq $Argument) {
+        return '""'
+    }
+
+    $builder = New-Object System.Text.StringBuilder
+    $backslashCount = 0
+    [void] $builder.Append('"')
+
+    foreach ($character in $Argument.ToCharArray()) {
+        if ($character -eq [char]92) {
+            $backslashCount++
+            continue
+        }
+
+        if ($character -eq '"') {
+            [void] $builder.Append((New-BackslashString -Count ($backslashCount * 2 + 1)))
+            [void] $builder.Append('"')
+            $backslashCount = 0
+            continue
+        }
+
+        if ($backslashCount -gt 0) {
+            [void] $builder.Append((New-BackslashString -Count $backslashCount))
+            $backslashCount = 0
+        }
+
+        [void] $builder.Append($character)
+    }
+
+    if ($backslashCount -gt 0) {
+        [void] $builder.Append((New-BackslashString -Count ($backslashCount * 2)))
+    }
+
+    [void] $builder.Append('"')
+    return $builder.ToString()
+}
+
+function Join-NativeArguments {
+    param([string[]] $Arguments)
+
+    return (@($Arguments | ForEach-Object { ConvertTo-NativeArgument -Argument $_ }) -join ' ')
+}
+
 function Invoke-DockerPsqlCommand {
     param(
         [string] $Sql,
-        [string] $FilePath
+        [string] $FilePath,
+        [string] $CommandConnectionString = $ConnectionString
     )
 
     $dockerArgs = Get-DockerPsqlBaseArgs
-    $dockerArgs.Add($ConnectionString)
+    $dockerArgs.Add($CommandConnectionString)
     $dockerArgs.Add('-v')
     $dockerArgs.Add('ON_ERROR_STOP=1')
 
@@ -333,29 +440,53 @@ function Invoke-DockerPsqlCommand {
         throw 'Invoke-DockerPsqlCommand requires either Sql or FilePath.'
     }
 
-    $output = & docker @($dockerArgs.ToArray()) 2>&1
-    if ($LASTEXITCODE -ne 0) {
-        throw "Docker psql execution failed. Verify Docker is running, image '$DockerImage' is available, and the connection string targets a disposable database. Output: $($output -join [Environment]::NewLine)"
+    $processStartInfo = [System.Diagnostics.ProcessStartInfo]::new()
+    $processStartInfo.FileName = 'docker'
+    $processStartInfo.UseShellExecute = $false
+    $processStartInfo.RedirectStandardOutput = $true
+    $processStartInfo.RedirectStandardError = $true
+    $processStartInfo.Arguments = Join-NativeArguments -Arguments $dockerArgs.ToArray()
+
+    $process = [System.Diagnostics.Process]::Start($processStartInfo)
+    $stdout = $process.StandardOutput.ReadToEnd()
+    $stderr = $process.StandardError.ReadToEnd()
+    $process.WaitForExit()
+
+    if (-not [string]::IsNullOrWhiteSpace($stderr)) {
+        $script:PsqlDiagnostics.Add([ordered]@{
+            runner = 'docker'
+            exit_code = $process.ExitCode
+            stderr = $stderr.Trim()
+        })
     }
 
-    return $output
+    if ($process.ExitCode -ne 0) {
+        throw "Docker psql execution failed with exit code $($process.ExitCode). Verify Docker is running, image '$DockerImage' is available, and the connection string targets a disposable database. Stdout: $($stdout.Trim()) Stderr: $($stderr.Trim())"
+    }
+
+    if ([string]::IsNullOrWhiteSpace($stdout)) {
+        return @()
+    }
+
+    return @($stdout -split "`r?`n" | Where-Object { $_ -ne '' })
 }
 
 function Invoke-PsqlCommand {
     param(
         [string] $Sql,
-        [string] $FilePath
+        [string] $FilePath,
+        [string] $CommandConnectionString = $ConnectionString
     )
 
     if ($UseDockerPsql) {
-        return Invoke-DockerPsqlCommand -Sql $Sql -FilePath $FilePath
+        return Invoke-DockerPsqlCommand -Sql $Sql -FilePath $FilePath -CommandConnectionString $CommandConnectionString
     }
 
     if (-not [string]::IsNullOrWhiteSpace($Sql)) {
-        $output = & psql $ConnectionString -v ON_ERROR_STOP=1 -t -A -c $Sql 2>&1
+        $output = & psql $CommandConnectionString -v ON_ERROR_STOP=1 -t -A -c $Sql 2>&1
     }
     elseif (-not [string]::IsNullOrWhiteSpace($FilePath)) {
-        $output = & psql $ConnectionString -v ON_ERROR_STOP=1 -f $FilePath 2>&1
+        $output = & psql $CommandConnectionString -v ON_ERROR_STOP=1 -f $FilePath 2>&1
     }
     else {
         throw 'Invoke-PsqlCommand requires either Sql or FilePath.'
@@ -366,6 +497,145 @@ function Invoke-PsqlCommand {
     }
 
     return $output
+}
+
+function Get-ControlledCodeGeneratedSqlFiles {
+    if (-not (Test-Path -LiteralPath $ControlledCodeGeneratedSqlRoot)) {
+        throw "Controlled-code generated SQL directory not found: $ControlledCodeGeneratedSqlRoot"
+    }
+
+    return @(Get-ChildItem -LiteralPath $ControlledCodeGeneratedSqlRoot -File -Filter '*.sql' |
+        Sort-Object Name |
+        ForEach-Object { ConvertTo-RepoRelativePath $_.FullName })
+}
+
+function Get-ControlledCodeSourceInventory {
+    if (-not (Test-Path -LiteralPath $ControlledCodeSourceIndexPath)) {
+        throw "Controlled-code source index not found: $ControlledCodeSourceIndexPath"
+    }
+
+    $index = Get-JsonFile -Path $ControlledCodeSourceIndexPath
+    $codeSetKeys = New-Object System.Collections.Generic.List[string]
+    $codePairs = New-Object System.Collections.Generic.List[string]
+    $familyFiles = New-Object System.Collections.Generic.List[string]
+    $indexOrder = @($index.family_sources | ForEach-Object { $_.code_set_key })
+    $sortedIndexOrder = @($indexOrder | Sort-Object)
+    $indexIsSorted = $true
+    for ($i = 0; $i -lt $indexOrder.Count; $i++) {
+        if ($indexOrder[$i] -ne $sortedIndexOrder[$i]) {
+            $indexIsSorted = $false
+            break
+        }
+    }
+
+    foreach ($familySource in $index.family_sources) {
+        $familyRelative = $familySource.path.Replace('/', [IO.Path]::DirectorySeparatorChar)
+        $familyPath = Join-Path $ControlledCodeSourceRoot $familyRelative
+        $familyFiles.Add("db/reference-data/controlled-codes/source/$($familySource.path)")
+
+        $family = Get-JsonFile -Path $familyPath
+        foreach ($codeSet in $family.code_sets) {
+            $codeSetKeys.Add([string] $codeSet.code_set_key)
+            foreach ($code in $codeSet.codes) {
+                $codePairs.Add("$($codeSet.code_set_key):$($code.code_key)")
+            }
+        }
+    }
+
+    return [ordered]@{
+        source_index = 'db/reference-data/controlled-codes/source/controlled_code_source_index.json'
+        uuid_namespace = $index.uuid_namespace
+        uuid_name_inputs = $index.uuid_name_inputs
+        family_files = $familyFiles.ToArray()
+        index_code_set_order = $indexOrder
+        index_is_sorted_by_code_set_key = $indexIsSorted
+        expected_code_set_keys = @($codeSetKeys.ToArray() | Sort-Object)
+        expected_code_pairs = @($codePairs.ToArray() | Sort-Object)
+        expected_code_set_count = $codeSetKeys.Count
+        expected_code_value_count = $codePairs.Count
+    }
+}
+
+function ConvertTo-JsonFromPsqlOutput {
+    param([object[]] $Output)
+
+    $json = ($Output | Where-Object { $_ -and $_.ToString().Trim().Length -gt 0 }) -join [Environment]::NewLine
+    return $json | ConvertFrom-Json
+}
+
+function Get-ControlledCodeDatabaseInventory {
+    $query = @"
+select jsonb_build_object(
+  'code_set_count', (
+    select count(*) from pos.controlled_code_sets
+  ),
+  'code_value_count', (
+    select count(*) from pos.controlled_codes
+  ),
+  'code_set_keys', (
+    select coalesce(jsonb_agg(code_set_key order by code_set_key), '[]'::jsonb)
+    from pos.controlled_code_sets
+  ),
+  'code_pairs', (
+    select coalesce(jsonb_agg(s.code_pair order by s.code_pair), '[]'::jsonb)
+    from (
+      select ccs.code_set_key || ':' || cc.code_key as code_pair
+      from pos.controlled_codes cc
+      join pos.controlled_code_sets ccs on ccs.controlled_code_set_id = cc.controlled_code_set_id
+    ) s
+  ),
+  'orphan_code_count', (
+    select count(*)
+    from pos.controlled_codes cc
+    left join pos.controlled_code_sets ccs on ccs.controlled_code_set_id = cc.controlled_code_set_id
+    where ccs.controlled_code_set_id is null
+  ),
+  'uuid_inventory', (
+    select coalesce(jsonb_agg(s.uuid_entry order by s.uuid_entry), '[]'::jsonb)
+    from (
+      select 'set:' || code_set_key || ':' || controlled_code_set_id::text as uuid_entry
+      from pos.controlled_code_sets
+      union all
+      select 'code:' || ccs.code_set_key || ':' || cc.code_key || ':' || cc.controlled_code_id::text as uuid_entry
+      from pos.controlled_codes cc
+      join pos.controlled_code_sets ccs on ccs.controlled_code_set_id = cc.controlled_code_set_id
+    ) s
+  )
+)::text;
+"@
+
+    return ConvertTo-JsonFromPsqlOutput -Output (Invoke-PsqlCommand -Sql $query)
+}
+
+function Compare-StringInventory {
+    param(
+        [string[]] $Expected,
+        [string[]] $Actual
+    )
+
+    $expectedSorted = @($Expected | Sort-Object)
+    $actualSorted = @($Actual | Sort-Object)
+
+    return [ordered]@{
+        missing = @(Compare-Object -ReferenceObject $expectedSorted -DifferenceObject $actualSorted |
+            Where-Object { $_.SideIndicator -eq '<=' } |
+            ForEach-Object { $_.InputObject })
+        unexpected = @(Compare-Object -ReferenceObject $expectedSorted -DifferenceObject $actualSorted |
+            Where-Object { $_.SideIndicator -eq '=>' } |
+            ForEach-Object { $_.InputObject })
+    }
+}
+
+function Reset-ControlledCodeValidationDatabase {
+    Assert-ControlledCodeDisposableDatabaseTarget
+
+    $maintenanceConnectionString = ConvertTo-TemplateConnectionString -InputConnectionString $ConnectionString
+    $databaseLiteral = ConvertTo-SqlLiteral -Value $DatabaseName
+    $databaseIdentifier = ConvertTo-SqlIdentifier -Identifier $DatabaseName
+
+    Invoke-PsqlCommand -CommandConnectionString $maintenanceConnectionString -Sql "select pg_terminate_backend(pid) from pg_stat_activity where datname = $databaseLiteral and pid <> pg_backend_pid();" | Out-Null
+    Invoke-PsqlCommand -CommandConnectionString $maintenanceConnectionString -Sql "drop database if exists $databaseIdentifier;" | Out-Null
+    Invoke-PsqlCommand -CommandConnectionString $maintenanceConnectionString -Sql "create database $databaseIdentifier;" | Out-Null
 }
 
 function Get-DatabaseInventory {
@@ -754,11 +1024,157 @@ function Invoke-AllChecks {
     return Complete-Result -Result $result -SummaryLines $summary.ToArray()
 }
 
+function Invoke-ControlledCodeLoadChecks {
+    Assert-ControlledCodeDisposableDatabaseTarget
+    Assert-PsqlRunnerAvailable
+    $script:PsqlDiagnostics.Clear()
+
+    $result = New-CheckResult -Name 'ControlledCodeLoad'
+    $summary = New-Object System.Collections.Generic.List[string]
+    $summary.Add('POS Server controlled-code load validation')
+    $summary.Add('This mode resets only the explicitly named disposable validation database.')
+    $summary.Add('Repository JSON source and generated SQL remain the source of truth. Disposable DB state is not promoted.')
+    $summary.Add("Database name: $DatabaseName")
+
+    $sourceInventory = Get-ControlledCodeSourceInventory
+    $generatedSqlFiles = Get-ControlledCodeGeneratedSqlFiles
+    if ($generatedSqlFiles.Count -eq 0) {
+        Add-ValidationError $result 'No controlled-code generated SQL files were found.'
+        return Complete-Result -Result $result -SummaryLines $summary.ToArray()
+    }
+    if (-not $sourceInventory.index_is_sorted_by_code_set_key) {
+        Add-ValidationError $result 'Controlled-code source index is not sorted by code_set_key.'
+    }
+    if ($result.errors.Count -gt 0) {
+        return Complete-Result -Result $result -SummaryLines $summary.ToArray()
+    }
+
+    Reset-ControlledCodeValidationDatabase
+
+    $schemaFiles = New-Object System.Collections.Generic.List[string]
+    foreach ($entry in Get-ManifestEntries) {
+        $file = Resolve-RepoFile $entry
+        Invoke-PsqlCommand -FilePath $file | Out-Null
+        $schemaFiles.Add($entry)
+    }
+
+    $appliedGeneratedSqlFiles = New-Object System.Collections.Generic.List[string]
+    foreach ($entry in $generatedSqlFiles) {
+        $file = Resolve-RepoFile $entry
+        Invoke-PsqlCommand -FilePath $file | Out-Null
+        $appliedGeneratedSqlFiles.Add($entry)
+    }
+
+    $inventoryBeforeRepeat = Get-ControlledCodeDatabaseInventory
+    $latestGeneratedSql = $generatedSqlFiles[-1]
+    Invoke-PsqlCommand -FilePath (Resolve-RepoFile $latestGeneratedSql) | Out-Null
+    $inventoryAfterRepeat = Get-ControlledCodeDatabaseInventory
+
+    $expectedCodeSetKeys = @($sourceInventory.expected_code_set_keys)
+    $expectedCodePairs = @($sourceInventory.expected_code_pairs)
+    $actualCodeSetKeys = @($inventoryAfterRepeat.code_set_keys | Sort-Object)
+    $actualCodePairs = @($inventoryAfterRepeat.code_pairs | Sort-Object)
+    $codeSetComparison = Compare-StringInventory -Expected $expectedCodeSetKeys -Actual $actualCodeSetKeys
+    $codePairComparison = Compare-StringInventory -Expected $expectedCodePairs -Actual $actualCodePairs
+    $uuidBefore = @($inventoryBeforeRepeat.uuid_inventory | Sort-Object)
+    $uuidAfter = @($inventoryAfterRepeat.uuid_inventory | Sort-Object)
+    $uuidComparison = Compare-StringInventory -Expected $uuidBefore -Actual $uuidAfter
+
+    if ([int] $inventoryAfterRepeat.code_set_count -ne [int] $sourceInventory.expected_code_set_count) {
+        Add-ValidationError $result "Controlled-code set count mismatch. Expected $($sourceInventory.expected_code_set_count), actual $($inventoryAfterRepeat.code_set_count)."
+    }
+    if ([int] $inventoryAfterRepeat.code_value_count -ne [int] $sourceInventory.expected_code_value_count) {
+        Add-ValidationError $result "Controlled-code value count mismatch. Expected $($sourceInventory.expected_code_value_count), actual $($inventoryAfterRepeat.code_value_count)."
+    }
+    if ([int] $inventoryAfterRepeat.orphan_code_count -ne 0) {
+        Add-ValidationError $result "Controlled-code orphan row count is $($inventoryAfterRepeat.orphan_code_count)."
+    }
+    foreach ($key in @($codeSetComparison.missing)) { Add-ValidationError $result "Missing controlled-code set key after load: $key" }
+    foreach ($key in @($codeSetComparison.unexpected)) { Add-ValidationError $result "Unexpected controlled-code set key after load: $key" }
+    foreach ($pair in @($codePairComparison.missing)) { Add-ValidationError $result "Missing controlled-code value after load: $pair" }
+    foreach ($pair in @($codePairComparison.unexpected)) { Add-ValidationError $result "Unexpected controlled-code value after load: $pair" }
+    foreach ($entry in @($uuidComparison.missing)) { Add-ValidationError $result "UUID inventory entry missing after repeat load: $entry" }
+    foreach ($entry in @($uuidComparison.unexpected)) { Add-ValidationError $result "UUID inventory entry changed after repeat load: $entry" }
+
+    $result.details = [ordered]@{
+        source_index = $sourceInventory.source_index
+        uuid_namespace = $sourceInventory.uuid_namespace
+        uuid_name_inputs = $sourceInventory.uuid_name_inputs
+        family_file_count = @($sourceInventory.family_files).Count
+        family_files = $sourceInventory.family_files
+        expected_code_set_count = $sourceInventory.expected_code_set_count
+        expected_code_value_count = $sourceInventory.expected_code_value_count
+        generated_sql_files = $generatedSqlFiles
+        generated_sql_file_count = $generatedSqlFiles.Count
+        schema_rebuild_manifest = 'db/rebuild/pos_sql_apply_order.txt'
+        schema_files_applied = $schemaFiles.ToArray()
+        schema_file_count = $schemaFiles.Count
+        generated_sql_files_applied = $appliedGeneratedSqlFiles.ToArray()
+        repeat_load_file = $latestGeneratedSql
+        database_reset = 'completed using template1 maintenance connection'
+        psql_runner = if ($UseDockerPsql) { 'docker' } else { 'local' }
+        docker = if ($UseDockerPsql) {
+            [ordered]@{
+                image = $DockerImage
+                network = $DockerNetwork
+                host_alias = $DockerHostAlias
+                container_name = $DockerContainerName
+                workdir = '/work'
+            }
+        }
+        else {
+            $null
+        }
+        after_first_load = [ordered]@{
+            code_set_count = [int] $inventoryBeforeRepeat.code_set_count
+            code_value_count = [int] $inventoryBeforeRepeat.code_value_count
+            orphan_code_count = [int] $inventoryBeforeRepeat.orphan_code_count
+        }
+        after_repeat_load = [ordered]@{
+            code_set_count = [int] $inventoryAfterRepeat.code_set_count
+            code_value_count = [int] $inventoryAfterRepeat.code_value_count
+            orphan_code_count = [int] $inventoryAfterRepeat.orphan_code_count
+        }
+        key_inventory = [ordered]@{
+            missing_code_set_keys = @($codeSetComparison.missing)
+            unexpected_code_set_keys = @($codeSetComparison.unexpected)
+            missing_code_pairs = @($codePairComparison.missing)
+            unexpected_code_pairs = @($codePairComparison.unexpected)
+        }
+        uuid_stability = [ordered]@{
+            stable = (@($uuidComparison.missing).Count -eq 0 -and @($uuidComparison.unexpected).Count -eq 0)
+            missing_after_repeat = @($uuidComparison.missing)
+            unexpected_after_repeat = @($uuidComparison.unexpected)
+            entry_count_before_repeat = $uuidBefore.Count
+            entry_count_after_repeat = $uuidAfter.Count
+        }
+        psql_diagnostics = $script:PsqlDiagnostics.ToArray()
+        source_of_truth = 'JSON source and generated SQL are repository artifacts. Disposable DB state is validation evidence only.'
+    }
+
+    $summary.Add("Schema files applied: $($schemaFiles.Count)")
+    $summary.Add("Generated SQL files applied: $($appliedGeneratedSqlFiles.Count)")
+    $summary.Add("Repeated generated SQL file: $latestGeneratedSql")
+    $summary.Add("Expected code sets: $($sourceInventory.expected_code_set_count)")
+    $summary.Add("Actual code sets after repeat load: $($inventoryAfterRepeat.code_set_count)")
+    $summary.Add("Expected code values: $($sourceInventory.expected_code_value_count)")
+    $summary.Add("Actual code values after repeat load: $($inventoryAfterRepeat.code_value_count)")
+    $summary.Add("Orphan controlled-code rows: $($inventoryAfterRepeat.orphan_code_count)")
+    $summary.Add("Missing code-set keys: $(@($codeSetComparison.missing).Count)")
+    $summary.Add("Unexpected code-set keys: $(@($codeSetComparison.unexpected).Count)")
+    $summary.Add("Missing code values: $(@($codePairComparison.missing).Count)")
+    $summary.Add("Unexpected code values: $(@($codePairComparison.unexpected).Count)")
+    $summary.Add("UUID inventory stable after repeat load: $($result.details.uuid_stability.stable)")
+
+    return Complete-Result -Result $result -SummaryLines $summary.ToArray()
+}
+
 switch ($Mode) {
     'Static' { Invoke-StaticChecks | Out-Null }
     'Rebuild' { Invoke-RebuildChecks | Out-Null }
     'Inventory' { Invoke-InventoryChecks -ResultMode 'Inventory' | Out-Null }
     'Drift' { Invoke-InventoryChecks -ResultMode 'Drift' | Out-Null }
+    'ControlledCodeLoad' { Invoke-ControlledCodeLoadChecks | Out-Null }
     'All' { Invoke-AllChecks | Out-Null }
 }
 
