@@ -10,6 +10,10 @@ public sealed class FiscalDocumentCreationService
         "evidence_payload",
         "evidence_image",
         "credential",
+        "payment_payload",
+        "provider_callback",
+        "card_number",
+        "cvv",
         "token",
         "secret"
     ];
@@ -36,7 +40,7 @@ public sealed class FiscalDocumentCreationService
         {
             return FiscalDocumentCreationResult.Failure(
                 FiscalDocumentCreationErrorCode.UnsupportedFiscalDocumentRequest,
-                "Fiscal document request is missing required local fiscal schema context.");
+                "Fiscal document request is missing required local fiscal schema context: sitePosServerRef, fiscalDocumentTypeCodeKey, sitePosServerId, fiscalDocumentTypeCodeId, and fiscalDocumentStatusCodeId.");
         }
 
         if (command.PayableBasis is null ||
@@ -113,6 +117,32 @@ public sealed class FiscalDocumentCreationService
             }
         }
 
+        var tenders = command.Tenders ?? Array.Empty<FiscalTenderInput>();
+        if (tenders.Count == 0)
+        {
+            return FiscalDocumentCreationResult.Failure(
+                FiscalDocumentCreationErrorCode.MissingFiscalTender,
+                "Fiscal document creation requires at least one fiscal tender allocation.");
+        }
+
+        if (ContainsSensitiveEvidence(tenders))
+        {
+            return FiscalDocumentCreationResult.Failure(
+                FiscalDocumentCreationErrorCode.SensitiveTenderPayloadNotAllowed,
+                "Fiscal tenders accept references only and must not receive raw payment credential, token, secret, provider callback, or payment payload values.");
+        }
+
+        var payableBasisCurrency = command.PayableBasis.CurrencyCode.Trim().ToUpperInvariant();
+        foreach (var tender in tenders)
+        {
+            if (!IsValidTender(tender, payableBasisCurrency))
+            {
+                return FiscalDocumentCreationResult.Failure(
+                    FiscalDocumentCreationErrorCode.InvalidFiscalTender,
+                    "Fiscal tenders require a tender type, positive amount, matching currency, and non-blank optional reference fields.");
+            }
+        }
+
         var draft = new FiscalDocumentDraft(
             Guid.NewGuid(),
             command.SitePosServerId.Value,
@@ -133,6 +163,7 @@ public sealed class FiscalDocumentCreationService
             NormalizeOptionalReference(command.VendorAckRef),
             documentLinks.Select(NormalizeDocumentLink).ToArray(),
             documentLines.Select(NormalizeDocumentLine).OrderBy(line => line.LineSequence).ToArray(),
+            tenders.Select(NormalizeTender).ToArray(),
             discountReferences.ToArray());
 
         var persistedDraft = await repository.CreateAsync(draft, cancellationToken).ConfigureAwait(false);
@@ -187,6 +218,37 @@ public sealed class FiscalDocumentCreationService
             HasValidContext(line.LineContext);
     }
 
+    private static FiscalTenderInput NormalizeTender(FiscalTenderInput tender) =>
+        tender with
+        {
+            CurrencyCode = tender.CurrencyCode.Trim().ToUpperInvariant(),
+            CentralPmsPaymentAttemptRef = NormalizeOptionalReference(tender.CentralPmsPaymentAttemptRef),
+            CentralPmsPaymentConfirmationRef = NormalizeOptionalReference(tender.CentralPmsPaymentConfirmationRef),
+            PaymentFinalityRef = NormalizeOptionalReference(tender.PaymentFinalityRef),
+            ProviderRef = NormalizeOptionalReference(tender.ProviderRef)
+        };
+
+    private static bool IsValidTender(FiscalTenderInput tender, string payableBasisCurrency)
+    {
+        if (string.IsNullOrWhiteSpace(tender.CurrencyCode))
+        {
+            return false;
+        }
+
+        var normalizedCurrency = tender.CurrencyCode.Trim().ToUpperInvariant();
+
+        return tender.TenderTypeCodeId != Guid.Empty &&
+            tender.AmountMinorUnits > 0 &&
+            normalizedCurrency.Length == 3 &&
+            normalizedCurrency.All(char.IsAsciiLetterUpper) &&
+            normalizedCurrency == payableBasisCurrency &&
+            !IsBlankOptionalReference(tender.CentralPmsPaymentAttemptRef) &&
+            !IsBlankOptionalReference(tender.CentralPmsPaymentConfirmationRef) &&
+            !IsBlankOptionalReference(tender.PaymentFinalityRef) &&
+            !IsBlankOptionalReference(tender.ProviderRef) &&
+            HasValidContext(tender.TenderContext);
+    }
+
     private static bool HasValidContext(IReadOnlyDictionary<string, string>? context)
     {
         if (context is null)
@@ -207,6 +269,21 @@ public sealed class FiscalDocumentCreationService
             ContainsSensitiveEvidence(command.DocumentLines) ||
             (command.PayableBasis?.DiscountReferences?.Any(discount =>
                 ContainsSensitiveEvidence(discount.ReferenceContext)) ?? false);
+    }
+
+    private static bool ContainsSensitiveEvidence(IReadOnlyList<FiscalTenderInput>? tenders)
+    {
+        if (tenders is null)
+        {
+            return false;
+        }
+
+        return tenders.Any(tender =>
+            ContainsSensitiveEvidenceMarker(tender.CentralPmsPaymentAttemptRef) ||
+            ContainsSensitiveEvidenceMarker(tender.CentralPmsPaymentConfirmationRef) ||
+            ContainsSensitiveEvidenceMarker(tender.PaymentFinalityRef) ||
+            ContainsSensitiveEvidenceMarker(tender.ProviderRef) ||
+            ContainsSensitiveEvidence(tender.TenderContext));
     }
 
     private static bool ContainsSensitiveEvidence(IReadOnlyList<FiscalDocumentLineInput>? documentLines)

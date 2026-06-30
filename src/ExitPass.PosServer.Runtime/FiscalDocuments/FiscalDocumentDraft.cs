@@ -20,4 +20,5 @@ public sealed record FiscalDocumentDraft(
     string? VendorAckRef,
     IReadOnlyList<FiscalDocumentLinkInput> DocumentLinks,
     IReadOnlyList<FiscalDocumentLineInput> DocumentLines,
+    IReadOnlyList<FiscalTenderInput> Tenders,
     IReadOnlyList<FiscalDiscountReferenceInput> DiscountReferences);

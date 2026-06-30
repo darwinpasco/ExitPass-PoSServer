@@ -29,6 +29,8 @@ public sealed class FiscalDocumentCreationEndpointTests
         Assert.Equal(Guid.Parse("eeeeeeee-eeee-eeee-eeee-eeeeeeeeeeee"), repository.LastDraft.DocumentLinks[0].TargetFiscalDocumentId);
         Assert.Equal(1, repository.LastDraft.DocumentLines[0].LineSequence);
         Assert.Equal("Parking fee", repository.LastDraft.DocumentLines[0].Description);
+        Assert.Equal(Guid.Parse("22222222-2222-2222-2222-222222222222"), repository.LastDraft.Tenders[0].TenderTypeCodeId);
+        Assert.Equal(12500, repository.LastDraft.Tenders[0].AmountMinorUnits);
     }
 
     [Fact]
@@ -134,6 +136,123 @@ public sealed class FiscalDocumentCreationEndpointTests
         Assert.False(response.Succeeded);
         Assert.Equal("unsupported_fiscal_document_request", response.Code);
         Assert.Equal(StatusCodes.Status400BadRequest, response.HttpStatusCode);
+    }
+
+    [Fact]
+    public async Task MissingTendersAreRejectedThroughEntrypoint()
+    {
+        var response = await CreateWithRecordingRepository(ValidRequest() with { Tenders = [] });
+
+        Assert.False(response.Succeeded);
+        Assert.Equal("missing_fiscal_tender", response.Code);
+        Assert.Equal(StatusCodes.Status400BadRequest, response.HttpStatusCode);
+    }
+
+    [Fact]
+    public async Task CompleteRequestWithRequiredLocalSchemaContextReachesTenderValidation()
+    {
+        var request = ValidRequest() with { Tenders = [] };
+
+        var response = await CreateWithRecordingRepository(request);
+
+        Assert.False(response.Succeeded);
+        Assert.Equal("missing_fiscal_tender", response.Code);
+        Assert.DoesNotContain("local fiscal schema context", response.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Equal(StatusCodes.Status400BadRequest, response.HttpStatusCode);
+    }
+
+    [Fact]
+    public async Task TopLevelUpstreamFinalityRefAliasReachesTenderValidation()
+    {
+        var payableBasis = ValidPayableBasis() with { UpstreamFinalityRef = null };
+        var request = ValidRequest() with
+        {
+            PayableBasis = payableBasis,
+            UpstreamFinalityRef = "central-finality-001",
+            Tenders = []
+        };
+
+        var response = await CreateWithRecordingRepository(request);
+
+        Assert.False(response.Succeeded);
+        Assert.Equal("missing_fiscal_tender", response.Code);
+        Assert.DoesNotContain("upstream payment/finality", response.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Equal(StatusCodes.Status400BadRequest, response.HttpStatusCode);
+    }
+
+    [Fact]
+    public async Task InvalidTenderAmountIsRejectedThroughEntrypoint()
+    {
+        var request = ValidRequest() with
+        {
+            Tenders =
+            [
+                ValidTender() with { AmountMinorUnits = 0 }
+            ]
+        };
+
+        var response = await CreateWithRecordingRepository(request);
+
+        Assert.False(response.Succeeded);
+        Assert.Equal("invalid_fiscal_tender", response.Code);
+        Assert.Equal(StatusCodes.Status400BadRequest, response.HttpStatusCode);
+    }
+
+    [Fact]
+    public async Task TenderCurrencyMismatchIsRejectedThroughEntrypoint()
+    {
+        var request = ValidRequest() with
+        {
+            Tenders =
+            [
+                ValidTender() with { CurrencyCode = "USD" }
+            ]
+        };
+
+        var response = await CreateWithRecordingRepository(request);
+
+        Assert.False(response.Succeeded);
+        Assert.Equal("invalid_fiscal_tender", response.Code);
+        Assert.Equal(StatusCodes.Status400BadRequest, response.HttpStatusCode);
+    }
+
+    [Fact]
+    public async Task RawCredentialMarkerInTenderIsRejectedThroughEntrypoint()
+    {
+        var request = ValidRequest() with
+        {
+            Tenders =
+            [
+                ValidTender() with
+                {
+                    TenderContext = new Dictionary<string, string> { ["payment_payload"] = "raw-provider-callback" }
+                }
+            ]
+        };
+
+        var response = await CreateWithRecordingRepository(request);
+
+        Assert.False(response.Succeeded);
+        Assert.Equal("sensitive_tender_payload_not_allowed", response.Code);
+        Assert.Equal(StatusCodes.Status400BadRequest, response.HttpStatusCode);
+    }
+
+    [Fact]
+    public async Task LinesAliasMapsIntoFiscalDocumentLines()
+    {
+        var request = ValidRequest() with
+        {
+            DocumentLines = null,
+            Lines = [ValidLine(1)]
+        };
+        var repository = new RecordingFiscalDocumentRepository();
+        var service = new FiscalDocumentCreationService(repository);
+
+        var response = await FiscalDocumentCreationEndpoint.CreateAsync(request, service);
+
+        Assert.True(response.Succeeded);
+        Assert.NotNull(repository.LastDraft);
+        Assert.Equal(1, repository.LastDraft.DocumentLines[0].LineSequence);
     }
 
     [Fact]
@@ -251,7 +370,8 @@ public sealed class FiscalDocumentCreationEndpointTests
             typeof(FiscalizationPayableBasisRequest),
             typeof(FiscalDiscountReferenceRequest),
             typeof(FiscalDocumentLinkRequest),
-            typeof(CreateFiscalDocumentLineRequest)
+            typeof(CreateFiscalDocumentLineRequest),
+            typeof(CreateFiscalTenderRequest)
         };
 
         foreach (var type in dtoTypes)
@@ -334,7 +454,8 @@ public sealed class FiscalDocumentCreationEndpointTests
                     Guid.Parse("ffffffff-ffff-ffff-ffff-ffffffffffff"),
                     CreatedByRef: "pos-server-api")
             ],
-            DocumentLines: [ValidLine(1)]);
+            DocumentLines: [ValidLine(1)],
+            Tenders: [ValidTender()]);
 
     private static FiscalizationPayableBasisRequest ValidPayableBasis() =>
         new(
@@ -358,6 +479,17 @@ public sealed class FiscalDocumentCreationEndpointTests
             "PHP",
             SourceRef: $"line-source-{lineSequence:000}",
             LineContext: new Dictionary<string, string> { ["source_system"] = "central_pms" });
+
+    private static CreateFiscalTenderRequest ValidTender() =>
+        new(
+            Guid.Parse("22222222-2222-2222-2222-222222222222"),
+            12500,
+            "PHP",
+            CentralPmsPaymentAttemptRef: "payment-attempt-001",
+            CentralPmsPaymentConfirmationRef: "payment-confirmation-001",
+            PaymentFinalityRef: "central-finality-001",
+            ProviderRef: "provider-ref-001",
+            TenderContext: new Dictionary<string, string> { ["source_system"] = "central_pms" });
 
     private sealed class RecordingFiscalDocumentRepository : IFiscalDocumentRepository
     {
