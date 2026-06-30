@@ -161,6 +161,36 @@ public static class PostgresFiscalDocumentSql
         );
         """;
 
+    public const string InsertFiscalTaxDetail = """
+        insert into pos.fiscal_tax_details (
+            fiscal_tax_detail_id,
+            fiscal_document_id,
+            fiscal_document_line_id,
+            tax_type_code_id,
+            tax_classification_code_id,
+            tax_rate,
+            taxable_amount_minor_units,
+            tax_amount_minor_units,
+            currency_code,
+            tax_context,
+            created_at,
+            updated_at
+        ) values (
+            @fiscal_tax_detail_id,
+            @fiscal_document_id,
+            @fiscal_document_line_id,
+            @tax_type_code_id,
+            @tax_classification_code_id,
+            @tax_rate,
+            @taxable_amount_minor_units,
+            @tax_amount_minor_units,
+            @currency_code,
+            @tax_context,
+            current_timestamp,
+            current_timestamp
+        );
+        """;
+
     public static string CreateDocumentContextJson(FiscalDocumentDraft draft)
     {
         var context = new
@@ -196,6 +226,16 @@ public static class PostgresFiscalDocumentSql
                 payment_finality_ref = tender.PaymentFinalityRef,
                 provider_ref = tender.ProviderRef
             }),
+            fiscal_tax_details = draft.TaxDetails.Select(taxDetail => new
+            {
+                line_sequence = taxDetail.LineSequence,
+                tax_type_code_id = taxDetail.TaxTypeCodeId,
+                tax_classification_code_id = taxDetail.TaxClassificationCodeId,
+                tax_rate = taxDetail.TaxRate,
+                taxable_amount_minor_units = taxDetail.TaxableAmountMinorUnits,
+                tax_amount_minor_units = taxDetail.TaxAmountMinorUnits,
+                currency_code = taxDetail.CurrencyCode
+            }),
             discount_references = draft.DiscountReferences.Select(discount => new
             {
                 discount_validation_ref = discount.DiscountValidationRef,
@@ -226,5 +266,15 @@ public static class PostgresFiscalDocumentSql
         }
 
         return JsonSerializer.Serialize(tender.TenderContext);
+    }
+
+    public static string? CreateTaxContextJson(FiscalTaxDetailInput taxDetail)
+    {
+        if (taxDetail.TaxContext is null)
+        {
+            return null;
+        }
+
+        return JsonSerializer.Serialize(taxDetail.TaxContext);
     }
 }
