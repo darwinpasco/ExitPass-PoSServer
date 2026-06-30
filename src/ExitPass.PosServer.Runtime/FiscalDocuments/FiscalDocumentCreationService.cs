@@ -117,6 +117,7 @@ public sealed class FiscalDocumentCreationService
             }
         }
 
+        var payableBasisCurrency = command.PayableBasis.CurrencyCode.Trim().ToUpperInvariant();
         var tenders = command.Tenders ?? Array.Empty<FiscalTenderInput>();
         if (tenders.Count == 0)
         {
@@ -132,7 +133,6 @@ public sealed class FiscalDocumentCreationService
                 "Fiscal tenders accept references only and must not receive raw payment credential, token, secret, provider callback, or payment payload values.");
         }
 
-        var payableBasisCurrency = command.PayableBasis.CurrencyCode.Trim().ToUpperInvariant();
         foreach (var tender in tenders)
         {
             if (!IsValidTender(tender, payableBasisCurrency))
@@ -140,6 +140,24 @@ public sealed class FiscalDocumentCreationService
                 return FiscalDocumentCreationResult.Failure(
                     FiscalDocumentCreationErrorCode.InvalidFiscalTender,
                     "Fiscal tenders require a tender type, positive amount, matching currency, and non-blank optional reference fields.");
+            }
+        }
+
+        var taxDetails = command.TaxDetails ?? Array.Empty<FiscalTaxDetailInput>();
+        if (ContainsSensitiveEvidence(taxDetails))
+        {
+            return FiscalDocumentCreationResult.Failure(
+                FiscalDocumentCreationErrorCode.SensitiveTaxDetailPayloadNotAllowed,
+                "Fiscal tax details accept references only and must not receive raw evidence, credential, payment payload, token, secret, or provider callback values.");
+        }
+
+        foreach (var taxDetail in taxDetails)
+        {
+            if (!IsValidTaxDetail(taxDetail, payableBasisCurrency, lineSequences))
+            {
+                return FiscalDocumentCreationResult.Failure(
+                    FiscalDocumentCreationErrorCode.InvalidFiscalTaxDetail,
+                    "Fiscal tax details require tax type and classification codes, nonnegative amounts, matching currency, valid line scope, and non-blank context entries.");
             }
         }
 
@@ -164,6 +182,7 @@ public sealed class FiscalDocumentCreationService
             documentLinks.Select(NormalizeDocumentLink).ToArray(),
             documentLines.Select(NormalizeDocumentLine).OrderBy(line => line.LineSequence).ToArray(),
             tenders.Select(NormalizeTender).ToArray(),
+            taxDetails.Select(NormalizeTaxDetail).OrderBy(tax => tax.LineSequence ?? int.MaxValue).ThenBy(tax => tax.TaxTypeCodeId).ToArray(),
             discountReferences.ToArray());
 
         var persistedDraft = await repository.CreateAsync(draft, cancellationToken).ConfigureAwait(false);
@@ -249,6 +268,36 @@ public sealed class FiscalDocumentCreationService
             HasValidContext(tender.TenderContext);
     }
 
+    private static FiscalTaxDetailInput NormalizeTaxDetail(FiscalTaxDetailInput taxDetail) =>
+        taxDetail with
+        {
+            CurrencyCode = taxDetail.CurrencyCode.Trim().ToUpperInvariant()
+        };
+
+    private static bool IsValidTaxDetail(
+        FiscalTaxDetailInput taxDetail,
+        string payableBasisCurrency,
+        IReadOnlySet<int> lineSequences)
+    {
+        if (string.IsNullOrWhiteSpace(taxDetail.CurrencyCode))
+        {
+            return false;
+        }
+
+        var normalizedCurrency = taxDetail.CurrencyCode.Trim().ToUpperInvariant();
+
+        return taxDetail.TaxTypeCodeId != Guid.Empty &&
+            taxDetail.TaxClassificationCodeId != Guid.Empty &&
+            taxDetail.TaxableAmountMinorUnits >= 0 &&
+            taxDetail.TaxAmountMinorUnits >= 0 &&
+            (taxDetail.TaxRate is null || taxDetail.TaxRate >= 0) &&
+            normalizedCurrency.Length == 3 &&
+            normalizedCurrency.All(char.IsAsciiLetterUpper) &&
+            normalizedCurrency == payableBasisCurrency &&
+            (taxDetail.LineSequence is null || lineSequences.Contains(taxDetail.LineSequence.Value)) &&
+            HasValidContext(taxDetail.TaxContext);
+    }
+
     private static bool HasValidContext(IReadOnlyDictionary<string, string>? context)
     {
         if (context is null)
@@ -284,6 +333,16 @@ public sealed class FiscalDocumentCreationService
             ContainsSensitiveEvidenceMarker(tender.PaymentFinalityRef) ||
             ContainsSensitiveEvidenceMarker(tender.ProviderRef) ||
             ContainsSensitiveEvidence(tender.TenderContext));
+    }
+
+    private static bool ContainsSensitiveEvidence(IReadOnlyList<FiscalTaxDetailInput>? taxDetails)
+    {
+        if (taxDetails is null)
+        {
+            return false;
+        }
+
+        return taxDetails.Any(taxDetail => ContainsSensitiveEvidence(taxDetail.TaxContext));
     }
 
     private static bool ContainsSensitiveEvidence(IReadOnlyList<FiscalDocumentLineInput>? documentLines)

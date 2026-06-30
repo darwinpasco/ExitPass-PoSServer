@@ -26,6 +26,9 @@ public sealed class FiscalDocumentCreationServiceTests
         Assert.Equal("Parking fee", result.Draft.DocumentLines[0].Description);
         Assert.Equal(Guid.Parse("22222222-2222-2222-2222-222222222222"), result.Draft.Tenders[0].TenderTypeCodeId);
         Assert.Equal(12500, result.Draft.Tenders[0].AmountMinorUnits);
+        Assert.Equal(Guid.Parse("33333333-3333-3333-3333-333333333333"), result.Draft.TaxDetails[0].TaxTypeCodeId);
+        Assert.Equal(12500, result.Draft.TaxDetails[0].TaxableAmountMinorUnits);
+        Assert.Equal(1, result.Draft.TaxDetails[0].LineSequence);
     }
 
     [Fact]
@@ -270,6 +273,54 @@ public sealed class FiscalDocumentCreationServiceTests
         Assert.Equal(0, repository.CreateCount);
     }
 
+    [Theory]
+    [InlineData("taxable_amount")]
+    [InlineData("tax_amount")]
+    [InlineData("currency")]
+    [InlineData("tax_type")]
+    [InlineData("tax_classification")]
+    [InlineData("line_sequence")]
+    [InlineData("context")]
+    public async Task InvalidTaxDetailFieldsAreRejectedBeforePersistence(string invalidField)
+    {
+        var repository = new RecordingFiscalDocumentRepository();
+        var service = new FiscalDocumentCreationService(repository);
+        var invalidTaxDetail = invalidField switch
+        {
+            "taxable_amount" => ValidTaxDetail() with { TaxableAmountMinorUnits = -1 },
+            "tax_amount" => ValidTaxDetail() with { TaxAmountMinorUnits = -1 },
+            "currency" => ValidTaxDetail() with { CurrencyCode = "USD" },
+            "tax_type" => ValidTaxDetail() with { TaxTypeCodeId = Guid.Empty },
+            "tax_classification" => ValidTaxDetail() with { TaxClassificationCodeId = Guid.Empty },
+            "line_sequence" => ValidTaxDetail() with { LineSequence = 99 },
+            "context" => ValidTaxDetail() with { TaxContext = new Dictionary<string, string> { ["source_system"] = " " } },
+            _ => ValidTaxDetail()
+        };
+
+        var result = await service.CreateAsync(ValidCommand() with { TaxDetails = [invalidTaxDetail] });
+
+        Assert.False(result.Succeeded);
+        Assert.Equal(FiscalDocumentCreationErrorCode.InvalidFiscalTaxDetail, result.ErrorCode);
+        Assert.Equal(0, repository.CreateCount);
+    }
+
+    [Fact]
+    public async Task RawEvidenceOrPaymentMarkerInTaxDetailIsRejectedBeforePersistence()
+    {
+        var repository = new RecordingFiscalDocumentRepository();
+        var service = new FiscalDocumentCreationService(repository);
+        var taxDetail = ValidTaxDetail() with
+        {
+            TaxContext = new Dictionary<string, string> { ["payment_payload"] = "raw-provider-payload" }
+        };
+
+        var result = await service.CreateAsync(ValidCommand() with { TaxDetails = [taxDetail] });
+
+        Assert.False(result.Succeeded);
+        Assert.Equal(FiscalDocumentCreationErrorCode.SensitiveTaxDetailPayloadNotAllowed, result.ErrorCode);
+        Assert.Equal(0, repository.CreateCount);
+    }
+
     [Fact]
     public void CommandModelsDoNotIncludeEntitlementApprovalFields()
     {
@@ -281,7 +332,8 @@ public sealed class FiscalDocumentCreationServiceTests
             typeof(FiscalDiscountReferenceInput),
             typeof(FiscalDocumentLinkInput),
             typeof(FiscalDocumentLineInput),
-            typeof(FiscalTenderInput)
+            typeof(FiscalTenderInput),
+            typeof(FiscalTaxDetailInput)
         };
 
         foreach (var type in modelTypes)
@@ -349,7 +401,8 @@ public sealed class FiscalDocumentCreationServiceTests
                     CreatedByRef: "pos-server-runtime")
             ],
             DocumentLines: [ValidLine(1)],
-            Tenders: [ValidTender()]);
+            Tenders: [ValidTender()],
+            TaxDetails: [ValidTaxDetail()]);
 
     private static FiscalizationPayableBasisInput ValidPayableBasis() =>
         new(
@@ -389,6 +442,17 @@ public sealed class FiscalDocumentCreationServiceTests
             PaymentFinalityRef: "central-finality-001",
             ProviderRef: "provider-ref-001",
             TenderContext: new Dictionary<string, string> { ["source_system"] = "central_pms" });
+
+    private static FiscalTaxDetailInput ValidTaxDetail() =>
+        new(
+            Guid.Parse("33333333-3333-3333-3333-333333333333"),
+            Guid.Parse("44444444-4444-4444-4444-444444444444"),
+            12500,
+            0,
+            "PHP",
+            LineSequence: 1,
+            TaxRate: 0,
+            TaxContext: new Dictionary<string, string> { ["source_system"] = "central_pms" });
 
     private sealed class RecordingFiscalDocumentRepository : IFiscalDocumentRepository
     {

@@ -46,13 +46,17 @@ public sealed class PostgresFiscalDocumentRepository : IFiscalDocumentRepository
                     await linkCommand.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
                 }
 
+                var lineIdsBySequence = new Dictionary<int, Guid>();
                 foreach (var documentLine in draft.DocumentLines)
                 {
+                    var fiscalDocumentLineId = Guid.NewGuid();
+                    lineIdsBySequence.Add(documentLine.LineSequence, fiscalDocumentLineId);
+
                     await using var lineCommand = new NpgsqlCommand(
                         PostgresFiscalDocumentSql.InsertFiscalDocumentLine,
                         connection,
                         transaction);
-                    AddDocumentLineParameters(lineCommand, draft, documentLine);
+                    AddDocumentLineParameters(lineCommand, draft, documentLine, fiscalDocumentLineId);
                     await lineCommand.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
                 }
 
@@ -64,6 +68,16 @@ public sealed class PostgresFiscalDocumentRepository : IFiscalDocumentRepository
                         transaction);
                     AddTenderParameters(tenderCommand, draft, tender);
                     await tenderCommand.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
+                }
+
+                foreach (var taxDetail in draft.TaxDetails)
+                {
+                    await using var taxCommand = new NpgsqlCommand(
+                        PostgresFiscalDocumentSql.InsertFiscalTaxDetail,
+                        connection,
+                        transaction);
+                    AddTaxDetailParameters(taxCommand, draft, taxDetail, lineIdsBySequence);
+                    await taxCommand.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
                 }
 
                 await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
@@ -126,9 +140,10 @@ public sealed class PostgresFiscalDocumentRepository : IFiscalDocumentRepository
     private static void AddDocumentLineParameters(
         NpgsqlCommand command,
         FiscalDocumentDraft draft,
-        FiscalDocumentLineInput line)
+        FiscalDocumentLineInput line,
+        Guid fiscalDocumentLineId)
     {
-        command.Parameters.AddWithValue("fiscal_document_line_id", Guid.NewGuid());
+        command.Parameters.AddWithValue("fiscal_document_line_id", fiscalDocumentLineId);
         command.Parameters.AddWithValue("fiscal_document_id", draft.FiscalDocumentId);
         command.Parameters.AddWithValue("line_sequence", line.LineSequence);
         command.Parameters.AddWithValue("line_type_code_id", line.LineTypeCodeId);
@@ -164,5 +179,31 @@ public sealed class PostgresFiscalDocumentRepository : IFiscalDocumentRepository
 
         var tenderContextParameter = command.Parameters.Add("tender_context", NpgsqlDbType.Jsonb);
         tenderContextParameter.Value = (object?)PostgresFiscalDocumentSql.CreateTenderContextJson(tender) ?? DBNull.Value;
+    }
+
+    private static void AddTaxDetailParameters(
+        NpgsqlCommand command,
+        FiscalDocumentDraft draft,
+        FiscalTaxDetailInput taxDetail,
+        IReadOnlyDictionary<int, Guid> lineIdsBySequence)
+    {
+        Guid? fiscalDocumentLineId = null;
+        if (taxDetail.LineSequence is not null)
+        {
+            fiscalDocumentLineId = lineIdsBySequence[taxDetail.LineSequence.Value];
+        }
+
+        command.Parameters.AddWithValue("fiscal_tax_detail_id", Guid.NewGuid());
+        command.Parameters.AddWithValue("fiscal_document_id", draft.FiscalDocumentId);
+        command.Parameters.AddWithValue("fiscal_document_line_id", (object?)fiscalDocumentLineId ?? DBNull.Value);
+        command.Parameters.AddWithValue("tax_type_code_id", taxDetail.TaxTypeCodeId);
+        command.Parameters.AddWithValue("tax_classification_code_id", taxDetail.TaxClassificationCodeId);
+        command.Parameters.AddWithValue("tax_rate", (object?)taxDetail.TaxRate ?? DBNull.Value);
+        command.Parameters.AddWithValue("taxable_amount_minor_units", taxDetail.TaxableAmountMinorUnits);
+        command.Parameters.AddWithValue("tax_amount_minor_units", taxDetail.TaxAmountMinorUnits);
+        command.Parameters.AddWithValue("currency_code", taxDetail.CurrencyCode);
+
+        var taxContextParameter = command.Parameters.Add("tax_context", NpgsqlDbType.Jsonb);
+        taxContextParameter.Value = (object?)PostgresFiscalDocumentSql.CreateTaxContextJson(taxDetail) ?? DBNull.Value;
     }
 }

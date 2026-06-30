@@ -19,6 +19,7 @@ public sealed record CreateFiscalDocumentRequest(
     IReadOnlyList<CreateFiscalDocumentLineRequest>? DocumentLines = null,
     IReadOnlyList<CreateFiscalDocumentLineRequest>? Lines = null,
     IReadOnlyList<CreateFiscalTenderRequest>? Tenders = null,
+    IReadOnlyList<CreateFiscalTaxDetailRequest>? TaxDetails = null,
     IReadOnlyDictionary<string, string>? ReferenceContext = null);
 
 public sealed record FiscalDocumentLinkRequest(
@@ -52,3 +53,13 @@ public sealed record CreateFiscalTenderRequest(
     string? PaymentFinalityRef = null,
     string? ProviderRef = null,
     IReadOnlyDictionary<string, string>? TenderContext = null);
+
+public sealed record CreateFiscalTaxDetailRequest(
+    Guid? TaxTypeCodeId,
+    Guid? TaxClassificationCodeId,
+    long TaxableAmountMinorUnits,
+    long TaxAmountMinorUnits,
+    string? CurrencyCode,
+    int? LineSequence = null,
+    decimal? TaxRate = null,
+    IReadOnlyDictionary<string, string>? TaxContext = null);
