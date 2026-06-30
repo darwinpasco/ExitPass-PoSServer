@@ -21,6 +21,7 @@ public sealed record CreateFiscalDocumentRequest(
     IReadOnlyList<CreateFiscalTenderRequest>? Tenders = null,
     IReadOnlyList<CreateFiscalTaxDetailRequest>? TaxDetails = null,
     IReadOnlyList<CreateFiscalDiscountPrivilegeDetailRequest>? DiscountPrivilegeDetails = null,
+    IReadOnlyList<CreateFiscalTotalRequest>? Totals = null,
     IReadOnlyDictionary<string, string>? ReferenceContext = null);
 
 public sealed record FiscalDocumentLinkRequest(
@@ -76,3 +77,9 @@ public sealed record CreateFiscalDiscountPrivilegeDetailRequest(
     string? EvidenceRef = null,
     string? ApprovalRef = null,
     IReadOnlyDictionary<string, string>? DiscountPrivilegeContext = null);
+
+public sealed record CreateFiscalTotalRequest(
+    Guid? TotalTypeCodeId,
+    long AmountMinorUnits,
+    string? CurrencyCode,
+    IReadOnlyDictionary<string, string>? TotalContext = null);

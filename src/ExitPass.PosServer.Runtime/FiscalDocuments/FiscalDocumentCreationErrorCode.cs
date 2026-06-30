@@ -14,5 +14,7 @@ public enum FiscalDocumentCreationErrorCode
     InvalidFiscalTaxDetail = 9,
     SensitiveTaxDetailPayloadNotAllowed = 10,
     InvalidFiscalDiscountPrivilegeDetail = 11,
-    SensitiveDiscountPrivilegePayloadNotAllowed = 12
+    SensitiveDiscountPrivilegePayloadNotAllowed = 12,
+    InvalidFiscalTotal = 13,
+    SensitiveTotalPayloadNotAllowed = 14
 }

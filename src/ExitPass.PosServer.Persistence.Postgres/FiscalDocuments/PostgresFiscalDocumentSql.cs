@@ -225,6 +225,28 @@ public static class PostgresFiscalDocumentSql
         );
         """;
 
+    public const string InsertFiscalTotal = """
+        insert into pos.fiscal_totals (
+            fiscal_total_id,
+            fiscal_document_id,
+            total_type_code_id,
+            amount_minor_units,
+            currency_code,
+            total_context,
+            created_at,
+            updated_at
+        ) values (
+            @fiscal_total_id,
+            @fiscal_document_id,
+            @total_type_code_id,
+            @amount_minor_units,
+            @currency_code,
+            @total_context,
+            current_timestamp,
+            current_timestamp
+        );
+        """;
+
     public static string CreateDocumentContextJson(FiscalDocumentDraft draft)
     {
         var context = new
@@ -282,6 +304,12 @@ public static class PostgresFiscalDocumentSql
                 evidence_ref = discountPrivilegeDetail.EvidenceRef,
                 approval_ref = discountPrivilegeDetail.ApprovalRef
             }),
+            fiscal_totals = draft.Totals.Select(total => new
+            {
+                total_type_code_id = total.TotalTypeCodeId,
+                amount_minor_units = total.AmountMinorUnits,
+                currency_code = total.CurrencyCode
+            }),
             discount_references = draft.DiscountReferences.Select(discount => new
             {
                 discount_validation_ref = discount.DiscountValidationRef,
@@ -332,5 +360,15 @@ public static class PostgresFiscalDocumentSql
         }
 
         return JsonSerializer.Serialize(discountPrivilegeDetail.DiscountPrivilegeContext);
+    }
+
+    public static string? CreateTotalContextJson(FiscalTotalInput total)
+    {
+        if (total.TotalContext is null)
+        {
+            return null;
+        }
+
+        return JsonSerializer.Serialize(total.TotalContext);
     }
 }

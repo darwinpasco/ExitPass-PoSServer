@@ -60,6 +60,7 @@ public static class FiscalDocumentCreationEndpoint
             request.Tenders?.Select(MapTender).ToArray(),
             request.TaxDetails?.Select(MapTaxDetail).ToArray(),
             request.DiscountPrivilegeDetails?.Select(MapDiscountPrivilegeDetail).ToArray(),
+            request.Totals?.Select(MapTotal).ToArray(),
             request.ReferenceContext);
 
     public static CreateFiscalDocumentResponse MapResult(FiscalDocumentCreationResult result)
@@ -170,6 +171,13 @@ public static class FiscalDocumentCreationEndpoint
             request.ApprovalRef,
             request.DiscountPrivilegeContext);
 
+    private static FiscalTotalInput MapTotal(CreateFiscalTotalRequest request) =>
+        new(
+            request.TotalTypeCodeId ?? Guid.Empty,
+            request.AmountMinorUnits,
+            request.CurrencyCode ?? string.Empty,
+            request.TotalContext);
+
     private static FiscalDiscountReferenceStatus MapDiscountStatus(string? status) =>
         status?.Trim().ToLowerInvariant() switch
         {
@@ -197,6 +205,8 @@ public static class FiscalDocumentCreationEndpoint
             FiscalDocumentCreationErrorCode.SensitiveTaxDetailPayloadNotAllowed => "sensitive_tax_detail_payload_not_allowed",
             FiscalDocumentCreationErrorCode.InvalidFiscalDiscountPrivilegeDetail => "invalid_fiscal_discount_privilege_detail",
             FiscalDocumentCreationErrorCode.SensitiveDiscountPrivilegePayloadNotAllowed => "sensitive_discount_privilege_payload_not_allowed",
+            FiscalDocumentCreationErrorCode.InvalidFiscalTotal => "invalid_fiscal_total",
+            FiscalDocumentCreationErrorCode.SensitiveTotalPayloadNotAllowed => "sensitive_total_payload_not_allowed",
             _ => "fiscal_document_creation_failed"
         };
 }
