@@ -2,12 +2,18 @@ namespace ExitPass.PosServer.Runtime.FiscalDocuments;
 
 public sealed record FiscalDocumentDraft(
     Guid FiscalDocumentId,
+    Guid SitePosServerId,
+    Guid? ChannelTerminalId,
+    Guid FiscalDocumentTypeCodeId,
+    Guid FiscalDocumentStatusCodeId,
     string SitePosServerRef,
     string FiscalDocumentTypeCodeKey,
     string PayableBasisRef,
     string UpstreamFinalityRef,
     string CurrencyCode,
     long PayableAmountMinorUnits,
+    DateOnly? BusinessDayDate,
+    string? CentralPmsParkingSessionRef,
     string? CentralPmsPaymentAttemptRef,
     string? CentralPmsPaymentConfirmationRef,
     string? PaymentFinalityRef,

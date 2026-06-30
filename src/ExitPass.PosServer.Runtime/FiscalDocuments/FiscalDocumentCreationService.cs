@@ -26,11 +26,17 @@ public sealed class FiscalDocumentCreationService
         CancellationToken cancellationToken = default)
     {
         if (string.IsNullOrWhiteSpace(command.SitePosServerRef) ||
-            string.IsNullOrWhiteSpace(command.FiscalDocumentTypeCodeKey))
+            string.IsNullOrWhiteSpace(command.FiscalDocumentTypeCodeKey) ||
+            command.SitePosServerId is null ||
+            command.SitePosServerId == Guid.Empty ||
+            command.FiscalDocumentTypeCodeId is null ||
+            command.FiscalDocumentTypeCodeId == Guid.Empty ||
+            command.FiscalDocumentStatusCodeId is null ||
+            command.FiscalDocumentStatusCodeId == Guid.Empty)
         {
             return FiscalDocumentCreationResult.Failure(
                 FiscalDocumentCreationErrorCode.UnsupportedFiscalDocumentRequest,
-                "Fiscal document request is missing required local fiscal context.");
+                "Fiscal document request is missing required local fiscal schema context.");
         }
 
         if (command.PayableBasis is null ||
@@ -69,15 +75,21 @@ public sealed class FiscalDocumentCreationService
 
         var draft = new FiscalDocumentDraft(
             Guid.NewGuid(),
+            command.SitePosServerId.Value,
+            command.ChannelTerminalId,
+            command.FiscalDocumentTypeCodeId.Value,
+            command.FiscalDocumentStatusCodeId.Value,
             command.SitePosServerRef.Trim(),
             command.FiscalDocumentTypeCodeKey.Trim(),
             command.PayableBasis.PayableBasisRef.Trim(),
             command.PayableBasis.UpstreamFinalityRef.Trim(),
             command.PayableBasis.CurrencyCode.Trim().ToUpperInvariant(),
             command.PayableBasis.PayableAmountMinorUnits,
+            command.BusinessDayDate,
+            NormalizeOptionalReference(command.CentralPmsParkingSessionRef),
             NormalizeOptionalReference(command.CentralPmsPaymentAttemptRef),
             NormalizeOptionalReference(command.CentralPmsPaymentConfirmationRef),
-            NormalizeOptionalReference(command.PaymentFinalityRef),
+            NormalizeOptionalReference(command.PaymentFinalityRef) ?? command.PayableBasis.UpstreamFinalityRef.Trim(),
             NormalizeOptionalReference(command.VendorAckRef),
             discountReferences.ToArray());
 

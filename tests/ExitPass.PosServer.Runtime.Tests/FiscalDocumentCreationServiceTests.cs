@@ -150,6 +150,10 @@ public sealed class FiscalDocumentCreationServiceTests
             "site-pos-server-001",
             "sales_invoice",
             ValidPayableBasis(),
+            SitePosServerId: Guid.Parse("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb"),
+            FiscalDocumentTypeCodeId: Guid.Parse("cccccccc-cccc-cccc-cccc-cccccccccccc"),
+            FiscalDocumentStatusCodeId: Guid.Parse("dddddddd-dddd-dddd-dddd-dddddddddddd"),
+            CentralPmsParkingSessionRef: "parking-session-001",
             CentralPmsPaymentAttemptRef: "payment-attempt-001",
             CentralPmsPaymentConfirmationRef: "payment-confirmation-001",
             PaymentFinalityRef: "central-finality-001");

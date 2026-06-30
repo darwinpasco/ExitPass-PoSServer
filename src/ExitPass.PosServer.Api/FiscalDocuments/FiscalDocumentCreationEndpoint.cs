@@ -22,6 +22,14 @@ public static class FiscalDocumentCreationEndpoint
                 ex.Message,
                 HttpStatusCode: StatusCodes.Status503ServiceUnavailable);
         }
+        catch (FiscalDocumentPersistenceException ex)
+        {
+            return new CreateFiscalDocumentResponse(
+                false,
+                "persistence_write_failed",
+                ex.Message,
+                HttpStatusCode: StatusCodes.Status503ServiceUnavailable);
+        }
     }
 
     public static FiscalDocumentCreationCommand MapToCommand(CreateFiscalDocumentRequest request) =>
@@ -29,6 +37,12 @@ public static class FiscalDocumentCreationEndpoint
             request.SitePosServerRef ?? string.Empty,
             request.FiscalDocumentTypeCodeKey ?? string.Empty,
             MapPayableBasis(request.PayableBasis),
+            request.SitePosServerId,
+            request.ChannelTerminalId,
+            request.FiscalDocumentTypeCodeId,
+            request.FiscalDocumentStatusCodeId,
+            request.BusinessDayDate,
+            request.CentralPmsParkingSessionRef,
             request.CentralPmsPaymentAttemptRef,
             request.CentralPmsPaymentConfirmationRef,
             request.PaymentFinalityRef,
