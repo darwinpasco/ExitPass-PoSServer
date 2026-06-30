@@ -22,6 +22,8 @@ public sealed class FiscalDocumentCreationServiceTests
         Assert.Equal("central-finality-001", result.Draft.UpstreamFinalityRef);
         Assert.Equal("discount-validation-001", result.Draft.DiscountReferences[0].DiscountValidationRef);
         Assert.Equal(Guid.Parse("eeeeeeee-eeee-eeee-eeee-eeeeeeeeeeee"), result.Draft.DocumentLinks[0].TargetFiscalDocumentId);
+        Assert.Equal(1, result.Draft.DocumentLines[0].LineSequence);
+        Assert.Equal("Parking fee", result.Draft.DocumentLines[0].Description);
     }
 
     [Fact]
@@ -136,6 +138,82 @@ public sealed class FiscalDocumentCreationServiceTests
     }
 
     [Fact]
+    public async Task MissingDocumentLinesAreRejectedBeforePersistence()
+    {
+        var repository = new RecordingFiscalDocumentRepository();
+        var service = new FiscalDocumentCreationService(repository);
+
+        var result = await service.CreateAsync(ValidCommand() with { DocumentLines = [] });
+
+        Assert.False(result.Succeeded);
+        Assert.Equal(FiscalDocumentCreationErrorCode.UnsupportedFiscalDocumentRequest, result.ErrorCode);
+        Assert.Equal(0, repository.CreateCount);
+    }
+
+    [Fact]
+    public async Task DuplicateLineSequenceIsRejectedBeforePersistence()
+    {
+        var repository = new RecordingFiscalDocumentRepository();
+        var service = new FiscalDocumentCreationService(repository);
+        var command = ValidCommand() with
+        {
+            DocumentLines =
+            [
+                ValidLine(1),
+                ValidLine(1) with { SourceRef = "line-source-002" }
+            ]
+        };
+
+        var result = await service.CreateAsync(command);
+
+        Assert.False(result.Succeeded);
+        Assert.Equal(FiscalDocumentCreationErrorCode.UnsupportedFiscalDocumentRequest, result.ErrorCode);
+        Assert.Equal(0, repository.CreateCount);
+    }
+
+    [Theory]
+    [InlineData("quantity")]
+    [InlineData("amount")]
+    [InlineData("description")]
+    [InlineData("line_type")]
+    public async Task InvalidFiscalLineFieldsAreRejectedBeforePersistence(string invalidField)
+    {
+        var repository = new RecordingFiscalDocumentRepository();
+        var service = new FiscalDocumentCreationService(repository);
+        var invalidLine = invalidField switch
+        {
+            "quantity" => ValidLine(1) with { Quantity = 0 },
+            "amount" => ValidLine(1) with { NetAmountMinorUnits = 999 },
+            "description" => ValidLine(1) with { Description = " " },
+            "line_type" => ValidLine(1) with { LineTypeCodeId = Guid.Empty },
+            _ => ValidLine(1)
+        };
+
+        var result = await service.CreateAsync(ValidCommand() with { DocumentLines = [invalidLine] });
+
+        Assert.False(result.Succeeded);
+        Assert.Equal(FiscalDocumentCreationErrorCode.UnsupportedFiscalDocumentRequest, result.ErrorCode);
+        Assert.Equal(0, repository.CreateCount);
+    }
+
+    [Fact]
+    public async Task RawEvidenceMarkerInDocumentLineIsRejectedBeforePersistence()
+    {
+        var repository = new RecordingFiscalDocumentRepository();
+        var service = new FiscalDocumentCreationService(repository);
+        var line = ValidLine(1) with
+        {
+            LineContext = new Dictionary<string, string> { ["raw_id_image"] = "base64-image-payload" }
+        };
+
+        var result = await service.CreateAsync(ValidCommand() with { DocumentLines = [line] });
+
+        Assert.False(result.Succeeded);
+        Assert.Equal(FiscalDocumentCreationErrorCode.SensitiveEvidencePayloadNotAllowed, result.ErrorCode);
+        Assert.Equal(0, repository.CreateCount);
+    }
+
+    [Fact]
     public void CommandModelsDoNotIncludeEntitlementApprovalFields()
     {
         var forbiddenNames = new[] { "Entitlement", "Eligibility", "Ordinance", "SupervisorApproval", "OperatorApproval", "RawId", "EvidencePayload" };
@@ -144,7 +222,8 @@ public sealed class FiscalDocumentCreationServiceTests
             typeof(FiscalDocumentCreationCommand),
             typeof(FiscalizationPayableBasisInput),
             typeof(FiscalDiscountReferenceInput),
-            typeof(FiscalDocumentLinkInput)
+            typeof(FiscalDocumentLinkInput),
+            typeof(FiscalDocumentLineInput)
         };
 
         foreach (var type in modelTypes)
@@ -210,7 +289,8 @@ public sealed class FiscalDocumentCreationServiceTests
                     Guid.Parse("eeeeeeee-eeee-eeee-eeee-eeeeeeeeeeee"),
                     Guid.Parse("ffffffff-ffff-ffff-ffff-ffffffffffff"),
                     CreatedByRef: "pos-server-runtime")
-            ]);
+            ],
+            DocumentLines: [ValidLine(1)]);
 
     private static FiscalizationPayableBasisInput ValidPayableBasis() =>
         new(
@@ -224,6 +304,21 @@ public sealed class FiscalDocumentCreationServiceTests
                     FiscalDiscountReferenceStatus.Approved,
                     true)
             ]);
+
+    private static FiscalDocumentLineInput ValidLine(int lineSequence) =>
+        new(
+            lineSequence,
+            Guid.Parse("11111111-1111-1111-1111-111111111111"),
+            "Parking fee",
+            1,
+            12500,
+            12500,
+            0,
+            0,
+            12500,
+            "PHP",
+            SourceRef: $"line-source-{lineSequence:000}",
+            LineContext: new Dictionary<string, string> { ["source_system"] = "central_pms" });
 
     private sealed class RecordingFiscalDocumentRepository : IFiscalDocumentRepository
     {

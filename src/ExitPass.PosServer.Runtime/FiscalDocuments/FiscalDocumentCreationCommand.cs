@@ -15,4 +15,5 @@ public sealed record FiscalDocumentCreationCommand(
     string? PaymentFinalityRef = null,
     string? VendorAckRef = null,
     IReadOnlyList<FiscalDocumentLinkInput>? DocumentLinks = null,
+    IReadOnlyList<FiscalDocumentLineInput>? DocumentLines = null,
     IReadOnlyDictionary<string, string>? ReferenceContext = null);

@@ -46,6 +46,16 @@ public sealed class PostgresFiscalDocumentRepository : IFiscalDocumentRepository
                     await linkCommand.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
                 }
 
+                foreach (var documentLine in draft.DocumentLines)
+                {
+                    await using var lineCommand = new NpgsqlCommand(
+                        PostgresFiscalDocumentSql.InsertFiscalDocumentLine,
+                        connection,
+                        transaction);
+                    AddDocumentLineParameters(lineCommand, draft, documentLine);
+                    await lineCommand.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
+                }
+
                 await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
             }
             catch
@@ -101,5 +111,29 @@ public sealed class PostgresFiscalDocumentRepository : IFiscalDocumentRepository
         command.Parameters.AddWithValue("link_reason_code_id", (object?)link.LinkReasonCodeId ?? DBNull.Value);
         command.Parameters.AddWithValue("link_reason_text", (object?)link.LinkReasonText ?? DBNull.Value);
         command.Parameters.AddWithValue("created_by_ref", (object?)link.CreatedByRef ?? DBNull.Value);
+    }
+
+    private static void AddDocumentLineParameters(
+        NpgsqlCommand command,
+        FiscalDocumentDraft draft,
+        FiscalDocumentLineInput line)
+    {
+        command.Parameters.AddWithValue("fiscal_document_line_id", Guid.NewGuid());
+        command.Parameters.AddWithValue("fiscal_document_id", draft.FiscalDocumentId);
+        command.Parameters.AddWithValue("line_sequence", line.LineSequence);
+        command.Parameters.AddWithValue("line_type_code_id", line.LineTypeCodeId);
+        command.Parameters.AddWithValue("line_status_code_id", (object?)line.LineStatusCodeId ?? DBNull.Value);
+        command.Parameters.AddWithValue("description", line.Description);
+        command.Parameters.AddWithValue("quantity", line.Quantity);
+        command.Parameters.AddWithValue("unit_amount_minor_units", line.UnitAmountMinorUnits);
+        command.Parameters.AddWithValue("gross_amount_minor_units", line.GrossAmountMinorUnits);
+        command.Parameters.AddWithValue("discount_amount_minor_units", line.DiscountAmountMinorUnits);
+        command.Parameters.AddWithValue("tax_amount_minor_units", line.TaxAmountMinorUnits);
+        command.Parameters.AddWithValue("net_amount_minor_units", line.NetAmountMinorUnits);
+        command.Parameters.AddWithValue("currency_code", line.CurrencyCode);
+        command.Parameters.AddWithValue("source_ref", (object?)line.SourceRef ?? DBNull.Value);
+
+        var lineContextParameter = command.Parameters.Add("line_context", NpgsqlDbType.Jsonb);
+        lineContextParameter.Value = (object?)PostgresFiscalDocumentSql.CreateLineContextJson(line) ?? DBNull.Value;
     }
 }

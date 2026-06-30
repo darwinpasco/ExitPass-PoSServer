@@ -27,6 +27,8 @@ public sealed class FiscalDocumentCreationEndpointTests
         Assert.Equal("central-finality-001", repository.LastDraft.UpstreamFinalityRef);
         Assert.Equal("discount-validation-001", repository.LastDraft.DiscountReferences[0].DiscountValidationRef);
         Assert.Equal(Guid.Parse("eeeeeeee-eeee-eeee-eeee-eeeeeeeeeeee"), repository.LastDraft.DocumentLinks[0].TargetFiscalDocumentId);
+        Assert.Equal(1, repository.LastDraft.DocumentLines[0].LineSequence);
+        Assert.Equal("Parking fee", repository.LastDraft.DocumentLines[0].Description);
     }
 
     [Fact]
@@ -107,6 +109,34 @@ public sealed class FiscalDocumentCreationEndpointTests
     }
 
     [Fact]
+    public async Task MissingFiscalLinesAreRejectedThroughEntrypoint()
+    {
+        var response = await CreateWithRecordingRepository(ValidRequest() with { DocumentLines = [] });
+
+        Assert.False(response.Succeeded);
+        Assert.Equal("unsupported_fiscal_document_request", response.Code);
+        Assert.Equal(StatusCodes.Status400BadRequest, response.HttpStatusCode);
+    }
+
+    [Fact]
+    public async Task InvalidFiscalLineIsRejectedThroughEntrypoint()
+    {
+        var request = ValidRequest() with
+        {
+            DocumentLines =
+            [
+                ValidLine(1) with { Quantity = -1 }
+            ]
+        };
+
+        var response = await CreateWithRecordingRepository(request);
+
+        Assert.False(response.Succeeded);
+        Assert.Equal("unsupported_fiscal_document_request", response.Code);
+        Assert.Equal(StatusCodes.Status400BadRequest, response.HttpStatusCode);
+    }
+
+    [Fact]
     public async Task PersistenceNotConfiguredFailsClosed()
     {
         var service = new FiscalDocumentCreationService(new PersistenceNotConfiguredFiscalDocumentRepository());
@@ -116,6 +146,32 @@ public sealed class FiscalDocumentCreationEndpointTests
         Assert.False(response.Succeeded);
         Assert.Equal("persistence_not_configured", response.Code);
         Assert.Equal(StatusCodes.Status503ServiceUnavailable, response.HttpStatusCode);
+    }
+
+    [Fact]
+    public async Task InvalidPersistenceConfigurationFailsClosedWithoutConnectionDetails()
+    {
+        var service = new FiscalDocumentCreationService(new InvalidPersistenceConfigurationFiscalDocumentRepository());
+
+        var response = await FiscalDocumentCreationEndpoint.CreateAsync(ValidRequest(), service);
+
+        Assert.False(response.Succeeded);
+        Assert.Equal("invalid_persistence_configuration", response.Code);
+        Assert.Equal(StatusCodes.Status503ServiceUnavailable, response.HttpStatusCode);
+        Assert.DoesNotContain("postgresql://", response.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("Password", response.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task InvalidFiscalDocumentRequestStillReturnsValidationFailureBeforePersistence()
+    {
+        var service = new FiscalDocumentCreationService(new InvalidPersistenceConfigurationFiscalDocumentRepository());
+
+        var response = await FiscalDocumentCreationEndpoint.CreateAsync(ValidRequest() with { PayableBasis = null }, service);
+
+        Assert.False(response.Succeeded);
+        Assert.Equal("missing_payable_basis", response.Code);
+        Assert.Equal(StatusCodes.Status400BadRequest, response.HttpStatusCode);
     }
 
     [Fact]
@@ -129,6 +185,42 @@ public sealed class FiscalDocumentCreationEndpointTests
         using var provider = services.BuildServiceProvider();
         var repository = provider.GetRequiredService<IFiscalDocumentRepository>();
         Assert.IsType<PersistenceNotConfiguredFiscalDocumentRepository>(repository);
+    }
+
+    [Fact]
+    public void DependencyInjectionUsesInvalidConfigurationRepositoryForMalformedConnectionString()
+    {
+        var services = new ServiceCollection();
+        var configuration = new ConfigurationBuilder()
+            .AddInMemoryCollection(new Dictionary<string, string?>
+            {
+                ["ConnectionStrings:PosServer"] = "not-a-valid-npgsql-connection-string"
+            })
+            .Build();
+
+        services.AddPosServerFiscalDocumentApi(configuration);
+
+        using var provider = services.BuildServiceProvider();
+        var repository = provider.GetRequiredService<IFiscalDocumentRepository>();
+        Assert.IsType<InvalidPersistenceConfigurationFiscalDocumentRepository>(repository);
+    }
+
+    [Fact]
+    public void DependencyInjectionUsesInvalidConfigurationRepositoryForUrlStylePostgresConnectionString()
+    {
+        var services = new ServiceCollection();
+        var configuration = new ConfigurationBuilder()
+            .AddInMemoryCollection(new Dictionary<string, string?>
+            {
+                ["POSSERVER_DB_URL"] = "postgresql://exitpass:secret@host.docker.internal:5433/posserver_validation_local"
+            })
+            .Build();
+
+        services.AddPosServerFiscalDocumentApi(configuration);
+
+        using var provider = services.BuildServiceProvider();
+        var repository = provider.GetRequiredService<IFiscalDocumentRepository>();
+        Assert.IsType<InvalidPersistenceConfigurationFiscalDocumentRepository>(repository);
     }
 
     [Fact]
@@ -158,7 +250,8 @@ public sealed class FiscalDocumentCreationEndpointTests
             typeof(CreateFiscalDocumentRequest),
             typeof(FiscalizationPayableBasisRequest),
             typeof(FiscalDiscountReferenceRequest),
-            typeof(FiscalDocumentLinkRequest)
+            typeof(FiscalDocumentLinkRequest),
+            typeof(CreateFiscalDocumentLineRequest)
         };
 
         foreach (var type in dtoTypes)
@@ -240,7 +333,8 @@ public sealed class FiscalDocumentCreationEndpointTests
                     Guid.Parse("eeeeeeee-eeee-eeee-eeee-eeeeeeeeeeee"),
                     Guid.Parse("ffffffff-ffff-ffff-ffff-ffffffffffff"),
                     CreatedByRef: "pos-server-api")
-            ]);
+            ],
+            DocumentLines: [ValidLine(1)]);
 
     private static FiscalizationPayableBasisRequest ValidPayableBasis() =>
         new(
@@ -249,6 +343,21 @@ public sealed class FiscalDocumentCreationEndpointTests
             "PHP",
             12500,
             [new FiscalDiscountReferenceRequest("discount-validation-001", "approved", true)]);
+
+    private static CreateFiscalDocumentLineRequest ValidLine(int lineSequence) =>
+        new(
+            lineSequence,
+            Guid.Parse("11111111-1111-1111-1111-111111111111"),
+            "Parking fee",
+            1,
+            12500,
+            12500,
+            0,
+            0,
+            12500,
+            "PHP",
+            SourceRef: $"line-source-{lineSequence:000}",
+            LineContext: new Dictionary<string, string> { ["source_system"] = "central_pms" });
 
     private sealed class RecordingFiscalDocumentRepository : IFiscalDocumentRepository
     {

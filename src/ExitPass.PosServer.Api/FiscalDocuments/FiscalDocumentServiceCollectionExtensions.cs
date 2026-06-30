@@ -20,6 +20,10 @@ public static class FiscalDocumentServiceCollectionExtensions
         {
             services.TryAddScoped<IFiscalDocumentRepository, PersistenceNotConfiguredFiscalDocumentRepository>();
         }
+        else if (!IsValidNpgsqlConnectionString(connectionString))
+        {
+            services.TryAddScoped<IFiscalDocumentRepository, InvalidPersistenceConfigurationFiscalDocumentRepository>();
+        }
         else
         {
             services.TryAddSingleton(_ => NpgsqlDataSource.Create(connectionString));
@@ -29,5 +33,25 @@ public static class FiscalDocumentServiceCollectionExtensions
         services.AddScoped<FiscalDocumentCreationService>();
 
         return services;
+    }
+
+    private static bool IsValidNpgsqlConnectionString(string connectionString)
+    {
+        if (Uri.TryCreate(connectionString, UriKind.Absolute, out var uri) &&
+            (uri.Scheme.Equals("postgresql", StringComparison.OrdinalIgnoreCase) ||
+             uri.Scheme.Equals("postgres", StringComparison.OrdinalIgnoreCase)))
+        {
+            return false;
+        }
+
+        try
+        {
+            _ = new NpgsqlConnectionStringBuilder(connectionString);
+            return true;
+        }
+        catch (ArgumentException)
+        {
+            return false;
+        }
     }
 }

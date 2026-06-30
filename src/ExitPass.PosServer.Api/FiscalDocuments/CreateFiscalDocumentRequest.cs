@@ -15,6 +15,7 @@ public sealed record CreateFiscalDocumentRequest(
     string? PaymentFinalityRef = null,
     string? VendorAckRef = null,
     IReadOnlyList<FiscalDocumentLinkRequest>? DocumentLinks = null,
+    IReadOnlyList<CreateFiscalDocumentLineRequest>? DocumentLines = null,
     IReadOnlyDictionary<string, string>? ReferenceContext = null);
 
 public sealed record FiscalDocumentLinkRequest(
@@ -23,3 +24,18 @@ public sealed record FiscalDocumentLinkRequest(
     Guid? LinkReasonCodeId = null,
     string? LinkReasonText = null,
     string? CreatedByRef = null);
+
+public sealed record CreateFiscalDocumentLineRequest(
+    int LineSequence,
+    Guid? LineTypeCodeId,
+    string? Description,
+    decimal Quantity,
+    long UnitAmountMinorUnits,
+    long GrossAmountMinorUnits,
+    long DiscountAmountMinorUnits,
+    long TaxAmountMinorUnits,
+    long NetAmountMinorUnits,
+    string? CurrencyCode,
+    Guid? LineStatusCodeId = null,
+    string? SourceRef = null,
+    IReadOnlyDictionary<string, string>? LineContext = null);
