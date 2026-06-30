@@ -18,10 +18,31 @@ public sealed class PostgresFiscalDocumentRepository : IFiscalDocumentRepository
         try
         {
             await using var connection = await dataSource.OpenConnectionAsync(cancellationToken).ConfigureAwait(false);
-            await using var command = new NpgsqlCommand(PostgresFiscalDocumentSql.InsertFiscalDocument, connection);
+            await using var transaction = await connection.BeginTransactionAsync(cancellationToken).ConfigureAwait(false);
 
-            AddParameters(command, draft);
-            await command.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
+            try
+            {
+                await using var documentCommand = new NpgsqlCommand(
+                    PostgresFiscalDocumentSql.InsertFiscalDocument,
+                    connection,
+                    transaction);
+                AddFiscalDocumentParameters(documentCommand, draft);
+                await documentCommand.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
+
+                await using var statusHistoryCommand = new NpgsqlCommand(
+                    PostgresFiscalDocumentSql.InsertFiscalDocumentStatusHistory,
+                    connection,
+                    transaction);
+                AddStatusHistoryParameters(statusHistoryCommand, draft);
+                await statusHistoryCommand.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
+
+                await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
+            }
+            catch
+            {
+                await transaction.RollbackAsync(cancellationToken).ConfigureAwait(false);
+                throw;
+            }
 
             return draft;
         }
@@ -33,7 +54,7 @@ public sealed class PostgresFiscalDocumentRepository : IFiscalDocumentRepository
         }
     }
 
-    private static void AddParameters(NpgsqlCommand command, FiscalDocumentDraft draft)
+    private static void AddFiscalDocumentParameters(NpgsqlCommand command, FiscalDocumentDraft draft)
     {
         command.Parameters.AddWithValue("fiscal_document_id", draft.FiscalDocumentId);
         command.Parameters.AddWithValue("site_pos_server_id", draft.SitePosServerId);
@@ -49,5 +70,12 @@ public sealed class PostgresFiscalDocumentRepository : IFiscalDocumentRepository
 
         var contextParameter = command.Parameters.Add("document_context", NpgsqlDbType.Jsonb);
         contextParameter.Value = PostgresFiscalDocumentSql.CreateDocumentContextJson(draft);
+    }
+
+    private static void AddStatusHistoryParameters(NpgsqlCommand command, FiscalDocumentDraft draft)
+    {
+        command.Parameters.AddWithValue("fiscal_document_status_history_id", Guid.NewGuid());
+        command.Parameters.AddWithValue("fiscal_document_id", draft.FiscalDocumentId);
+        command.Parameters.AddWithValue("fiscal_document_status_code_id", draft.FiscalDocumentStatusCodeId);
     }
 }

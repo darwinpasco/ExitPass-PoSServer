@@ -41,6 +41,32 @@ public static class PostgresFiscalDocumentSql
         );
         """;
 
+    public const string InsertFiscalDocumentStatusHistory = """
+        insert into pos.fiscal_document_status_history (
+            fiscal_document_status_history_id,
+            fiscal_document_id,
+            prior_fiscal_document_status_code_id,
+            new_fiscal_document_status_code_id,
+            status_reason_code_id,
+            status_reason_text,
+            changed_at,
+            actor_ref,
+            service_identity_ref,
+            created_at
+        ) values (
+            @fiscal_document_status_history_id,
+            @fiscal_document_id,
+            null,
+            @fiscal_document_status_code_id,
+            null,
+            null,
+            current_timestamp,
+            null,
+            null,
+            current_timestamp
+        );
+        """;
+
     public static string CreateDocumentContextJson(FiscalDocumentDraft draft)
     {
         var context = new
