@@ -1,7 +1,10 @@
 using System.Reflection;
 using ExitPass.PosServer.Api.FiscalDocuments;
+using ExitPass.PosServer.Persistence.Postgres.FiscalDocuments;
 using ExitPass.PosServer.Runtime.FiscalDocuments;
 using Microsoft.AspNetCore.Http;
+using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.DependencyInjection;
 using Xunit;
 
 namespace ExitPass.PosServer.Api.Tests;
@@ -95,6 +98,37 @@ public sealed class FiscalDocumentCreationEndpointTests
     }
 
     [Fact]
+    public void DependencyInjectionUsesFailClosedRepositoryWhenPersistenceIsNotConfigured()
+    {
+        var services = new ServiceCollection();
+        var configuration = new ConfigurationBuilder().Build();
+
+        services.AddPosServerFiscalDocumentApi(configuration);
+
+        using var provider = services.BuildServiceProvider();
+        var repository = provider.GetRequiredService<IFiscalDocumentRepository>();
+        Assert.IsType<PersistenceNotConfiguredFiscalDocumentRepository>(repository);
+    }
+
+    [Fact]
+    public void DependencyInjectionUsesPostgresRepositoryWhenConnectionIsConfigured()
+    {
+        var services = new ServiceCollection();
+        var configuration = new ConfigurationBuilder()
+            .AddInMemoryCollection(new Dictionary<string, string?>
+            {
+                ["ConnectionStrings:PosServer"] = "Host=localhost;Database=posserver_validation_local;Username=postgres;Password=postgres"
+            })
+            .Build();
+
+        services.AddPosServerFiscalDocumentApi(configuration);
+
+        using var provider = services.BuildServiceProvider();
+        var repository = provider.GetRequiredService<IFiscalDocumentRepository>();
+        Assert.IsType<PostgresFiscalDocumentRepository>(repository);
+    }
+
+    [Fact]
     public void RequestDtosDoNotContainEntitlementApprovalFields()
     {
         var forbiddenNames = new[] { "Entitlement", "Eligibility", "Ordinance", "SupervisorApproval", "OperatorApproval", "RawId", "EvidencePayload" };
@@ -171,6 +205,10 @@ public sealed class FiscalDocumentCreationEndpointTests
             "site-pos-server-001",
             "sales_invoice",
             ValidPayableBasis(),
+            SitePosServerId: Guid.Parse("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb"),
+            FiscalDocumentTypeCodeId: Guid.Parse("cccccccc-cccc-cccc-cccc-cccccccccccc"),
+            FiscalDocumentStatusCodeId: Guid.Parse("dddddddd-dddd-dddd-dddd-dddddddddddd"),
+            CentralPmsParkingSessionRef: "parking-session-001",
             CentralPmsPaymentAttemptRef: "payment-attempt-001",
             CentralPmsPaymentConfirmationRef: "payment-confirmation-001",
             PaymentFinalityRef: "central-finality-001");
