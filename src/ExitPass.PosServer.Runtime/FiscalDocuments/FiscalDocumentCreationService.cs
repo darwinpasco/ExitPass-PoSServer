@@ -179,6 +179,26 @@ public sealed class FiscalDocumentCreationService
             }
         }
 
+        var totals = command.Totals ?? Array.Empty<FiscalTotalInput>();
+        if (ContainsSensitiveEvidence(totals))
+        {
+            return FiscalDocumentCreationResult.Failure(
+                FiscalDocumentCreationErrorCode.SensitiveTotalPayloadNotAllowed,
+                "Fiscal totals accept references only and must not receive raw evidence, credential, payment payload, token, secret, or provider callback values.");
+        }
+
+        var totalTypeIds = new HashSet<Guid>();
+        foreach (var total in totals)
+        {
+            if (!totalTypeIds.Add(total.TotalTypeCodeId) ||
+                !IsValidTotal(total, payableBasisCurrency))
+            {
+                return FiscalDocumentCreationResult.Failure(
+                    FiscalDocumentCreationErrorCode.InvalidFiscalTotal,
+                    "Fiscal totals require a unique total type code, nonnegative amount, matching currency, and non-blank context entries.");
+            }
+        }
+
         var draft = new FiscalDocumentDraft(
             Guid.NewGuid(),
             command.SitePosServerId.Value,
@@ -206,6 +226,7 @@ public sealed class FiscalDocumentCreationService
                 .OrderBy(discount => discount.LineSequence ?? int.MaxValue)
                 .ThenBy(discount => discount.DiscountPrivilegeTypeCodeId)
                 .ToArray(),
+            totals.Select(NormalizeTotal).OrderBy(total => total.TotalTypeCodeId).ToArray(),
             discountReferences.ToArray());
 
         var persistedDraft = await repository.CreateAsync(draft, cancellationToken).ConfigureAwait(false);
@@ -359,6 +380,29 @@ public sealed class FiscalDocumentCreationService
             HasValidContext(discountPrivilegeDetail.DiscountPrivilegeContext);
     }
 
+    private static FiscalTotalInput NormalizeTotal(FiscalTotalInput total) =>
+        total with
+        {
+            CurrencyCode = total.CurrencyCode.Trim().ToUpperInvariant()
+        };
+
+    private static bool IsValidTotal(FiscalTotalInput total, string payableBasisCurrency)
+    {
+        if (string.IsNullOrWhiteSpace(total.CurrencyCode))
+        {
+            return false;
+        }
+
+        var normalizedCurrency = total.CurrencyCode.Trim().ToUpperInvariant();
+
+        return total.TotalTypeCodeId != Guid.Empty &&
+            total.AmountMinorUnits >= 0 &&
+            normalizedCurrency.Length == 3 &&
+            normalizedCurrency.All(char.IsAsciiLetterUpper) &&
+            normalizedCurrency == payableBasisCurrency &&
+            HasValidContext(total.TotalContext);
+    }
+
     private static bool HasValidContext(IReadOnlyDictionary<string, string>? context)
     {
         if (context is null)
@@ -418,6 +462,16 @@ public sealed class FiscalDocumentCreationService
             ContainsSensitiveEvidenceMarker(discountPrivilegeDetail.EvidenceRef) ||
             ContainsSensitiveEvidenceMarker(discountPrivilegeDetail.ApprovalRef) ||
             ContainsSensitiveEvidence(discountPrivilegeDetail.DiscountPrivilegeContext));
+    }
+
+    private static bool ContainsSensitiveEvidence(IReadOnlyList<FiscalTotalInput>? totals)
+    {
+        if (totals is null)
+        {
+            return false;
+        }
+
+        return totals.Any(total => ContainsSensitiveEvidence(total.TotalContext));
     }
 
     private static bool ContainsSensitiveEvidence(IReadOnlyList<FiscalDocumentLineInput>? documentLines)

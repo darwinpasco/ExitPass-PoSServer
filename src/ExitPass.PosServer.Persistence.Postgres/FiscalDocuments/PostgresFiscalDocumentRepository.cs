@@ -94,6 +94,16 @@ public sealed class PostgresFiscalDocumentRepository : IFiscalDocumentRepository
                     await discountPrivilegeCommand.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
                 }
 
+                foreach (var total in draft.Totals)
+                {
+                    await using var totalCommand = new NpgsqlCommand(
+                        PostgresFiscalDocumentSql.InsertFiscalTotal,
+                        connection,
+                        transaction);
+                    AddTotalParameters(totalCommand, draft, total);
+                    await totalCommand.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
+                }
+
                 await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
             }
             catch
@@ -247,5 +257,20 @@ public sealed class PostgresFiscalDocumentRepository : IFiscalDocumentRepository
 
         var contextParameter = command.Parameters.Add("discount_privilege_context", NpgsqlDbType.Jsonb);
         contextParameter.Value = (object?)PostgresFiscalDocumentSql.CreateDiscountPrivilegeContextJson(discountPrivilegeDetail) ?? DBNull.Value;
+    }
+
+    private static void AddTotalParameters(
+        NpgsqlCommand command,
+        FiscalDocumentDraft draft,
+        FiscalTotalInput total)
+    {
+        command.Parameters.AddWithValue("fiscal_total_id", Guid.NewGuid());
+        command.Parameters.AddWithValue("fiscal_document_id", draft.FiscalDocumentId);
+        command.Parameters.AddWithValue("total_type_code_id", total.TotalTypeCodeId);
+        command.Parameters.AddWithValue("amount_minor_units", total.AmountMinorUnits);
+        command.Parameters.AddWithValue("currency_code", total.CurrencyCode);
+
+        var contextParameter = command.Parameters.Add("total_context", NpgsqlDbType.Jsonb);
+        contextParameter.Value = (object?)PostgresFiscalDocumentSql.CreateTotalContextJson(total) ?? DBNull.Value;
     }
 }

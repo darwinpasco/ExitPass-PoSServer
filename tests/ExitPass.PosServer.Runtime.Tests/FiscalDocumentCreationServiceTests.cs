@@ -32,6 +32,8 @@ public sealed class FiscalDocumentCreationServiceTests
         Assert.Equal(Guid.Parse("55555555-5555-5555-5555-555555555555"), result.Draft.DiscountPrivilegeDetails[0].DiscountPrivilegeTypeCodeId);
         Assert.Equal(1000, result.Draft.DiscountPrivilegeDetails[0].DiscountAmountMinorUnits);
         Assert.Equal("discount-validation-001", result.Draft.DiscountPrivilegeDetails[0].ApprovalRef);
+        Assert.Equal(Guid.Parse("66666666-6666-6666-6666-666666666666"), result.Draft.Totals[0].TotalTypeCodeId);
+        Assert.Equal(12500, result.Draft.Totals[0].AmountMinorUnits);
     }
 
     [Fact]
@@ -378,6 +380,50 @@ public sealed class FiscalDocumentCreationServiceTests
         Assert.Equal(0, repository.CreateCount);
     }
 
+    [Theory]
+    [InlineData("amount")]
+    [InlineData("currency")]
+    [InlineData("type")]
+    [InlineData("duplicate_type")]
+    [InlineData("context")]
+    public async Task InvalidFiscalTotalFieldsAreRejectedBeforePersistence(string invalidField)
+    {
+        var repository = new RecordingFiscalDocumentRepository();
+        var service = new FiscalDocumentCreationService(repository);
+        var command = invalidField switch
+        {
+            "amount" => ValidCommand() with { Totals = [ValidTotal() with { AmountMinorUnits = -1 }] },
+            "currency" => ValidCommand() with { Totals = [ValidTotal() with { CurrencyCode = "USD" }] },
+            "type" => ValidCommand() with { Totals = [ValidTotal() with { TotalTypeCodeId = Guid.Empty }] },
+            "duplicate_type" => ValidCommand() with { Totals = [ValidTotal(), ValidTotal()] },
+            "context" => ValidCommand() with { Totals = [ValidTotal() with { TotalContext = new Dictionary<string, string> { ["source_system"] = " " } }] },
+            _ => ValidCommand()
+        };
+
+        var result = await service.CreateAsync(command);
+
+        Assert.False(result.Succeeded);
+        Assert.Equal(FiscalDocumentCreationErrorCode.InvalidFiscalTotal, result.ErrorCode);
+        Assert.Equal(0, repository.CreateCount);
+    }
+
+    [Fact]
+    public async Task RawEvidenceOrPaymentMarkerInFiscalTotalIsRejectedBeforePersistence()
+    {
+        var repository = new RecordingFiscalDocumentRepository();
+        var service = new FiscalDocumentCreationService(repository);
+        var total = ValidTotal() with
+        {
+            TotalContext = new Dictionary<string, string> { ["payment_payload"] = "raw-provider-payload" }
+        };
+
+        var result = await service.CreateAsync(ValidCommand() with { Totals = [total] });
+
+        Assert.False(result.Succeeded);
+        Assert.Equal(FiscalDocumentCreationErrorCode.SensitiveTotalPayloadNotAllowed, result.ErrorCode);
+        Assert.Equal(0, repository.CreateCount);
+    }
+
     [Fact]
     public void CommandModelsDoNotIncludeEntitlementApprovalFields()
     {
@@ -391,7 +437,8 @@ public sealed class FiscalDocumentCreationServiceTests
             typeof(FiscalDocumentLineInput),
             typeof(FiscalTenderInput),
             typeof(FiscalTaxDetailInput),
-            typeof(FiscalDiscountPrivilegeDetailInput)
+            typeof(FiscalDiscountPrivilegeDetailInput),
+            typeof(FiscalTotalInput)
         };
 
         foreach (var type in modelTypes)
@@ -461,7 +508,8 @@ public sealed class FiscalDocumentCreationServiceTests
             DocumentLines: [ValidLine(1)],
             Tenders: [ValidTender()],
             TaxDetails: [ValidTaxDetail()],
-            DiscountPrivilegeDetails: [ValidDiscountPrivilegeDetail()]);
+            DiscountPrivilegeDetails: [ValidDiscountPrivilegeDetail()],
+            Totals: [ValidTotal()]);
 
     private static FiscalizationPayableBasisInput ValidPayableBasis() =>
         new(
@@ -525,6 +573,13 @@ public sealed class FiscalDocumentCreationServiceTests
             EvidenceRef: "evidence-ref-001",
             ApprovalRef: "discount-validation-001",
             DiscountPrivilegeContext: new Dictionary<string, string> { ["source_system"] = "central_pms" });
+
+    private static FiscalTotalInput ValidTotal() =>
+        new(
+            Guid.Parse("66666666-6666-6666-6666-666666666666"),
+            12500,
+            "PHP",
+            new Dictionary<string, string> { ["source_system"] = "central_pms" });
 
     private sealed class RecordingFiscalDocumentRepository : IFiscalDocumentRepository
     {

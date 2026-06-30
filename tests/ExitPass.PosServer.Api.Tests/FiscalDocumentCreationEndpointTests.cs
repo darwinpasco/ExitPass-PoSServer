@@ -37,6 +37,8 @@ public sealed class FiscalDocumentCreationEndpointTests
         Assert.Equal(Guid.Parse("55555555-5555-5555-5555-555555555555"), repository.LastDraft.DiscountPrivilegeDetails[0].DiscountPrivilegeTypeCodeId);
         Assert.Equal(1000, repository.LastDraft.DiscountPrivilegeDetails[0].DiscountAmountMinorUnits);
         Assert.Equal("discount-validation-001", repository.LastDraft.DiscountPrivilegeDetails[0].ApprovalRef);
+        Assert.Equal(Guid.Parse("66666666-6666-6666-6666-666666666666"), repository.LastDraft.Totals[0].TotalTypeCodeId);
+        Assert.Equal(12500, repository.LastDraft.Totals[0].AmountMinorUnits);
     }
 
     [Fact]
@@ -391,6 +393,82 @@ public sealed class FiscalDocumentCreationEndpointTests
     }
 
     [Fact]
+    public async Task InvalidFiscalTotalAmountIsRejectedThroughEntrypoint()
+    {
+        var request = ValidRequest() with
+        {
+            Totals =
+            [
+                ValidTotal() with { AmountMinorUnits = -1 }
+            ]
+        };
+
+        var response = await CreateWithRecordingRepository(request);
+
+        Assert.False(response.Succeeded);
+        Assert.Equal("invalid_fiscal_total", response.Code);
+        Assert.Equal(StatusCodes.Status400BadRequest, response.HttpStatusCode);
+    }
+
+    [Fact]
+    public async Task FiscalTotalCurrencyMismatchIsRejectedThroughEntrypoint()
+    {
+        var request = ValidRequest() with
+        {
+            Totals =
+            [
+                ValidTotal() with { CurrencyCode = "USD" }
+            ]
+        };
+
+        var response = await CreateWithRecordingRepository(request);
+
+        Assert.False(response.Succeeded);
+        Assert.Equal("invalid_fiscal_total", response.Code);
+        Assert.Equal(StatusCodes.Status400BadRequest, response.HttpStatusCode);
+    }
+
+    [Fact]
+    public async Task DuplicateFiscalTotalTypeIsRejectedThroughEntrypoint()
+    {
+        var request = ValidRequest() with
+        {
+            Totals =
+            [
+                ValidTotal(),
+                ValidTotal()
+            ]
+        };
+
+        var response = await CreateWithRecordingRepository(request);
+
+        Assert.False(response.Succeeded);
+        Assert.Equal("invalid_fiscal_total", response.Code);
+        Assert.Equal(StatusCodes.Status400BadRequest, response.HttpStatusCode);
+    }
+
+    [Fact]
+    public async Task RawPaymentPayloadMarkerInFiscalTotalIsRejectedThroughEntrypoint()
+    {
+        var request = ValidRequest() with
+        {
+            Totals =
+            [
+                ValidTotal() with
+                {
+                    TotalContext = new Dictionary<string, string> { ["payment_payload"] = "raw-provider-callback" }
+                }
+            ]
+        };
+
+        var response = await CreateWithRecordingRepository(request);
+
+        Assert.False(response.Succeeded);
+        Assert.Equal("sensitive_total_payload_not_allowed", response.Code);
+        Assert.Equal(StatusCodes.Status400BadRequest, response.HttpStatusCode);
+    }
+
+    [Fact]
     public async Task LinesAliasMapsIntoFiscalDocumentLines()
     {
         var request = ValidRequest() with
@@ -526,7 +604,8 @@ public sealed class FiscalDocumentCreationEndpointTests
             typeof(CreateFiscalDocumentLineRequest),
             typeof(CreateFiscalTenderRequest),
             typeof(CreateFiscalTaxDetailRequest),
-            typeof(CreateFiscalDiscountPrivilegeDetailRequest)
+            typeof(CreateFiscalDiscountPrivilegeDetailRequest),
+            typeof(CreateFiscalTotalRequest)
         };
 
         foreach (var type in dtoTypes)
@@ -612,7 +691,8 @@ public sealed class FiscalDocumentCreationEndpointTests
             DocumentLines: [ValidLine(1)],
             Tenders: [ValidTender()],
             TaxDetails: [ValidTaxDetail()],
-            DiscountPrivilegeDetails: [ValidDiscountPrivilegeDetail()]);
+            DiscountPrivilegeDetails: [ValidDiscountPrivilegeDetail()],
+            Totals: [ValidTotal()]);
 
     private static FiscalizationPayableBasisRequest ValidPayableBasis() =>
         new(
@@ -671,6 +751,13 @@ public sealed class FiscalDocumentCreationEndpointTests
             EvidenceRef: "evidence-ref-001",
             ApprovalRef: "discount-validation-001",
             DiscountPrivilegeContext: new Dictionary<string, string> { ["source_system"] = "central_pms" });
+
+    private static CreateFiscalTotalRequest ValidTotal() =>
+        new(
+            Guid.Parse("66666666-6666-6666-6666-666666666666"),
+            12500,
+            "PHP",
+            new Dictionary<string, string> { ["source_system"] = "central_pms" });
 
     private sealed class RecordingFiscalDocumentRepository : IFiscalDocumentRepository
     {
