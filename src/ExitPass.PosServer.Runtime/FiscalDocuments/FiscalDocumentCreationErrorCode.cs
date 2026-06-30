@@ -7,5 +7,8 @@ public enum FiscalDocumentCreationErrorCode
     MissingUpstreamFinalityReference = 2,
     UnapprovedDiscountReference = 3,
     SensitiveEvidencePayloadNotAllowed = 4,
-    UnsupportedFiscalDocumentRequest = 5
+    UnsupportedFiscalDocumentRequest = 5,
+    MissingFiscalTender = 6,
+    InvalidFiscalTender = 7,
+    SensitiveTenderPayloadNotAllowed = 8
 }

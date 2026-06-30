@@ -56,6 +56,16 @@ public sealed class PostgresFiscalDocumentRepository : IFiscalDocumentRepository
                     await lineCommand.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
                 }
 
+                foreach (var tender in draft.Tenders)
+                {
+                    await using var tenderCommand = new NpgsqlCommand(
+                        PostgresFiscalDocumentSql.InsertFiscalTender,
+                        connection,
+                        transaction);
+                    AddTenderParameters(tenderCommand, draft, tender);
+                    await tenderCommand.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
+                }
+
                 await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
             }
             catch
@@ -135,5 +145,24 @@ public sealed class PostgresFiscalDocumentRepository : IFiscalDocumentRepository
 
         var lineContextParameter = command.Parameters.Add("line_context", NpgsqlDbType.Jsonb);
         lineContextParameter.Value = (object?)PostgresFiscalDocumentSql.CreateLineContextJson(line) ?? DBNull.Value;
+    }
+
+    private static void AddTenderParameters(
+        NpgsqlCommand command,
+        FiscalDocumentDraft draft,
+        FiscalTenderInput tender)
+    {
+        command.Parameters.AddWithValue("fiscal_tender_id", Guid.NewGuid());
+        command.Parameters.AddWithValue("fiscal_document_id", draft.FiscalDocumentId);
+        command.Parameters.AddWithValue("tender_type_code_id", tender.TenderTypeCodeId);
+        command.Parameters.AddWithValue("amount_minor_units", tender.AmountMinorUnits);
+        command.Parameters.AddWithValue("currency_code", tender.CurrencyCode);
+        command.Parameters.AddWithValue("central_pms_payment_attempt_ref", (object?)tender.CentralPmsPaymentAttemptRef ?? DBNull.Value);
+        command.Parameters.AddWithValue("central_pms_payment_confirmation_ref", (object?)tender.CentralPmsPaymentConfirmationRef ?? DBNull.Value);
+        command.Parameters.AddWithValue("payment_finality_ref", (object?)tender.PaymentFinalityRef ?? DBNull.Value);
+        command.Parameters.AddWithValue("provider_ref", (object?)tender.ProviderRef ?? DBNull.Value);
+
+        var tenderContextParameter = command.Parameters.Add("tender_context", NpgsqlDbType.Jsonb);
+        tenderContextParameter.Value = (object?)PostgresFiscalDocumentSql.CreateTenderContextJson(tender) ?? DBNull.Value;
     }
 }

@@ -12,10 +12,13 @@ public sealed record CreateFiscalDocumentRequest(
     string? CentralPmsParkingSessionRef = null,
     string? CentralPmsPaymentAttemptRef = null,
     string? CentralPmsPaymentConfirmationRef = null,
+    string? UpstreamFinalityRef = null,
     string? PaymentFinalityRef = null,
     string? VendorAckRef = null,
     IReadOnlyList<FiscalDocumentLinkRequest>? DocumentLinks = null,
     IReadOnlyList<CreateFiscalDocumentLineRequest>? DocumentLines = null,
+    IReadOnlyList<CreateFiscalDocumentLineRequest>? Lines = null,
+    IReadOnlyList<CreateFiscalTenderRequest>? Tenders = null,
     IReadOnlyDictionary<string, string>? ReferenceContext = null);
 
 public sealed record FiscalDocumentLinkRequest(
@@ -39,3 +42,13 @@ public sealed record CreateFiscalDocumentLineRequest(
     Guid? LineStatusCodeId = null,
     string? SourceRef = null,
     IReadOnlyDictionary<string, string>? LineContext = null);
+
+public sealed record CreateFiscalTenderRequest(
+    Guid? TenderTypeCodeId,
+    long AmountMinorUnits,
+    string? CurrencyCode,
+    string? CentralPmsPaymentAttemptRef = null,
+    string? CentralPmsPaymentConfirmationRef = null,
+    string? PaymentFinalityRef = null,
+    string? ProviderRef = null,
+    IReadOnlyDictionary<string, string>? TenderContext = null);

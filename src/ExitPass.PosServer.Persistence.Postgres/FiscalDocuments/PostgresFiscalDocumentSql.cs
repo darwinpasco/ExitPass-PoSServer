@@ -131,6 +131,36 @@ public static class PostgresFiscalDocumentSql
         );
         """;
 
+    public const string InsertFiscalTender = """
+        insert into pos.fiscal_tenders (
+            fiscal_tender_id,
+            fiscal_document_id,
+            tender_type_code_id,
+            amount_minor_units,
+            currency_code,
+            central_pms_payment_attempt_ref,
+            central_pms_payment_confirmation_ref,
+            payment_finality_ref,
+            provider_ref,
+            tender_context,
+            created_at,
+            updated_at
+        ) values (
+            @fiscal_tender_id,
+            @fiscal_document_id,
+            @tender_type_code_id,
+            @amount_minor_units,
+            @currency_code,
+            @central_pms_payment_attempt_ref,
+            @central_pms_payment_confirmation_ref,
+            @payment_finality_ref,
+            @provider_ref,
+            @tender_context,
+            current_timestamp,
+            current_timestamp
+        );
+        """;
+
     public static string CreateDocumentContextJson(FiscalDocumentDraft draft)
     {
         var context = new
@@ -156,6 +186,16 @@ public static class PostgresFiscalDocumentSql
                 line_status_code_id = line.LineStatusCodeId,
                 source_ref = line.SourceRef
             }),
+            fiscal_tenders = draft.Tenders.Select(tender => new
+            {
+                tender_type_code_id = tender.TenderTypeCodeId,
+                amount_minor_units = tender.AmountMinorUnits,
+                currency_code = tender.CurrencyCode,
+                central_pms_payment_attempt_ref = tender.CentralPmsPaymentAttemptRef,
+                central_pms_payment_confirmation_ref = tender.CentralPmsPaymentConfirmationRef,
+                payment_finality_ref = tender.PaymentFinalityRef,
+                provider_ref = tender.ProviderRef
+            }),
             discount_references = draft.DiscountReferences.Select(discount => new
             {
                 discount_validation_ref = discount.DiscountValidationRef,
@@ -176,5 +216,15 @@ public static class PostgresFiscalDocumentSql
         }
 
         return JsonSerializer.Serialize(line.LineContext);
+    }
+
+    public static string? CreateTenderContextJson(FiscalTenderInput tender)
+    {
+        if (tender.TenderContext is null)
+        {
+            return null;
+        }
+
+        return JsonSerializer.Serialize(tender.TenderContext);
     }
 }

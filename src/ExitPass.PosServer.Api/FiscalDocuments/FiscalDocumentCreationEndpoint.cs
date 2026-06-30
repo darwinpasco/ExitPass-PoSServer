@@ -44,7 +44,7 @@ public static class FiscalDocumentCreationEndpoint
         new(
             request.SitePosServerRef ?? string.Empty,
             request.FiscalDocumentTypeCodeKey ?? string.Empty,
-            MapPayableBasis(request.PayableBasis),
+            MapPayableBasis(request.PayableBasis, request.UpstreamFinalityRef),
             request.SitePosServerId,
             request.ChannelTerminalId,
             request.FiscalDocumentTypeCodeId,
@@ -56,7 +56,8 @@ public static class FiscalDocumentCreationEndpoint
             request.PaymentFinalityRef,
             request.VendorAckRef,
             request.DocumentLinks?.Select(MapDocumentLink).ToArray(),
-            request.DocumentLines?.Select(MapDocumentLine).ToArray(),
+            (request.DocumentLines ?? request.Lines)?.Select(MapDocumentLine).ToArray(),
+            request.Tenders?.Select(MapTender).ToArray(),
             request.ReferenceContext);
 
     public static CreateFiscalDocumentResponse MapResult(FiscalDocumentCreationResult result)
@@ -78,16 +79,22 @@ public static class FiscalDocumentCreationEndpoint
             HttpStatusCode: StatusCodes.Status400BadRequest);
     }
 
-    private static FiscalizationPayableBasisInput? MapPayableBasis(FiscalizationPayableBasisRequest? request)
+    private static FiscalizationPayableBasisInput? MapPayableBasis(
+        FiscalizationPayableBasisRequest? request,
+        string? upstreamFinalityRef)
     {
         if (request is null)
         {
             return null;
         }
 
+        var mappedUpstreamFinalityRef = string.IsNullOrWhiteSpace(request.UpstreamFinalityRef)
+            ? upstreamFinalityRef
+            : request.UpstreamFinalityRef;
+
         return new FiscalizationPayableBasisInput(
             request.PayableBasisRef ?? string.Empty,
-            request.UpstreamFinalityRef ?? string.Empty,
+            mappedUpstreamFinalityRef ?? string.Empty,
             request.CurrencyCode ?? string.Empty,
             request.PayableAmountMinorUnits,
             request.DiscountReferences?.Select(MapDiscountReference).ToArray(),
@@ -125,6 +132,17 @@ public static class FiscalDocumentCreationEndpoint
             request.SourceRef,
             request.LineContext);
 
+    private static FiscalTenderInput MapTender(CreateFiscalTenderRequest request) =>
+        new(
+            request.TenderTypeCodeId ?? Guid.Empty,
+            request.AmountMinorUnits,
+            request.CurrencyCode ?? string.Empty,
+            request.CentralPmsPaymentAttemptRef,
+            request.CentralPmsPaymentConfirmationRef,
+            request.PaymentFinalityRef,
+            request.ProviderRef,
+            request.TenderContext);
+
     private static FiscalDiscountReferenceStatus MapDiscountStatus(string? status) =>
         status?.Trim().ToLowerInvariant() switch
         {
@@ -145,6 +163,9 @@ public static class FiscalDocumentCreationEndpoint
             FiscalDocumentCreationErrorCode.UnapprovedDiscountReference => "unapproved_discount_reference",
             FiscalDocumentCreationErrorCode.SensitiveEvidencePayloadNotAllowed => "sensitive_evidence_payload_not_allowed",
             FiscalDocumentCreationErrorCode.UnsupportedFiscalDocumentRequest => "unsupported_fiscal_document_request",
+            FiscalDocumentCreationErrorCode.MissingFiscalTender => "missing_fiscal_tender",
+            FiscalDocumentCreationErrorCode.InvalidFiscalTender => "invalid_fiscal_tender",
+            FiscalDocumentCreationErrorCode.SensitiveTenderPayloadNotAllowed => "sensitive_tender_payload_not_allowed",
             _ => "fiscal_document_creation_failed"
         };
 }
