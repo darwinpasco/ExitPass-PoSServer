@@ -47,6 +47,7 @@ public static class FiscalDocumentCreationEndpoint
             request.CentralPmsPaymentConfirmationRef,
             request.PaymentFinalityRef,
             request.VendorAckRef,
+            request.DocumentLinks?.Select(MapDocumentLink).ToArray(),
             request.ReferenceContext);
 
     public static CreateFiscalDocumentResponse MapResult(FiscalDocumentCreationResult result)
@@ -90,6 +91,14 @@ public static class FiscalDocumentCreationEndpoint
             MapDiscountStatus(request.Status),
             request.AppliesStatutoryDiscountTreatment,
             request.ReferenceContext);
+
+    private static FiscalDocumentLinkInput MapDocumentLink(FiscalDocumentLinkRequest request) =>
+        new(
+            request.TargetFiscalDocumentId ?? Guid.Empty,
+            request.LinkTypeCodeId ?? Guid.Empty,
+            request.LinkReasonCodeId,
+            request.LinkReasonText,
+            request.CreatedByRef);
 
     private static FiscalDiscountReferenceStatus MapDiscountStatus(string? status) =>
         status?.Trim().ToLowerInvariant() switch

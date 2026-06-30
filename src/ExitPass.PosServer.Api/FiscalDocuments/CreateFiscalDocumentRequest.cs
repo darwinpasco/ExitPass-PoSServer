@@ -14,4 +14,12 @@ public sealed record CreateFiscalDocumentRequest(
     string? CentralPmsPaymentConfirmationRef = null,
     string? PaymentFinalityRef = null,
     string? VendorAckRef = null,
+    IReadOnlyList<FiscalDocumentLinkRequest>? DocumentLinks = null,
     IReadOnlyDictionary<string, string>? ReferenceContext = null);
+
+public sealed record FiscalDocumentLinkRequest(
+    Guid? TargetFiscalDocumentId,
+    Guid? LinkTypeCodeId,
+    Guid? LinkReasonCodeId = null,
+    string? LinkReasonText = null,
+    string? CreatedByRef = null);

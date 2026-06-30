@@ -21,6 +21,7 @@ public sealed class FiscalDocumentCreationServiceTests
         Assert.Equal("payable-basis-001", result.Draft.PayableBasisRef);
         Assert.Equal("central-finality-001", result.Draft.UpstreamFinalityRef);
         Assert.Equal("discount-validation-001", result.Draft.DiscountReferences[0].DiscountValidationRef);
+        Assert.Equal(Guid.Parse("eeeeeeee-eeee-eeee-eeee-eeeeeeeeeeee"), result.Draft.DocumentLinks[0].TargetFiscalDocumentId);
     }
 
     [Fact]
@@ -90,6 +91,51 @@ public sealed class FiscalDocumentCreationServiceTests
     }
 
     [Fact]
+    public async Task InvalidDocumentLinkIsRejectedBeforePersistence()
+    {
+        var repository = new RecordingFiscalDocumentRepository();
+        var service = new FiscalDocumentCreationService(repository);
+        var command = ValidCommand() with
+        {
+            DocumentLinks =
+            [
+                new FiscalDocumentLinkInput(
+                    Guid.Empty,
+                    Guid.Parse("ffffffff-ffff-ffff-ffff-ffffffffffff"))
+            ]
+        };
+
+        var result = await service.CreateAsync(command);
+
+        Assert.False(result.Succeeded);
+        Assert.Equal(FiscalDocumentCreationErrorCode.UnsupportedFiscalDocumentRequest, result.ErrorCode);
+        Assert.Equal(0, repository.CreateCount);
+    }
+
+    [Fact]
+    public async Task RawEvidenceMarkerInDocumentLinkIsRejectedBeforePersistence()
+    {
+        var repository = new RecordingFiscalDocumentRepository();
+        var service = new FiscalDocumentCreationService(repository);
+        var command = ValidCommand() with
+        {
+            DocumentLinks =
+            [
+                new FiscalDocumentLinkInput(
+                    Guid.Parse("eeeeeeee-eeee-eeee-eeee-eeeeeeeeeeee"),
+                    Guid.Parse("ffffffff-ffff-ffff-ffff-ffffffffffff"),
+                    LinkReasonText: "raw_id_image")
+            ]
+        };
+
+        var result = await service.CreateAsync(command);
+
+        Assert.False(result.Succeeded);
+        Assert.Equal(FiscalDocumentCreationErrorCode.SensitiveEvidencePayloadNotAllowed, result.ErrorCode);
+        Assert.Equal(0, repository.CreateCount);
+    }
+
+    [Fact]
     public void CommandModelsDoNotIncludeEntitlementApprovalFields()
     {
         var forbiddenNames = new[] { "Entitlement", "Eligibility", "Ordinance", "SupervisorApproval", "OperatorApproval", "RawId", "EvidencePayload" };
@@ -97,7 +143,8 @@ public sealed class FiscalDocumentCreationServiceTests
         {
             typeof(FiscalDocumentCreationCommand),
             typeof(FiscalizationPayableBasisInput),
-            typeof(FiscalDiscountReferenceInput)
+            typeof(FiscalDiscountReferenceInput),
+            typeof(FiscalDocumentLinkInput)
         };
 
         foreach (var type in modelTypes)
@@ -156,7 +203,14 @@ public sealed class FiscalDocumentCreationServiceTests
             CentralPmsParkingSessionRef: "parking-session-001",
             CentralPmsPaymentAttemptRef: "payment-attempt-001",
             CentralPmsPaymentConfirmationRef: "payment-confirmation-001",
-            PaymentFinalityRef: "central-finality-001");
+            PaymentFinalityRef: "central-finality-001",
+            DocumentLinks:
+            [
+                new FiscalDocumentLinkInput(
+                    Guid.Parse("eeeeeeee-eeee-eeee-eeee-eeeeeeeeeeee"),
+                    Guid.Parse("ffffffff-ffff-ffff-ffff-ffffffffffff"),
+                    CreatedByRef: "pos-server-runtime")
+            ]);
 
     private static FiscalizationPayableBasisInput ValidPayableBasis() =>
         new(

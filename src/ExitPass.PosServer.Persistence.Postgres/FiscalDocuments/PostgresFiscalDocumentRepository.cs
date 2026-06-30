@@ -36,6 +36,16 @@ public sealed class PostgresFiscalDocumentRepository : IFiscalDocumentRepository
                 AddStatusHistoryParameters(statusHistoryCommand, draft);
                 await statusHistoryCommand.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
 
+                foreach (var documentLink in draft.DocumentLinks)
+                {
+                    await using var linkCommand = new NpgsqlCommand(
+                        PostgresFiscalDocumentSql.InsertFiscalDocumentLink,
+                        connection,
+                        transaction);
+                    AddDocumentLinkParameters(linkCommand, draft, documentLink);
+                    await linkCommand.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
+                }
+
                 await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
             }
             catch
@@ -77,5 +87,19 @@ public sealed class PostgresFiscalDocumentRepository : IFiscalDocumentRepository
         command.Parameters.AddWithValue("fiscal_document_status_history_id", Guid.NewGuid());
         command.Parameters.AddWithValue("fiscal_document_id", draft.FiscalDocumentId);
         command.Parameters.AddWithValue("fiscal_document_status_code_id", draft.FiscalDocumentStatusCodeId);
+    }
+
+    private static void AddDocumentLinkParameters(
+        NpgsqlCommand command,
+        FiscalDocumentDraft draft,
+        FiscalDocumentLinkInput link)
+    {
+        command.Parameters.AddWithValue("fiscal_document_link_id", Guid.NewGuid());
+        command.Parameters.AddWithValue("source_fiscal_document_id", draft.FiscalDocumentId);
+        command.Parameters.AddWithValue("target_fiscal_document_id", link.TargetFiscalDocumentId);
+        command.Parameters.AddWithValue("fiscal_document_link_type_code_id", link.LinkTypeCodeId);
+        command.Parameters.AddWithValue("link_reason_code_id", (object?)link.LinkReasonCodeId ?? DBNull.Value);
+        command.Parameters.AddWithValue("link_reason_text", (object?)link.LinkReasonText ?? DBNull.Value);
+        command.Parameters.AddWithValue("created_by_ref", (object?)link.CreatedByRef ?? DBNull.Value);
     }
 }

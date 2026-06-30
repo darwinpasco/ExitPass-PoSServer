@@ -73,6 +73,20 @@ public sealed class FiscalDocumentCreationService
             }
         }
 
+        var documentLinks = command.DocumentLinks ?? Array.Empty<FiscalDocumentLinkInput>();
+        foreach (var documentLink in documentLinks)
+        {
+            if (documentLink.TargetFiscalDocumentId == Guid.Empty ||
+                documentLink.LinkTypeCodeId == Guid.Empty ||
+                IsBlankOptionalReference(documentLink.LinkReasonText) ||
+                IsBlankOptionalReference(documentLink.CreatedByRef))
+            {
+                return FiscalDocumentCreationResult.Failure(
+                    FiscalDocumentCreationErrorCode.UnsupportedFiscalDocumentRequest,
+                    "Fiscal document links require a target fiscal document, link type, and non-blank optional reference fields.");
+            }
+        }
+
         var draft = new FiscalDocumentDraft(
             Guid.NewGuid(),
             command.SitePosServerId.Value,
@@ -91,6 +105,7 @@ public sealed class FiscalDocumentCreationService
             NormalizeOptionalReference(command.CentralPmsPaymentConfirmationRef),
             NormalizeOptionalReference(command.PaymentFinalityRef) ?? command.PayableBasis.UpstreamFinalityRef.Trim(),
             NormalizeOptionalReference(command.VendorAckRef),
+            documentLinks.Select(NormalizeDocumentLink).ToArray(),
             discountReferences.ToArray());
 
         var persistedDraft = await repository.CreateAsync(draft, cancellationToken).ConfigureAwait(false);
@@ -100,12 +115,35 @@ public sealed class FiscalDocumentCreationService
     private static string? NormalizeOptionalReference(string? value) =>
         string.IsNullOrWhiteSpace(value) ? null : value.Trim();
 
+    private static bool IsBlankOptionalReference(string? value) =>
+        value is not null && string.IsNullOrWhiteSpace(value);
+
+    private static FiscalDocumentLinkInput NormalizeDocumentLink(FiscalDocumentLinkInput link) =>
+        link with
+        {
+            LinkReasonText = NormalizeOptionalReference(link.LinkReasonText),
+            CreatedByRef = NormalizeOptionalReference(link.CreatedByRef)
+        };
+
     private static bool ContainsSensitiveEvidence(FiscalDocumentCreationCommand command)
     {
         return ContainsSensitiveEvidence(command.ReferenceContext) ||
             ContainsSensitiveEvidence(command.PayableBasis?.ReferenceContext) ||
+            ContainsSensitiveEvidence(command.DocumentLinks) ||
             (command.PayableBasis?.DiscountReferences?.Any(discount =>
                 ContainsSensitiveEvidence(discount.ReferenceContext)) ?? false);
+    }
+
+    private static bool ContainsSensitiveEvidence(IReadOnlyList<FiscalDocumentLinkInput>? documentLinks)
+    {
+        if (documentLinks is null)
+        {
+            return false;
+        }
+
+        return documentLinks.Any(link =>
+            ContainsSensitiveEvidenceMarker(link.LinkReasonText) ||
+            ContainsSensitiveEvidenceMarker(link.CreatedByRef));
     }
 
     private static bool ContainsSensitiveEvidence(IReadOnlyDictionary<string, string>? context)
