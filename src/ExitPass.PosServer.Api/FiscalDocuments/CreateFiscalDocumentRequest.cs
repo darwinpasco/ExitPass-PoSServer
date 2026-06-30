@@ -20,6 +20,7 @@ public sealed record CreateFiscalDocumentRequest(
     IReadOnlyList<CreateFiscalDocumentLineRequest>? Lines = null,
     IReadOnlyList<CreateFiscalTenderRequest>? Tenders = null,
     IReadOnlyList<CreateFiscalTaxDetailRequest>? TaxDetails = null,
+    IReadOnlyList<CreateFiscalDiscountPrivilegeDetailRequest>? DiscountPrivilegeDetails = null,
     IReadOnlyDictionary<string, string>? ReferenceContext = null);
 
 public sealed record FiscalDocumentLinkRequest(
@@ -63,3 +64,15 @@ public sealed record CreateFiscalTaxDetailRequest(
     int? LineSequence = null,
     decimal? TaxRate = null,
     IReadOnlyDictionary<string, string>? TaxContext = null);
+
+public sealed record CreateFiscalDiscountPrivilegeDetailRequest(
+    Guid? DiscountPrivilegeTypeCodeId,
+    long BasisAmountMinorUnits,
+    long DiscountAmountMinorUnits,
+    long VatPrivilegeAmountMinorUnits,
+    string? CurrencyCode,
+    int? LineSequence = null,
+    string? BeneficiaryRef = null,
+    string? EvidenceRef = null,
+    string? ApprovalRef = null,
+    IReadOnlyDictionary<string, string>? DiscountPrivilegeContext = null);

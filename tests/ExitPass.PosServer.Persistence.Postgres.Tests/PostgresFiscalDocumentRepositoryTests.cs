@@ -8,14 +8,15 @@ namespace ExitPass.PosServer.Persistence.Postgres.Tests;
 public sealed class PostgresFiscalDocumentRepositoryTests
 {
     [Fact]
-    public void InsertSqlTargetsOnlyFiscalDocumentHeaderStatusHistoryLinksLinesTendersAndTaxDetails()
+    public void InsertSqlTargetsOnlyFiscalDocumentHeaderStatusHistoryLinksLinesTendersTaxAndDiscountPrivilegeDetails()
     {
         var sql = PostgresFiscalDocumentSql.InsertFiscalDocument +
             PostgresFiscalDocumentSql.InsertFiscalDocumentStatusHistory +
             PostgresFiscalDocumentSql.InsertFiscalDocumentLink +
             PostgresFiscalDocumentSql.InsertFiscalDocumentLine +
             PostgresFiscalDocumentSql.InsertFiscalTender +
-            PostgresFiscalDocumentSql.InsertFiscalTaxDetail;
+            PostgresFiscalDocumentSql.InsertFiscalTaxDetail +
+            PostgresFiscalDocumentSql.InsertFiscalDiscountPrivilegeDetail;
 
         Assert.Contains("insert into pos.fiscal_documents", sql, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("insert into pos.fiscal_document_status_history", sql, StringComparison.OrdinalIgnoreCase);
@@ -23,7 +24,7 @@ public sealed class PostgresFiscalDocumentRepositoryTests
         Assert.Contains("insert into pos.fiscal_document_lines", sql, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("insert into pos.fiscal_tenders", sql, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("insert into pos.fiscal_tax_details", sql, StringComparison.OrdinalIgnoreCase);
-        Assert.DoesNotContain("pos.fiscal_discount_privilege_details", sql, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("insert into pos.fiscal_discount_privilege_details", sql, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("pos.fiscal_totals", sql, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("pos.fiscal_report", sql, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("pos.digital_si", sql, StringComparison.OrdinalIgnoreCase);
@@ -40,7 +41,8 @@ public sealed class PostgresFiscalDocumentRepositoryTests
             PostgresFiscalDocumentSql.InsertFiscalDocumentLink +
             PostgresFiscalDocumentSql.InsertFiscalDocumentLine +
             PostgresFiscalDocumentSql.InsertFiscalTender +
-            PostgresFiscalDocumentSql.InsertFiscalTaxDetail;
+            PostgresFiscalDocumentSql.InsertFiscalTaxDetail +
+            PostgresFiscalDocumentSql.InsertFiscalDiscountPrivilegeDetail;
         var untrusted = "payable-basis-001'); drop table pos.fiscal_documents; --";
 
         Assert.Contains("@fiscal_document_id", sql, StringComparison.Ordinal);
@@ -65,6 +67,12 @@ public sealed class PostgresFiscalDocumentRepositoryTests
         Assert.Contains("@taxable_amount_minor_units", sql, StringComparison.Ordinal);
         Assert.Contains("@tax_amount_minor_units", sql, StringComparison.Ordinal);
         Assert.Contains("@tax_context", sql, StringComparison.Ordinal);
+        Assert.Contains("@fiscal_discount_privilege_detail_id", sql, StringComparison.Ordinal);
+        Assert.Contains("@discount_privilege_type_code_id", sql, StringComparison.Ordinal);
+        Assert.Contains("@basis_amount_minor_units", sql, StringComparison.Ordinal);
+        Assert.Contains("@discount_amount_minor_units", sql, StringComparison.Ordinal);
+        Assert.Contains("@vat_privilege_amount_minor_units", sql, StringComparison.Ordinal);
+        Assert.Contains("@discount_privilege_context", sql, StringComparison.Ordinal);
         Assert.Contains("@document_context", sql, StringComparison.Ordinal);
         Assert.DoesNotContain(untrusted, sql, StringComparison.Ordinal);
         Assert.DoesNotContain("drop table", sql, StringComparison.OrdinalIgnoreCase);
@@ -154,7 +162,29 @@ public sealed class PostgresFiscalDocumentRepositoryTests
     }
 
     [Fact]
-    public void RepositoryUsesSingleTransactionForHeaderStatusHistoryLinksLinesTendersAndTaxDetails()
+    public void DiscountPrivilegeDetailSqlUsesFiscalDiscountPrivilegeMappingOnly()
+    {
+        var discountSql = PostgresFiscalDocumentSql.InsertFiscalDiscountPrivilegeDetail;
+
+        Assert.Contains("pos.fiscal_discount_privilege_details", discountSql, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("fiscal_document_id", discountSql, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("fiscal_document_line_id", discountSql, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("discount_privilege_type_code_id", discountSql, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("basis_amount_minor_units", discountSql, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("discount_amount_minor_units", discountSql, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("vat_privilege_amount_minor_units", discountSql, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("currency_code", discountSql, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("beneficiary_ref", discountSql, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("evidence_ref", discountSql, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("approval_ref", discountSql, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("fiscal_total", discountSql, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("report", discountSql, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("exit", discountSql, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("gate", discountSql, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void RepositoryUsesSingleTransactionForHeaderStatusHistoryLinksLinesTendersTaxAndDiscountPrivilegeDetails()
     {
         var repositorySource = File.ReadAllText(FindRepositorySourcePath());
 
@@ -165,6 +195,7 @@ public sealed class PostgresFiscalDocumentRepositoryTests
         Assert.Contains("PostgresFiscalDocumentSql.InsertFiscalDocumentLine,", repositorySource, StringComparison.Ordinal);
         Assert.Contains("PostgresFiscalDocumentSql.InsertFiscalTender,", repositorySource, StringComparison.Ordinal);
         Assert.Contains("PostgresFiscalDocumentSql.InsertFiscalTaxDetail,", repositorySource, StringComparison.Ordinal);
+        Assert.Contains("PostgresFiscalDocumentSql.InsertFiscalDiscountPrivilegeDetail,", repositorySource, StringComparison.Ordinal);
         Assert.Contains("CommitAsync", repositorySource, StringComparison.Ordinal);
         Assert.Contains("RollbackAsync", repositorySource, StringComparison.Ordinal);
 
@@ -174,13 +205,15 @@ public sealed class PostgresFiscalDocumentRepositoryTests
         var lineIndex = repositorySource.IndexOf("InsertFiscalDocumentLine,", StringComparison.Ordinal);
         var tenderIndex = repositorySource.IndexOf("InsertFiscalTender,", StringComparison.Ordinal);
         var taxIndex = repositorySource.IndexOf("InsertFiscalTaxDetail,", StringComparison.Ordinal);
+        var discountIndex = repositorySource.IndexOf("InsertFiscalDiscountPrivilegeDetail,", StringComparison.Ordinal);
         var commitIndex = repositorySource.IndexOf("CommitAsync", StringComparison.Ordinal);
         Assert.True(headerIndex < statusIndex);
         Assert.True(statusIndex < linkIndex);
         Assert.True(linkIndex < lineIndex);
         Assert.True(lineIndex < tenderIndex);
         Assert.True(tenderIndex < taxIndex);
-        Assert.True(taxIndex < commitIndex);
+        Assert.True(taxIndex < discountIndex);
+        Assert.True(discountIndex < commitIndex);
     }
 
     [Fact]
@@ -197,6 +230,8 @@ public sealed class PostgresFiscalDocumentRepositoryTests
         Assert.Contains("line-source-001", json, StringComparison.Ordinal);
         Assert.Contains("provider-ref-001", json, StringComparison.Ordinal);
         Assert.Contains("33333333-3333-3333-3333-333333333333", json, StringComparison.Ordinal);
+        Assert.Contains("55555555-5555-5555-5555-555555555555", json, StringComparison.Ordinal);
+        Assert.Contains("discount-validation-001", json, StringComparison.Ordinal);
         Assert.DoesNotContain("raw_id", json, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("evidence_payload", json, StringComparison.OrdinalIgnoreCase);
     }
@@ -232,6 +267,17 @@ public sealed class PostgresFiscalDocumentRepositoryTests
         Assert.Contains("source_system", taxContext, StringComparison.Ordinal);
         Assert.DoesNotContain("raw_id", taxContext, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("payment_payload", taxContext, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void DiscountPrivilegeContextPreservesReferenceOnlyJson()
+    {
+        var context = PostgresFiscalDocumentSql.CreateDiscountPrivilegeContextJson(ValidDraft().DiscountPrivilegeDetails[0]);
+
+        Assert.NotNull(context);
+        Assert.Contains("source_system", context, StringComparison.Ordinal);
+        Assert.DoesNotContain("raw_id", context, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("evidence_payload", context, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]
@@ -320,6 +366,19 @@ public sealed class PostgresFiscalDocumentRepositoryTests
                     LineSequence: 1,
                     TaxRate: 0,
                     TaxContext: new Dictionary<string, string> { ["source_system"] = "central_pms" })
+            ],
+            [
+                new FiscalDiscountPrivilegeDetailInput(
+                    Guid.Parse("55555555-5555-5555-5555-555555555555"),
+                    12500,
+                    1000,
+                    0,
+                    "PHP",
+                    LineSequence: 1,
+                    BeneficiaryRef: "beneficiary-ref-001",
+                    EvidenceRef: "evidence-ref-001",
+                    ApprovalRef: "discount-validation-001",
+                    DiscountPrivilegeContext: new Dictionary<string, string> { ["source_system"] = "central_pms" })
             ],
             [new FiscalDiscountReferenceInput("discount-validation-001", FiscalDiscountReferenceStatus.Approved, true)]);
 

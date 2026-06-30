@@ -29,6 +29,9 @@ public sealed class FiscalDocumentCreationServiceTests
         Assert.Equal(Guid.Parse("33333333-3333-3333-3333-333333333333"), result.Draft.TaxDetails[0].TaxTypeCodeId);
         Assert.Equal(12500, result.Draft.TaxDetails[0].TaxableAmountMinorUnits);
         Assert.Equal(1, result.Draft.TaxDetails[0].LineSequence);
+        Assert.Equal(Guid.Parse("55555555-5555-5555-5555-555555555555"), result.Draft.DiscountPrivilegeDetails[0].DiscountPrivilegeTypeCodeId);
+        Assert.Equal(1000, result.Draft.DiscountPrivilegeDetails[0].DiscountAmountMinorUnits);
+        Assert.Equal("discount-validation-001", result.Draft.DiscountPrivilegeDetails[0].ApprovalRef);
     }
 
     [Fact]
@@ -321,6 +324,60 @@ public sealed class FiscalDocumentCreationServiceTests
         Assert.Equal(0, repository.CreateCount);
     }
 
+    [Theory]
+    [InlineData("basis_amount")]
+    [InlineData("discount_amount")]
+    [InlineData("vat_privilege_amount")]
+    [InlineData("discount_exceeds_basis")]
+    [InlineData("vat_privilege_exceeds_basis")]
+    [InlineData("currency")]
+    [InlineData("type")]
+    [InlineData("line_sequence")]
+    [InlineData("blank_ref")]
+    [InlineData("context")]
+    public async Task InvalidDiscountPrivilegeDetailFieldsAreRejectedBeforePersistence(string invalidField)
+    {
+        var repository = new RecordingFiscalDocumentRepository();
+        var service = new FiscalDocumentCreationService(repository);
+        var invalidDetail = invalidField switch
+        {
+            "basis_amount" => ValidDiscountPrivilegeDetail() with { BasisAmountMinorUnits = -1 },
+            "discount_amount" => ValidDiscountPrivilegeDetail() with { DiscountAmountMinorUnits = -1 },
+            "vat_privilege_amount" => ValidDiscountPrivilegeDetail() with { VatPrivilegeAmountMinorUnits = -1 },
+            "discount_exceeds_basis" => ValidDiscountPrivilegeDetail() with { BasisAmountMinorUnits = 1000, DiscountAmountMinorUnits = 1001 },
+            "vat_privilege_exceeds_basis" => ValidDiscountPrivilegeDetail() with { BasisAmountMinorUnits = 1000, VatPrivilegeAmountMinorUnits = 1001 },
+            "currency" => ValidDiscountPrivilegeDetail() with { CurrencyCode = "USD" },
+            "type" => ValidDiscountPrivilegeDetail() with { DiscountPrivilegeTypeCodeId = Guid.Empty },
+            "line_sequence" => ValidDiscountPrivilegeDetail() with { LineSequence = 99 },
+            "blank_ref" => ValidDiscountPrivilegeDetail() with { EvidenceRef = " " },
+            "context" => ValidDiscountPrivilegeDetail() with { DiscountPrivilegeContext = new Dictionary<string, string> { ["source_system"] = " " } },
+            _ => ValidDiscountPrivilegeDetail()
+        };
+
+        var result = await service.CreateAsync(ValidCommand() with { DiscountPrivilegeDetails = [invalidDetail] });
+
+        Assert.False(result.Succeeded);
+        Assert.Equal(FiscalDocumentCreationErrorCode.InvalidFiscalDiscountPrivilegeDetail, result.ErrorCode);
+        Assert.Equal(0, repository.CreateCount);
+    }
+
+    [Fact]
+    public async Task RawEvidenceOrPaymentMarkerInDiscountPrivilegeDetailIsRejectedBeforePersistence()
+    {
+        var repository = new RecordingFiscalDocumentRepository();
+        var service = new FiscalDocumentCreationService(repository);
+        var detail = ValidDiscountPrivilegeDetail() with
+        {
+            EvidenceRef = "raw_id_image_payload"
+        };
+
+        var result = await service.CreateAsync(ValidCommand() with { DiscountPrivilegeDetails = [detail] });
+
+        Assert.False(result.Succeeded);
+        Assert.Equal(FiscalDocumentCreationErrorCode.SensitiveDiscountPrivilegePayloadNotAllowed, result.ErrorCode);
+        Assert.Equal(0, repository.CreateCount);
+    }
+
     [Fact]
     public void CommandModelsDoNotIncludeEntitlementApprovalFields()
     {
@@ -333,7 +390,8 @@ public sealed class FiscalDocumentCreationServiceTests
             typeof(FiscalDocumentLinkInput),
             typeof(FiscalDocumentLineInput),
             typeof(FiscalTenderInput),
-            typeof(FiscalTaxDetailInput)
+            typeof(FiscalTaxDetailInput),
+            typeof(FiscalDiscountPrivilegeDetailInput)
         };
 
         foreach (var type in modelTypes)
@@ -402,7 +460,8 @@ public sealed class FiscalDocumentCreationServiceTests
             ],
             DocumentLines: [ValidLine(1)],
             Tenders: [ValidTender()],
-            TaxDetails: [ValidTaxDetail()]);
+            TaxDetails: [ValidTaxDetail()],
+            DiscountPrivilegeDetails: [ValidDiscountPrivilegeDetail()]);
 
     private static FiscalizationPayableBasisInput ValidPayableBasis() =>
         new(
@@ -453,6 +512,19 @@ public sealed class FiscalDocumentCreationServiceTests
             LineSequence: 1,
             TaxRate: 0,
             TaxContext: new Dictionary<string, string> { ["source_system"] = "central_pms" });
+
+    private static FiscalDiscountPrivilegeDetailInput ValidDiscountPrivilegeDetail() =>
+        new(
+            Guid.Parse("55555555-5555-5555-5555-555555555555"),
+            12500,
+            1000,
+            0,
+            "PHP",
+            LineSequence: 1,
+            BeneficiaryRef: "beneficiary-ref-001",
+            EvidenceRef: "evidence-ref-001",
+            ApprovalRef: "discount-validation-001",
+            DiscountPrivilegeContext: new Dictionary<string, string> { ["source_system"] = "central_pms" });
 
     private sealed class RecordingFiscalDocumentRepository : IFiscalDocumentRepository
     {

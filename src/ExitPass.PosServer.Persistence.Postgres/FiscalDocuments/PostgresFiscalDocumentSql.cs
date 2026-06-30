@@ -191,6 +191,40 @@ public static class PostgresFiscalDocumentSql
         );
         """;
 
+    public const string InsertFiscalDiscountPrivilegeDetail = """
+        insert into pos.fiscal_discount_privilege_details (
+            fiscal_discount_privilege_detail_id,
+            fiscal_document_id,
+            fiscal_document_line_id,
+            discount_privilege_type_code_id,
+            basis_amount_minor_units,
+            discount_amount_minor_units,
+            vat_privilege_amount_minor_units,
+            currency_code,
+            beneficiary_ref,
+            evidence_ref,
+            approval_ref,
+            discount_privilege_context,
+            created_at,
+            updated_at
+        ) values (
+            @fiscal_discount_privilege_detail_id,
+            @fiscal_document_id,
+            @fiscal_document_line_id,
+            @discount_privilege_type_code_id,
+            @basis_amount_minor_units,
+            @discount_amount_minor_units,
+            @vat_privilege_amount_minor_units,
+            @currency_code,
+            @beneficiary_ref,
+            @evidence_ref,
+            @approval_ref,
+            @discount_privilege_context,
+            current_timestamp,
+            current_timestamp
+        );
+        """;
+
     public static string CreateDocumentContextJson(FiscalDocumentDraft draft)
     {
         var context = new
@@ -236,6 +270,18 @@ public static class PostgresFiscalDocumentSql
                 tax_amount_minor_units = taxDetail.TaxAmountMinorUnits,
                 currency_code = taxDetail.CurrencyCode
             }),
+            fiscal_discount_privilege_details = draft.DiscountPrivilegeDetails.Select(discountPrivilegeDetail => new
+            {
+                line_sequence = discountPrivilegeDetail.LineSequence,
+                discount_privilege_type_code_id = discountPrivilegeDetail.DiscountPrivilegeTypeCodeId,
+                basis_amount_minor_units = discountPrivilegeDetail.BasisAmountMinorUnits,
+                discount_amount_minor_units = discountPrivilegeDetail.DiscountAmountMinorUnits,
+                vat_privilege_amount_minor_units = discountPrivilegeDetail.VatPrivilegeAmountMinorUnits,
+                currency_code = discountPrivilegeDetail.CurrencyCode,
+                beneficiary_ref = discountPrivilegeDetail.BeneficiaryRef,
+                evidence_ref = discountPrivilegeDetail.EvidenceRef,
+                approval_ref = discountPrivilegeDetail.ApprovalRef
+            }),
             discount_references = draft.DiscountReferences.Select(discount => new
             {
                 discount_validation_ref = discount.DiscountValidationRef,
@@ -276,5 +322,15 @@ public static class PostgresFiscalDocumentSql
         }
 
         return JsonSerializer.Serialize(taxDetail.TaxContext);
+    }
+
+    public static string? CreateDiscountPrivilegeContextJson(FiscalDiscountPrivilegeDetailInput discountPrivilegeDetail)
+    {
+        if (discountPrivilegeDetail.DiscountPrivilegeContext is null)
+        {
+            return null;
+        }
+
+        return JsonSerializer.Serialize(discountPrivilegeDetail.DiscountPrivilegeContext);
     }
 }
