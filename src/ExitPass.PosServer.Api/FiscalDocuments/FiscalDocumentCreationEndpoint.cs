@@ -59,6 +59,7 @@ public static class FiscalDocumentCreationEndpoint
             (request.DocumentLines ?? request.Lines)?.Select(MapDocumentLine).ToArray(),
             request.Tenders?.Select(MapTender).ToArray(),
             request.TaxDetails?.Select(MapTaxDetail).ToArray(),
+            request.DiscountPrivilegeDetails?.Select(MapDiscountPrivilegeDetail).ToArray(),
             request.ReferenceContext);
 
     public static CreateFiscalDocumentResponse MapResult(FiscalDocumentCreationResult result)
@@ -155,6 +156,20 @@ public static class FiscalDocumentCreationEndpoint
             request.TaxRate,
             request.TaxContext);
 
+    private static FiscalDiscountPrivilegeDetailInput MapDiscountPrivilegeDetail(
+        CreateFiscalDiscountPrivilegeDetailRequest request) =>
+        new(
+            request.DiscountPrivilegeTypeCodeId ?? Guid.Empty,
+            request.BasisAmountMinorUnits,
+            request.DiscountAmountMinorUnits,
+            request.VatPrivilegeAmountMinorUnits,
+            request.CurrencyCode ?? string.Empty,
+            request.LineSequence,
+            request.BeneficiaryRef,
+            request.EvidenceRef,
+            request.ApprovalRef,
+            request.DiscountPrivilegeContext);
+
     private static FiscalDiscountReferenceStatus MapDiscountStatus(string? status) =>
         status?.Trim().ToLowerInvariant() switch
         {
@@ -180,6 +195,8 @@ public static class FiscalDocumentCreationEndpoint
             FiscalDocumentCreationErrorCode.SensitiveTenderPayloadNotAllowed => "sensitive_tender_payload_not_allowed",
             FiscalDocumentCreationErrorCode.InvalidFiscalTaxDetail => "invalid_fiscal_tax_detail",
             FiscalDocumentCreationErrorCode.SensitiveTaxDetailPayloadNotAllowed => "sensitive_tax_detail_payload_not_allowed",
+            FiscalDocumentCreationErrorCode.InvalidFiscalDiscountPrivilegeDetail => "invalid_fiscal_discount_privilege_detail",
+            FiscalDocumentCreationErrorCode.SensitiveDiscountPrivilegePayloadNotAllowed => "sensitive_discount_privilege_payload_not_allowed",
             _ => "fiscal_document_creation_failed"
         };
 }

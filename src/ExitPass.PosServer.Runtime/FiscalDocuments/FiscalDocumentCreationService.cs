@@ -161,6 +161,24 @@ public sealed class FiscalDocumentCreationService
             }
         }
 
+        var discountPrivilegeDetails = command.DiscountPrivilegeDetails ?? Array.Empty<FiscalDiscountPrivilegeDetailInput>();
+        if (ContainsSensitiveEvidence(discountPrivilegeDetails))
+        {
+            return FiscalDocumentCreationResult.Failure(
+                FiscalDocumentCreationErrorCode.SensitiveDiscountPrivilegePayloadNotAllowed,
+                "Fiscal discount/privilege details accept references only and must not receive raw evidence, credential, payment payload, token, secret, or provider callback values.");
+        }
+
+        foreach (var discountPrivilegeDetail in discountPrivilegeDetails)
+        {
+            if (!IsValidDiscountPrivilegeDetail(discountPrivilegeDetail, payableBasisCurrency, lineSequences))
+            {
+                return FiscalDocumentCreationResult.Failure(
+                    FiscalDocumentCreationErrorCode.InvalidFiscalDiscountPrivilegeDetail,
+                    "Fiscal discount/privilege details require a type code, nonnegative bounded amounts, matching currency, valid line scope, and non-blank optional references/context entries.");
+            }
+        }
+
         var draft = new FiscalDocumentDraft(
             Guid.NewGuid(),
             command.SitePosServerId.Value,
@@ -183,6 +201,11 @@ public sealed class FiscalDocumentCreationService
             documentLines.Select(NormalizeDocumentLine).OrderBy(line => line.LineSequence).ToArray(),
             tenders.Select(NormalizeTender).ToArray(),
             taxDetails.Select(NormalizeTaxDetail).OrderBy(tax => tax.LineSequence ?? int.MaxValue).ThenBy(tax => tax.TaxTypeCodeId).ToArray(),
+            discountPrivilegeDetails
+                .Select(NormalizeDiscountPrivilegeDetail)
+                .OrderBy(discount => discount.LineSequence ?? int.MaxValue)
+                .ThenBy(discount => discount.DiscountPrivilegeTypeCodeId)
+                .ToArray(),
             discountReferences.ToArray());
 
         var persistedDraft = await repository.CreateAsync(draft, cancellationToken).ConfigureAwait(false);
@@ -298,6 +321,44 @@ public sealed class FiscalDocumentCreationService
             HasValidContext(taxDetail.TaxContext);
     }
 
+    private static FiscalDiscountPrivilegeDetailInput NormalizeDiscountPrivilegeDetail(
+        FiscalDiscountPrivilegeDetailInput discountPrivilegeDetail) =>
+        discountPrivilegeDetail with
+        {
+            CurrencyCode = discountPrivilegeDetail.CurrencyCode.Trim().ToUpperInvariant(),
+            BeneficiaryRef = NormalizeOptionalReference(discountPrivilegeDetail.BeneficiaryRef),
+            EvidenceRef = NormalizeOptionalReference(discountPrivilegeDetail.EvidenceRef),
+            ApprovalRef = NormalizeOptionalReference(discountPrivilegeDetail.ApprovalRef)
+        };
+
+    private static bool IsValidDiscountPrivilegeDetail(
+        FiscalDiscountPrivilegeDetailInput discountPrivilegeDetail,
+        string payableBasisCurrency,
+        IReadOnlySet<int> lineSequences)
+    {
+        if (string.IsNullOrWhiteSpace(discountPrivilegeDetail.CurrencyCode))
+        {
+            return false;
+        }
+
+        var normalizedCurrency = discountPrivilegeDetail.CurrencyCode.Trim().ToUpperInvariant();
+
+        return discountPrivilegeDetail.DiscountPrivilegeTypeCodeId != Guid.Empty &&
+            discountPrivilegeDetail.BasisAmountMinorUnits >= 0 &&
+            discountPrivilegeDetail.DiscountAmountMinorUnits >= 0 &&
+            discountPrivilegeDetail.VatPrivilegeAmountMinorUnits >= 0 &&
+            discountPrivilegeDetail.DiscountAmountMinorUnits <= discountPrivilegeDetail.BasisAmountMinorUnits &&
+            discountPrivilegeDetail.VatPrivilegeAmountMinorUnits <= discountPrivilegeDetail.BasisAmountMinorUnits &&
+            normalizedCurrency.Length == 3 &&
+            normalizedCurrency.All(char.IsAsciiLetterUpper) &&
+            normalizedCurrency == payableBasisCurrency &&
+            (discountPrivilegeDetail.LineSequence is null || lineSequences.Contains(discountPrivilegeDetail.LineSequence.Value)) &&
+            !IsBlankOptionalReference(discountPrivilegeDetail.BeneficiaryRef) &&
+            !IsBlankOptionalReference(discountPrivilegeDetail.EvidenceRef) &&
+            !IsBlankOptionalReference(discountPrivilegeDetail.ApprovalRef) &&
+            HasValidContext(discountPrivilegeDetail.DiscountPrivilegeContext);
+    }
+
     private static bool HasValidContext(IReadOnlyDictionary<string, string>? context)
     {
         if (context is null)
@@ -343,6 +404,20 @@ public sealed class FiscalDocumentCreationService
         }
 
         return taxDetails.Any(taxDetail => ContainsSensitiveEvidence(taxDetail.TaxContext));
+    }
+
+    private static bool ContainsSensitiveEvidence(IReadOnlyList<FiscalDiscountPrivilegeDetailInput>? discountPrivilegeDetails)
+    {
+        if (discountPrivilegeDetails is null)
+        {
+            return false;
+        }
+
+        return discountPrivilegeDetails.Any(discountPrivilegeDetail =>
+            ContainsSensitiveEvidenceMarker(discountPrivilegeDetail.BeneficiaryRef) ||
+            ContainsSensitiveEvidenceMarker(discountPrivilegeDetail.EvidenceRef) ||
+            ContainsSensitiveEvidenceMarker(discountPrivilegeDetail.ApprovalRef) ||
+            ContainsSensitiveEvidence(discountPrivilegeDetail.DiscountPrivilegeContext));
     }
 
     private static bool ContainsSensitiveEvidence(IReadOnlyList<FiscalDocumentLineInput>? documentLines)

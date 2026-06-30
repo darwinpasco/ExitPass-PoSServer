@@ -18,4 +18,5 @@ public sealed record FiscalDocumentCreationCommand(
     IReadOnlyList<FiscalDocumentLineInput>? DocumentLines = null,
     IReadOnlyList<FiscalTenderInput>? Tenders = null,
     IReadOnlyList<FiscalTaxDetailInput>? TaxDetails = null,
+    IReadOnlyList<FiscalDiscountPrivilegeDetailInput>? DiscountPrivilegeDetails = null,
     IReadOnlyDictionary<string, string>? ReferenceContext = null);

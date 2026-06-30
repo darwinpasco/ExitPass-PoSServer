@@ -22,4 +22,5 @@ public sealed record FiscalDocumentDraft(
     IReadOnlyList<FiscalDocumentLineInput> DocumentLines,
     IReadOnlyList<FiscalTenderInput> Tenders,
     IReadOnlyList<FiscalTaxDetailInput> TaxDetails,
+    IReadOnlyList<FiscalDiscountPrivilegeDetailInput> DiscountPrivilegeDetails,
     IReadOnlyList<FiscalDiscountReferenceInput> DiscountReferences);

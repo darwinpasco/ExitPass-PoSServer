@@ -80,6 +80,20 @@ public sealed class PostgresFiscalDocumentRepository : IFiscalDocumentRepository
                     await taxCommand.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
                 }
 
+                foreach (var discountPrivilegeDetail in draft.DiscountPrivilegeDetails)
+                {
+                    await using var discountPrivilegeCommand = new NpgsqlCommand(
+                        PostgresFiscalDocumentSql.InsertFiscalDiscountPrivilegeDetail,
+                        connection,
+                        transaction);
+                    AddDiscountPrivilegeDetailParameters(
+                        discountPrivilegeCommand,
+                        draft,
+                        discountPrivilegeDetail,
+                        lineIdsBySequence);
+                    await discountPrivilegeCommand.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
+                }
+
                 await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
             }
             catch
@@ -205,5 +219,33 @@ public sealed class PostgresFiscalDocumentRepository : IFiscalDocumentRepository
 
         var taxContextParameter = command.Parameters.Add("tax_context", NpgsqlDbType.Jsonb);
         taxContextParameter.Value = (object?)PostgresFiscalDocumentSql.CreateTaxContextJson(taxDetail) ?? DBNull.Value;
+    }
+
+    private static void AddDiscountPrivilegeDetailParameters(
+        NpgsqlCommand command,
+        FiscalDocumentDraft draft,
+        FiscalDiscountPrivilegeDetailInput discountPrivilegeDetail,
+        IReadOnlyDictionary<int, Guid> lineIdsBySequence)
+    {
+        Guid? fiscalDocumentLineId = null;
+        if (discountPrivilegeDetail.LineSequence is not null)
+        {
+            fiscalDocumentLineId = lineIdsBySequence[discountPrivilegeDetail.LineSequence.Value];
+        }
+
+        command.Parameters.AddWithValue("fiscal_discount_privilege_detail_id", Guid.NewGuid());
+        command.Parameters.AddWithValue("fiscal_document_id", draft.FiscalDocumentId);
+        command.Parameters.AddWithValue("fiscal_document_line_id", (object?)fiscalDocumentLineId ?? DBNull.Value);
+        command.Parameters.AddWithValue("discount_privilege_type_code_id", discountPrivilegeDetail.DiscountPrivilegeTypeCodeId);
+        command.Parameters.AddWithValue("basis_amount_minor_units", discountPrivilegeDetail.BasisAmountMinorUnits);
+        command.Parameters.AddWithValue("discount_amount_minor_units", discountPrivilegeDetail.DiscountAmountMinorUnits);
+        command.Parameters.AddWithValue("vat_privilege_amount_minor_units", discountPrivilegeDetail.VatPrivilegeAmountMinorUnits);
+        command.Parameters.AddWithValue("currency_code", discountPrivilegeDetail.CurrencyCode);
+        command.Parameters.AddWithValue("beneficiary_ref", (object?)discountPrivilegeDetail.BeneficiaryRef ?? DBNull.Value);
+        command.Parameters.AddWithValue("evidence_ref", (object?)discountPrivilegeDetail.EvidenceRef ?? DBNull.Value);
+        command.Parameters.AddWithValue("approval_ref", (object?)discountPrivilegeDetail.ApprovalRef ?? DBNull.Value);
+
+        var contextParameter = command.Parameters.Add("discount_privilege_context", NpgsqlDbType.Jsonb);
+        contextParameter.Value = (object?)PostgresFiscalDocumentSql.CreateDiscountPrivilegeContextJson(discountPrivilegeDetail) ?? DBNull.Value;
     }
 }
