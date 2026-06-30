@@ -87,6 +87,32 @@ public sealed class FiscalDocumentCreationService
             }
         }
 
+        var documentLines = command.DocumentLines ?? Array.Empty<FiscalDocumentLineInput>();
+        if (documentLines.Count == 0)
+        {
+            return FiscalDocumentCreationResult.Failure(
+                FiscalDocumentCreationErrorCode.UnsupportedFiscalDocumentRequest,
+                "Fiscal document creation requires at least one fiscal line.");
+        }
+
+        var lineSequences = new HashSet<int>();
+        foreach (var documentLine in documentLines)
+        {
+            if (!lineSequences.Add(documentLine.LineSequence))
+            {
+                return FiscalDocumentCreationResult.Failure(
+                    FiscalDocumentCreationErrorCode.UnsupportedFiscalDocumentRequest,
+                    "Fiscal document line sequence values must be unique within the document.");
+            }
+
+            if (!IsValidDocumentLine(documentLine))
+            {
+                return FiscalDocumentCreationResult.Failure(
+                    FiscalDocumentCreationErrorCode.UnsupportedFiscalDocumentRequest,
+                    "Fiscal document lines require positive sequence and quantity, required type and description, nonnegative amounts, valid currency, and consistent net amount.");
+            }
+        }
+
         var draft = new FiscalDocumentDraft(
             Guid.NewGuid(),
             command.SitePosServerId.Value,
@@ -106,6 +132,7 @@ public sealed class FiscalDocumentCreationService
             NormalizeOptionalReference(command.PaymentFinalityRef) ?? command.PayableBasis.UpstreamFinalityRef.Trim(),
             NormalizeOptionalReference(command.VendorAckRef),
             documentLinks.Select(NormalizeDocumentLink).ToArray(),
+            documentLines.Select(NormalizeDocumentLine).OrderBy(line => line.LineSequence).ToArray(),
             discountReferences.ToArray());
 
         var persistedDraft = await repository.CreateAsync(draft, cancellationToken).ConfigureAwait(false);
@@ -125,13 +152,74 @@ public sealed class FiscalDocumentCreationService
             CreatedByRef = NormalizeOptionalReference(link.CreatedByRef)
         };
 
+    private static FiscalDocumentLineInput NormalizeDocumentLine(FiscalDocumentLineInput line) =>
+        line with
+        {
+            Description = line.Description.Trim(),
+            CurrencyCode = line.CurrencyCode.Trim().ToUpperInvariant(),
+            SourceRef = NormalizeOptionalReference(line.SourceRef)
+        };
+
+    private static bool IsValidDocumentLine(FiscalDocumentLineInput line)
+    {
+        if (string.IsNullOrWhiteSpace(line.Description) ||
+            string.IsNullOrWhiteSpace(line.CurrencyCode))
+        {
+            return false;
+        }
+
+        var normalizedCurrency = line.CurrencyCode.Trim().ToUpperInvariant();
+        var expectedNetAmount = line.GrossAmountMinorUnits - line.DiscountAmountMinorUnits + line.TaxAmountMinorUnits;
+
+        return line.LineSequence > 0 &&
+            line.LineTypeCodeId != Guid.Empty &&
+            (line.LineStatusCodeId is null || line.LineStatusCodeId != Guid.Empty) &&
+            line.Quantity > 0 &&
+            line.UnitAmountMinorUnits >= 0 &&
+            line.GrossAmountMinorUnits >= 0 &&
+            line.DiscountAmountMinorUnits >= 0 &&
+            line.TaxAmountMinorUnits >= 0 &&
+            line.NetAmountMinorUnits >= 0 &&
+            line.NetAmountMinorUnits == expectedNetAmount &&
+            normalizedCurrency.Length == 3 &&
+            normalizedCurrency.All(char.IsAsciiLetterUpper) &&
+            !IsBlankOptionalReference(line.SourceRef) &&
+            HasValidContext(line.LineContext);
+    }
+
+    private static bool HasValidContext(IReadOnlyDictionary<string, string>? context)
+    {
+        if (context is null)
+        {
+            return true;
+        }
+
+        return context.All(entry =>
+            !string.IsNullOrWhiteSpace(entry.Key) &&
+            !string.IsNullOrWhiteSpace(entry.Value));
+    }
+
     private static bool ContainsSensitiveEvidence(FiscalDocumentCreationCommand command)
     {
         return ContainsSensitiveEvidence(command.ReferenceContext) ||
             ContainsSensitiveEvidence(command.PayableBasis?.ReferenceContext) ||
             ContainsSensitiveEvidence(command.DocumentLinks) ||
+            ContainsSensitiveEvidence(command.DocumentLines) ||
             (command.PayableBasis?.DiscountReferences?.Any(discount =>
                 ContainsSensitiveEvidence(discount.ReferenceContext)) ?? false);
+    }
+
+    private static bool ContainsSensitiveEvidence(IReadOnlyList<FiscalDocumentLineInput>? documentLines)
+    {
+        if (documentLines is null)
+        {
+            return false;
+        }
+
+        return documentLines.Any(line =>
+            ContainsSensitiveEvidenceMarker(line.Description) ||
+            ContainsSensitiveEvidenceMarker(line.SourceRef) ||
+            ContainsSensitiveEvidence(line.LineContext));
     }
 
     private static bool ContainsSensitiveEvidence(IReadOnlyList<FiscalDocumentLinkInput>? documentLinks)

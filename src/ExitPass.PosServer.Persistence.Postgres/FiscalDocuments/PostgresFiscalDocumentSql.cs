@@ -89,6 +89,48 @@ public static class PostgresFiscalDocumentSql
         );
         """;
 
+    public const string InsertFiscalDocumentLine = """
+        insert into pos.fiscal_document_lines (
+            fiscal_document_line_id,
+            fiscal_document_id,
+            line_sequence,
+            line_type_code_id,
+            line_status_code_id,
+            description,
+            quantity,
+            unit_amount_minor_units,
+            gross_amount_minor_units,
+            discount_amount_minor_units,
+            tax_amount_minor_units,
+            net_amount_minor_units,
+            currency_code,
+            source_ref,
+            line_context,
+            is_active,
+            created_at,
+            updated_at
+        ) values (
+            @fiscal_document_line_id,
+            @fiscal_document_id,
+            @line_sequence,
+            @line_type_code_id,
+            @line_status_code_id,
+            @description,
+            @quantity,
+            @unit_amount_minor_units,
+            @gross_amount_minor_units,
+            @discount_amount_minor_units,
+            @tax_amount_minor_units,
+            @net_amount_minor_units,
+            @currency_code,
+            @source_ref,
+            @line_context,
+            true,
+            current_timestamp,
+            current_timestamp
+        );
+        """;
+
     public static string CreateDocumentContextJson(FiscalDocumentDraft draft)
     {
         var context = new
@@ -107,6 +149,13 @@ public static class PostgresFiscalDocumentSql
                 link_reason_text = link.LinkReasonText,
                 created_by_ref = link.CreatedByRef
             }),
+            fiscal_document_lines = draft.DocumentLines.Select(line => new
+            {
+                line_sequence = line.LineSequence,
+                line_type_code_id = line.LineTypeCodeId,
+                line_status_code_id = line.LineStatusCodeId,
+                source_ref = line.SourceRef
+            }),
             discount_references = draft.DiscountReferences.Select(discount => new
             {
                 discount_validation_ref = discount.DiscountValidationRef,
@@ -117,5 +166,15 @@ public static class PostgresFiscalDocumentSql
         };
 
         return JsonSerializer.Serialize(context);
+    }
+
+    public static string? CreateLineContextJson(FiscalDocumentLineInput line)
+    {
+        if (line.LineContext is null)
+        {
+            return null;
+        }
+
+        return JsonSerializer.Serialize(line.LineContext);
     }
 }

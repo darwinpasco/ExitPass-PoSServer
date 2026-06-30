@@ -22,6 +22,14 @@ public static class FiscalDocumentCreationEndpoint
                 ex.Message,
                 HttpStatusCode: StatusCodes.Status503ServiceUnavailable);
         }
+        catch (FiscalDocumentInvalidPersistenceConfigurationException ex)
+        {
+            return new CreateFiscalDocumentResponse(
+                false,
+                "invalid_persistence_configuration",
+                ex.Message,
+                HttpStatusCode: StatusCodes.Status503ServiceUnavailable);
+        }
         catch (FiscalDocumentPersistenceException ex)
         {
             return new CreateFiscalDocumentResponse(
@@ -48,6 +56,7 @@ public static class FiscalDocumentCreationEndpoint
             request.PaymentFinalityRef,
             request.VendorAckRef,
             request.DocumentLinks?.Select(MapDocumentLink).ToArray(),
+            request.DocumentLines?.Select(MapDocumentLine).ToArray(),
             request.ReferenceContext);
 
     public static CreateFiscalDocumentResponse MapResult(FiscalDocumentCreationResult result)
@@ -99,6 +108,22 @@ public static class FiscalDocumentCreationEndpoint
             request.LinkReasonCodeId,
             request.LinkReasonText,
             request.CreatedByRef);
+
+    private static FiscalDocumentLineInput MapDocumentLine(CreateFiscalDocumentLineRequest request) =>
+        new(
+            request.LineSequence,
+            request.LineTypeCodeId ?? Guid.Empty,
+            request.Description ?? string.Empty,
+            request.Quantity,
+            request.UnitAmountMinorUnits,
+            request.GrossAmountMinorUnits,
+            request.DiscountAmountMinorUnits,
+            request.TaxAmountMinorUnits,
+            request.NetAmountMinorUnits,
+            request.CurrencyCode ?? string.Empty,
+            request.LineStatusCodeId,
+            request.SourceRef,
+            request.LineContext);
 
     private static FiscalDiscountReferenceStatus MapDiscountStatus(string? status) =>
         status?.Trim().ToLowerInvariant() switch
