@@ -67,6 +67,28 @@ public static class PostgresFiscalDocumentSql
         );
         """;
 
+    public const string InsertFiscalDocumentLink = """
+        insert into pos.fiscal_document_links (
+            fiscal_document_link_id,
+            source_fiscal_document_id,
+            target_fiscal_document_id,
+            fiscal_document_link_type_code_id,
+            link_reason_code_id,
+            link_reason_text,
+            created_at,
+            created_by_ref
+        ) values (
+            @fiscal_document_link_id,
+            @source_fiscal_document_id,
+            @target_fiscal_document_id,
+            @fiscal_document_link_type_code_id,
+            @link_reason_code_id,
+            @link_reason_text,
+            current_timestamp,
+            @created_by_ref
+        );
+        """;
+
     public static string CreateDocumentContextJson(FiscalDocumentDraft draft)
     {
         var context = new
@@ -77,6 +99,14 @@ public static class PostgresFiscalDocumentSql
             upstream_finality_ref = draft.UpstreamFinalityRef,
             currency_code = draft.CurrencyCode,
             payable_amount_minor_units = draft.PayableAmountMinorUnits,
+            fiscal_document_links = draft.DocumentLinks.Select(link => new
+            {
+                target_fiscal_document_id = link.TargetFiscalDocumentId,
+                link_type_code_id = link.LinkTypeCodeId,
+                link_reason_code_id = link.LinkReasonCodeId,
+                link_reason_text = link.LinkReasonText,
+                created_by_ref = link.CreatedByRef
+            }),
             discount_references = draft.DiscountReferences.Select(discount => new
             {
                 discount_validation_ref = discount.DiscountValidationRef,

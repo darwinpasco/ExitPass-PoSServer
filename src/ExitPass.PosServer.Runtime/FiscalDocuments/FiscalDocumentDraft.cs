@@ -18,4 +18,5 @@ public sealed record FiscalDocumentDraft(
     string? CentralPmsPaymentConfirmationRef,
     string? PaymentFinalityRef,
     string? VendorAckRef,
+    IReadOnlyList<FiscalDocumentLinkInput> DocumentLinks,
     IReadOnlyList<FiscalDiscountReferenceInput> DiscountReferences);

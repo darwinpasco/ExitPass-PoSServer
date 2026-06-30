@@ -26,6 +26,7 @@ public sealed class FiscalDocumentCreationEndpointTests
         Assert.Equal("payable-basis-001", repository.LastDraft.PayableBasisRef);
         Assert.Equal("central-finality-001", repository.LastDraft.UpstreamFinalityRef);
         Assert.Equal("discount-validation-001", repository.LastDraft.DiscountReferences[0].DiscountValidationRef);
+        Assert.Equal(Guid.Parse("eeeeeeee-eeee-eeee-eeee-eeeeeeeeeeee"), repository.LastDraft.DocumentLinks[0].TargetFiscalDocumentId);
     }
 
     [Fact]
@@ -86,6 +87,26 @@ public sealed class FiscalDocumentCreationEndpointTests
     }
 
     [Fact]
+    public async Task InvalidDocumentLinkIsRejectedThroughEntrypoint()
+    {
+        var request = ValidRequest() with
+        {
+            DocumentLinks =
+            [
+                new FiscalDocumentLinkRequest(
+                    Guid.Empty,
+                    Guid.Parse("ffffffff-ffff-ffff-ffff-ffffffffffff"))
+            ]
+        };
+
+        var response = await CreateWithRecordingRepository(request);
+
+        Assert.False(response.Succeeded);
+        Assert.Equal("unsupported_fiscal_document_request", response.Code);
+        Assert.Equal(StatusCodes.Status400BadRequest, response.HttpStatusCode);
+    }
+
+    [Fact]
     public async Task PersistenceNotConfiguredFailsClosed()
     {
         var service = new FiscalDocumentCreationService(new PersistenceNotConfiguredFiscalDocumentRepository());
@@ -136,7 +157,8 @@ public sealed class FiscalDocumentCreationEndpointTests
         {
             typeof(CreateFiscalDocumentRequest),
             typeof(FiscalizationPayableBasisRequest),
-            typeof(FiscalDiscountReferenceRequest)
+            typeof(FiscalDiscountReferenceRequest),
+            typeof(FiscalDocumentLinkRequest)
         };
 
         foreach (var type in dtoTypes)
@@ -211,7 +233,14 @@ public sealed class FiscalDocumentCreationEndpointTests
             CentralPmsParkingSessionRef: "parking-session-001",
             CentralPmsPaymentAttemptRef: "payment-attempt-001",
             CentralPmsPaymentConfirmationRef: "payment-confirmation-001",
-            PaymentFinalityRef: "central-finality-001");
+            PaymentFinalityRef: "central-finality-001",
+            DocumentLinks:
+            [
+                new FiscalDocumentLinkRequest(
+                    Guid.Parse("eeeeeeee-eeee-eeee-eeee-eeeeeeeeeeee"),
+                    Guid.Parse("ffffffff-ffff-ffff-ffff-ffffffffffff"),
+                    CreatedByRef: "pos-server-api")
+            ]);
 
     private static FiscalizationPayableBasisRequest ValidPayableBasis() =>
         new(
