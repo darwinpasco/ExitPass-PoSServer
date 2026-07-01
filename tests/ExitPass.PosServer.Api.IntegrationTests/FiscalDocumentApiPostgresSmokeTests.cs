@@ -1,0 +1,616 @@
+using System.Net;
+using System.Net.Http.Json;
+using ExitPass.PosServer.Api.FiscalDocuments;
+using Microsoft.AspNetCore.Builder;
+using Microsoft.AspNetCore.Hosting;
+using Microsoft.AspNetCore.Hosting.Server;
+using Microsoft.AspNetCore.Hosting.Server.Features;
+using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.DependencyInjection;
+using Npgsql;
+using Xunit;
+using Xunit.Abstractions;
+
+namespace ExitPass.PosServer.Api.IntegrationTests;
+
+public sealed class FiscalDocumentApiPostgresSmokeTests
+{
+    private const string ConnectionStringEnvironmentVariable = "POSSERVER_API_SMOKE_DB_URL";
+    private static readonly Guid SitePosServerId = Guid.Parse("10000000-0000-0000-0000-000000000001");
+    private static readonly Guid FiscalDocumentTypeCodeId = Guid.Parse("10000000-0000-0000-0000-000000000101");
+    private static readonly Guid FiscalDocumentStatusCodeId = Guid.Parse("10000000-0000-0000-0000-000000000102");
+    private static readonly Guid FiscalLineTypeCodeId = Guid.Parse("10000000-0000-0000-0000-000000000201");
+    private static readonly Guid FiscalTenderTypeCodeId = Guid.Parse("10000000-0000-0000-0000-000000000301");
+    private static readonly Guid FiscalTaxTypeCodeId = Guid.Parse("10000000-0000-0000-0000-000000000401");
+    private static readonly Guid FiscalTaxClassificationCodeId = Guid.Parse("10000000-0000-0000-0000-000000000402");
+    private static readonly Guid FiscalDiscountPrivilegeTypeCodeId = Guid.Parse("10000000-0000-0000-0000-000000000501");
+    private static readonly Guid FiscalTotalTypeCodeId = Guid.Parse("10000000-0000-0000-0000-000000000601");
+
+    private readonly ITestOutputHelper output;
+
+    public FiscalDocumentApiPostgresSmokeTests(ITestOutputHelper output)
+    {
+        this.output = output;
+    }
+
+    [Fact]
+    public async Task PostFiscalDocumentWritesCompletePersistenceShell()
+    {
+        if (!TryGetSmokeConnectionString(out var connectionString))
+        {
+            return;
+        }
+
+        await RebuildDisposableDatabaseAsync(connectionString);
+        await InsertDisposableSmokeFixtureAsync(connectionString);
+
+        await using var app = await StartApiAsync(connectionString);
+        using var client = CreateClient(app);
+        var request = CreateValidRequest("success");
+
+        using var response = await client.PostAsJsonAsync("/v1/fiscal-documents/", request);
+        var body = await response.Content.ReadFromJsonAsync<CreateFiscalDocumentResponse>();
+
+        Assert.Equal(HttpStatusCode.Accepted, response.StatusCode);
+        Assert.NotNull(body);
+        Assert.True(body.Succeeded);
+        Assert.Equal("accepted", body.Code);
+        Assert.NotNull(body.FiscalDocumentId);
+
+        await using var connection = new NpgsqlConnection(connectionString);
+        await connection.OpenAsync();
+
+        var fiscalDocumentId = body.FiscalDocumentId.Value;
+        Assert.Equal(1, await CountAsync(connection, "pos.fiscal_documents", "fiscal_document_id = @id", "id", fiscalDocumentId));
+        Assert.Equal(1, await CountAsync(connection, "pos.fiscal_document_status_history", "fiscal_document_id = @id", "id", fiscalDocumentId));
+        Assert.Equal(0, await CountAsync(connection, "pos.fiscal_document_links", "source_fiscal_document_id = @id", "id", fiscalDocumentId));
+        Assert.Equal(1, await CountAsync(connection, "pos.fiscal_document_lines", "fiscal_document_id = @id", "id", fiscalDocumentId));
+        Assert.Equal(1, await CountAsync(connection, "pos.fiscal_tenders", "fiscal_document_id = @id", "id", fiscalDocumentId));
+        Assert.Equal(1, await CountAsync(connection, "pos.fiscal_tax_details", "fiscal_document_id = @id", "id", fiscalDocumentId));
+        Assert.Equal(1, await CountAsync(connection, "pos.fiscal_discount_privilege_details", "fiscal_document_id = @id", "id", fiscalDocumentId));
+        Assert.Equal(1, await CountAsync(connection, "pos.fiscal_totals", "fiscal_document_id = @id", "id", fiscalDocumentId));
+
+        Assert.Equal("central-finality-success", await ScalarStringAsync(
+            connection,
+            "select payment_finality_ref from pos.fiscal_documents where fiscal_document_id = @id",
+            fiscalDocumentId));
+        Assert.Equal("evidence-ref-success", await ScalarStringAsync(
+            connection,
+            "select evidence_ref from pos.fiscal_discount_privilege_details where fiscal_document_id = @id",
+            fiscalDocumentId));
+        Assert.Equal(0, await CountTextMarkerAsync(connection, "raw_id"));
+        Assert.Equal(0, await CountTextMarkerAsync(connection, "payment_payload"));
+
+        foreach (var prohibitedTable in ProhibitedRuntimeTables())
+        {
+            Assert.Equal(0, await CountIfTableExistsAsync(connection, prohibitedTable));
+        }
+
+        Assert.Equal(0, await CountTablesLikeAsync(connection, "%exit%"));
+        Assert.Equal(0, await CountTablesLikeAsync(connection, "%gate%"));
+    }
+
+    [Fact]
+    public async Task LatePersistenceFailureRollsBackFiscalDocumentShell()
+    {
+        if (!TryGetSmokeConnectionString(out var connectionString))
+        {
+            return;
+        }
+
+        await RebuildDisposableDatabaseAsync(connectionString);
+        await InsertDisposableSmokeFixtureAsync(connectionString);
+
+        await using var app = await StartApiAsync(connectionString);
+        using var client = CreateClient(app);
+        var request = CreateValidRequest("rollback") with
+        {
+            Totals =
+            [
+                new CreateFiscalTotalRequest(
+                    Guid.Parse("10000000-0000-0000-0000-000000009999"),
+                    12500,
+                    "PHP",
+                    new Dictionary<string, string> { ["source_system"] = "central_pms" })
+            ]
+        };
+
+        using var response = await client.PostAsJsonAsync("/v1/fiscal-documents/", request);
+        var body = await response.Content.ReadFromJsonAsync<CreateFiscalDocumentResponse>();
+
+        Assert.Equal(HttpStatusCode.ServiceUnavailable, response.StatusCode);
+        Assert.NotNull(body);
+        Assert.False(body.Succeeded);
+        Assert.Equal("persistence_write_failed", body.Code);
+
+        await using var connection = new NpgsqlConnection(connectionString);
+        await connection.OpenAsync();
+
+        Assert.Equal(0, await CountAsync(
+            connection,
+            "pos.fiscal_documents",
+            "payment_finality_ref = @ref",
+            "ref",
+            "central-finality-rollback"));
+        Assert.Equal(0, await CountAsync(
+            connection,
+            "pos.fiscal_document_lines",
+            "source_ref = @ref",
+            "ref",
+            "line-source-rollback"));
+        Assert.Equal(0, await CountAsync(
+            connection,
+            "pos.fiscal_tenders",
+            "payment_finality_ref = @ref",
+            "ref",
+            "central-finality-rollback"));
+        Assert.Equal(0, await CountAsync(
+            connection,
+            "pos.fiscal_discount_privilege_details",
+            "approval_ref = @ref",
+            "ref",
+            "discount-validation-rollback"));
+    }
+
+    private bool TryGetSmokeConnectionString(out string connectionString)
+    {
+        connectionString = Environment.GetEnvironmentVariable(ConnectionStringEnvironmentVariable) ?? string.Empty;
+        if (string.IsNullOrWhiteSpace(connectionString))
+        {
+            output.WriteLine(
+                $"Skipping PostgreSQL API smoke test because {ConnectionStringEnvironmentVariable} is not set.");
+            return false;
+        }
+
+        if (Uri.TryCreate(connectionString, UriKind.Absolute, out var uri) &&
+            (uri.Scheme.Equals("postgresql", StringComparison.OrdinalIgnoreCase) ||
+             uri.Scheme.Equals("postgres", StringComparison.OrdinalIgnoreCase)))
+        {
+            throw new InvalidOperationException(
+                $"{ConnectionStringEnvironmentVariable} must be an Npgsql key-value connection string, not a URL-style PostgreSQL URI.");
+        }
+
+        var builder = new NpgsqlConnectionStringBuilder(connectionString);
+        var databaseName = builder.Database ?? string.Empty;
+        if (!databaseName.Contains("smoke", StringComparison.OrdinalIgnoreCase) ||
+            !databaseName.Contains("validation", StringComparison.OrdinalIgnoreCase) ||
+            !databaseName.Contains("local", StringComparison.OrdinalIgnoreCase) ||
+            databaseName.Contains("prod", StringComparison.OrdinalIgnoreCase) ||
+            databaseName.Contains("shared", StringComparison.OrdinalIgnoreCase) ||
+            databaseName.Contains("live", StringComparison.OrdinalIgnoreCase))
+        {
+            throw new InvalidOperationException(
+                $"{ConnectionStringEnvironmentVariable} must target a disposable local smoke validation database.");
+        }
+
+        return true;
+    }
+
+    private static async Task RebuildDisposableDatabaseAsync(string connectionString)
+    {
+        var repoRoot = FindRepositoryRoot();
+        await using var connection = new NpgsqlConnection(connectionString);
+        await connection.OpenAsync();
+
+        await ExecuteSqlAsync(connection, "drop schema if exists pos cascade;");
+
+        var manifestPath = Path.Combine(repoRoot, "db", "rebuild", "pos_sql_apply_order.txt");
+        foreach (var manifestEntry in File.ReadAllLines(manifestPath)
+                     .Select(line => line.Trim())
+                     .Where(line => line.Length > 0 && !line.StartsWith('#')))
+        {
+            await ExecuteFileAsync(connection, Path.Combine(repoRoot, manifestEntry.Replace('/', Path.DirectorySeparatorChar)));
+        }
+
+        var generatedSqlDirectory = Path.Combine(repoRoot, "db", "reference-data", "controlled-codes", "generated", "sql");
+        foreach (var generatedSqlFile in Directory.GetFiles(generatedSqlDirectory, "*.sql").OrderBy(path => path, StringComparer.Ordinal))
+        {
+            await ExecuteFileAsync(connection, generatedSqlFile);
+        }
+    }
+
+    private static async Task InsertDisposableSmokeFixtureAsync(string connectionString)
+    {
+        await using var connection = new NpgsqlConnection(connectionString);
+        await connection.OpenAsync();
+
+        foreach (var code in SmokeCodes())
+        {
+            await ExecuteSqlAsync(
+                connection,
+                """
+                insert into pos.controlled_code_sets (
+                    controlled_code_set_id,
+                    code_set_key,
+                    display_name,
+                    description,
+                    governance_owner,
+                    source_ref,
+                    is_active
+                ) values (
+                    @set_id,
+                    @set_key,
+                    @set_display_name,
+                    @set_description,
+                    'Engineering',
+                    'runtime/fiscal-document-api-postgres-smoke disposable fixture',
+                    true
+                ) on conflict (code_set_key) do update set
+                    display_name = excluded.display_name,
+                    description = excluded.description,
+                    updated_at = current_timestamp;
+
+                insert into pos.controlled_codes (
+                    controlled_code_id,
+                    controlled_code_set_id,
+                    code_key,
+                    display_name,
+                    description,
+                    source_ref,
+                    sort_order,
+                    is_active
+                ) values (
+                    @code_id,
+                    @set_id,
+                    @code_key,
+                    @code_display_name,
+                    @code_description,
+                    'runtime/fiscal-document-api-postgres-smoke disposable fixture',
+                    1,
+                    true
+                ) on conflict (controlled_code_set_id, code_key) do update set
+                    display_name = excluded.display_name,
+                    description = excluded.description,
+                    updated_at = current_timestamp;
+                """,
+                command =>
+                {
+                    command.Parameters.AddWithValue("set_id", code.SetId);
+                    command.Parameters.AddWithValue("set_key", code.SetKey);
+                    command.Parameters.AddWithValue("set_display_name", code.SetDisplayName);
+                    command.Parameters.AddWithValue("set_description", code.SetDescription);
+                    command.Parameters.AddWithValue("code_id", code.CodeId);
+                    command.Parameters.AddWithValue("code_key", code.CodeKey);
+                    command.Parameters.AddWithValue("code_display_name", code.CodeDisplayName);
+                    command.Parameters.AddWithValue("code_description", code.CodeDescription);
+                });
+        }
+
+        await ExecuteSqlAsync(
+            connection,
+            """
+            insert into pos.site_pos_servers (
+                site_pos_server_id,
+                site_pos_server_code,
+                display_name,
+                central_pms_site_ref,
+                central_pms_site_resolution_ref,
+                is_active
+            ) values (
+                @site_pos_server_id,
+                'site-pos-server-smoke',
+                'Site POS Server Smoke Fixture',
+                'central-pms-site-smoke',
+                'central-pms-site-resolution-smoke',
+                true
+            ) on conflict (site_pos_server_id) do update set
+                display_name = excluded.display_name,
+                updated_at = current_timestamp;
+            """,
+            command => command.Parameters.AddWithValue("site_pos_server_id", SitePosServerId));
+    }
+
+    private static async Task<WebApplication> StartApiAsync(string connectionString)
+    {
+        var builder = WebApplication.CreateBuilder();
+        builder.WebHost.UseKestrel();
+        builder.WebHost.UseUrls("http://127.0.0.1:0");
+        builder.Configuration.AddInMemoryCollection(new Dictionary<string, string?>
+        {
+            ["ConnectionStrings:PosServer"] = connectionString
+        });
+        builder.Services.AddPosServerFiscalDocumentApi(builder.Configuration);
+
+        var app = builder.Build();
+        app.MapFiscalDocumentEndpoints();
+        await app.StartAsync();
+        return app;
+    }
+
+    private static HttpClient CreateClient(WebApplication app)
+    {
+        var addresses = app.Services.GetRequiredService<IServer>()
+            .Features
+            .Get<IServerAddressesFeature>()?
+            .Addresses;
+        var address = addresses?.SingleOrDefault() ??
+            throw new InvalidOperationException("Could not resolve smoke API server address.");
+
+        return new HttpClient { BaseAddress = new Uri(address) };
+    }
+
+    private static CreateFiscalDocumentRequest CreateValidRequest(string suffix) =>
+        new(
+            "site-pos-server-smoke",
+            "sales_invoice_smoke",
+            new FiscalizationPayableBasisRequest(
+                $"payable-basis-{suffix}",
+                $"central-finality-{suffix}",
+                "PHP",
+                12500,
+                [new FiscalDiscountReferenceRequest($"discount-validation-{suffix}", "approved", true)]),
+            SitePosServerId: SitePosServerId,
+            FiscalDocumentTypeCodeId: FiscalDocumentTypeCodeId,
+            FiscalDocumentStatusCodeId: FiscalDocumentStatusCodeId,
+            BusinessDayDate: new DateOnly(2026, 7, 1),
+            CentralPmsParkingSessionRef: $"parking-session-{suffix}",
+            CentralPmsPaymentAttemptRef: $"payment-attempt-{suffix}",
+            CentralPmsPaymentConfirmationRef: $"payment-confirmation-{suffix}",
+            PaymentFinalityRef: $"central-finality-{suffix}",
+            VendorAckRef: $"vendor-ack-{suffix}",
+            DocumentLines:
+            [
+                new CreateFiscalDocumentLineRequest(
+                    1,
+                    FiscalLineTypeCodeId,
+                    "Parking fee",
+                    1,
+                    12500,
+                    12500,
+                    1000,
+                    0,
+                    11500,
+                    "PHP",
+                    SourceRef: $"line-source-{suffix}",
+                    LineContext: new Dictionary<string, string> { ["source_system"] = "central_pms" })
+            ],
+            Tenders:
+            [
+                new CreateFiscalTenderRequest(
+                    FiscalTenderTypeCodeId,
+                    12500,
+                    "PHP",
+                    CentralPmsPaymentAttemptRef: $"payment-attempt-{suffix}",
+                    CentralPmsPaymentConfirmationRef: $"payment-confirmation-{suffix}",
+                    PaymentFinalityRef: $"central-finality-{suffix}",
+                    ProviderRef: $"provider-ref-{suffix}",
+                    TenderContext: new Dictionary<string, string> { ["source_system"] = "central_pms" })
+            ],
+            TaxDetails:
+            [
+                new CreateFiscalTaxDetailRequest(
+                    FiscalTaxTypeCodeId,
+                    FiscalTaxClassificationCodeId,
+                    12500,
+                    0,
+                    "PHP",
+                    LineSequence: 1,
+                    TaxRate: 0,
+                    TaxContext: new Dictionary<string, string> { ["source_system"] = "central_pms" })
+            ],
+            DiscountPrivilegeDetails:
+            [
+                new CreateFiscalDiscountPrivilegeDetailRequest(
+                    FiscalDiscountPrivilegeTypeCodeId,
+                    12500,
+                    1000,
+                    0,
+                    "PHP",
+                    LineSequence: 1,
+                    BeneficiaryRef: $"beneficiary-ref-{suffix}",
+                    EvidenceRef: $"evidence-ref-{suffix}",
+                    ApprovalRef: $"discount-validation-{suffix}",
+                    DiscountPrivilegeContext: new Dictionary<string, string> { ["source_system"] = "central_pms" })
+            ],
+            Totals:
+            [
+                new CreateFiscalTotalRequest(
+                    FiscalTotalTypeCodeId,
+                    12500,
+                    "PHP",
+                    new Dictionary<string, string> { ["source_system"] = "central_pms" })
+            ]);
+
+    private static IReadOnlyList<SmokeCode> SmokeCodes() =>
+    [
+        new(
+            Guid.Parse("20000000-0000-0000-0000-000000000101"),
+            "api_smoke_fiscal_document_type",
+            "API Smoke Fiscal Document Type",
+            "Disposable smoke-test fiscal document type code set.",
+            FiscalDocumentTypeCodeId,
+            "sales_invoice_smoke",
+            "Sales Invoice Smoke",
+            "Disposable smoke-test sales invoice posture."),
+        new(
+            Guid.Parse("20000000-0000-0000-0000-000000000102"),
+            "api_smoke_fiscal_document_status",
+            "API Smoke Fiscal Document Status",
+            "Disposable smoke-test fiscal document status code set.",
+            FiscalDocumentStatusCodeId,
+            "created_smoke",
+            "Created Smoke",
+            "Disposable smoke-test created status posture."),
+        new(
+            Guid.Parse("20000000-0000-0000-0000-000000000201"),
+            "api_smoke_fiscal_line_type",
+            "API Smoke Fiscal Line Type",
+            "Disposable smoke-test fiscal line type code set.",
+            FiscalLineTypeCodeId,
+            "parking_fee_smoke",
+            "Parking Fee Smoke",
+            "Disposable smoke-test parking fee line posture."),
+        new(
+            Guid.Parse("20000000-0000-0000-0000-000000000301"),
+            "api_smoke_fiscal_tender_type",
+            "API Smoke Fiscal Tender Type",
+            "Disposable smoke-test fiscal tender type code set.",
+            FiscalTenderTypeCodeId,
+            "cash_smoke",
+            "Cash Smoke",
+            "Disposable smoke-test tender posture."),
+        new(
+            Guid.Parse("20000000-0000-0000-0000-000000000401"),
+            "api_smoke_fiscal_tax_type",
+            "API Smoke Fiscal Tax Type",
+            "Disposable smoke-test fiscal tax type code set.",
+            FiscalTaxTypeCodeId,
+            "tax_smoke",
+            "Tax Smoke",
+            "Disposable smoke-test tax type posture."),
+        new(
+            Guid.Parse("20000000-0000-0000-0000-000000000402"),
+            "api_smoke_fiscal_tax_classification",
+            "API Smoke Fiscal Tax Classification",
+            "Disposable smoke-test fiscal tax classification code set.",
+            FiscalTaxClassificationCodeId,
+            "tax_classification_smoke",
+            "Tax Classification Smoke",
+            "Disposable smoke-test tax classification posture."),
+        new(
+            Guid.Parse("20000000-0000-0000-0000-000000000501"),
+            "api_smoke_discount_privilege_type",
+            "API Smoke Discount Privilege Type",
+            "Disposable smoke-test discount/privilege type code set.",
+            FiscalDiscountPrivilegeTypeCodeId,
+            "discount_privilege_smoke",
+            "Discount Privilege Smoke",
+            "Disposable smoke-test discount/privilege posture."),
+        new(
+            Guid.Parse("20000000-0000-0000-0000-000000000601"),
+            "api_smoke_fiscal_total_type",
+            "API Smoke Fiscal Total Type",
+            "Disposable smoke-test fiscal total type code set.",
+            FiscalTotalTypeCodeId,
+            "payable_total_smoke",
+            "Payable Total Smoke",
+            "Disposable smoke-test payable total posture.")
+    ];
+
+    private static IEnumerable<string> ProhibitedRuntimeTables() =>
+    [
+        "pos.fiscal_report_requests",
+        "pos.fiscal_report_scopes",
+        "pos.x_z_reports",
+        "pos.bir_sales_summary_reports",
+        "pos.annex_e_reports",
+        "pos.fiscal_report_output_refs",
+        "pos.digital_si_urls",
+        "pos.digital_si_url_access_events"
+    ];
+
+    private static async Task ExecuteFileAsync(NpgsqlConnection connection, string path)
+    {
+        await ExecuteSqlAsync(connection, await File.ReadAllTextAsync(path));
+    }
+
+    private static async Task ExecuteSqlAsync(
+        NpgsqlConnection connection,
+        string sql,
+        Action<NpgsqlCommand>? configure = null)
+    {
+        await using var command = new NpgsqlCommand(sql, connection);
+        configure?.Invoke(command);
+        await command.ExecuteNonQueryAsync();
+    }
+
+    private static async Task<long> CountAsync(
+        NpgsqlConnection connection,
+        string tableName,
+        string predicate,
+        string parameterName,
+        object value)
+    {
+        await using var command = new NpgsqlCommand($"select count(*) from {tableName} where {predicate};", connection);
+        command.Parameters.AddWithValue(parameterName, value);
+        return (long)(await command.ExecuteScalarAsync() ?? 0L);
+    }
+
+    private static async Task<string?> ScalarStringAsync(NpgsqlConnection connection, string sql, Guid id)
+    {
+        await using var command = new NpgsqlCommand(sql, connection);
+        command.Parameters.AddWithValue("id", id);
+        return (string?)await command.ExecuteScalarAsync();
+    }
+
+    private static async Task<long> CountTextMarkerAsync(NpgsqlConnection connection, string marker)
+    {
+        await using var command = new NpgsqlCommand(
+            """
+            select
+                (select count(*) from pos.fiscal_documents where document_context::text ilike @marker) +
+                (select count(*) from pos.fiscal_document_lines where coalesce(line_context::text, '') ilike @marker) +
+                (select count(*) from pos.fiscal_tenders where coalesce(tender_context::text, '') ilike @marker) +
+                (select count(*) from pos.fiscal_tax_details where coalesce(tax_context::text, '') ilike @marker) +
+                (select count(*) from pos.fiscal_discount_privilege_details
+                    where coalesce(discount_privilege_context::text, '') ilike @marker
+                       or coalesce(evidence_ref, '') ilike @marker) +
+                (select count(*) from pos.fiscal_totals where coalesce(total_context::text, '') ilike @marker);
+            """,
+            connection);
+        command.Parameters.AddWithValue("marker", $"%{marker}%");
+        return (long)(await command.ExecuteScalarAsync() ?? 0L);
+    }
+
+    private static async Task<long> CountIfTableExistsAsync(NpgsqlConnection connection, string qualifiedTableName)
+    {
+        await using var command = new NpgsqlCommand(
+            """
+            select case
+                when to_regclass(@table_name) is null then 0
+                else (select count(*) from pg_catalog.pg_class c)
+            end;
+            """,
+            connection);
+        command.Parameters.AddWithValue("table_name", qualifiedTableName);
+
+        if ((long)(await command.ExecuteScalarAsync() ?? 0L) == 0)
+        {
+            return 0;
+        }
+
+        await using var countCommand = new NpgsqlCommand($"select count(*) from {qualifiedTableName};", connection);
+        return (long)(await countCommand.ExecuteScalarAsync() ?? 0L);
+    }
+
+    private static async Task<long> CountTablesLikeAsync(NpgsqlConnection connection, string pattern)
+    {
+        await using var command = new NpgsqlCommand(
+            """
+            select count(*)
+            from information_schema.tables
+            where table_schema = 'pos'
+              and table_name ilike @pattern;
+            """,
+            connection);
+        command.Parameters.AddWithValue("pattern", pattern);
+        return (long)(await command.ExecuteScalarAsync() ?? 0L);
+    }
+
+    private static string FindRepositoryRoot()
+    {
+        var current = new DirectoryInfo(AppContext.BaseDirectory);
+        while (current is not null)
+        {
+            var manifestPath = Path.Combine(current.FullName, "db", "rebuild", "pos_sql_apply_order.txt");
+            if (File.Exists(manifestPath))
+            {
+                return current.FullName;
+            }
+
+            current = current.Parent;
+        }
+
+        throw new DirectoryNotFoundException("Could not locate repository root from test output directory.");
+    }
+
+    private sealed record SmokeCode(
+        Guid SetId,
+        string SetKey,
+        string SetDisplayName,
+        string SetDescription,
+        Guid CodeId,
+        string CodeKey,
+        string CodeDisplayName,
+        string CodeDescription);
+}
