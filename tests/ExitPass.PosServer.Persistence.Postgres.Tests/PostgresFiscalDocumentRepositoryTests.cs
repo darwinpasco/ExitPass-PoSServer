@@ -84,6 +84,20 @@ public sealed class PostgresFiscalDocumentRepositoryTests
     }
 
     [Fact]
+    public void HeaderInsertDoesNotPopulateFiscalNumberingFields()
+    {
+        var headerSql = PostgresFiscalDocumentSql.InsertFiscalDocument;
+
+        Assert.DoesNotContain("fiscal_identity_id", headerSql, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("fiscal_sequence_policy_id", headerSql, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("fiscal_sequence_value", headerSql, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("fiscal_document_number", headerSql, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("fiscal_number_assigned_at", headerSql, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("fiscal_sequence_states", headerSql, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("fiscal_counter_states", headerSql, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
     public void StatusHistoryUsesSameStatusCodeParameterAsHeader()
     {
         var headerSql = PostgresFiscalDocumentSql.InsertFiscalDocument;

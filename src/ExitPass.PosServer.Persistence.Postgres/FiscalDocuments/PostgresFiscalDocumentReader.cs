@@ -72,8 +72,17 @@ public sealed class PostgresFiscalDocumentReader : IFiscalDocumentReader
                 fiscal_document_id,
                 site_pos_server_id,
                 channel_terminal_id,
+                fiscal_identity_id,
                 fiscal_document_type_code_id,
                 fiscal_document_status_code_id,
+                fiscal_sequence_policy_id,
+                fiscal_sequence_value,
+                fiscal_document_number,
+                fiscal_series,
+                fiscal_number_prefix_text,
+                fiscal_number_suffix_text,
+                fiscal_number_assigned_at,
+                fiscal_number_assigned_by_ref,
                 central_pms_parking_session_ref,
                 central_pms_payment_attempt_ref,
                 central_pms_payment_confirmation_ref,
@@ -99,18 +108,27 @@ public sealed class PostgresFiscalDocumentReader : IFiscalDocumentReader
             reader.GetGuid(0),
             reader.GetGuid(1),
             GetNullableGuid(reader, 2),
-            reader.GetGuid(3),
+            GetNullableGuid(reader, 3),
             reader.GetGuid(4),
-            GetSafeString(reader, 5),
-            GetSafeString(reader, 6),
-            GetSafeString(reader, 7),
+            reader.GetGuid(5),
+            GetNullableGuid(reader, 6),
+            GetNullableInt64(reader, 7),
             GetSafeString(reader, 8),
             GetSafeString(reader, 9),
-            GetNullableDateOnly(reader, 10),
+            GetSafeString(reader, 10),
             GetSafeString(reader, 11),
-            reader.GetBoolean(12),
-            reader.GetFieldValue<DateTimeOffset>(13),
-            reader.GetFieldValue<DateTimeOffset>(14),
+            GetNullableDateTimeOffset(reader, 12),
+            GetSafeString(reader, 13),
+            GetSafeString(reader, 14),
+            GetSafeString(reader, 15),
+            GetSafeString(reader, 16),
+            GetSafeString(reader, 17),
+            GetSafeString(reader, 18),
+            GetNullableDateOnly(reader, 19),
+            GetSafeString(reader, 20),
+            reader.GetBoolean(21),
+            reader.GetFieldValue<DateTimeOffset>(22),
+            reader.GetFieldValue<DateTimeOffset>(23),
             [],
             [],
             [],
@@ -472,8 +490,14 @@ public sealed class PostgresFiscalDocumentReader : IFiscalDocumentReader
     private static decimal? GetNullableDecimal(NpgsqlDataReader reader, int ordinal) =>
         reader.IsDBNull(ordinal) ? null : reader.GetDecimal(ordinal);
 
+    private static long? GetNullableInt64(NpgsqlDataReader reader, int ordinal) =>
+        reader.IsDBNull(ordinal) ? null : reader.GetInt64(ordinal);
+
     private static DateOnly? GetNullableDateOnly(NpgsqlDataReader reader, int ordinal) =>
         reader.IsDBNull(ordinal) ? null : reader.GetFieldValue<DateOnly>(ordinal);
+
+    private static DateTimeOffset? GetNullableDateTimeOffset(NpgsqlDataReader reader, int ordinal) =>
+        reader.IsDBNull(ordinal) ? null : reader.GetFieldValue<DateTimeOffset>(ordinal);
 
     private static string? GetSafeString(NpgsqlDataReader reader, int ordinal)
     {

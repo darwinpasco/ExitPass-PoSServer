@@ -43,6 +43,24 @@ public sealed class PostgresFiscalDocumentReaderTests
     }
 
     [Fact]
+    public void ReaderSqlSelectsFiscalNumberingFieldsFromHeader()
+    {
+        var source = File.ReadAllText(FindReaderSourcePath());
+
+        Assert.Contains("fiscal_identity_id", source, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("fiscal_sequence_policy_id", source, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("fiscal_sequence_value", source, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("fiscal_document_number", source, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("fiscal_series", source, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("fiscal_number_prefix_text", source, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("fiscal_number_suffix_text", source, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("fiscal_number_assigned_at", source, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("fiscal_number_assigned_by_ref", source, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("GetNullableInt64(reader", source, StringComparison.Ordinal);
+        Assert.Contains("GetNullableDateTimeOffset(reader", source, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void ReaderOrdersChildRowsDeterministically()
     {
         var source = File.ReadAllText(FindReaderSourcePath());
