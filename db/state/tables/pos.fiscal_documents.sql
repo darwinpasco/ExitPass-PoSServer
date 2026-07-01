@@ -1,13 +1,22 @@
 ﻿-- ExitPass POS Server Slice 2 table artifact.
--- Fiscal document header/core posture only.
--- This table does not issue Sales Invoices, allocate fiscal numbers, create counters, own payment finality, or own ExitAuthorization.
+-- Fiscal document header/core posture with nullable fiscal numbering persistence fields.
+-- This table does not allocate fiscal numbers, mutate counters, own payment finality, or own ExitAuthorization.
 
 CREATE TABLE IF NOT EXISTS pos.fiscal_documents (
     fiscal_document_id uuid NOT NULL,
     site_pos_server_id uuid NOT NULL,
     channel_terminal_id uuid NULL,
+    fiscal_identity_id uuid NULL,
     fiscal_document_type_code_id uuid NOT NULL,
     fiscal_document_status_code_id uuid NOT NULL,
+    fiscal_sequence_policy_id uuid NULL,
+    fiscal_sequence_value bigint NULL,
+    fiscal_document_number text NULL,
+    fiscal_series text NULL,
+    fiscal_number_prefix_text text NULL,
+    fiscal_number_suffix_text text NULL,
+    fiscal_number_assigned_at timestamptz NULL,
+    fiscal_number_assigned_by_ref text NULL,
     central_pms_parking_session_ref text NULL,
     central_pms_payment_attempt_ref text NULL,
     central_pms_payment_confirmation_ref text NULL,
@@ -23,10 +32,47 @@ CREATE TABLE IF NOT EXISTS pos.fiscal_documents (
         REFERENCES pos.site_pos_servers (site_pos_server_id),
     CONSTRAINT fk_fiscal_documents__channel_terminal FOREIGN KEY (channel_terminal_id)
         REFERENCES pos.channel_terminals (channel_terminal_id),
+    CONSTRAINT fk_fiscal_documents__fiscal_identity FOREIGN KEY (fiscal_identity_id)
+        REFERENCES pos.fiscal_identities (fiscal_identity_id),
     CONSTRAINT fk_fiscal_documents__doc_type_code FOREIGN KEY (fiscal_document_type_code_id)
         REFERENCES pos.controlled_codes (controlled_code_id),
     CONSTRAINT fk_fiscal_documents__doc_status_code FOREIGN KEY (fiscal_document_status_code_id)
         REFERENCES pos.controlled_codes (controlled_code_id),
+    CONSTRAINT fk_fiscal_documents__sequence_policy FOREIGN KEY (fiscal_sequence_policy_id)
+        REFERENCES pos.fiscal_sequence_policies (fiscal_sequence_policy_id),
+    CONSTRAINT ck_fiscal_documents__sequence_value CHECK (
+        fiscal_sequence_value IS NULL OR fiscal_sequence_value > 0
+    ),
+    CONSTRAINT ck_fiscal_documents__document_number CHECK (
+        fiscal_document_number IS NULL OR char_length(btrim(fiscal_document_number)) > 0
+    ),
+    CONSTRAINT ck_fiscal_documents__fiscal_series CHECK (
+        fiscal_series IS NULL OR char_length(btrim(fiscal_series)) > 0
+    ),
+    CONSTRAINT ck_fiscal_documents__number_prefix CHECK (
+        fiscal_number_prefix_text IS NULL OR char_length(btrim(fiscal_number_prefix_text)) > 0
+    ),
+    CONSTRAINT ck_fiscal_documents__number_suffix CHECK (
+        fiscal_number_suffix_text IS NULL OR char_length(btrim(fiscal_number_suffix_text)) > 0
+    ),
+    CONSTRAINT ck_fiscal_documents__number_assigned_by CHECK (
+        fiscal_number_assigned_by_ref IS NULL OR char_length(btrim(fiscal_number_assigned_by_ref)) > 0
+    ),
+    CONSTRAINT ck_fiscal_documents__number_assignment CHECK (
+        (
+            fiscal_sequence_policy_id IS NULL
+            AND fiscal_sequence_value IS NULL
+            AND fiscal_document_number IS NULL
+            AND fiscal_number_assigned_at IS NULL
+        )
+        OR
+        (
+            fiscal_sequence_policy_id IS NOT NULL
+            AND fiscal_sequence_value IS NOT NULL
+            AND fiscal_document_number IS NOT NULL
+            AND fiscal_number_assigned_at IS NOT NULL
+        )
+    ),
     CONSTRAINT ck_fiscal_documents__parking_session_ref CHECK (
         central_pms_parking_session_ref IS NULL OR char_length(btrim(central_pms_parking_session_ref)) > 0
     ),
@@ -47,11 +93,38 @@ CREATE TABLE IF NOT EXISTS pos.fiscal_documents (
     )
 );
 
-COMMENT ON TABLE pos.fiscal_documents IS 'Fiscal document header/core posture. Does not issue Sales Invoices, allocate fiscal numbers, create fiscal sequencing, own payment finality, or own ExitAuthorization.';
+CREATE UNIQUE INDEX IF NOT EXISTS ux_fiscal_documents__seq_policy_value
+    ON pos.fiscal_documents (fiscal_sequence_policy_id, fiscal_sequence_value)
+    WHERE fiscal_sequence_policy_id IS NOT NULL
+      AND fiscal_sequence_value IS NOT NULL;
+
+CREATE UNIQUE INDEX IF NOT EXISTS ux_fiscal_documents__seq_policy_number
+    ON pos.fiscal_documents (fiscal_sequence_policy_id, fiscal_document_number)
+    WHERE fiscal_sequence_policy_id IS NOT NULL
+      AND fiscal_document_number IS NOT NULL;
+
+CREATE INDEX IF NOT EXISTS ix_fiscal_documents__fiscal_identity
+    ON pos.fiscal_documents (fiscal_identity_id);
+
+CREATE INDEX IF NOT EXISTS ix_fiscal_documents__seq_policy
+    ON pos.fiscal_documents (fiscal_sequence_policy_id);
+
+CREATE INDEX IF NOT EXISTS ix_fiscal_documents__document_number
+    ON pos.fiscal_documents (fiscal_document_number);
+
+COMMENT ON TABLE pos.fiscal_documents IS 'Fiscal document header/core posture with nullable fiscal numbering fields. Does not allocate fiscal numbers, mutate counters, own payment finality, or own ExitAuthorization.';
+COMMENT ON COLUMN pos.fiscal_documents.fiscal_identity_id IS 'Optional fiscal identity reference for future fiscal numbering. Nullable until runtime allocation and identity selection rules are implemented.';
+COMMENT ON COLUMN pos.fiscal_documents.fiscal_sequence_policy_id IS 'Optional fiscal sequence policy reference used by future runtime allocation. Nullable until fiscal number assignment is implemented.';
+COMMENT ON COLUMN pos.fiscal_documents.fiscal_sequence_value IS 'Optional allocated fiscal sequence value. Must be positive when present; runtime allocation remains future work.';
+COMMENT ON COLUMN pos.fiscal_documents.fiscal_document_number IS 'Optional formatted fiscal document number. Authoritative fiscal number storage must use this column, not document_context.';
+COMMENT ON COLUMN pos.fiscal_documents.fiscal_series IS 'Optional fiscal series or book/register reference copied at assignment time when approved.';
+COMMENT ON COLUMN pos.fiscal_documents.fiscal_number_prefix_text IS 'Optional prefix copied from the sequence policy at fiscal number assignment time.';
+COMMENT ON COLUMN pos.fiscal_documents.fiscal_number_suffix_text IS 'Optional suffix copied from the sequence policy at fiscal number assignment time.';
+COMMENT ON COLUMN pos.fiscal_documents.fiscal_number_assigned_at IS 'Optional timestamp for future durable fiscal number assignment. Runtime allocation is not implemented by this table artifact.';
+COMMENT ON COLUMN pos.fiscal_documents.fiscal_number_assigned_by_ref IS 'Optional service or actor reference for future fiscal number assignment; reference only.';
 COMMENT ON COLUMN pos.fiscal_documents.central_pms_parking_session_ref IS 'Reference to Central PMS parking session context; POS Server does not own parking session lifecycle.';
 COMMENT ON COLUMN pos.fiscal_documents.central_pms_payment_attempt_ref IS 'Reference to Central PMS PaymentAttempt context; POS Server does not own PaymentAttempt lifecycle.';
 COMMENT ON COLUMN pos.fiscal_documents.central_pms_payment_confirmation_ref IS 'Reference to Central PMS PaymentConfirmation context; POS Server does not own PaymentConfirmation lifecycle.';
 COMMENT ON COLUMN pos.fiscal_documents.payment_finality_ref IS 'Reference to Central PMS payment finality context only; not POS-owned payment finality.';
 COMMENT ON COLUMN pos.fiscal_documents.vendor_ack_ref IS 'Reference to vendor acknowledgement context only; not vendor authority.';
-COMMENT ON COLUMN pos.fiscal_documents.document_context IS 'Flexible header context for unresolved fiscal document attributes. Must remain a JSON object when present.';
-
+COMMENT ON COLUMN pos.fiscal_documents.document_context IS 'Flexible header context for unresolved fiscal document attributes. Must remain a JSON object and is not authoritative fiscal number storage.';
