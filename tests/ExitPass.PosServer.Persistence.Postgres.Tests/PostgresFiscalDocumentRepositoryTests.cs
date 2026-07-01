@@ -14,6 +14,10 @@ public sealed class PostgresFiscalDocumentRepositoryTests
             PostgresFiscalDocumentSql.CountFiscalIdentityRelationships +
             PostgresFiscalDocumentSql.SelectEligibleFiscalSequencePolicy +
             PostgresFiscalDocumentSql.CountFiscalSequencePolicies +
+            PostgresFiscalDocumentSql.SelectFiscalSequenceStateForUpdate +
+            PostgresFiscalDocumentSql.CountFiscalSequenceStates +
+            PostgresFiscalDocumentSql.UpdateFiscalSequenceStateIssued +
+            PostgresFiscalDocumentSql.SelectReplayFiscalDocumentNumbering +
             PostgresFiscalDocumentSql.InsertIdempotencyRecord +
             PostgresFiscalDocumentSql.SelectIdempotencyRecordForUpdate +
             PostgresFiscalDocumentSql.UpdateIdempotencyRecordCompleted +
@@ -30,6 +34,7 @@ public sealed class PostgresFiscalDocumentRepositoryTests
         Assert.Contains("pos.site_pos_server_fiscal_identity_history", sql, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("pos.fiscal_identities", sql, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("pos.fiscal_sequence_policies", sql, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("pos.fiscal_sequence_states", sql, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("pos.idempotency_records", sql, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("insert into pos.fiscal_documents", sql, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("insert into pos.fiscal_document_status_history", sql, StringComparison.OrdinalIgnoreCase);
@@ -41,12 +46,12 @@ public sealed class PostgresFiscalDocumentRepositoryTests
         Assert.Contains("insert into pos.fiscal_totals", sql, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("insert into pos.fiscal_sequence_policies", sql, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("update pos.fiscal_sequence_policies", sql, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("insert into pos.fiscal_sequence_states", sql, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("insert into pos.fiscal_identities", sql, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("update pos.fiscal_identities", sql, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("pos.fiscal_report", sql, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("pos.digital_si", sql, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("pos.audit", sql, StringComparison.OrdinalIgnoreCase);
-        Assert.DoesNotContain("pos.fiscal_sequence_states", sql, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("pos.fiscal_counter_states", sql, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("exit", sql, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("gate", sql, StringComparison.OrdinalIgnoreCase);
@@ -59,6 +64,10 @@ public sealed class PostgresFiscalDocumentRepositoryTests
             PostgresFiscalDocumentSql.CountFiscalIdentityRelationships +
             PostgresFiscalDocumentSql.SelectEligibleFiscalSequencePolicy +
             PostgresFiscalDocumentSql.CountFiscalSequencePolicies +
+            PostgresFiscalDocumentSql.SelectFiscalSequenceStateForUpdate +
+            PostgresFiscalDocumentSql.CountFiscalSequenceStates +
+            PostgresFiscalDocumentSql.UpdateFiscalSequenceStateIssued +
+            PostgresFiscalDocumentSql.SelectReplayFiscalDocumentNumbering +
             PostgresFiscalDocumentSql.InsertIdempotencyRecord +
             PostgresFiscalDocumentSql.SelectIdempotencyRecordForUpdate +
             PostgresFiscalDocumentSql.UpdateIdempotencyRecordCompleted +
@@ -78,6 +87,10 @@ public sealed class PostgresFiscalDocumentRepositoryTests
         Assert.Contains("@idempotency_scope", sql, StringComparison.Ordinal);
         Assert.Contains("@idempotency_key", sql, StringComparison.Ordinal);
         Assert.Contains("@semantic_request_hash", sql, StringComparison.Ordinal);
+        Assert.Contains("@fiscal_sequence_policy_id", sql, StringComparison.Ordinal);
+        Assert.Contains("@fiscal_sequence_value", sql, StringComparison.Ordinal);
+        Assert.Contains("@fiscal_document_number", sql, StringComparison.Ordinal);
+        Assert.Contains("@fiscal_number_assigned_at", sql, StringComparison.Ordinal);
         Assert.Contains("@operation_type_code_id", sql, StringComparison.Ordinal);
         Assert.Contains("@operation_status_code_id", sql, StringComparison.Ordinal);
         Assert.Contains("@idempotency_context", sql, StringComparison.Ordinal);
@@ -168,17 +181,39 @@ public sealed class PostgresFiscalDocumentRepositoryTests
     }
 
     [Fact]
-    public void HeaderInsertPersistsIdentityButDoesNotPopulateFiscalNumberingFields()
+    public void HeaderInsertPersistsIdentityAndFiscalNumberingFields()
     {
         var headerSql = PostgresFiscalDocumentSql.InsertFiscalDocument;
 
         Assert.Contains("fiscal_identity_id", headerSql, StringComparison.OrdinalIgnoreCase);
-        Assert.DoesNotContain("fiscal_sequence_policy_id", headerSql, StringComparison.OrdinalIgnoreCase);
-        Assert.DoesNotContain("fiscal_sequence_value", headerSql, StringComparison.OrdinalIgnoreCase);
-        Assert.DoesNotContain("fiscal_document_number", headerSql, StringComparison.OrdinalIgnoreCase);
-        Assert.DoesNotContain("fiscal_number_assigned_at", headerSql, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("fiscal_sequence_policy_id", headerSql, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("fiscal_sequence_value", headerSql, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("fiscal_document_number", headerSql, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("fiscal_series", headerSql, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("fiscal_number_prefix_text", headerSql, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("fiscal_number_suffix_text", headerSql, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("fiscal_number_assigned_at", headerSql, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("fiscal_number_assigned_by_ref", headerSql, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("fiscal_sequence_states", headerSql, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("fiscal_counter_states", headerSql, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void SequenceAllocationSqlLocksAndUpdatesOnlySequenceState()
+    {
+        var sequenceSql = PostgresFiscalDocumentSql.SelectFiscalSequenceStateForUpdate +
+            PostgresFiscalDocumentSql.UpdateFiscalSequenceStateIssued;
+
+        Assert.Contains("from pos.fiscal_sequence_states", sequenceSql, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("for update", sequenceSql, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("update pos.fiscal_sequence_states", sequenceSql, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("current_sequence_value = @fiscal_sequence_value", sequenceSql, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("last_issued_sequence_value = @fiscal_sequence_value", sequenceSql, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("pos.fiscal_counter_states", sequenceSql, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("pos.fiscal_sequence_gap_audit", sequenceSql, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("pos.fiscal_documents", sequenceSql, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("exit", sequenceSql, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("gate", sequenceSql, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]
@@ -306,13 +341,14 @@ public sealed class PostgresFiscalDocumentRepositoryTests
     }
 
     [Fact]
-    public void RepositoryUsesSingleTransactionForIdempotencyHeaderStatusHistoryLinksLinesTendersTaxDiscountPrivilegeAndTotals()
+    public void RepositoryUsesSingleTransactionForIdempotencySequenceAllocationHeaderStatusHistoryLinksLinesTendersTaxDiscountPrivilegeTotalsAndSequenceUpdate()
     {
         var repositorySource = File.ReadAllText(FindRepositorySourcePath());
 
         Assert.Contains("BeginTransactionAsync", repositorySource, StringComparison.Ordinal);
         Assert.Contains("PostgresFiscalDocumentSql.InsertIdempotencyRecord,", repositorySource, StringComparison.Ordinal);
         Assert.Contains("PostgresFiscalDocumentSql.SelectIdempotencyRecordForUpdate,", repositorySource, StringComparison.Ordinal);
+        Assert.Contains("PostgresFiscalDocumentSql.SelectFiscalSequenceStateForUpdate,", repositorySource, StringComparison.Ordinal);
         Assert.Contains("PostgresFiscalDocumentSql.InsertFiscalDocument,", repositorySource, StringComparison.Ordinal);
         Assert.Contains("PostgresFiscalDocumentSql.InsertFiscalDocumentStatusHistory,", repositorySource, StringComparison.Ordinal);
         Assert.Contains("PostgresFiscalDocumentSql.InsertFiscalDocumentLink,", repositorySource, StringComparison.Ordinal);
@@ -321,11 +357,13 @@ public sealed class PostgresFiscalDocumentRepositoryTests
         Assert.Contains("PostgresFiscalDocumentSql.InsertFiscalTaxDetail,", repositorySource, StringComparison.Ordinal);
         Assert.Contains("PostgresFiscalDocumentSql.InsertFiscalDiscountPrivilegeDetail,", repositorySource, StringComparison.Ordinal);
         Assert.Contains("PostgresFiscalDocumentSql.InsertFiscalTotal,", repositorySource, StringComparison.Ordinal);
+        Assert.Contains("PostgresFiscalDocumentSql.UpdateFiscalSequenceStateIssued,", repositorySource, StringComparison.Ordinal);
         Assert.Contains("CommitAsync", repositorySource, StringComparison.Ordinal);
         Assert.Contains("RollbackAsync", repositorySource, StringComparison.Ordinal);
 
         var idempotencyInsertIndex = repositorySource.IndexOf("InsertIdempotencyRecord,", StringComparison.Ordinal);
         var idempotencyLockIndex = repositorySource.IndexOf("SelectIdempotencyRecordForUpdate,", StringComparison.Ordinal);
+        var sequenceAllocationIndex = repositorySource.IndexOf("var assignment = await AllocateFiscalNumberAsync", StringComparison.Ordinal);
         var headerIndex = repositorySource.IndexOf("InsertFiscalDocument,", StringComparison.Ordinal);
         var statusIndex = repositorySource.IndexOf("InsertFiscalDocumentStatusHistory,", StringComparison.Ordinal);
         var linkIndex = repositorySource.IndexOf("InsertFiscalDocumentLink,", StringComparison.Ordinal);
@@ -334,10 +372,12 @@ public sealed class PostgresFiscalDocumentRepositoryTests
         var taxIndex = repositorySource.IndexOf("InsertFiscalTaxDetail,", StringComparison.Ordinal);
         var discountIndex = repositorySource.IndexOf("InsertFiscalDiscountPrivilegeDetail,", StringComparison.Ordinal);
         var totalIndex = repositorySource.IndexOf("InsertFiscalTotal,", StringComparison.Ordinal);
+        var sequenceUpdateIndex = repositorySource.IndexOf("UpdateFiscalSequenceStateIssued,", StringComparison.Ordinal);
         var completeIdempotencyIndex = repositorySource.IndexOf("UpdateIdempotencyRecordCompleted,", StringComparison.Ordinal);
         var commitIndex = repositorySource.LastIndexOf("CommitAsync", StringComparison.Ordinal);
         Assert.True(idempotencyInsertIndex < idempotencyLockIndex);
-        Assert.True(idempotencyLockIndex < headerIndex);
+        Assert.True(idempotencyLockIndex < sequenceAllocationIndex);
+        Assert.True(sequenceAllocationIndex < headerIndex);
         Assert.True(headerIndex < statusIndex);
         Assert.True(statusIndex < linkIndex);
         Assert.True(linkIndex < lineIndex);
@@ -345,7 +385,8 @@ public sealed class PostgresFiscalDocumentRepositoryTests
         Assert.True(tenderIndex < taxIndex);
         Assert.True(taxIndex < discountIndex);
         Assert.True(discountIndex < totalIndex);
-        Assert.True(totalIndex < completeIdempotencyIndex);
+        Assert.True(totalIndex < sequenceUpdateIndex);
+        Assert.True(sequenceUpdateIndex < completeIdempotencyIndex);
         Assert.True(completeIdempotencyIndex < commitIndex);
     }
 
@@ -366,6 +407,8 @@ public sealed class PostgresFiscalDocumentRepositoryTests
         Assert.Contains("55555555-5555-5555-5555-555555555555", json, StringComparison.Ordinal);
         Assert.Contains("discount-validation-001", json, StringComparison.Ordinal);
         Assert.Contains("66666666-6666-6666-6666-666666666666", json, StringComparison.Ordinal);
+        Assert.Contains("SI-00000001-A", json, StringComparison.Ordinal);
+        Assert.Contains("allocated_in_document_transaction", json, StringComparison.Ordinal);
         Assert.DoesNotContain("raw_id", json, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("evidence_payload", json, StringComparison.OrdinalIgnoreCase);
     }
@@ -532,7 +575,16 @@ public sealed class PostgresFiscalDocumentRepositoryTests
                     "PHP",
                     new Dictionary<string, string> { ["source_system"] = "central_pms" })
             ],
-            [new FiscalDiscountReferenceInput("discount-validation-001", FiscalDiscountReferenceStatus.Approved, true)]);
+            [new FiscalDiscountReferenceInput("discount-validation-001", FiscalDiscountReferenceStatus.Approved, true)],
+            ResolvedFiscalIdentityId: Guid.Parse("77777777-7777-7777-7777-777777777777"),
+            ResolvedFiscalSequencePolicyId: Guid.Parse("88888888-8888-8888-8888-888888888888"),
+            FiscalSequenceValue: 1,
+            FiscalDocumentNumber: "SI-00000001-A",
+            FiscalSeries: "sales_invoice_policy",
+            FiscalNumberPrefixText: "SI-",
+            FiscalNumberSuffixText: "-A",
+            FiscalNumberAssignedAt: DateTimeOffset.Parse("2026-07-01T00:00:00Z"),
+            FiscalNumberAssignedByRef: "pos-server:system");
 
     private static string FindRepositorySourcePath([CallerFilePath] string testFilePath = "")
     {
