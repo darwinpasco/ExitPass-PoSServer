@@ -79,8 +79,13 @@ public static class FiscalDocumentCreationEndpoint
             false,
             ToResponseCode(result.ErrorCode),
             result.Message,
-            HttpStatusCode: StatusCodes.Status400BadRequest);
+            HttpStatusCode: ToHttpStatusCode(result.ErrorCode));
     }
+
+    private static int ToHttpStatusCode(FiscalDocumentCreationErrorCode errorCode) =>
+        errorCode == FiscalDocumentCreationErrorCode.IdempotencyConflict
+            ? StatusCodes.Status409Conflict
+            : StatusCodes.Status400BadRequest;
 
     private static FiscalizationPayableBasisInput? MapPayableBasis(
         FiscalizationPayableBasisRequest? request,
@@ -207,6 +212,7 @@ public static class FiscalDocumentCreationEndpoint
             FiscalDocumentCreationErrorCode.SensitiveDiscountPrivilegePayloadNotAllowed => "sensitive_discount_privilege_payload_not_allowed",
             FiscalDocumentCreationErrorCode.InvalidFiscalTotal => "invalid_fiscal_total",
             FiscalDocumentCreationErrorCode.SensitiveTotalPayloadNotAllowed => "sensitive_total_payload_not_allowed",
+            FiscalDocumentCreationErrorCode.IdempotencyConflict => "fiscal_document_idempotency_conflict",
             _ => "fiscal_document_creation_failed"
         };
 }

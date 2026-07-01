@@ -5,6 +5,63 @@ namespace ExitPass.PosServer.Persistence.Postgres.FiscalDocuments;
 
 public static class PostgresFiscalDocumentSql
 {
+    public const string InsertIdempotencyRecord = """
+        insert into pos.idempotency_records (
+            idempotency_record_id,
+            idempotency_scope,
+            idempotency_key,
+            semantic_request_hash,
+            operation_type_code_id,
+            operation_status_code_id,
+            idempotency_context,
+            completion_unknown,
+            created_at,
+            updated_at
+        ) values (
+            @idempotency_record_id,
+            @idempotency_scope,
+            @idempotency_key,
+            @semantic_request_hash,
+            @operation_type_code_id,
+            @operation_status_code_id,
+            @idempotency_context,
+            false,
+            current_timestamp,
+            current_timestamp
+        )
+        on conflict (idempotency_scope, idempotency_key) do nothing;
+        """;
+
+    public const string SelectIdempotencyRecordForUpdate = """
+        select
+            semantic_request_hash,
+            linked_fiscal_document_id
+        from pos.idempotency_records
+        where idempotency_scope = @idempotency_scope
+          and idempotency_key = @idempotency_key
+        for update;
+        """;
+
+    public const string UpdateIdempotencyRecordCompleted = """
+        update pos.idempotency_records
+        set
+            linked_fiscal_document_id = @fiscal_document_id,
+            replay_result_ref = @replay_result_ref,
+            completion_unknown = false,
+            updated_at = current_timestamp
+        where idempotency_scope = @idempotency_scope
+          and idempotency_key = @idempotency_key;
+        """;
+
+    public const string UpdateIdempotencyRecordReplay = """
+        update pos.idempotency_records
+        set
+            replay_result_ref = @replay_result_ref,
+            updated_at = current_timestamp
+        where idempotency_scope = @idempotency_scope
+          and idempotency_key = @idempotency_key;
+        """;
+
     public const string InsertFiscalDocument = """
         insert into pos.fiscal_documents (
             fiscal_document_id,
@@ -317,6 +374,26 @@ public static class PostgresFiscalDocumentSql
                 applies_statutory_discount_treatment = discount.AppliesStatutoryDiscountTreatment,
                 reference_context = discount.ReferenceContext
             })
+        };
+
+        return JsonSerializer.Serialize(context);
+    }
+
+    public static string CreateIdempotencyContextJson(FiscalDocumentDraft draft, FiscalIssuanceIdempotency idempotency)
+    {
+        var context = new
+        {
+            source = "pos_server_runtime_fiscal_document_creation",
+            posture = "idempotency_only_no_fiscal_number_allocation",
+            idempotency_scope = idempotency.Scope,
+            idempotency_key_source = "upstream_finality_ref",
+            semantic_request_hash = idempotency.SemanticRequestHash,
+            operation_type_code_id_source = "fiscal_document_type_code_id",
+            operation_status_code_id_source = "fiscal_document_status_code_id",
+            site_pos_server_id = draft.SitePosServerId,
+            fiscal_document_type_code_id = draft.FiscalDocumentTypeCodeId,
+            payable_basis_ref = draft.PayableBasisRef,
+            upstream_finality_ref = draft.UpstreamFinalityRef
         };
 
         return JsonSerializer.Serialize(context);

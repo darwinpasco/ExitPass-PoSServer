@@ -2,5 +2,8 @@ namespace ExitPass.PosServer.Runtime.FiscalDocuments;
 
 public interface IFiscalDocumentRepository
 {
-    Task<FiscalDocumentDraft> CreateAsync(FiscalDocumentDraft draft, CancellationToken cancellationToken);
+    Task<FiscalDocumentPersistenceResult> CreateAsync(
+        FiscalDocumentDraft draft,
+        FiscalIssuanceIdempotency idempotency,
+        CancellationToken cancellationToken);
 }

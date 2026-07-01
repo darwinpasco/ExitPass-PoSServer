@@ -4,7 +4,10 @@ namespace ExitPass.PosServer.Api.FiscalDocuments;
 
 public sealed class InvalidPersistenceConfigurationFiscalDocumentRepository : IFiscalDocumentRepository
 {
-    public Task<FiscalDocumentDraft> CreateAsync(FiscalDocumentDraft draft, CancellationToken cancellationToken)
+    public Task<FiscalDocumentPersistenceResult> CreateAsync(
+        FiscalDocumentDraft draft,
+        FiscalIssuanceIdempotency idempotency,
+        CancellationToken cancellationToken)
     {
         throw new FiscalDocumentInvalidPersistenceConfigurationException();
     }
