@@ -29,6 +29,7 @@ public sealed class FiscalDocumentApiPostgresSmokeTests
     private static readonly Guid FiscalSequenceFamilyCodeId = Guid.Parse("10000000-0000-0000-0000-000000000801");
     private static readonly Guid FiscalSequencePolicyStatusCodeId = Guid.Parse("10000000-0000-0000-0000-000000000802");
     private static readonly Guid FiscalSequencePolicyId = Guid.Parse("10000000-0000-0000-0000-000000000803");
+    private static readonly Guid FiscalSequenceStateId = Guid.Parse("10000000-0000-0000-0000-000000000804");
 
     private readonly ITestOutputHelper output;
 
@@ -60,6 +61,15 @@ public sealed class FiscalDocumentApiPostgresSmokeTests
         Assert.True(body.Succeeded);
         Assert.Equal("accepted", body.Code);
         Assert.NotNull(body.FiscalDocumentId);
+        Assert.Equal(FiscalIdentityId, body.FiscalIdentityId);
+        Assert.Equal(FiscalSequencePolicyId, body.FiscalSequencePolicyId);
+        Assert.Equal(1, body.FiscalSequenceValue);
+        Assert.Equal("SI-00000001-A", body.FiscalDocumentNumber);
+        Assert.Equal("api-smoke-sequence-policy", body.FiscalSeries);
+        Assert.Equal("SI-", body.FiscalNumberPrefixText);
+        Assert.Equal("-A", body.FiscalNumberSuffixText);
+        Assert.NotNull(body.FiscalNumberAssignedAt);
+        Assert.Equal("pos-server:system", body.FiscalNumberAssignedByRef);
 
         var fiscalDocumentId = body.FiscalDocumentId.Value;
         using var getResponse = await client.GetAsync($"/v1/fiscal-documents/{fiscalDocumentId}");
@@ -81,14 +91,24 @@ public sealed class FiscalDocumentApiPostgresSmokeTests
         Assert.Equal("central-finality-success", getBody.Document.PaymentFinalityRef);
         Assert.Equal("evidence-ref-success", getBody.Document.DiscountPrivilegeDetails[0].EvidenceRef);
         Assert.Equal(FiscalIdentityId, getBody.Document.FiscalIdentityId);
-        Assert.Null(getBody.Document.FiscalSequencePolicyId);
-        Assert.Null(getBody.Document.FiscalSequenceValue);
-        Assert.Null(getBody.Document.FiscalDocumentNumber);
-        Assert.Null(getBody.Document.FiscalSeries);
-        Assert.Null(getBody.Document.FiscalNumberPrefixText);
-        Assert.Null(getBody.Document.FiscalNumberSuffixText);
-        Assert.Null(getBody.Document.FiscalNumberAssignedAt);
-        Assert.Null(getBody.Document.FiscalNumberAssignedByRef);
+        Assert.Equal(FiscalSequencePolicyId, getBody.Document.FiscalSequencePolicyId);
+        Assert.Equal(1, getBody.Document.FiscalSequenceValue);
+        Assert.Equal("SI-00000001-A", getBody.Document.FiscalDocumentNumber);
+        Assert.Equal("api-smoke-sequence-policy", getBody.Document.FiscalSeries);
+        Assert.Equal("SI-", getBody.Document.FiscalNumberPrefixText);
+        Assert.Equal("-A", getBody.Document.FiscalNumberSuffixText);
+        Assert.NotNull(getBody.Document.FiscalNumberAssignedAt);
+        Assert.Equal("pos-server:system", getBody.Document.FiscalNumberAssignedByRef);
+
+        using var replayResponse = await client.PostAsJsonAsync("/v1/fiscal-documents/", request);
+        var replayBody = await replayResponse.Content.ReadFromJsonAsync<CreateFiscalDocumentResponse>();
+
+        Assert.Equal(HttpStatusCode.Accepted, replayResponse.StatusCode);
+        Assert.NotNull(replayBody);
+        Assert.True(replayBody.Succeeded);
+        Assert.Equal(fiscalDocumentId, replayBody.FiscalDocumentId);
+        Assert.Equal(1, replayBody.FiscalSequenceValue);
+        Assert.Equal("SI-00000001-A", replayBody.FiscalDocumentNumber);
 
         using var missingGetResponse = await client.GetAsync($"/v1/fiscal-documents/{Guid.Parse("99999999-9999-9999-9999-999999999999")}");
         var missingGetBody = await missingGetResponse.Content.ReadFromJsonAsync<GetFiscalDocumentResponse>();
@@ -118,25 +138,14 @@ public sealed class FiscalDocumentApiPostgresSmokeTests
             connection,
             "select evidence_ref from pos.fiscal_discount_privilege_details where fiscal_document_id = @id",
             fiscalDocumentId));
-
-        var assignedAt = DateTimeOffset.Parse("2026-07-01T08:15:00Z");
-        await UpdateDisposableFiscalNumberingAsync(connection, fiscalDocumentId, assignedAt);
-
-        using var numberedGetResponse = await client.GetAsync($"/v1/fiscal-documents/{fiscalDocumentId}");
-        var numberedGetBody = await numberedGetResponse.Content.ReadFromJsonAsync<GetFiscalDocumentResponse>();
-
-        Assert.Equal(HttpStatusCode.OK, numberedGetResponse.StatusCode);
-        Assert.NotNull(numberedGetBody);
-        Assert.NotNull(numberedGetBody.Document);
-        Assert.Equal(FiscalIdentityId, numberedGetBody.Document.FiscalIdentityId);
-        Assert.Equal(FiscalSequencePolicyId, numberedGetBody.Document.FiscalSequencePolicyId);
-        Assert.Equal(42, numberedGetBody.Document.FiscalSequenceValue);
-        Assert.Equal("SI-00000042", numberedGetBody.Document.FiscalDocumentNumber);
-        Assert.Equal("SI", numberedGetBody.Document.FiscalSeries);
-        Assert.Equal("SI-", numberedGetBody.Document.FiscalNumberPrefixText);
-        Assert.Equal("-A", numberedGetBody.Document.FiscalNumberSuffixText);
-        Assert.Equal(assignedAt, numberedGetBody.Document.FiscalNumberAssignedAt);
-        Assert.Equal("pos-server-smoke-fixture", numberedGetBody.Document.FiscalNumberAssignedByRef);
+        Assert.Equal(1, await ScalarLongAsync(
+            connection,
+            "select current_sequence_value from pos.fiscal_sequence_states where fiscal_sequence_policy_id = @id",
+            FiscalSequencePolicyId));
+        Assert.Equal(1, await ScalarLongAsync(
+            connection,
+            "select last_issued_sequence_value from pos.fiscal_sequence_states where fiscal_sequence_policy_id = @id",
+            FiscalSequencePolicyId));
 
         Assert.Equal(0, await CountTextMarkerAsync(connection, "raw_id"));
         Assert.Equal(0, await CountTextMarkerAsync(connection, "payment_payload"));
@@ -210,6 +219,51 @@ public sealed class FiscalDocumentApiPostgresSmokeTests
             "approval_ref = @ref",
             "ref",
             "discount-validation-rollback"));
+        Assert.Equal(0, await ScalarLongAsync(
+            connection,
+            "select current_sequence_value from pos.fiscal_sequence_states where fiscal_sequence_policy_id = @id",
+            FiscalSequencePolicyId));
+    }
+
+    [Fact]
+    public async Task ConcurrentFiscalDocumentPostsReceiveDistinctFiscalNumbers()
+    {
+        if (!TryGetSmokeConnectionString(out var connectionString))
+        {
+            return;
+        }
+
+        await RebuildDisposableDatabaseAsync(connectionString);
+        await InsertDisposableSmokeFixtureAsync(connectionString);
+
+        await using var app = await StartApiAsync(connectionString);
+        using var client = CreateClient(app);
+
+        var firstTask = client.PostAsJsonAsync("/v1/fiscal-documents/", CreateValidRequest("concurrent-a"));
+        var secondTask = client.PostAsJsonAsync("/v1/fiscal-documents/", CreateValidRequest("concurrent-b"));
+        await Task.WhenAll(firstTask, secondTask);
+
+        using var firstResponse = await firstTask;
+        using var secondResponse = await secondTask;
+        var firstBody = await firstResponse.Content.ReadFromJsonAsync<CreateFiscalDocumentResponse>();
+        var secondBody = await secondResponse.Content.ReadFromJsonAsync<CreateFiscalDocumentResponse>();
+
+        Assert.Equal(HttpStatusCode.Accepted, firstResponse.StatusCode);
+        Assert.Equal(HttpStatusCode.Accepted, secondResponse.StatusCode);
+        Assert.NotNull(firstBody);
+        Assert.NotNull(secondBody);
+        Assert.True(firstBody.Succeeded);
+        Assert.True(secondBody.Succeeded);
+        Assert.NotEqual(firstBody.FiscalDocumentId, secondBody.FiscalDocumentId);
+        Assert.NotEqual(firstBody.FiscalDocumentNumber, secondBody.FiscalDocumentNumber);
+        Assert.Equal([1L, 2L], new[] { firstBody.FiscalSequenceValue!.Value, secondBody.FiscalSequenceValue!.Value }.Order());
+
+        await using var connection = new NpgsqlConnection(connectionString);
+        await connection.OpenAsync();
+        Assert.Equal(2, await ScalarLongAsync(
+            connection,
+            "select current_sequence_value from pos.fiscal_sequence_states where fiscal_sequence_policy_id = @id",
+            FiscalSequencePolicyId));
     }
 
     private bool TryGetSmokeConnectionString(out string connectionString)
@@ -446,6 +500,35 @@ public sealed class FiscalDocumentApiPostgresSmokeTests
                 command.Parameters.AddWithValue("document_type_code_id", FiscalDocumentTypeCodeId);
                 command.Parameters.AddWithValue("policy_status_code_id", FiscalSequencePolicyStatusCodeId);
             });
+
+        await ExecuteSqlAsync(
+            connection,
+            """
+            insert into pos.fiscal_sequence_states (
+                fiscal_sequence_state_id,
+                fiscal_sequence_policy_id,
+                current_sequence_value,
+                sequence_state_code_id,
+                state_context
+            ) values (
+                @fiscal_sequence_state_id,
+                @fiscal_sequence_policy_id,
+                0,
+                @sequence_state_code_id,
+                '{}'::jsonb
+            ) on conflict (fiscal_sequence_policy_id) do update set
+                current_sequence_value = 0,
+                last_reserved_sequence_value = null,
+                last_issued_sequence_value = null,
+                last_transition_at = null,
+                updated_at = current_timestamp;
+            """,
+            command =>
+            {
+                command.Parameters.AddWithValue("fiscal_sequence_state_id", FiscalSequenceStateId);
+                command.Parameters.AddWithValue("fiscal_sequence_policy_id", FiscalSequencePolicyId);
+                command.Parameters.AddWithValue("sequence_state_code_id", FiscalSequencePolicyStatusCodeId);
+            });
     }
 
     private static async Task<WebApplication> StartApiAsync(string connectionString)
@@ -653,36 +736,6 @@ public sealed class FiscalDocumentApiPostgresSmokeTests
             "Disposable smoke-test sequence policy active posture.")
     ];
 
-    private static async Task UpdateDisposableFiscalNumberingAsync(
-        NpgsqlConnection connection,
-        Guid fiscalDocumentId,
-        DateTimeOffset assignedAt)
-    {
-        await ExecuteSqlAsync(
-            connection,
-            """
-            update pos.fiscal_documents
-            set fiscal_identity_id = @fiscal_identity_id,
-                fiscal_sequence_policy_id = @fiscal_sequence_policy_id,
-                fiscal_sequence_value = 42,
-                fiscal_document_number = 'SI-00000042',
-                fiscal_series = 'SI',
-                fiscal_number_prefix_text = 'SI-',
-                fiscal_number_suffix_text = '-A',
-                fiscal_number_assigned_at = @assigned_at,
-                fiscal_number_assigned_by_ref = 'pos-server-smoke-fixture',
-                updated_at = current_timestamp
-            where fiscal_document_id = @fiscal_document_id;
-            """,
-            command =>
-            {
-                command.Parameters.AddWithValue("fiscal_document_id", fiscalDocumentId);
-                command.Parameters.AddWithValue("fiscal_identity_id", FiscalIdentityId);
-                command.Parameters.AddWithValue("fiscal_sequence_policy_id", FiscalSequencePolicyId);
-                command.Parameters.AddWithValue("assigned_at", assignedAt);
-            });
-    }
-
     private static IEnumerable<string> ProhibitedRuntimeTables() =>
     [
         "pos.fiscal_report_requests",
@@ -727,6 +780,13 @@ public sealed class FiscalDocumentApiPostgresSmokeTests
         await using var command = new NpgsqlCommand(sql, connection);
         command.Parameters.AddWithValue("id", id);
         return (string?)await command.ExecuteScalarAsync();
+    }
+
+    private static async Task<long> ScalarLongAsync(NpgsqlConnection connection, string sql, Guid id)
+    {
+        await using var command = new NpgsqlCommand(sql, connection);
+        command.Parameters.AddWithValue("id", id);
+        return Convert.ToInt64(await command.ExecuteScalarAsync() ?? 0L);
     }
 
     private static async Task<long> CountTextMarkerAsync(NpgsqlConnection connection, string marker)

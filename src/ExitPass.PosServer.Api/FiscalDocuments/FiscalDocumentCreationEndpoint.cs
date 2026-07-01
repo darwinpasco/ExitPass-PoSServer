@@ -72,6 +72,15 @@ public static class FiscalDocumentCreationEndpoint
                 "accepted",
                 result.Message,
                 result.Draft?.FiscalDocumentId,
+                result.Draft?.ResolvedFiscalIdentityId,
+                result.Draft?.ResolvedFiscalSequencePolicyId,
+                result.Draft?.FiscalSequenceValue,
+                result.Draft?.FiscalDocumentNumber,
+                result.Draft?.FiscalSeries,
+                result.Draft?.FiscalNumberPrefixText,
+                result.Draft?.FiscalNumberSuffixText,
+                result.Draft?.FiscalNumberAssignedAt,
+                result.Draft?.FiscalNumberAssignedByRef,
                 StatusCodes.Status202Accepted);
         }
 
@@ -219,6 +228,10 @@ public static class FiscalDocumentCreationEndpoint
             FiscalDocumentCreationErrorCode.FiscalSequencePolicyNotFound => "fiscal_sequence_policy_not_found",
             FiscalDocumentCreationErrorCode.FiscalSequencePolicyAmbiguous => "fiscal_sequence_policy_ambiguous",
             FiscalDocumentCreationErrorCode.FiscalSequencePolicyNotEffective => "fiscal_sequence_policy_not_effective",
+            FiscalDocumentCreationErrorCode.FiscalSequenceStateNotFound => "fiscal_sequence_state_not_found",
+            FiscalDocumentCreationErrorCode.FiscalSequenceStateNotEffective => "fiscal_sequence_state_not_effective",
+            FiscalDocumentCreationErrorCode.FiscalNumberAllocationFailed => "fiscal_number_allocation_failed",
+            FiscalDocumentCreationErrorCode.FiscalDocumentNumberFormatFailed => "fiscal_document_number_format_failed",
             _ => "fiscal_document_creation_failed"
         };
 }

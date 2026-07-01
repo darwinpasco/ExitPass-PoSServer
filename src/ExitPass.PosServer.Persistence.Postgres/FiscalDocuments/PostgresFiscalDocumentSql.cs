@@ -40,7 +40,11 @@ public static class PostgresFiscalDocumentSql
 
     public const string SelectEligibleFiscalSequencePolicy = """
         select
-            policy.fiscal_sequence_policy_id
+            policy.fiscal_sequence_policy_id,
+            policy.policy_code,
+            policy.prefix_text,
+            policy.suffix_text,
+            policy.padding_length
         from pos.fiscal_sequence_policies policy
         inner join pos.site_pos_servers site
             on site.site_pos_server_id = policy.site_pos_server_id
@@ -56,6 +60,52 @@ public static class PostgresFiscalDocumentSql
           and (policy_status.effective_end_at is null or policy_status.effective_end_at > current_timestamp)
         order by policy.effective_start_at desc, policy.fiscal_sequence_policy_id
         limit 2;
+        """;
+
+    public const string SelectFiscalSequenceStateForUpdate = """
+        select
+            state.current_sequence_value,
+            current_timestamp
+        from pos.fiscal_sequence_states state
+        inner join pos.controlled_codes sequence_state
+            on sequence_state.controlled_code_id = state.sequence_state_code_id
+        where state.fiscal_sequence_policy_id = @fiscal_sequence_policy_id
+          and sequence_state.is_active = true
+          and (sequence_state.effective_start_at is null or sequence_state.effective_start_at <= current_timestamp)
+          and (sequence_state.effective_end_at is null or sequence_state.effective_end_at > current_timestamp)
+        for update;
+        """;
+
+    public const string CountFiscalSequenceStates = """
+        select count(*)
+        from pos.fiscal_sequence_states
+        where fiscal_sequence_policy_id = @fiscal_sequence_policy_id;
+        """;
+
+    public const string UpdateFiscalSequenceStateIssued = """
+        update pos.fiscal_sequence_states
+        set
+            current_sequence_value = @fiscal_sequence_value,
+            last_reserved_sequence_value = @fiscal_sequence_value,
+            last_issued_sequence_value = @fiscal_sequence_value,
+            last_transition_at = @fiscal_number_assigned_at,
+            updated_at = current_timestamp
+        where fiscal_sequence_policy_id = @fiscal_sequence_policy_id;
+        """;
+
+    public const string SelectReplayFiscalDocumentNumbering = """
+        select
+            fiscal_identity_id,
+            fiscal_sequence_policy_id,
+            fiscal_sequence_value,
+            fiscal_document_number,
+            fiscal_series,
+            fiscal_number_prefix_text,
+            fiscal_number_suffix_text,
+            fiscal_number_assigned_at,
+            fiscal_number_assigned_by_ref
+        from pos.fiscal_documents
+        where fiscal_document_id = @fiscal_document_id;
         """;
 
     public const string CountFiscalSequencePolicies = """
@@ -130,6 +180,14 @@ public static class PostgresFiscalDocumentSql
             fiscal_identity_id,
             fiscal_document_type_code_id,
             fiscal_document_status_code_id,
+            fiscal_sequence_policy_id,
+            fiscal_sequence_value,
+            fiscal_document_number,
+            fiscal_series,
+            fiscal_number_prefix_text,
+            fiscal_number_suffix_text,
+            fiscal_number_assigned_at,
+            fiscal_number_assigned_by_ref,
             central_pms_parking_session_ref,
             central_pms_payment_attempt_ref,
             central_pms_payment_confirmation_ref,
@@ -147,6 +205,14 @@ public static class PostgresFiscalDocumentSql
             @fiscal_identity_id,
             @fiscal_document_type_code_id,
             @fiscal_document_status_code_id,
+            @fiscal_sequence_policy_id,
+            @fiscal_sequence_value,
+            @fiscal_document_number,
+            @fiscal_series,
+            @fiscal_number_prefix_text,
+            @fiscal_number_suffix_text,
+            @fiscal_number_assigned_at,
+            @fiscal_number_assigned_by_ref,
             @central_pms_parking_session_ref,
             @central_pms_payment_attempt_ref,
             @central_pms_payment_confirmation_ref,
@@ -378,7 +444,14 @@ public static class PostgresFiscalDocumentSql
             payable_amount_minor_units = draft.PayableAmountMinorUnits,
             resolved_fiscal_identity_id = draft.ResolvedFiscalIdentityId,
             resolved_fiscal_sequence_policy_id = draft.ResolvedFiscalSequencePolicyId,
-            fiscal_sequence_policy_resolution_posture = "validated_only_no_number_allocation",
+            fiscal_sequence_policy_resolution_posture = "allocated_in_document_transaction",
+            fiscal_sequence_value = draft.FiscalSequenceValue,
+            fiscal_document_number = draft.FiscalDocumentNumber,
+            fiscal_series = draft.FiscalSeries,
+            fiscal_number_prefix_text = draft.FiscalNumberPrefixText,
+            fiscal_number_suffix_text = draft.FiscalNumberSuffixText,
+            fiscal_number_assigned_at = draft.FiscalNumberAssignedAt,
+            fiscal_number_assigned_by_ref = draft.FiscalNumberAssignedByRef,
             fiscal_document_links = draft.DocumentLinks.Select(link => new
             {
                 target_fiscal_document_id = link.TargetFiscalDocumentId,
@@ -449,7 +522,7 @@ public static class PostgresFiscalDocumentSql
         var context = new
         {
             source = "pos_server_runtime_fiscal_document_creation",
-            posture = "idempotency_only_no_fiscal_number_allocation",
+            posture = "idempotency_with_transactional_fiscal_sequence_allocation",
             idempotency_scope = idempotency.Scope,
             idempotency_key_source = "upstream_finality_ref",
             semantic_request_hash = idempotency.SemanticRequestHash,

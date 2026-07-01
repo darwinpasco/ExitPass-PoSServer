@@ -22,6 +22,15 @@ public sealed class FiscalDocumentCreationEndpointTests
         Assert.True(response.Succeeded);
         Assert.Equal("accepted", response.Code);
         Assert.Equal(StatusCodes.Status202Accepted, response.HttpStatusCode);
+        Assert.Equal(Guid.Parse("77777777-7777-7777-7777-777777777777"), response.FiscalIdentityId);
+        Assert.Equal(Guid.Parse("88888888-8888-8888-8888-888888888888"), response.FiscalSequencePolicyId);
+        Assert.Equal(1, response.FiscalSequenceValue);
+        Assert.Equal("SI-00000001-A", response.FiscalDocumentNumber);
+        Assert.Equal("sales_invoice_policy", response.FiscalSeries);
+        Assert.Equal("SI-", response.FiscalNumberPrefixText);
+        Assert.Equal("-A", response.FiscalNumberSuffixText);
+        Assert.Equal("pos-server:system", response.FiscalNumberAssignedByRef);
+        Assert.NotNull(response.FiscalNumberAssignedAt);
         Assert.NotNull(repository.LastDraft);
         Assert.Equal("payable-basis-001", repository.LastDraft.PayableBasisRef);
         Assert.Equal("central-finality-001", repository.LastDraft.UpstreamFinalityRef);
@@ -502,6 +511,8 @@ public sealed class FiscalDocumentCreationEndpointTests
         Assert.Equal(StatusCodes.Status202Accepted, second.HttpStatusCode);
         Assert.NotNull(first.FiscalDocumentId);
         Assert.Equal(first.FiscalDocumentId, second.FiscalDocumentId);
+        Assert.Equal(first.FiscalSequenceValue, second.FiscalSequenceValue);
+        Assert.Equal(first.FiscalDocumentNumber, second.FiscalDocumentNumber);
         Assert.Equal(1, repository.CreateCount);
     }
 
@@ -536,6 +547,10 @@ public sealed class FiscalDocumentCreationEndpointTests
     [InlineData(FiscalDocumentCreationErrorCode.FiscalSequencePolicyNotFound, "fiscal_sequence_policy_not_found")]
     [InlineData(FiscalDocumentCreationErrorCode.FiscalSequencePolicyAmbiguous, "fiscal_sequence_policy_ambiguous")]
     [InlineData(FiscalDocumentCreationErrorCode.FiscalSequencePolicyNotEffective, "fiscal_sequence_policy_not_effective")]
+    [InlineData(FiscalDocumentCreationErrorCode.FiscalSequenceStateNotFound, "fiscal_sequence_state_not_found")]
+    [InlineData(FiscalDocumentCreationErrorCode.FiscalSequenceStateNotEffective, "fiscal_sequence_state_not_effective")]
+    [InlineData(FiscalDocumentCreationErrorCode.FiscalNumberAllocationFailed, "fiscal_number_allocation_failed")]
+    [InlineData(FiscalDocumentCreationErrorCode.FiscalDocumentNumberFormatFailed, "fiscal_document_number_format_failed")]
     public async Task FiscalContextResolutionFailuresMapToDeterministicResponses(
         FiscalDocumentCreationErrorCode errorCode,
         string expectedCode)
@@ -551,7 +566,7 @@ public sealed class FiscalDocumentCreationEndpointTests
     }
 
     [Fact]
-    public async Task ResolvedFiscalIdentityAndPolicyReachCreationResultWithoutAllocatingNumber()
+    public async Task ResolvedFiscalIdentityPolicyAndNumberReachCreationResult()
     {
         var repository = new RecordingFiscalDocumentRepository();
         var service = new FiscalDocumentCreationService(repository);
@@ -562,6 +577,8 @@ public sealed class FiscalDocumentCreationEndpointTests
         Assert.NotNull(repository.LastDraft);
         Assert.Equal(Guid.Parse("77777777-7777-7777-7777-777777777777"), repository.LastDraft.ResolvedFiscalIdentityId);
         Assert.Equal(Guid.Parse("88888888-8888-8888-8888-888888888888"), repository.LastDraft.ResolvedFiscalSequencePolicyId);
+        Assert.Equal(1, repository.LastDraft.FiscalSequenceValue);
+        Assert.Equal("SI-00000001-A", repository.LastDraft.FiscalDocumentNumber);
     }
 
     [Fact]
@@ -878,7 +895,14 @@ public sealed class FiscalDocumentCreationEndpointTests
             var resolvedDraft = draft with
             {
                 ResolvedFiscalIdentityId = Guid.Parse("77777777-7777-7777-7777-777777777777"),
-                ResolvedFiscalSequencePolicyId = Guid.Parse("88888888-8888-8888-8888-888888888888")
+                ResolvedFiscalSequencePolicyId = Guid.Parse("88888888-8888-8888-8888-888888888888"),
+                FiscalSequenceValue = 1,
+                FiscalDocumentNumber = "SI-00000001-A",
+                FiscalSeries = "sales_invoice_policy",
+                FiscalNumberPrefixText = "SI-",
+                FiscalNumberSuffixText = "-A",
+                FiscalNumberAssignedAt = DateTimeOffset.Parse("2026-07-01T00:00:00Z"),
+                FiscalNumberAssignedByRef = "pos-server:system"
             };
             LastDraft = resolvedDraft;
             records.Add(key, (idempotency.SemanticRequestHash, resolvedDraft));

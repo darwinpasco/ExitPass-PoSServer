@@ -23,5 +23,9 @@ public enum FiscalDocumentCreationErrorCode
     FiscalIdentityNotEffective = 18,
     FiscalSequencePolicyNotFound = 19,
     FiscalSequencePolicyAmbiguous = 20,
-    FiscalSequencePolicyNotEffective = 21
+    FiscalSequencePolicyNotEffective = 21,
+    FiscalSequenceStateNotFound = 22,
+    FiscalSequenceStateNotEffective = 23,
+    FiscalNumberAllocationFailed = 24,
+    FiscalDocumentNumberFormatFailed = 25
 }

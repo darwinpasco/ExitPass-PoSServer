@@ -26,4 +26,11 @@ public sealed record FiscalDocumentDraft(
     IReadOnlyList<FiscalTotalInput> Totals,
     IReadOnlyList<FiscalDiscountReferenceInput> DiscountReferences,
     Guid? ResolvedFiscalIdentityId = null,
-    Guid? ResolvedFiscalSequencePolicyId = null);
+    Guid? ResolvedFiscalSequencePolicyId = null,
+    long? FiscalSequenceValue = null,
+    string? FiscalDocumentNumber = null,
+    string? FiscalSeries = null,
+    string? FiscalNumberPrefixText = null,
+    string? FiscalNumberSuffixText = null,
+    DateTimeOffset? FiscalNumberAssignedAt = null,
+    string? FiscalNumberAssignedByRef = null);

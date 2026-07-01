@@ -1,6 +1,7 @@
 using ExitPass.PosServer.Runtime.FiscalDocuments;
 using Npgsql;
 using NpgsqlTypes;
+using System.Globalization;
 
 namespace ExitPass.PosServer.Persistence.Postgres.FiscalDocuments;
 
@@ -59,7 +60,11 @@ public sealed class PostgresFiscalDocumentRepository : IFiscalDocumentRepository
 
                 if (linkedFiscalDocumentId is not null)
                 {
-                    var replayedDraft = draft with { FiscalDocumentId = linkedFiscalDocumentId.Value };
+                    var replayedDraft = await ReadReplayDraftAsync(
+                        connection,
+                        transaction,
+                        draft with { FiscalDocumentId = linkedFiscalDocumentId.Value },
+                        cancellationToken).ConfigureAwait(false);
                     await using var replayCommand = new NpgsqlCommand(
                         PostgresFiscalDocumentSql.UpdateIdempotencyRecordReplay,
                         connection,
@@ -79,6 +84,21 @@ public sealed class PostgresFiscalDocumentRepository : IFiscalDocumentRepository
                 {
                     ResolvedFiscalIdentityId = resolvedContext.FiscalIdentityId,
                     ResolvedFiscalSequencePolicyId = resolvedContext.FiscalSequencePolicyId
+                };
+                var assignment = await AllocateFiscalNumberAsync(
+                    connection,
+                    transaction,
+                    resolvedContext,
+                    cancellationToken).ConfigureAwait(false);
+                resolvedDraft = resolvedDraft with
+                {
+                    FiscalSequenceValue = assignment.FiscalSequenceValue,
+                    FiscalDocumentNumber = assignment.FiscalDocumentNumber,
+                    FiscalSeries = assignment.FiscalSeries,
+                    FiscalNumberPrefixText = assignment.FiscalNumberPrefixText,
+                    FiscalNumberSuffixText = assignment.FiscalNumberSuffixText,
+                    FiscalNumberAssignedAt = assignment.FiscalNumberAssignedAt,
+                    FiscalNumberAssignedByRef = assignment.FiscalNumberAssignedByRef
                 };
 
                 await using var documentCommand = new NpgsqlCommand(
@@ -163,6 +183,13 @@ public sealed class PostgresFiscalDocumentRepository : IFiscalDocumentRepository
                     await totalCommand.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
                 }
 
+                await using var sequenceStateCommand = new NpgsqlCommand(
+                    PostgresFiscalDocumentSql.UpdateFiscalSequenceStateIssued,
+                    connection,
+                    transaction);
+                AddSequenceStateUpdateParameters(sequenceStateCommand, assignment);
+                await sequenceStateCommand.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
+
                 await using var completeIdempotencyCommand = new NpgsqlCommand(
                     PostgresFiscalDocumentSql.UpdateIdempotencyRecordCompleted,
                     connection,
@@ -209,27 +236,170 @@ public sealed class PostgresFiscalDocumentRepository : IFiscalDocumentRepository
             _ => await ResolveMissingIdentityErrorAsync(connection, transaction, draft, cancellationToken).ConfigureAwait(false)
         };
 
-        var fiscalSequencePolicyIds = await ReadGuidListAsync(
+        var fiscalSequencePolicies = await ReadFiscalSequencePoliciesAsync(
             connection,
             transaction,
-            PostgresFiscalDocumentSql.SelectEligibleFiscalSequencePolicy,
-            command =>
-            {
-                command.Parameters.AddWithValue("site_pos_server_id", draft.SitePosServerId);
-                command.Parameters.AddWithValue("fiscal_document_type_code_id", draft.FiscalDocumentTypeCodeId);
-            },
+            draft,
             cancellationToken).ConfigureAwait(false);
 
-        var fiscalSequencePolicyId = fiscalSequencePolicyIds.Count switch
+        var fiscalSequencePolicy = fiscalSequencePolicies.Count switch
         {
-            1 => fiscalSequencePolicyIds[0],
+            1 => fiscalSequencePolicies[0],
             > 1 => throw new FiscalDocumentFiscalContextException(
                 FiscalDocumentCreationErrorCode.FiscalSequencePolicyAmbiguous,
                 "Fiscal document creation requires exactly one eligible fiscal sequence policy for the Site POS Server and document type."),
             _ => await ResolveMissingPolicyErrorAsync(connection, transaction, draft, cancellationToken).ConfigureAwait(false)
         };
 
-        return new FiscalDocumentResolvedContext(fiscalIdentityId, fiscalSequencePolicyId);
+        return new FiscalDocumentResolvedContext(
+            fiscalIdentityId,
+            fiscalSequencePolicy.FiscalSequencePolicyId,
+            fiscalSequencePolicy.PolicyCode,
+            fiscalSequencePolicy.PrefixText,
+            fiscalSequencePolicy.SuffixText,
+            fiscalSequencePolicy.PaddingLength);
+    }
+
+    private static async Task<FiscalDocumentNumberAssignment> AllocateFiscalNumberAsync(
+        NpgsqlConnection connection,
+        NpgsqlTransaction transaction,
+        FiscalDocumentResolvedContext resolvedContext,
+        CancellationToken cancellationToken)
+    {
+        await using var command = new NpgsqlCommand(
+            PostgresFiscalDocumentSql.SelectFiscalSequenceStateForUpdate,
+            connection,
+            transaction);
+        command.Parameters.AddWithValue("fiscal_sequence_policy_id", resolvedContext.FiscalSequencePolicyId);
+
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
+        if (!await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
+        {
+            await reader.CloseAsync().ConfigureAwait(false);
+            await ResolveMissingSequenceStateErrorAsync(
+                connection,
+                transaction,
+                resolvedContext,
+                cancellationToken).ConfigureAwait(false);
+        }
+
+        var currentSequenceValue = reader.GetInt64(0);
+        var assignedAt = ReadDateTimeOffset(reader, 1);
+        if (await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
+        {
+            throw new FiscalDocumentFiscalContextException(
+                FiscalDocumentCreationErrorCode.FiscalNumberAllocationFailed,
+                "Fiscal sequence state allocation returned multiple rows for one sequence policy.");
+        }
+
+        var nextSequenceValue = checked(currentSequenceValue + 1);
+        var sequenceText = resolvedContext.PaddingLength is > 0
+            ? nextSequenceValue.ToString(CultureInfo.InvariantCulture).PadLeft(resolvedContext.PaddingLength.Value, '0')
+            : nextSequenceValue.ToString(CultureInfo.InvariantCulture);
+        var prefixText = NormalizeOptionalPolicyText(resolvedContext.PrefixText);
+        var suffixText = NormalizeOptionalPolicyText(resolvedContext.SuffixText);
+        var fiscalDocumentNumber = string.Concat(prefixText, sequenceText, suffixText);
+        var fiscalSeries = resolvedContext.PolicyCode.Trim();
+
+        if (string.IsNullOrWhiteSpace(fiscalDocumentNumber) ||
+            string.IsNullOrWhiteSpace(fiscalSeries))
+        {
+            throw new FiscalDocumentFiscalContextException(
+                FiscalDocumentCreationErrorCode.FiscalDocumentNumberFormatFailed,
+                "Fiscal document number could not be formatted from the selected fiscal sequence policy.");
+        }
+
+        return new FiscalDocumentNumberAssignment(
+            resolvedContext.FiscalSequencePolicyId,
+            nextSequenceValue,
+            fiscalDocumentNumber,
+            fiscalSeries,
+            prefixText,
+            suffixText,
+            assignedAt,
+            "pos-server:system");
+    }
+
+    private static async Task<Guid> ResolveMissingSequenceStateErrorAsync(
+        NpgsqlConnection connection,
+        NpgsqlTransaction transaction,
+        FiscalDocumentResolvedContext resolvedContext,
+        CancellationToken cancellationToken)
+    {
+        var stateCount = await ReadScalarInt64Async(
+            connection,
+            transaction,
+            PostgresFiscalDocumentSql.CountFiscalSequenceStates,
+            command => command.Parameters.AddWithValue("fiscal_sequence_policy_id", resolvedContext.FiscalSequencePolicyId),
+            cancellationToken).ConfigureAwait(false);
+
+        throw new FiscalDocumentFiscalContextException(
+            stateCount > 0
+                ? FiscalDocumentCreationErrorCode.FiscalSequenceStateNotEffective
+                : FiscalDocumentCreationErrorCode.FiscalSequenceStateNotFound,
+            stateCount > 0
+                ? "No active and effective fiscal sequence state is eligible for the selected sequence policy."
+                : "No fiscal sequence state exists for the selected sequence policy.");
+    }
+
+    private static async Task<FiscalDocumentDraft> ReadReplayDraftAsync(
+        NpgsqlConnection connection,
+        NpgsqlTransaction transaction,
+        FiscalDocumentDraft draft,
+        CancellationToken cancellationToken)
+    {
+        await using var command = new NpgsqlCommand(
+            PostgresFiscalDocumentSql.SelectReplayFiscalDocumentNumbering,
+            connection,
+            transaction);
+        command.Parameters.AddWithValue("fiscal_document_id", draft.FiscalDocumentId);
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
+
+        if (!await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
+        {
+            throw new InvalidOperationException("Idempotency record references a fiscal document that could not be found.");
+        }
+
+        return draft with
+        {
+            ResolvedFiscalIdentityId = reader.IsDBNull(0) ? null : reader.GetGuid(0),
+            ResolvedFiscalSequencePolicyId = reader.IsDBNull(1) ? null : reader.GetGuid(1),
+            FiscalSequenceValue = reader.IsDBNull(2) ? null : reader.GetInt64(2),
+            FiscalDocumentNumber = reader.IsDBNull(3) ? null : reader.GetString(3),
+            FiscalSeries = reader.IsDBNull(4) ? null : reader.GetString(4),
+            FiscalNumberPrefixText = reader.IsDBNull(5) ? null : reader.GetString(5),
+            FiscalNumberSuffixText = reader.IsDBNull(6) ? null : reader.GetString(6),
+            FiscalNumberAssignedAt = reader.IsDBNull(7) ? null : ReadDateTimeOffset(reader, 7),
+            FiscalNumberAssignedByRef = reader.IsDBNull(8) ? null : reader.GetString(8)
+        };
+    }
+
+    private static async Task<IReadOnlyList<FiscalSequencePolicyCandidate>> ReadFiscalSequencePoliciesAsync(
+        NpgsqlConnection connection,
+        NpgsqlTransaction transaction,
+        FiscalDocumentDraft draft,
+        CancellationToken cancellationToken)
+    {
+        await using var command = new NpgsqlCommand(
+            PostgresFiscalDocumentSql.SelectEligibleFiscalSequencePolicy,
+            connection,
+            transaction);
+        command.Parameters.AddWithValue("site_pos_server_id", draft.SitePosServerId);
+        command.Parameters.AddWithValue("fiscal_document_type_code_id", draft.FiscalDocumentTypeCodeId);
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
+
+        var values = new List<FiscalSequencePolicyCandidate>();
+        while (await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
+        {
+            values.Add(new FiscalSequencePolicyCandidate(
+                reader.GetGuid(0),
+                reader.GetString(1),
+                reader.IsDBNull(2) ? null : reader.GetString(2),
+                reader.IsDBNull(3) ? null : reader.GetString(3),
+                reader.IsDBNull(4) ? null : reader.GetInt32(4)));
+        }
+
+        return values;
     }
 
     private static async Task<Guid> ResolveMissingIdentityErrorAsync(
@@ -254,7 +424,7 @@ public sealed class PostgresFiscalDocumentRepository : IFiscalDocumentRepository
                 : "No fiscal identity relationship exists for the Site POS Server.");
     }
 
-    private static async Task<Guid> ResolveMissingPolicyErrorAsync(
+    private static async Task<FiscalSequencePolicyCandidate> ResolveMissingPolicyErrorAsync(
         NpgsqlConnection connection,
         NpgsqlTransaction transaction,
         FiscalDocumentDraft draft,
@@ -352,6 +522,14 @@ public sealed class PostgresFiscalDocumentRepository : IFiscalDocumentRepository
         command.Parameters.AddWithValue("fiscal_identity_id", (object?)draft.ResolvedFiscalIdentityId ?? DBNull.Value);
         command.Parameters.AddWithValue("fiscal_document_type_code_id", draft.FiscalDocumentTypeCodeId);
         command.Parameters.AddWithValue("fiscal_document_status_code_id", draft.FiscalDocumentStatusCodeId);
+        command.Parameters.AddWithValue("fiscal_sequence_policy_id", (object?)draft.ResolvedFiscalSequencePolicyId ?? DBNull.Value);
+        command.Parameters.AddWithValue("fiscal_sequence_value", (object?)draft.FiscalSequenceValue ?? DBNull.Value);
+        command.Parameters.AddWithValue("fiscal_document_number", (object?)draft.FiscalDocumentNumber ?? DBNull.Value);
+        command.Parameters.AddWithValue("fiscal_series", (object?)draft.FiscalSeries ?? DBNull.Value);
+        command.Parameters.AddWithValue("fiscal_number_prefix_text", (object?)draft.FiscalNumberPrefixText ?? DBNull.Value);
+        command.Parameters.AddWithValue("fiscal_number_suffix_text", (object?)draft.FiscalNumberSuffixText ?? DBNull.Value);
+        command.Parameters.AddWithValue("fiscal_number_assigned_at", (object?)draft.FiscalNumberAssignedAt ?? DBNull.Value);
+        command.Parameters.AddWithValue("fiscal_number_assigned_by_ref", (object?)draft.FiscalNumberAssignedByRef ?? DBNull.Value);
         command.Parameters.AddWithValue("central_pms_parking_session_ref", (object?)draft.CentralPmsParkingSessionRef ?? DBNull.Value);
         command.Parameters.AddWithValue("central_pms_payment_attempt_ref", (object?)draft.CentralPmsPaymentAttemptRef ?? DBNull.Value);
         command.Parameters.AddWithValue("central_pms_payment_confirmation_ref", (object?)draft.CentralPmsPaymentConfirmationRef ?? DBNull.Value);
@@ -362,6 +540,36 @@ public sealed class PostgresFiscalDocumentRepository : IFiscalDocumentRepository
         var contextParameter = command.Parameters.Add("document_context", NpgsqlDbType.Jsonb);
         contextParameter.Value = PostgresFiscalDocumentSql.CreateDocumentContextJson(draft);
     }
+
+    private static void AddSequenceStateUpdateParameters(
+        NpgsqlCommand command,
+        FiscalDocumentNumberAssignment assignment)
+    {
+        command.Parameters.AddWithValue("fiscal_sequence_policy_id", assignment.FiscalSequencePolicyId);
+        command.Parameters.AddWithValue("fiscal_sequence_value", assignment.FiscalSequenceValue);
+        command.Parameters.AddWithValue("fiscal_number_assigned_at", assignment.FiscalNumberAssignedAt);
+    }
+
+    private static DateTimeOffset ReadDateTimeOffset(NpgsqlDataReader reader, int ordinal)
+    {
+        var value = reader.GetValue(ordinal);
+        return value switch
+        {
+            DateTimeOffset dateTimeOffset => dateTimeOffset,
+            DateTime dateTime => new DateTimeOffset(DateTime.SpecifyKind(dateTime, DateTimeKind.Utc)),
+            _ => throw new InvalidOperationException("PostgreSQL timestamp value could not be read.")
+        };
+    }
+
+    private static string? NormalizeOptionalPolicyText(string? value) =>
+        string.IsNullOrWhiteSpace(value) ? null : value.Trim();
+
+    private sealed record FiscalSequencePolicyCandidate(
+        Guid FiscalSequencePolicyId,
+        string PolicyCode,
+        string? PrefixText,
+        string? SuffixText,
+        int? PaddingLength);
 
     private static void AddStatusHistoryParameters(NpgsqlCommand command, FiscalDocumentDraft draft)
     {
