@@ -19,6 +19,17 @@ public static class FiscalDocumentEndpointRouteBuilderExtensions
             return Results.Json(response, statusCode: response.HttpStatusCode);
         });
 
+        group.MapGet("/{fiscalDocumentId:guid}", async (
+            Guid fiscalDocumentId,
+            FiscalDocumentReadService service,
+            CancellationToken cancellationToken) =>
+        {
+            var response = await FiscalDocumentReadEndpoint.GetByIdAsync(fiscalDocumentId, service, cancellationToken)
+                .ConfigureAwait(false);
+
+            return Results.Json(response, statusCode: response.HttpStatusCode);
+        });
+
         return group;
     }
 }

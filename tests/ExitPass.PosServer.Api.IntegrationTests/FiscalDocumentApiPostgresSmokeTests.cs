@@ -57,10 +57,37 @@ public sealed class FiscalDocumentApiPostgresSmokeTests
         Assert.Equal("accepted", body.Code);
         Assert.NotNull(body.FiscalDocumentId);
 
+        var fiscalDocumentId = body.FiscalDocumentId.Value;
+        using var getResponse = await client.GetAsync($"/v1/fiscal-documents/{fiscalDocumentId}");
+        var getBody = await getResponse.Content.ReadFromJsonAsync<GetFiscalDocumentResponse>();
+
+        Assert.Equal(HttpStatusCode.OK, getResponse.StatusCode);
+        Assert.NotNull(getBody);
+        Assert.True(getBody.Succeeded);
+        Assert.Equal("found", getBody.Code);
+        Assert.NotNull(getBody.Document);
+        Assert.Equal(fiscalDocumentId, getBody.Document.FiscalDocumentId);
+        Assert.Single(getBody.Document.StatusHistory);
+        Assert.Empty(getBody.Document.DocumentLinks);
+        Assert.Single(getBody.Document.Lines);
+        Assert.Single(getBody.Document.Tenders);
+        Assert.Single(getBody.Document.TaxDetails);
+        Assert.Single(getBody.Document.DiscountPrivilegeDetails);
+        Assert.Single(getBody.Document.Totals);
+        Assert.Equal("central-finality-success", getBody.Document.PaymentFinalityRef);
+        Assert.Equal("evidence-ref-success", getBody.Document.DiscountPrivilegeDetails[0].EvidenceRef);
+
+        using var missingGetResponse = await client.GetAsync($"/v1/fiscal-documents/{Guid.Parse("99999999-9999-9999-9999-999999999999")}");
+        var missingGetBody = await missingGetResponse.Content.ReadFromJsonAsync<GetFiscalDocumentResponse>();
+
+        Assert.Equal(HttpStatusCode.NotFound, missingGetResponse.StatusCode);
+        Assert.NotNull(missingGetBody);
+        Assert.False(missingGetBody.Succeeded);
+        Assert.Equal("fiscal_document_not_found", missingGetBody.Code);
+
         await using var connection = new NpgsqlConnection(connectionString);
         await connection.OpenAsync();
 
-        var fiscalDocumentId = body.FiscalDocumentId.Value;
         Assert.Equal(1, await CountAsync(connection, "pos.fiscal_documents", "fiscal_document_id = @id", "id", fiscalDocumentId));
         Assert.Equal(1, await CountAsync(connection, "pos.fiscal_document_status_history", "fiscal_document_id = @id", "id", fiscalDocumentId));
         Assert.Equal(0, await CountAsync(connection, "pos.fiscal_document_links", "source_fiscal_document_id = @id", "id", fiscalDocumentId));
