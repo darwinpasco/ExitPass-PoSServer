@@ -25,6 +25,10 @@ public sealed class FiscalDocumentApiPostgresSmokeTests
     private static readonly Guid FiscalTaxClassificationCodeId = Guid.Parse("10000000-0000-0000-0000-000000000402");
     private static readonly Guid FiscalDiscountPrivilegeTypeCodeId = Guid.Parse("10000000-0000-0000-0000-000000000501");
     private static readonly Guid FiscalTotalTypeCodeId = Guid.Parse("10000000-0000-0000-0000-000000000601");
+    private static readonly Guid FiscalIdentityId = Guid.Parse("10000000-0000-0000-0000-000000000701");
+    private static readonly Guid FiscalSequenceFamilyCodeId = Guid.Parse("10000000-0000-0000-0000-000000000801");
+    private static readonly Guid FiscalSequencePolicyStatusCodeId = Guid.Parse("10000000-0000-0000-0000-000000000802");
+    private static readonly Guid FiscalSequencePolicyId = Guid.Parse("10000000-0000-0000-0000-000000000803");
 
     private readonly ITestOutputHelper output;
 
@@ -76,6 +80,15 @@ public sealed class FiscalDocumentApiPostgresSmokeTests
         Assert.Single(getBody.Document.Totals);
         Assert.Equal("central-finality-success", getBody.Document.PaymentFinalityRef);
         Assert.Equal("evidence-ref-success", getBody.Document.DiscountPrivilegeDetails[0].EvidenceRef);
+        Assert.Null(getBody.Document.FiscalIdentityId);
+        Assert.Null(getBody.Document.FiscalSequencePolicyId);
+        Assert.Null(getBody.Document.FiscalSequenceValue);
+        Assert.Null(getBody.Document.FiscalDocumentNumber);
+        Assert.Null(getBody.Document.FiscalSeries);
+        Assert.Null(getBody.Document.FiscalNumberPrefixText);
+        Assert.Null(getBody.Document.FiscalNumberSuffixText);
+        Assert.Null(getBody.Document.FiscalNumberAssignedAt);
+        Assert.Null(getBody.Document.FiscalNumberAssignedByRef);
 
         using var missingGetResponse = await client.GetAsync($"/v1/fiscal-documents/{Guid.Parse("99999999-9999-9999-9999-999999999999")}");
         var missingGetBody = await missingGetResponse.Content.ReadFromJsonAsync<GetFiscalDocumentResponse>();
@@ -105,6 +118,26 @@ public sealed class FiscalDocumentApiPostgresSmokeTests
             connection,
             "select evidence_ref from pos.fiscal_discount_privilege_details where fiscal_document_id = @id",
             fiscalDocumentId));
+
+        var assignedAt = DateTimeOffset.Parse("2026-07-01T08:15:00Z");
+        await UpdateDisposableFiscalNumberingAsync(connection, fiscalDocumentId, assignedAt);
+
+        using var numberedGetResponse = await client.GetAsync($"/v1/fiscal-documents/{fiscalDocumentId}");
+        var numberedGetBody = await numberedGetResponse.Content.ReadFromJsonAsync<GetFiscalDocumentResponse>();
+
+        Assert.Equal(HttpStatusCode.OK, numberedGetResponse.StatusCode);
+        Assert.NotNull(numberedGetBody);
+        Assert.NotNull(numberedGetBody.Document);
+        Assert.Equal(FiscalIdentityId, numberedGetBody.Document.FiscalIdentityId);
+        Assert.Equal(FiscalSequencePolicyId, numberedGetBody.Document.FiscalSequencePolicyId);
+        Assert.Equal(42, numberedGetBody.Document.FiscalSequenceValue);
+        Assert.Equal("SI-00000042", numberedGetBody.Document.FiscalDocumentNumber);
+        Assert.Equal("SI", numberedGetBody.Document.FiscalSeries);
+        Assert.Equal("SI-", numberedGetBody.Document.FiscalNumberPrefixText);
+        Assert.Equal("-A", numberedGetBody.Document.FiscalNumberSuffixText);
+        Assert.Equal(assignedAt, numberedGetBody.Document.FiscalNumberAssignedAt);
+        Assert.Equal("pos-server-smoke-fixture", numberedGetBody.Document.FiscalNumberAssignedByRef);
+
         Assert.Equal(0, await CountTextMarkerAsync(connection, "raw_id"));
         Assert.Equal(0, await CountTextMarkerAsync(connection, "payment_payload"));
 
@@ -325,6 +358,71 @@ public sealed class FiscalDocumentApiPostgresSmokeTests
                 updated_at = current_timestamp;
             """,
             command => command.Parameters.AddWithValue("site_pos_server_id", SitePosServerId));
+
+        await ExecuteSqlAsync(
+            connection,
+            """
+            insert into pos.fiscal_identities (
+                fiscal_identity_id,
+                fiscal_identity_code,
+                taxpayer_display_name,
+                registered_business_display_name,
+                metadata_json,
+                is_active
+            ) values (
+                @fiscal_identity_id,
+                'api-smoke-fiscal-identity',
+                'API Smoke Taxpayer',
+                'API Smoke Registered Business',
+                '{}'::jsonb,
+                true
+            ) on conflict (fiscal_identity_id) do update set
+                taxpayer_display_name = excluded.taxpayer_display_name,
+                updated_at = current_timestamp;
+            """,
+            command => command.Parameters.AddWithValue("fiscal_identity_id", FiscalIdentityId));
+
+        await ExecuteSqlAsync(
+            connection,
+            """
+            insert into pos.fiscal_sequence_policies (
+                fiscal_sequence_policy_id,
+                site_pos_server_id,
+                sequence_family_code_id,
+                document_type_code_id,
+                policy_code,
+                display_name,
+                prefix_text,
+                suffix_text,
+                padding_length,
+                current_policy_status_code_id,
+                effective_start_at,
+                policy_context
+            ) values (
+                @fiscal_sequence_policy_id,
+                @site_pos_server_id,
+                @sequence_family_code_id,
+                @document_type_code_id,
+                'api-smoke-sequence-policy',
+                'API Smoke Sequence Policy',
+                'SI-',
+                '-A',
+                8,
+                @policy_status_code_id,
+                '2026-01-01T00:00:00Z',
+                '{}'::jsonb
+            ) on conflict (fiscal_sequence_policy_id) do update set
+                display_name = excluded.display_name,
+                updated_at = current_timestamp;
+            """,
+            command =>
+            {
+                command.Parameters.AddWithValue("fiscal_sequence_policy_id", FiscalSequencePolicyId);
+                command.Parameters.AddWithValue("site_pos_server_id", SitePosServerId);
+                command.Parameters.AddWithValue("sequence_family_code_id", FiscalSequenceFamilyCodeId);
+                command.Parameters.AddWithValue("document_type_code_id", FiscalDocumentTypeCodeId);
+                command.Parameters.AddWithValue("policy_status_code_id", FiscalSequencePolicyStatusCodeId);
+            });
     }
 
     private static async Task<WebApplication> StartApiAsync(string connectionString)
@@ -511,8 +609,56 @@ public sealed class FiscalDocumentApiPostgresSmokeTests
             FiscalTotalTypeCodeId,
             "payable_total_smoke",
             "Payable Total Smoke",
-            "Disposable smoke-test payable total posture.")
+            "Disposable smoke-test payable total posture."),
+        new(
+            Guid.Parse("20000000-0000-0000-0000-000000000801"),
+            "api_smoke_sequence_family",
+            "API Smoke Sequence Family",
+            "Disposable smoke-test sequence family code set.",
+            FiscalSequenceFamilyCodeId,
+            "sales_invoice_sequence_smoke",
+            "Sales Invoice Sequence Smoke",
+            "Disposable smoke-test sequence family posture."),
+        new(
+            Guid.Parse("20000000-0000-0000-0000-000000000802"),
+            "api_smoke_sequence_policy_status",
+            "API Smoke Sequence Policy Status",
+            "Disposable smoke-test sequence policy status code set.",
+            FiscalSequencePolicyStatusCodeId,
+            "active_smoke",
+            "Active Smoke",
+            "Disposable smoke-test sequence policy active posture.")
     ];
+
+    private static async Task UpdateDisposableFiscalNumberingAsync(
+        NpgsqlConnection connection,
+        Guid fiscalDocumentId,
+        DateTimeOffset assignedAt)
+    {
+        await ExecuteSqlAsync(
+            connection,
+            """
+            update pos.fiscal_documents
+            set fiscal_identity_id = @fiscal_identity_id,
+                fiscal_sequence_policy_id = @fiscal_sequence_policy_id,
+                fiscal_sequence_value = 42,
+                fiscal_document_number = 'SI-00000042',
+                fiscal_series = 'SI',
+                fiscal_number_prefix_text = 'SI-',
+                fiscal_number_suffix_text = '-A',
+                fiscal_number_assigned_at = @assigned_at,
+                fiscal_number_assigned_by_ref = 'pos-server-smoke-fixture',
+                updated_at = current_timestamp
+            where fiscal_document_id = @fiscal_document_id;
+            """,
+            command =>
+            {
+                command.Parameters.AddWithValue("fiscal_document_id", fiscalDocumentId);
+                command.Parameters.AddWithValue("fiscal_identity_id", FiscalIdentityId);
+                command.Parameters.AddWithValue("fiscal_sequence_policy_id", FiscalSequencePolicyId);
+                command.Parameters.AddWithValue("assigned_at", assignedAt);
+            });
+    }
 
     private static IEnumerable<string> ProhibitedRuntimeTables() =>
     [

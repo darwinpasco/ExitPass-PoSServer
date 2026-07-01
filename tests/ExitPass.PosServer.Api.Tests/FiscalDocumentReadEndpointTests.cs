@@ -26,6 +26,60 @@ public sealed class FiscalDocumentReadEndpointTests
     }
 
     [Fact]
+    public async Task ExistingDocumentCanReturnPopulatedFiscalNumberingFields()
+    {
+        var assignedAt = DateTimeOffset.Parse("2026-07-01T08:15:00Z");
+        var document = ValidReadModel() with
+        {
+            FiscalIdentityId = Guid.Parse("eeeeeeee-eeee-eeee-eeee-eeeeeeeeeeee"),
+            FiscalSequencePolicyId = Guid.Parse("ffffffff-ffff-ffff-ffff-ffffffffffff"),
+            FiscalSequenceValue = 42,
+            FiscalDocumentNumber = "SI-00000042",
+            FiscalSeries = "SI",
+            FiscalNumberPrefixText = "SI-",
+            FiscalNumberSuffixText = "-A",
+            FiscalNumberAssignedAt = assignedAt,
+            FiscalNumberAssignedByRef = "pos-server-numbering-service"
+        };
+        var service = new FiscalDocumentReadService(new StubFiscalDocumentReader(document));
+
+        var response = await FiscalDocumentReadEndpoint.GetByIdAsync(document.FiscalDocumentId, service);
+
+        Assert.True(response.Succeeded);
+        Assert.NotNull(response.Document);
+        Assert.Equal(Guid.Parse("eeeeeeee-eeee-eeee-eeee-eeeeeeeeeeee"), response.Document.FiscalIdentityId);
+        Assert.Equal(Guid.Parse("ffffffff-ffff-ffff-ffff-ffffffffffff"), response.Document.FiscalSequencePolicyId);
+        Assert.Equal(42, response.Document.FiscalSequenceValue);
+        Assert.Equal("SI-00000042", response.Document.FiscalDocumentNumber);
+        Assert.Equal("SI", response.Document.FiscalSeries);
+        Assert.Equal("SI-", response.Document.FiscalNumberPrefixText);
+        Assert.Equal("-A", response.Document.FiscalNumberSuffixText);
+        Assert.Equal(assignedAt, response.Document.FiscalNumberAssignedAt);
+        Assert.Equal("pos-server-numbering-service", response.Document.FiscalNumberAssignedByRef);
+    }
+
+    [Fact]
+    public async Task ExistingDocumentCanReturnNullFiscalNumberingFields()
+    {
+        var document = ValidReadModel();
+        var service = new FiscalDocumentReadService(new StubFiscalDocumentReader(document));
+
+        var response = await FiscalDocumentReadEndpoint.GetByIdAsync(document.FiscalDocumentId, service);
+
+        Assert.True(response.Succeeded);
+        Assert.NotNull(response.Document);
+        Assert.Null(response.Document.FiscalIdentityId);
+        Assert.Null(response.Document.FiscalSequencePolicyId);
+        Assert.Null(response.Document.FiscalSequenceValue);
+        Assert.Null(response.Document.FiscalDocumentNumber);
+        Assert.Null(response.Document.FiscalSeries);
+        Assert.Null(response.Document.FiscalNumberPrefixText);
+        Assert.Null(response.Document.FiscalNumberSuffixText);
+        Assert.Null(response.Document.FiscalNumberAssignedAt);
+        Assert.Null(response.Document.FiscalNumberAssignedByRef);
+    }
+
+    [Fact]
     public async Task MissingDocumentMapsToDeterministicNotFound()
     {
         var documentId = Guid.Parse("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa");
@@ -170,8 +224,17 @@ public sealed class FiscalDocumentReadEndpointTests
             Guid.Parse("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"),
             Guid.Parse("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb"),
             null,
+            null,
             Guid.Parse("cccccccc-cccc-cccc-cccc-cccccccccccc"),
             Guid.Parse("dddddddd-dddd-dddd-dddd-dddddddddddd"),
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
             "parking-session-001",
             "payment-attempt-001",
             "payment-confirmation-001",
