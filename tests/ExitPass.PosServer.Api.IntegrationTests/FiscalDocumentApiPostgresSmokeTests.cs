@@ -80,7 +80,7 @@ public sealed class FiscalDocumentApiPostgresSmokeTests
         Assert.Single(getBody.Document.Totals);
         Assert.Equal("central-finality-success", getBody.Document.PaymentFinalityRef);
         Assert.Equal("evidence-ref-success", getBody.Document.DiscountPrivilegeDetails[0].EvidenceRef);
-        Assert.Null(getBody.Document.FiscalIdentityId);
+        Assert.Equal(FiscalIdentityId, getBody.Document.FiscalIdentityId);
         Assert.Null(getBody.Document.FiscalSequencePolicyId);
         Assert.Null(getBody.Document.FiscalSequenceValue);
         Assert.Null(getBody.Document.FiscalDocumentNumber);
@@ -381,6 +381,29 @@ public sealed class FiscalDocumentApiPostgresSmokeTests
                 updated_at = current_timestamp;
             """,
             command => command.Parameters.AddWithValue("fiscal_identity_id", FiscalIdentityId));
+
+        await ExecuteSqlAsync(
+            connection,
+            """
+            insert into pos.site_pos_server_fiscal_identity_history (
+                site_pos_server_fiscal_identity_history_id,
+                site_pos_server_id,
+                fiscal_identity_id,
+                effective_start_at
+            ) values (
+                @history_id,
+                @site_pos_server_id,
+                @fiscal_identity_id,
+                '2026-01-01T00:00:00Z'
+            ) on conflict (site_pos_server_id, fiscal_identity_id, effective_start_at) do update set
+                updated_at = current_timestamp;
+            """,
+            command =>
+            {
+                command.Parameters.AddWithValue("history_id", Guid.Parse("10000000-0000-0000-0000-000000000702"));
+                command.Parameters.AddWithValue("site_pos_server_id", SitePosServerId);
+                command.Parameters.AddWithValue("fiscal_identity_id", FiscalIdentityId);
+            });
 
         await ExecuteSqlAsync(
             connection,

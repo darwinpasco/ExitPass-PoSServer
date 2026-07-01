@@ -244,6 +244,12 @@ public sealed class FiscalDocumentCreationService
                 FiscalDocumentCreationErrorCode.IdempotencyConflict,
                 ex.Message);
         }
+        catch (FiscalDocumentFiscalContextException ex)
+        {
+            return FiscalDocumentCreationResult.Failure(
+                ex.ErrorCode,
+                ex.Message);
+        }
     }
 
     private static string? NormalizeOptionalReference(string? value) =>

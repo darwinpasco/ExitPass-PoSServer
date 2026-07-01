@@ -24,4 +24,6 @@ public sealed record FiscalDocumentDraft(
     IReadOnlyList<FiscalTaxDetailInput> TaxDetails,
     IReadOnlyList<FiscalDiscountPrivilegeDetailInput> DiscountPrivilegeDetails,
     IReadOnlyList<FiscalTotalInput> Totals,
-    IReadOnlyList<FiscalDiscountReferenceInput> DiscountReferences);
+    IReadOnlyList<FiscalDiscountReferenceInput> DiscountReferences,
+    Guid? ResolvedFiscalIdentityId = null,
+    Guid? ResolvedFiscalSequencePolicyId = null);
