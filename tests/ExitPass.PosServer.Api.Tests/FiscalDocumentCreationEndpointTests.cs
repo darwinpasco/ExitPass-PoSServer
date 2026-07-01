@@ -529,6 +529,41 @@ public sealed class FiscalDocumentCreationEndpointTests
         Assert.Equal(1, repository.CreateCount);
     }
 
+    [Theory]
+    [InlineData(FiscalDocumentCreationErrorCode.FiscalIdentityNotFound, "fiscal_identity_not_found")]
+    [InlineData(FiscalDocumentCreationErrorCode.FiscalIdentityAmbiguous, "fiscal_identity_ambiguous")]
+    [InlineData(FiscalDocumentCreationErrorCode.FiscalIdentityNotEffective, "fiscal_identity_not_effective")]
+    [InlineData(FiscalDocumentCreationErrorCode.FiscalSequencePolicyNotFound, "fiscal_sequence_policy_not_found")]
+    [InlineData(FiscalDocumentCreationErrorCode.FiscalSequencePolicyAmbiguous, "fiscal_sequence_policy_ambiguous")]
+    [InlineData(FiscalDocumentCreationErrorCode.FiscalSequencePolicyNotEffective, "fiscal_sequence_policy_not_effective")]
+    public async Task FiscalContextResolutionFailuresMapToDeterministicResponses(
+        FiscalDocumentCreationErrorCode errorCode,
+        string expectedCode)
+    {
+        var service = new FiscalDocumentCreationService(new RecordingFiscalDocumentRepository(errorCode));
+
+        var response = await FiscalDocumentCreationEndpoint.CreateAsync(ValidRequest(), service);
+
+        Assert.False(response.Succeeded);
+        Assert.Equal(expectedCode, response.Code);
+        Assert.Equal(StatusCodes.Status400BadRequest, response.HttpStatusCode);
+        Assert.Null(response.FiscalDocumentId);
+    }
+
+    [Fact]
+    public async Task ResolvedFiscalIdentityAndPolicyReachCreationResultWithoutAllocatingNumber()
+    {
+        var repository = new RecordingFiscalDocumentRepository();
+        var service = new FiscalDocumentCreationService(repository);
+
+        var response = await FiscalDocumentCreationEndpoint.CreateAsync(ValidRequest(), service);
+
+        Assert.True(response.Succeeded);
+        Assert.NotNull(repository.LastDraft);
+        Assert.Equal(Guid.Parse("77777777-7777-7777-7777-777777777777"), repository.LastDraft.ResolvedFiscalIdentityId);
+        Assert.Equal(Guid.Parse("88888888-8888-8888-8888-888888888888"), repository.LastDraft.ResolvedFiscalSequencePolicyId);
+    }
+
     [Fact]
     public async Task PersistenceNotConfiguredFailsClosed()
     {
@@ -805,6 +840,12 @@ public sealed class FiscalDocumentCreationEndpointTests
     private sealed class RecordingFiscalDocumentRepository : IFiscalDocumentRepository
     {
         private readonly Dictionary<(string Scope, string Key), (string Hash, FiscalDocumentDraft Draft)> records = [];
+        private readonly FiscalDocumentCreationErrorCode? forcedFailure;
+
+        public RecordingFiscalDocumentRepository(FiscalDocumentCreationErrorCode? forcedFailure = null)
+        {
+            this.forcedFailure = forcedFailure;
+        }
 
         public int CreateCount { get; private set; }
         public FiscalDocumentDraft? LastDraft { get; private set; }
@@ -826,10 +867,22 @@ public sealed class FiscalDocumentCreationEndpointTests
                 return Task.FromResult(FiscalDocumentPersistenceResult.Replayed(existing.Draft));
             }
 
+            if (forcedFailure is not null)
+            {
+                throw new FiscalDocumentFiscalContextException(
+                    forcedFailure.Value,
+                    "Fiscal context resolution failed closed.");
+            }
+
             CreateCount++;
-            LastDraft = draft;
-            records.Add(key, (idempotency.SemanticRequestHash, draft));
-            return Task.FromResult(FiscalDocumentPersistenceResult.Created(draft));
+            var resolvedDraft = draft with
+            {
+                ResolvedFiscalIdentityId = Guid.Parse("77777777-7777-7777-7777-777777777777"),
+                ResolvedFiscalSequencePolicyId = Guid.Parse("88888888-8888-8888-8888-888888888888")
+            };
+            LastDraft = resolvedDraft;
+            records.Add(key, (idempotency.SemanticRequestHash, resolvedDraft));
+            return Task.FromResult(FiscalDocumentPersistenceResult.Created(resolvedDraft));
         }
     }
 }

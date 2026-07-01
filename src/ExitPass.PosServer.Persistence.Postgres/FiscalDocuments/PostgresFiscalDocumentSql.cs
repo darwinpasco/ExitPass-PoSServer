@@ -5,6 +5,66 @@ namespace ExitPass.PosServer.Persistence.Postgres.FiscalDocuments;
 
 public static class PostgresFiscalDocumentSql
 {
+    public const string SelectEligibleFiscalIdentity = """
+        select
+            history.fiscal_identity_id
+        from pos.site_pos_server_fiscal_identity_history history
+        inner join pos.site_pos_servers site
+            on site.site_pos_server_id = history.site_pos_server_id
+        inner join pos.fiscal_identities identity
+            on identity.fiscal_identity_id = history.fiscal_identity_id
+        left join pos.controlled_codes identity_status
+            on identity_status.controlled_code_id = identity.fiscal_identity_status_code_id
+        where history.site_pos_server_id = @site_pos_server_id
+          and site.is_active = true
+          and identity.is_active = true
+          and history.effective_start_at <= current_timestamp
+          and (history.effective_end_at is null or history.effective_end_at > current_timestamp)
+          and (
+              identity.fiscal_identity_status_code_id is null
+              or (
+                  identity_status.is_active = true
+                  and (identity_status.effective_start_at is null or identity_status.effective_start_at <= current_timestamp)
+                  and (identity_status.effective_end_at is null or identity_status.effective_end_at > current_timestamp)
+              )
+          )
+        order by history.effective_start_at desc, history.fiscal_identity_id
+        limit 2;
+        """;
+
+    public const string CountFiscalIdentityRelationships = """
+        select count(*)
+        from pos.site_pos_server_fiscal_identity_history
+        where site_pos_server_id = @site_pos_server_id;
+        """;
+
+    public const string SelectEligibleFiscalSequencePolicy = """
+        select
+            policy.fiscal_sequence_policy_id
+        from pos.fiscal_sequence_policies policy
+        inner join pos.site_pos_servers site
+            on site.site_pos_server_id = policy.site_pos_server_id
+        inner join pos.controlled_codes policy_status
+            on policy_status.controlled_code_id = policy.current_policy_status_code_id
+        where policy.site_pos_server_id = @site_pos_server_id
+          and site.is_active = true
+          and policy.document_type_code_id = @fiscal_document_type_code_id
+          and policy.effective_start_at <= current_timestamp
+          and (policy.effective_end_at is null or policy.effective_end_at > current_timestamp)
+          and policy_status.is_active = true
+          and (policy_status.effective_start_at is null or policy_status.effective_start_at <= current_timestamp)
+          and (policy_status.effective_end_at is null or policy_status.effective_end_at > current_timestamp)
+        order by policy.effective_start_at desc, policy.fiscal_sequence_policy_id
+        limit 2;
+        """;
+
+    public const string CountFiscalSequencePolicies = """
+        select count(*)
+        from pos.fiscal_sequence_policies
+        where site_pos_server_id = @site_pos_server_id
+          and document_type_code_id = @fiscal_document_type_code_id;
+        """;
+
     public const string InsertIdempotencyRecord = """
         insert into pos.idempotency_records (
             idempotency_record_id,
@@ -67,6 +127,7 @@ public static class PostgresFiscalDocumentSql
             fiscal_document_id,
             site_pos_server_id,
             channel_terminal_id,
+            fiscal_identity_id,
             fiscal_document_type_code_id,
             fiscal_document_status_code_id,
             central_pms_parking_session_ref,
@@ -83,6 +144,7 @@ public static class PostgresFiscalDocumentSql
             @fiscal_document_id,
             @site_pos_server_id,
             @channel_terminal_id,
+            @fiscal_identity_id,
             @fiscal_document_type_code_id,
             @fiscal_document_status_code_id,
             @central_pms_parking_session_ref,
@@ -314,6 +376,9 @@ public static class PostgresFiscalDocumentSql
             upstream_finality_ref = draft.UpstreamFinalityRef,
             currency_code = draft.CurrencyCode,
             payable_amount_minor_units = draft.PayableAmountMinorUnits,
+            resolved_fiscal_identity_id = draft.ResolvedFiscalIdentityId,
+            resolved_fiscal_sequence_policy_id = draft.ResolvedFiscalSequencePolicyId,
+            fiscal_sequence_policy_resolution_posture = "validated_only_no_number_allocation",
             fiscal_document_links = draft.DocumentLinks.Select(link => new
             {
                 target_fiscal_document_id = link.TargetFiscalDocumentId,

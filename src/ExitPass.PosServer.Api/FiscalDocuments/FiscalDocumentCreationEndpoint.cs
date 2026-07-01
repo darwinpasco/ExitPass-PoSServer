@@ -213,6 +213,12 @@ public static class FiscalDocumentCreationEndpoint
             FiscalDocumentCreationErrorCode.InvalidFiscalTotal => "invalid_fiscal_total",
             FiscalDocumentCreationErrorCode.SensitiveTotalPayloadNotAllowed => "sensitive_total_payload_not_allowed",
             FiscalDocumentCreationErrorCode.IdempotencyConflict => "fiscal_document_idempotency_conflict",
+            FiscalDocumentCreationErrorCode.FiscalIdentityNotFound => "fiscal_identity_not_found",
+            FiscalDocumentCreationErrorCode.FiscalIdentityAmbiguous => "fiscal_identity_ambiguous",
+            FiscalDocumentCreationErrorCode.FiscalIdentityNotEffective => "fiscal_identity_not_effective",
+            FiscalDocumentCreationErrorCode.FiscalSequencePolicyNotFound => "fiscal_sequence_policy_not_found",
+            FiscalDocumentCreationErrorCode.FiscalSequencePolicyAmbiguous => "fiscal_sequence_policy_ambiguous",
+            FiscalDocumentCreationErrorCode.FiscalSequencePolicyNotEffective => "fiscal_sequence_policy_not_effective",
             _ => "fiscal_document_creation_failed"
         };
 }
