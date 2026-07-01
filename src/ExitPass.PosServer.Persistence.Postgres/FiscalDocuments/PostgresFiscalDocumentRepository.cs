@@ -13,7 +13,10 @@ public sealed class PostgresFiscalDocumentRepository : IFiscalDocumentRepository
         this.dataSource = dataSource ?? throw new ArgumentNullException(nameof(dataSource));
     }
 
-    public async Task<FiscalDocumentDraft> CreateAsync(FiscalDocumentDraft draft, CancellationToken cancellationToken)
+    public async Task<FiscalDocumentPersistenceResult> CreateAsync(
+        FiscalDocumentDraft draft,
+        FiscalIssuanceIdempotency idempotency,
+        CancellationToken cancellationToken)
     {
         try
         {
@@ -22,6 +25,51 @@ public sealed class PostgresFiscalDocumentRepository : IFiscalDocumentRepository
 
             try
             {
+                await using var insertIdempotencyCommand = new NpgsqlCommand(
+                    PostgresFiscalDocumentSql.InsertIdempotencyRecord,
+                    connection,
+                    transaction);
+                AddInsertIdempotencyParameters(insertIdempotencyCommand, draft, idempotency);
+                await insertIdempotencyCommand.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
+
+                await using var selectIdempotencyCommand = new NpgsqlCommand(
+                    PostgresFiscalDocumentSql.SelectIdempotencyRecordForUpdate,
+                    connection,
+                    transaction);
+                AddIdempotencyKeyParameters(selectIdempotencyCommand, idempotency);
+                await using var idempotencyReader = await selectIdempotencyCommand
+                    .ExecuteReaderAsync(cancellationToken)
+                    .ConfigureAwait(false);
+
+                if (!await idempotencyReader.ReadAsync(cancellationToken).ConfigureAwait(false))
+                {
+                    throw new InvalidOperationException("Fiscal document idempotency record was not available after insert.");
+                }
+
+                var existingSemanticHash = idempotencyReader.GetString(0);
+                var linkedFiscalDocumentId = idempotencyReader.IsDBNull(1)
+                    ? (Guid?)null
+                    : idempotencyReader.GetGuid(1);
+                await idempotencyReader.CloseAsync().ConfigureAwait(false);
+
+                if (!string.Equals(existingSemanticHash, idempotency.SemanticRequestHash, StringComparison.Ordinal))
+                {
+                    throw new FiscalDocumentIdempotencyConflictException();
+                }
+
+                if (linkedFiscalDocumentId is not null)
+                {
+                    var replayedDraft = draft with { FiscalDocumentId = linkedFiscalDocumentId.Value };
+                    await using var replayCommand = new NpgsqlCommand(
+                        PostgresFiscalDocumentSql.UpdateIdempotencyRecordReplay,
+                        connection,
+                        transaction);
+                    AddIdempotencyCompletionParameters(replayCommand, replayedDraft, idempotency);
+                    await replayCommand.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
+                    await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
+                    return FiscalDocumentPersistenceResult.Replayed(replayedDraft);
+                }
+
                 await using var documentCommand = new NpgsqlCommand(
                     PostgresFiscalDocumentSql.InsertFiscalDocument,
                     connection,
@@ -104,6 +152,13 @@ public sealed class PostgresFiscalDocumentRepository : IFiscalDocumentRepository
                     await totalCommand.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
                 }
 
+                await using var completeIdempotencyCommand = new NpgsqlCommand(
+                    PostgresFiscalDocumentSql.UpdateIdempotencyRecordCompleted,
+                    connection,
+                    transaction);
+                AddIdempotencyCompletionParameters(completeIdempotencyCommand, draft, idempotency);
+                await completeIdempotencyCommand.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
+
                 await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
             }
             catch
@@ -112,7 +167,7 @@ public sealed class PostgresFiscalDocumentRepository : IFiscalDocumentRepository
                 throw;
             }
 
-            return draft;
+            return FiscalDocumentPersistenceResult.Created(draft);
         }
         catch (Exception ex) when (ex is NpgsqlException or TimeoutException or InvalidOperationException)
         {
@@ -120,6 +175,38 @@ public sealed class PostgresFiscalDocumentRepository : IFiscalDocumentRepository
                 "Fiscal document persistence write failed.",
                 ex);
         }
+    }
+
+    private static void AddInsertIdempotencyParameters(
+        NpgsqlCommand command,
+        FiscalDocumentDraft draft,
+        FiscalIssuanceIdempotency idempotency)
+    {
+        command.Parameters.AddWithValue("idempotency_record_id", Guid.NewGuid());
+        command.Parameters.AddWithValue("idempotency_scope", idempotency.Scope);
+        command.Parameters.AddWithValue("idempotency_key", idempotency.Key);
+        command.Parameters.AddWithValue("semantic_request_hash", idempotency.SemanticRequestHash);
+        command.Parameters.AddWithValue("operation_type_code_id", draft.FiscalDocumentTypeCodeId);
+        command.Parameters.AddWithValue("operation_status_code_id", draft.FiscalDocumentStatusCodeId);
+
+        var contextParameter = command.Parameters.Add("idempotency_context", NpgsqlDbType.Jsonb);
+        contextParameter.Value = PostgresFiscalDocumentSql.CreateIdempotencyContextJson(draft, idempotency);
+    }
+
+    private static void AddIdempotencyKeyParameters(NpgsqlCommand command, FiscalIssuanceIdempotency idempotency)
+    {
+        command.Parameters.AddWithValue("idempotency_scope", idempotency.Scope);
+        command.Parameters.AddWithValue("idempotency_key", idempotency.Key);
+    }
+
+    private static void AddIdempotencyCompletionParameters(
+        NpgsqlCommand command,
+        FiscalDocumentDraft draft,
+        FiscalIssuanceIdempotency idempotency)
+    {
+        AddIdempotencyKeyParameters(command, idempotency);
+        command.Parameters.AddWithValue("fiscal_document_id", draft.FiscalDocumentId);
+        command.Parameters.AddWithValue("replay_result_ref", draft.FiscalDocumentId.ToString("D"));
     }
 
     private static void AddFiscalDocumentParameters(NpgsqlCommand command, FiscalDocumentDraft draft)

@@ -34,6 +34,78 @@ public sealed class FiscalDocumentCreationServiceTests
         Assert.Equal("discount-validation-001", result.Draft.DiscountPrivilegeDetails[0].ApprovalRef);
         Assert.Equal(Guid.Parse("66666666-6666-6666-6666-666666666666"), result.Draft.Totals[0].TotalTypeCodeId);
         Assert.Equal(12500, result.Draft.Totals[0].AmountMinorUnits);
+        Assert.NotNull(repository.LastIdempotency);
+        Assert.Equal(
+            "fiscal_document_creation:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb:cccccccccccccccccccccccccccccccc",
+            repository.LastIdempotency.Scope);
+        Assert.Equal("central-finality-001", repository.LastIdempotency.Key);
+        Assert.Equal(64, repository.LastIdempotency.SemanticRequestHash.Length);
+    }
+
+    [Fact]
+    public void SemanticRequestHashIsDeterministicForSameRequest()
+    {
+        var first = FiscalDocumentSemanticRequestHasher.Hash(ValidCommand());
+        var second = FiscalDocumentSemanticRequestHasher.Hash(ValidCommand());
+
+        Assert.Equal(first, second);
+    }
+
+    [Fact]
+    public void SemanticRequestHashChangesWhenMaterialFiscalFieldChanges()
+    {
+        var original = FiscalDocumentSemanticRequestHasher.Hash(ValidCommand());
+        var changedLine = ValidLine(1) with
+        {
+            GrossAmountMinorUnits = 13000,
+            NetAmountMinorUnits = 13000
+        };
+        var changed = FiscalDocumentSemanticRequestHasher.Hash(ValidCommand() with { DocumentLines = [changedLine] });
+
+        Assert.NotEqual(original, changed);
+    }
+
+    [Fact]
+    public async Task DuplicateSameIdempotencyKeyAndSemanticRequestReturnsOriginalDraft()
+    {
+        var repository = new RecordingFiscalDocumentRepository();
+        var service = new FiscalDocumentCreationService(repository);
+
+        var first = await service.CreateAsync(ValidCommand());
+        var second = await service.CreateAsync(ValidCommand());
+
+        Assert.True(first.Succeeded);
+        Assert.True(second.Succeeded);
+        Assert.False(first.Replayed);
+        Assert.True(second.Replayed);
+        Assert.Equal(1, repository.CreateCount);
+        Assert.Equal(first.Draft!.FiscalDocumentId, second.Draft!.FiscalDocumentId);
+    }
+
+    [Fact]
+    public async Task SameIdempotencyKeyWithDifferentSemanticRequestFailsClosed()
+    {
+        var repository = new RecordingFiscalDocumentRepository();
+        var service = new FiscalDocumentCreationService(repository);
+
+        var first = await service.CreateAsync(ValidCommand());
+        var changed = ValidCommand() with
+        {
+            DocumentLines =
+            [
+                ValidLine(1) with
+                {
+                    GrossAmountMinorUnits = 13000,
+                    NetAmountMinorUnits = 13000
+                }
+            ]
+        };
+        var second = await service.CreateAsync(changed);
+
+        Assert.True(first.Succeeded);
+        Assert.False(second.Succeeded);
+        Assert.Equal(FiscalDocumentCreationErrorCode.IdempotencyConflict, second.ErrorCode);
+        Assert.Equal(1, repository.CreateCount);
     }
 
     [Fact]
@@ -583,12 +655,31 @@ public sealed class FiscalDocumentCreationServiceTests
 
     private sealed class RecordingFiscalDocumentRepository : IFiscalDocumentRepository
     {
-        public int CreateCount { get; private set; }
+        private readonly Dictionary<(string Scope, string Key), (string Hash, FiscalDocumentDraft Draft)> records = [];
 
-        public Task<FiscalDocumentDraft> CreateAsync(FiscalDocumentDraft draft, CancellationToken cancellationToken)
+        public int CreateCount { get; private set; }
+        public FiscalIssuanceIdempotency? LastIdempotency { get; private set; }
+
+        public Task<FiscalDocumentPersistenceResult> CreateAsync(
+            FiscalDocumentDraft draft,
+            FiscalIssuanceIdempotency idempotency,
+            CancellationToken cancellationToken)
         {
+            LastIdempotency = idempotency;
+            var key = (idempotency.Scope, idempotency.Key);
+            if (records.TryGetValue(key, out var existing))
+            {
+                if (!string.Equals(existing.Hash, idempotency.SemanticRequestHash, StringComparison.Ordinal))
+                {
+                    throw new FiscalDocumentIdempotencyConflictException();
+                }
+
+                return Task.FromResult(FiscalDocumentPersistenceResult.Replayed(existing.Draft));
+            }
+
             CreateCount++;
-            return Task.FromResult(draft);
+            records.Add(key, (idempotency.SemanticRequestHash, draft));
+            return Task.FromResult(FiscalDocumentPersistenceResult.Created(draft));
         }
     }
 }

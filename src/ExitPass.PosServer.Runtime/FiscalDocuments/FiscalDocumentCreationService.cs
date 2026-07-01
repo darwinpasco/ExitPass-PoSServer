@@ -229,8 +229,21 @@ public sealed class FiscalDocumentCreationService
             totals.Select(NormalizeTotal).OrderBy(total => total.TotalTypeCodeId).ToArray(),
             discountReferences.ToArray());
 
-        var persistedDraft = await repository.CreateAsync(draft, cancellationToken).ConfigureAwait(false);
-        return FiscalDocumentCreationResult.Success(persistedDraft);
+        try
+        {
+            var idempotency = FiscalIssuanceIdempotencyResolver.Resolve(command);
+            var persistenceResult = await repository.CreateAsync(draft, idempotency, cancellationToken).ConfigureAwait(false);
+
+            return persistenceResult.Outcome == FiscalDocumentPersistenceOutcome.Replayed
+                ? FiscalDocumentCreationResult.Replay(persistenceResult.Draft)
+                : FiscalDocumentCreationResult.Success(persistenceResult.Draft);
+        }
+        catch (FiscalDocumentIdempotencyConflictException ex)
+        {
+            return FiscalDocumentCreationResult.Failure(
+                FiscalDocumentCreationErrorCode.IdempotencyConflict,
+                ex.Message);
+        }
     }
 
     private static string? NormalizeOptionalReference(string? value) =>
