@@ -19,18 +19,22 @@ public static class FiscalDocumentServiceCollectionExtensions
         if (string.IsNullOrWhiteSpace(connectionString))
         {
             services.TryAddScoped<IFiscalDocumentRepository, PersistenceNotConfiguredFiscalDocumentRepository>();
+            services.TryAddScoped<IFiscalDocumentReader, PersistenceNotConfiguredFiscalDocumentReader>();
         }
         else if (!IsValidNpgsqlConnectionString(connectionString))
         {
             services.TryAddScoped<IFiscalDocumentRepository, InvalidPersistenceConfigurationFiscalDocumentRepository>();
+            services.TryAddScoped<IFiscalDocumentReader, InvalidPersistenceConfigurationFiscalDocumentReader>();
         }
         else
         {
             services.TryAddSingleton(_ => NpgsqlDataSource.Create(connectionString));
             services.TryAddScoped<IFiscalDocumentRepository, PostgresFiscalDocumentRepository>();
+            services.TryAddScoped<IFiscalDocumentReader, PostgresFiscalDocumentReader>();
         }
 
         services.AddScoped<FiscalDocumentCreationService>();
+        services.AddScoped<FiscalDocumentReadService>();
 
         return services;
     }
