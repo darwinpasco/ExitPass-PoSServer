@@ -7,7 +7,11 @@ public sealed record CreateFiscalDocumentResponse(
     string Code,
     string Message,
     Guid? FiscalDocumentId = null,
+    string? ResultClassification = null,
+    string? FiscalIssuanceEvidenceStatus = null,
+    string? FiscalNumberAssignmentState = null,
     Guid? FiscalIdentityId = null,
+    Guid? FiscalDocumentStatusCodeId = null,
     Guid? FiscalSequencePolicyId = null,
     long? FiscalSequenceValue = null,
     string? FiscalDocumentNumber = null,
@@ -16,4 +20,5 @@ public sealed record CreateFiscalDocumentResponse(
     string? FiscalNumberSuffixText = null,
     DateTimeOffset? FiscalNumberAssignedAt = null,
     string? FiscalNumberAssignedByRef = null,
+    string? ErrorPosture = null,
     [property: JsonIgnore] int HttpStatusCode = StatusCodes.Status400BadRequest);

@@ -21,6 +21,9 @@ public sealed class FiscalDocumentReadEndpointTests
 
         Assert.True(response.Succeeded);
         Assert.Equal("found", response.Code);
+        Assert.Equal("not_assigned", response.FiscalNumberAssignmentState);
+        Assert.Null(response.FiscalIssuanceEvidenceStatus);
+        Assert.Equal(document.FiscalDocumentStatusCodeId, response.FiscalDocumentStatusCodeId);
         Assert.Equal(StatusCodes.Status200OK, response.HttpStatusCode);
         Assert.Same(document, response.Document);
     }
@@ -47,6 +50,9 @@ public sealed class FiscalDocumentReadEndpointTests
 
         Assert.True(response.Succeeded);
         Assert.NotNull(response.Document);
+        Assert.Equal("assigned", response.FiscalNumberAssignmentState);
+        Assert.Equal("fiscal_document_number_assigned", response.FiscalIssuanceEvidenceStatus);
+        Assert.Equal(document.FiscalDocumentStatusCodeId, response.FiscalDocumentStatusCodeId);
         Assert.Equal(Guid.Parse("eeeeeeee-eeee-eeee-eeee-eeeeeeeeeeee"), response.Document.FiscalIdentityId);
         Assert.Equal(Guid.Parse("ffffffff-ffff-ffff-ffff-ffffffffffff"), response.Document.FiscalSequencePolicyId);
         Assert.Equal(42, response.Document.FiscalSequenceValue);
@@ -68,6 +74,8 @@ public sealed class FiscalDocumentReadEndpointTests
 
         Assert.True(response.Succeeded);
         Assert.NotNull(response.Document);
+        Assert.Equal("not_assigned", response.FiscalNumberAssignmentState);
+        Assert.Null(response.FiscalIssuanceEvidenceStatus);
         Assert.Null(response.Document.FiscalIdentityId);
         Assert.Null(response.Document.FiscalSequencePolicyId);
         Assert.Null(response.Document.FiscalSequenceValue);
@@ -89,6 +97,7 @@ public sealed class FiscalDocumentReadEndpointTests
 
         Assert.False(response.Succeeded);
         Assert.Equal("fiscal_document_not_found", response.Code);
+        Assert.Equal("not_assigned", response.FiscalNumberAssignmentState);
         Assert.Equal(StatusCodes.Status404NotFound, response.HttpStatusCode);
         Assert.Null(response.Document);
     }
