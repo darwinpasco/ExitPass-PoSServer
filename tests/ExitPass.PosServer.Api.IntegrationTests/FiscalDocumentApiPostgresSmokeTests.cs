@@ -60,8 +60,12 @@ public sealed class FiscalDocumentApiPostgresSmokeTests
         Assert.NotNull(body);
         Assert.True(body.Succeeded);
         Assert.Equal("accepted", body.Code);
+        Assert.Equal("newly_created", body.ResultClassification);
+        Assert.Equal("fiscal_document_number_assigned", body.FiscalIssuanceEvidenceStatus);
+        Assert.Equal("assigned", body.FiscalNumberAssignmentState);
         Assert.NotNull(body.FiscalDocumentId);
         Assert.Equal(FiscalIdentityId, body.FiscalIdentityId);
+        Assert.Equal(FiscalDocumentStatusCodeId, body.FiscalDocumentStatusCodeId);
         Assert.Equal(FiscalSequencePolicyId, body.FiscalSequencePolicyId);
         Assert.Equal(1, body.FiscalSequenceValue);
         Assert.Equal("SI-00000001-A", body.FiscalDocumentNumber);
@@ -79,6 +83,9 @@ public sealed class FiscalDocumentApiPostgresSmokeTests
         Assert.NotNull(getBody);
         Assert.True(getBody.Succeeded);
         Assert.Equal("found", getBody.Code);
+        Assert.Equal("fiscal_document_number_assigned", getBody.FiscalIssuanceEvidenceStatus);
+        Assert.Equal("assigned", getBody.FiscalNumberAssignmentState);
+        Assert.Equal(FiscalDocumentStatusCodeId, getBody.FiscalDocumentStatusCodeId);
         Assert.NotNull(getBody.Document);
         Assert.Equal(fiscalDocumentId, getBody.Document.FiscalDocumentId);
         Assert.Single(getBody.Document.StatusHistory);
@@ -106,7 +113,11 @@ public sealed class FiscalDocumentApiPostgresSmokeTests
         Assert.Equal(HttpStatusCode.Accepted, replayResponse.StatusCode);
         Assert.NotNull(replayBody);
         Assert.True(replayBody.Succeeded);
+        Assert.Equal("idempotent_replay", replayBody.ResultClassification);
+        Assert.Equal("assigned", replayBody.FiscalNumberAssignmentState);
+        Assert.Equal("fiscal_document_number_assigned", replayBody.FiscalIssuanceEvidenceStatus);
         Assert.Equal(fiscalDocumentId, replayBody.FiscalDocumentId);
+        Assert.Equal(FiscalDocumentStatusCodeId, replayBody.FiscalDocumentStatusCodeId);
         Assert.Equal(1, replayBody.FiscalSequenceValue);
         Assert.Equal("SI-00000001-A", replayBody.FiscalDocumentNumber);
 
@@ -117,6 +128,7 @@ public sealed class FiscalDocumentApiPostgresSmokeTests
         Assert.NotNull(missingGetBody);
         Assert.False(missingGetBody.Succeeded);
         Assert.Equal("fiscal_document_not_found", missingGetBody.Code);
+        Assert.Equal("not_assigned", missingGetBody.FiscalNumberAssignmentState);
 
         await using var connection = new NpgsqlConnection(connectionString);
         await connection.OpenAsync();
@@ -191,6 +203,8 @@ public sealed class FiscalDocumentApiPostgresSmokeTests
         Assert.NotNull(body);
         Assert.False(body.Succeeded);
         Assert.Equal("persistence_write_failed", body.Code);
+        Assert.Equal("not_assigned", body.FiscalNumberAssignmentState);
+        Assert.Equal("retry_after_service_recovery", body.ErrorPosture);
 
         await using var connection = new NpgsqlConnection(connectionString);
         await connection.OpenAsync();
@@ -254,6 +268,10 @@ public sealed class FiscalDocumentApiPostgresSmokeTests
         Assert.NotNull(secondBody);
         Assert.True(firstBody.Succeeded);
         Assert.True(secondBody.Succeeded);
+        Assert.Equal("newly_created", firstBody.ResultClassification);
+        Assert.Equal("newly_created", secondBody.ResultClassification);
+        Assert.Equal("assigned", firstBody.FiscalNumberAssignmentState);
+        Assert.Equal("assigned", secondBody.FiscalNumberAssignmentState);
         Assert.NotEqual(firstBody.FiscalDocumentId, secondBody.FiscalDocumentId);
         Assert.NotEqual(firstBody.FiscalDocumentNumber, secondBody.FiscalDocumentNumber);
         Assert.Equal([1L, 2L], new[] { firstBody.FiscalSequenceValue!.Value, secondBody.FiscalSequenceValue!.Value }.Order());

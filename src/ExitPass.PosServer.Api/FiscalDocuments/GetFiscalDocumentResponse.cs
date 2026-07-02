@@ -8,4 +8,7 @@ public sealed record GetFiscalDocumentResponse(
     string Code,
     string Message,
     FiscalDocumentReadModel? Document = null,
+    string? FiscalIssuanceEvidenceStatus = null,
+    string? FiscalNumberAssignmentState = null,
+    Guid? FiscalDocumentStatusCodeId = null,
     [property: JsonIgnore] int HttpStatusCode = StatusCodes.Status200OK);

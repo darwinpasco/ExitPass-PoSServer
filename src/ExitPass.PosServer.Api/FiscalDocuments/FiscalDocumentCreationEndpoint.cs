@@ -20,6 +20,8 @@ public static class FiscalDocumentCreationEndpoint
                 false,
                 "persistence_not_configured",
                 ex.Message,
+                FiscalNumberAssignmentState: "not_assigned",
+                ErrorPosture: "retry_after_configuration_correction",
                 HttpStatusCode: StatusCodes.Status503ServiceUnavailable);
         }
         catch (FiscalDocumentInvalidPersistenceConfigurationException ex)
@@ -28,6 +30,8 @@ public static class FiscalDocumentCreationEndpoint
                 false,
                 "invalid_persistence_configuration",
                 ex.Message,
+                FiscalNumberAssignmentState: "not_assigned",
+                ErrorPosture: "retry_after_configuration_correction",
                 HttpStatusCode: StatusCodes.Status503ServiceUnavailable);
         }
         catch (FiscalDocumentPersistenceException ex)
@@ -36,6 +40,8 @@ public static class FiscalDocumentCreationEndpoint
                 false,
                 "persistence_write_failed",
                 ex.Message,
+                FiscalNumberAssignmentState: "not_assigned",
+                ErrorPosture: "retry_after_service_recovery",
                 HttpStatusCode: StatusCodes.Status503ServiceUnavailable);
         }
     }
@@ -67,34 +73,82 @@ public static class FiscalDocumentCreationEndpoint
     {
         if (result.Succeeded)
         {
+            var numberingAssigned = HasCompleteFiscalNumbering(result.Draft);
+            if (!numberingAssigned)
+            {
+                return new CreateFiscalDocumentResponse(
+                    false,
+                    "fiscal_number_assignment_incomplete",
+                    "Fiscal document creation did not return complete fiscal numbering evidence.",
+                    ResultClassification: result.Replayed ? "idempotent_replay" : "newly_created",
+                    FiscalDocumentId: result.Draft?.FiscalDocumentId,
+                    FiscalNumberAssignmentState: "not_assigned",
+                    FiscalDocumentStatusCodeId: result.Draft?.FiscalDocumentStatusCodeId,
+                    ErrorPosture: "retry_after_service_recovery",
+                    HttpStatusCode: StatusCodes.Status503ServiceUnavailable);
+            }
+
             return new CreateFiscalDocumentResponse(
                 true,
                 "accepted",
                 result.Message,
-                result.Draft?.FiscalDocumentId,
-                result.Draft?.ResolvedFiscalIdentityId,
-                result.Draft?.ResolvedFiscalSequencePolicyId,
-                result.Draft?.FiscalSequenceValue,
-                result.Draft?.FiscalDocumentNumber,
-                result.Draft?.FiscalSeries,
-                result.Draft?.FiscalNumberPrefixText,
-                result.Draft?.FiscalNumberSuffixText,
-                result.Draft?.FiscalNumberAssignedAt,
-                result.Draft?.FiscalNumberAssignedByRef,
-                StatusCodes.Status202Accepted);
+                FiscalDocumentId: result.Draft?.FiscalDocumentId,
+                ResultClassification: result.Replayed ? "idempotent_replay" : "newly_created",
+                FiscalIssuanceEvidenceStatus: "fiscal_document_number_assigned",
+                FiscalNumberAssignmentState: "assigned",
+                FiscalIdentityId: result.Draft?.ResolvedFiscalIdentityId,
+                FiscalDocumentStatusCodeId: result.Draft?.FiscalDocumentStatusCodeId,
+                FiscalSequencePolicyId: result.Draft?.ResolvedFiscalSequencePolicyId,
+                FiscalSequenceValue: result.Draft?.FiscalSequenceValue,
+                FiscalDocumentNumber: result.Draft?.FiscalDocumentNumber,
+                FiscalSeries: result.Draft?.FiscalSeries,
+                FiscalNumberPrefixText: result.Draft?.FiscalNumberPrefixText,
+                FiscalNumberSuffixText: result.Draft?.FiscalNumberSuffixText,
+                FiscalNumberAssignedAt: result.Draft?.FiscalNumberAssignedAt,
+                FiscalNumberAssignedByRef: result.Draft?.FiscalNumberAssignedByRef,
+                HttpStatusCode: StatusCodes.Status202Accepted);
         }
 
         return new CreateFiscalDocumentResponse(
             false,
             ToResponseCode(result.ErrorCode),
             result.Message,
+            FiscalNumberAssignmentState: "not_assigned",
+            ErrorPosture: ToErrorPosture(result.ErrorCode),
             HttpStatusCode: ToHttpStatusCode(result.ErrorCode));
     }
+
+    private static bool HasCompleteFiscalNumbering(FiscalDocumentDraft? draft) =>
+        draft is not null &&
+        draft.ResolvedFiscalIdentityId is not null &&
+        draft.ResolvedFiscalSequencePolicyId is not null &&
+        draft.FiscalSequenceValue is not null &&
+        !string.IsNullOrWhiteSpace(draft.FiscalDocumentNumber) &&
+        !string.IsNullOrWhiteSpace(draft.FiscalSeries) &&
+        draft.FiscalNumberAssignedAt is not null &&
+        !string.IsNullOrWhiteSpace(draft.FiscalNumberAssignedByRef);
 
     private static int ToHttpStatusCode(FiscalDocumentCreationErrorCode errorCode) =>
         errorCode == FiscalDocumentCreationErrorCode.IdempotencyConflict
             ? StatusCodes.Status409Conflict
             : StatusCodes.Status400BadRequest;
+
+    private static string ToErrorPosture(FiscalDocumentCreationErrorCode errorCode) =>
+        errorCode switch
+        {
+            FiscalDocumentCreationErrorCode.IdempotencyConflict => "do_not_retry_without_request_change",
+            FiscalDocumentCreationErrorCode.FiscalIdentityNotFound or
+            FiscalDocumentCreationErrorCode.FiscalIdentityAmbiguous or
+            FiscalDocumentCreationErrorCode.FiscalIdentityNotEffective or
+            FiscalDocumentCreationErrorCode.FiscalSequencePolicyNotFound or
+            FiscalDocumentCreationErrorCode.FiscalSequencePolicyAmbiguous or
+            FiscalDocumentCreationErrorCode.FiscalSequencePolicyNotEffective or
+            FiscalDocumentCreationErrorCode.FiscalSequenceStateNotFound or
+            FiscalDocumentCreationErrorCode.FiscalSequenceStateNotEffective or
+            FiscalDocumentCreationErrorCode.FiscalNumberAllocationFailed or
+            FiscalDocumentCreationErrorCode.FiscalDocumentNumberFormatFailed => "retry_after_configuration_correction",
+            _ => "do_not_retry_without_request_change"
+        };
 
     private static FiscalizationPayableBasisInput? MapPayableBasis(
         FiscalizationPayableBasisRequest? request,

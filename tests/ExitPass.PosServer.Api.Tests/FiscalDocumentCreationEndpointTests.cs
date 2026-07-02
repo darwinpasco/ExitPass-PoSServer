@@ -22,7 +22,11 @@ public sealed class FiscalDocumentCreationEndpointTests
         Assert.True(response.Succeeded);
         Assert.Equal("accepted", response.Code);
         Assert.Equal(StatusCodes.Status202Accepted, response.HttpStatusCode);
+        Assert.Equal("newly_created", response.ResultClassification);
+        Assert.Equal("fiscal_document_number_assigned", response.FiscalIssuanceEvidenceStatus);
+        Assert.Equal("assigned", response.FiscalNumberAssignmentState);
         Assert.Equal(Guid.Parse("77777777-7777-7777-7777-777777777777"), response.FiscalIdentityId);
+        Assert.Equal(Guid.Parse("dddddddd-dddd-dddd-dddd-dddddddddddd"), response.FiscalDocumentStatusCodeId);
         Assert.Equal(Guid.Parse("88888888-8888-8888-8888-888888888888"), response.FiscalSequencePolicyId);
         Assert.Equal(1, response.FiscalSequenceValue);
         Assert.Equal("SI-00000001-A", response.FiscalDocumentNumber);
@@ -57,6 +61,8 @@ public sealed class FiscalDocumentCreationEndpointTests
 
         Assert.False(response.Succeeded);
         Assert.Equal("missing_payable_basis", response.Code);
+        Assert.Equal("not_assigned", response.FiscalNumberAssignmentState);
+        Assert.Equal("do_not_retry_without_request_change", response.ErrorPosture);
         Assert.Equal(StatusCodes.Status400BadRequest, response.HttpStatusCode);
     }
 
@@ -508,6 +514,11 @@ public sealed class FiscalDocumentCreationEndpointTests
         Assert.True(second.Succeeded);
         Assert.Equal("accepted", first.Code);
         Assert.Equal("accepted", second.Code);
+        Assert.Equal("newly_created", first.ResultClassification);
+        Assert.Equal("idempotent_replay", second.ResultClassification);
+        Assert.Equal("assigned", first.FiscalNumberAssignmentState);
+        Assert.Equal("assigned", second.FiscalNumberAssignmentState);
+        Assert.Equal("fiscal_document_number_assigned", second.FiscalIssuanceEvidenceStatus);
         Assert.Equal(StatusCodes.Status202Accepted, second.HttpStatusCode);
         Assert.NotNull(first.FiscalDocumentId);
         Assert.Equal(first.FiscalDocumentId, second.FiscalDocumentId);
@@ -535,8 +546,12 @@ public sealed class FiscalDocumentCreationEndpointTests
         Assert.True(first.Succeeded);
         Assert.False(second.Succeeded);
         Assert.Equal("fiscal_document_idempotency_conflict", second.Code);
+        Assert.Equal("not_assigned", second.FiscalNumberAssignmentState);
+        Assert.Equal("do_not_retry_without_request_change", second.ErrorPosture);
         Assert.Equal(StatusCodes.Status409Conflict, second.HttpStatusCode);
         Assert.Null(second.FiscalDocumentId);
+        Assert.Null(second.FiscalDocumentNumber);
+        Assert.Null(second.FiscalIssuanceEvidenceStatus);
         Assert.Equal(1, repository.CreateCount);
     }
 
@@ -561,6 +576,8 @@ public sealed class FiscalDocumentCreationEndpointTests
 
         Assert.False(response.Succeeded);
         Assert.Equal(expectedCode, response.Code);
+        Assert.Equal("not_assigned", response.FiscalNumberAssignmentState);
+        Assert.Equal("retry_after_configuration_correction", response.ErrorPosture);
         Assert.Equal(StatusCodes.Status400BadRequest, response.HttpStatusCode);
         Assert.Null(response.FiscalDocumentId);
     }
@@ -582,6 +599,22 @@ public sealed class FiscalDocumentCreationEndpointTests
     }
 
     [Fact]
+    public async Task SuccessfulPersistenceWithoutCompleteNumberingEvidenceFailsClosed()
+    {
+        var service = new FiscalDocumentCreationService(new RecordingFiscalDocumentRepository(returnIncompleteNumbering: true));
+
+        var response = await FiscalDocumentCreationEndpoint.CreateAsync(ValidRequest(), service);
+
+        Assert.False(response.Succeeded);
+        Assert.Equal("fiscal_number_assignment_incomplete", response.Code);
+        Assert.Equal("not_assigned", response.FiscalNumberAssignmentState);
+        Assert.Equal("retry_after_service_recovery", response.ErrorPosture);
+        Assert.Equal(StatusCodes.Status503ServiceUnavailable, response.HttpStatusCode);
+        Assert.NotNull(response.FiscalDocumentId);
+        Assert.Null(response.FiscalDocumentNumber);
+    }
+
+    [Fact]
     public async Task PersistenceNotConfiguredFailsClosed()
     {
         var service = new FiscalDocumentCreationService(new PersistenceNotConfiguredFiscalDocumentRepository());
@@ -590,6 +623,8 @@ public sealed class FiscalDocumentCreationEndpointTests
 
         Assert.False(response.Succeeded);
         Assert.Equal("persistence_not_configured", response.Code);
+        Assert.Equal("not_assigned", response.FiscalNumberAssignmentState);
+        Assert.Equal("retry_after_configuration_correction", response.ErrorPosture);
         Assert.Equal(StatusCodes.Status503ServiceUnavailable, response.HttpStatusCode);
     }
 
@@ -602,6 +637,8 @@ public sealed class FiscalDocumentCreationEndpointTests
 
         Assert.False(response.Succeeded);
         Assert.Equal("invalid_persistence_configuration", response.Code);
+        Assert.Equal("not_assigned", response.FiscalNumberAssignmentState);
+        Assert.Equal("retry_after_configuration_correction", response.ErrorPosture);
         Assert.Equal(StatusCodes.Status503ServiceUnavailable, response.HttpStatusCode);
         Assert.DoesNotContain("postgresql://", response.Message, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("Password", response.Message, StringComparison.OrdinalIgnoreCase);
@@ -858,10 +895,14 @@ public sealed class FiscalDocumentCreationEndpointTests
     {
         private readonly Dictionary<(string Scope, string Key), (string Hash, FiscalDocumentDraft Draft)> records = [];
         private readonly FiscalDocumentCreationErrorCode? forcedFailure;
+        private readonly bool returnIncompleteNumbering;
 
-        public RecordingFiscalDocumentRepository(FiscalDocumentCreationErrorCode? forcedFailure = null)
+        public RecordingFiscalDocumentRepository(
+            FiscalDocumentCreationErrorCode? forcedFailure = null,
+            bool returnIncompleteNumbering = false)
         {
             this.forcedFailure = forcedFailure;
+            this.returnIncompleteNumbering = returnIncompleteNumbering;
         }
 
         public int CreateCount { get; private set; }
@@ -895,15 +936,21 @@ public sealed class FiscalDocumentCreationEndpointTests
             var resolvedDraft = draft with
             {
                 ResolvedFiscalIdentityId = Guid.Parse("77777777-7777-7777-7777-777777777777"),
-                ResolvedFiscalSequencePolicyId = Guid.Parse("88888888-8888-8888-8888-888888888888"),
-                FiscalSequenceValue = 1,
-                FiscalDocumentNumber = "SI-00000001-A",
-                FiscalSeries = "sales_invoice_policy",
-                FiscalNumberPrefixText = "SI-",
-                FiscalNumberSuffixText = "-A",
-                FiscalNumberAssignedAt = DateTimeOffset.Parse("2026-07-01T00:00:00Z"),
-                FiscalNumberAssignedByRef = "pos-server:system"
+                ResolvedFiscalSequencePolicyId = Guid.Parse("88888888-8888-8888-8888-888888888888")
             };
+            if (!returnIncompleteNumbering)
+            {
+                resolvedDraft = resolvedDraft with
+                {
+                    FiscalSequenceValue = 1,
+                    FiscalDocumentNumber = "SI-00000001-A",
+                    FiscalSeries = "sales_invoice_policy",
+                    FiscalNumberPrefixText = "SI-",
+                    FiscalNumberSuffixText = "-A",
+                    FiscalNumberAssignedAt = DateTimeOffset.Parse("2026-07-01T00:00:00Z"),
+                    FiscalNumberAssignedByRef = "pos-server:system"
+                };
+            }
             LastDraft = resolvedDraft;
             records.Add(key, (idempotency.SemanticRequestHash, resolvedDraft));
             return Task.FromResult(FiscalDocumentPersistenceResult.Created(resolvedDraft));
