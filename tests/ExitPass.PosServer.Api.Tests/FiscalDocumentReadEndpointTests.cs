@@ -42,7 +42,13 @@ public sealed class FiscalDocumentReadEndpointTests
             FiscalNumberPrefixText = "SI-",
             FiscalNumberSuffixText = "-A",
             FiscalNumberAssignedAt = assignedAt,
-            FiscalNumberAssignedByRef = "pos-server-numbering-service"
+            FiscalNumberAssignedByRef = "pos-server-numbering-service",
+            IdempotencyScope = "fiscal_document_creation:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb:cccccccccccccccccccccccccccccccc",
+            IdempotencyKey = "central-finality-001",
+            IdempotencyKeySource = "upstream_finality_ref",
+            SemanticRequestHash = new string('a', 64),
+            SemanticRequestHashVersion = "sha256:v1",
+            SemanticRequestHashStatus = "matched"
         };
         var service = new FiscalDocumentReadService(new StubFiscalDocumentReader(document));
 
@@ -62,6 +68,12 @@ public sealed class FiscalDocumentReadEndpointTests
         Assert.Equal("-A", response.Document.FiscalNumberSuffixText);
         Assert.Equal(assignedAt, response.Document.FiscalNumberAssignedAt);
         Assert.Equal("pos-server-numbering-service", response.Document.FiscalNumberAssignedByRef);
+        Assert.Equal("fiscal_document_creation:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb:cccccccccccccccccccccccccccccccc", response.Document.IdempotencyScope);
+        Assert.Equal("central-finality-001", response.Document.IdempotencyKey);
+        Assert.Equal("upstream_finality_ref", response.Document.IdempotencyKeySource);
+        Assert.Equal(new string('a', 64), response.Document.SemanticRequestHash);
+        Assert.Equal("sha256:v1", response.Document.SemanticRequestHashVersion);
+        Assert.Equal("matched", response.Document.SemanticRequestHashStatus);
     }
 
     [Fact]
@@ -85,6 +97,12 @@ public sealed class FiscalDocumentReadEndpointTests
         Assert.Null(response.Document.FiscalNumberSuffixText);
         Assert.Null(response.Document.FiscalNumberAssignedAt);
         Assert.Null(response.Document.FiscalNumberAssignedByRef);
+        Assert.Null(response.Document.IdempotencyScope);
+        Assert.Null(response.Document.IdempotencyKey);
+        Assert.Null(response.Document.IdempotencyKeySource);
+        Assert.Null(response.Document.SemanticRequestHash);
+        Assert.Null(response.Document.SemanticRequestHashVersion);
+        Assert.Null(response.Document.SemanticRequestHashStatus);
     }
 
     [Fact]
@@ -236,6 +254,12 @@ public sealed class FiscalDocumentReadEndpointTests
             null,
             Guid.Parse("cccccccc-cccc-cccc-cccc-cccccccccccc"),
             Guid.Parse("dddddddd-dddd-dddd-dddd-dddddddddddd"),
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
             null,
             null,
             null,

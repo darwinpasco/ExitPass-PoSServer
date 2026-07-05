@@ -526,6 +526,8 @@ public static class PostgresFiscalDocumentSql
             idempotency_scope = idempotency.Scope,
             idempotency_key_source = "upstream_finality_ref",
             semantic_request_hash = idempotency.SemanticRequestHash,
+            semantic_request_hash_version = FiscalDocumentSemanticRequestHasher.Version,
+            semantic_request_hash_status = FiscalDocumentSemanticRequestHasher.Status,
             operation_type_code_id_source = "fiscal_document_type_code_id",
             operation_status_code_id_source = "fiscal_document_status_code_id",
             site_pos_server_id = draft.SitePosServerId,

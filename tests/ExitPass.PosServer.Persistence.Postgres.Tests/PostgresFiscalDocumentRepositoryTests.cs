@@ -414,6 +414,27 @@ public sealed class PostgresFiscalDocumentRepositoryTests
     }
 
     [Fact]
+    public void IdempotencyContextDocumentsStableSourceKeyAndSemanticHashVersion()
+    {
+        var draft = ValidDraft();
+        var idempotency = new FiscalIssuanceIdempotency(
+            "fiscal_document_creation:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb:cccccccccccccccccccccccccccccccc",
+            "central-finality-001",
+            new string('a', 64));
+
+        var json = PostgresFiscalDocumentSql.CreateIdempotencyContextJson(draft, idempotency);
+
+        Assert.Contains("idempotency_key_source", json, StringComparison.Ordinal);
+        Assert.Contains("upstream_finality_ref", json, StringComparison.Ordinal);
+        Assert.Contains("semantic_request_hash_version", json, StringComparison.Ordinal);
+        Assert.Contains("sha256:v1", json, StringComparison.Ordinal);
+        Assert.Contains("semantic_request_hash_status", json, StringComparison.Ordinal);
+        Assert.Contains("calculated", json, StringComparison.Ordinal);
+        Assert.DoesNotContain("payment_payload", json, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("secret", json, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
     public void LineContextPreservesReferenceOnlyJson()
     {
         var lineContext = PostgresFiscalDocumentSql.CreateLineContextJson(ValidDraft().DocumentLines[0]);

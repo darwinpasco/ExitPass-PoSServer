@@ -69,32 +69,55 @@ public sealed class PostgresFiscalDocumentReader : IFiscalDocumentReader
             connection,
             """
             select
-                fiscal_document_id,
-                site_pos_server_id,
-                channel_terminal_id,
-                fiscal_identity_id,
-                fiscal_document_type_code_id,
-                fiscal_document_status_code_id,
-                fiscal_sequence_policy_id,
-                fiscal_sequence_value,
-                fiscal_document_number,
-                fiscal_series,
-                fiscal_number_prefix_text,
-                fiscal_number_suffix_text,
-                fiscal_number_assigned_at,
-                fiscal_number_assigned_by_ref,
-                central_pms_parking_session_ref,
-                central_pms_payment_attempt_ref,
-                central_pms_payment_confirmation_ref,
-                payment_finality_ref,
-                vendor_ack_ref,
-                business_day_date,
-                document_context::text,
-                is_active,
-                created_at,
-                updated_at
-            from pos.fiscal_documents
-            where fiscal_document_id = @fiscal_document_id;
+                document.fiscal_document_id,
+                document.site_pos_server_id,
+                document.channel_terminal_id,
+                document.fiscal_identity_id,
+                document.fiscal_document_type_code_id,
+                document.fiscal_document_status_code_id,
+                document.fiscal_sequence_policy_id,
+                document.fiscal_sequence_value,
+                document.fiscal_document_number,
+                document.fiscal_series,
+                document.fiscal_number_prefix_text,
+                document.fiscal_number_suffix_text,
+                document.fiscal_number_assigned_at,
+                document.fiscal_number_assigned_by_ref,
+                idempotency.idempotency_scope,
+                idempotency.idempotency_key,
+                idempotency.idempotency_context ->> 'idempotency_key_source',
+                idempotency.semantic_request_hash,
+                case
+                    when idempotency.semantic_request_hash is null then null
+                    else idempotency.idempotency_context ->> 'semantic_request_hash_version'
+                end,
+                case
+                    when idempotency.semantic_request_hash is null then null
+                    else 'matched'
+                end,
+                document.central_pms_parking_session_ref,
+                document.central_pms_payment_attempt_ref,
+                document.central_pms_payment_confirmation_ref,
+                document.payment_finality_ref,
+                document.vendor_ack_ref,
+                document.business_day_date,
+                document.document_context::text,
+                document.is_active,
+                document.created_at,
+                document.updated_at
+            from pos.fiscal_documents document
+            left join lateral (
+                select
+                    idempotency_scope,
+                    idempotency_key,
+                    semantic_request_hash,
+                    idempotency_context
+                from pos.idempotency_records
+                where linked_fiscal_document_id = document.fiscal_document_id
+                order by updated_at desc, created_at desc, idempotency_record_id
+                limit 1
+            ) idempotency on true
+            where document.fiscal_document_id = @fiscal_document_id;
             """,
             fiscalDocumentId);
 
@@ -123,12 +146,18 @@ public sealed class PostgresFiscalDocumentReader : IFiscalDocumentReader
             GetSafeString(reader, 15),
             GetSafeString(reader, 16),
             GetSafeString(reader, 17),
-            GetSafeString(reader, 18),
-            GetNullableDateOnly(reader, 19),
+            GetSafeString(reader, 18) ?? (reader.IsDBNull(17) ? null : FiscalDocumentSemanticRequestHasher.Version),
+            GetSafeString(reader, 19),
             GetSafeString(reader, 20),
-            reader.GetBoolean(21),
-            reader.GetFieldValue<DateTimeOffset>(22),
-            reader.GetFieldValue<DateTimeOffset>(23),
+            GetSafeString(reader, 21),
+            GetSafeString(reader, 22),
+            GetSafeString(reader, 23),
+            GetSafeString(reader, 24),
+            GetNullableDateOnly(reader, 25),
+            GetSafeString(reader, 26),
+            reader.GetBoolean(27),
+            reader.GetFieldValue<DateTimeOffset>(28),
+            reader.GetFieldValue<DateTimeOffset>(29),
             [],
             [],
             [],

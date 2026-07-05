@@ -12,6 +12,7 @@ public sealed class PostgresFiscalDocumentReaderTests
 
         Assert.Contains("from pos.fiscal_documents", source, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("from pos.fiscal_document_status_history", source, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("from pos.idempotency_records", source, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("from pos.fiscal_document_links", source, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("from pos.fiscal_document_lines", source, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("from pos.fiscal_tenders", source, StringComparison.OrdinalIgnoreCase);
@@ -56,6 +57,11 @@ public sealed class PostgresFiscalDocumentReaderTests
         Assert.Contains("fiscal_number_suffix_text", source, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("fiscal_number_assigned_at", source, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("fiscal_number_assigned_by_ref", source, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("idempotency_scope", source, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("idempotency_key", source, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("semantic_request_hash", source, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("semantic_request_hash_version", source, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("matched", source, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("GetNullableInt64(reader", source, StringComparison.Ordinal);
         Assert.Contains("GetNullableDateTimeOffset(reader", source, StringComparison.Ordinal);
     }

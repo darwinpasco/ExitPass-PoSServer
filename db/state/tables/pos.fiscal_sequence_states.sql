@@ -1,6 +1,6 @@
 -- ExitPass POS Server Slice 4 table artifact.
 -- Fiscal sequence state/posture only.
--- This table tracks sequence state records without implementing allocation logic or PostgreSQL sequences.
+-- Runtime allocation uses row-level locking on this table; PostgreSQL sequences are not used.
 
 CREATE TABLE IF NOT EXISTS pos.fiscal_sequence_states (
     fiscal_sequence_state_id uuid NOT NULL,
@@ -37,9 +37,8 @@ CREATE TABLE IF NOT EXISTS pos.fiscal_sequence_states (
     )
 );
 
-COMMENT ON TABLE pos.fiscal_sequence_states IS 'Current fiscal sequence state posture. Does not implement fiscal number allocation, PostgreSQL sequences, functions, or triggers.';
-COMMENT ON COLUMN pos.fiscal_sequence_states.current_sequence_value IS 'Current sequence state value only; not an allocation function.';
+COMMENT ON TABLE pos.fiscal_sequence_states IS 'Current fiscal sequence state used by runtime fiscal number allocation with row-level locking. Does not use PostgreSQL sequences, functions, or triggers.';
+COMMENT ON COLUMN pos.fiscal_sequence_states.current_sequence_value IS 'Current fiscal sequence state value locked and advanced by runtime allocation.';
 COMMENT ON COLUMN pos.fiscal_sequence_states.last_reserved_sequence_value IS 'Last reserved sequence value posture. Reserved numbers are not reused unless a future compliant rule is approved.';
 COMMENT ON COLUMN pos.fiscal_sequence_states.last_issued_sequence_value IS 'Last issued sequence value posture. Consumed numbers are never reused.';
 COMMENT ON COLUMN pos.fiscal_sequence_states.state_context IS 'Flexible sequence state context. Must remain a JSON object when present.';
-

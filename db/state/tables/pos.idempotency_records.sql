@@ -46,9 +46,8 @@ CREATE TABLE IF NOT EXISTS pos.idempotency_records (
 
 COMMENT ON TABLE pos.idempotency_records IS 'Idempotency request identity posture for fiscal side-effect protection. Does not create payment finality, PaymentAttempt lifecycle, PaymentConfirmation lifecycle, or ExitAuthorization authority.';
 COMMENT ON COLUMN pos.idempotency_records.idempotency_scope IS 'Scope used with idempotency_key for duplicate fiscal side-effect protection.';
-COMMENT ON COLUMN pos.idempotency_records.semantic_request_hash IS 'Optional semantic request identity hash reference/value; no hashing implementation is created here.';
-COMMENT ON COLUMN pos.idempotency_records.linked_fiscal_document_id IS 'Optional linked fiscal document reference for fiscal side-effect correlation.';
-COMMENT ON COLUMN pos.idempotency_records.replay_result_ref IS 'Optional replay result reference; reference only.';
+COMMENT ON COLUMN pos.idempotency_records.semantic_request_hash IS 'Semantic request identity hash used by runtime idempotency conflict detection for fiscal document creation.';
+COMMENT ON COLUMN pos.idempotency_records.linked_fiscal_document_id IS 'Linked fiscal document reference used to replay the original fiscal document outcome for duplicate requests.';
+COMMENT ON COLUMN pos.idempotency_records.replay_result_ref IS 'Replay result reference for the linked fiscal document outcome.';
 COMMENT ON COLUMN pos.idempotency_records.conflict_ref IS 'Optional conflict reference; reference only.';
 COMMENT ON COLUMN pos.idempotency_records.idempotency_context IS 'Flexible idempotency context. Must remain a JSON object when present.';
-

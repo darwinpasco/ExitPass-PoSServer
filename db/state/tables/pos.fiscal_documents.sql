@@ -1,6 +1,7 @@
 ﻿-- ExitPass POS Server Slice 2 table artifact.
 -- Fiscal document header/core posture with nullable fiscal numbering persistence fields.
--- This table does not allocate fiscal numbers, mutate counters, own payment finality, or own ExitAuthorization.
+-- Fiscal numbers are allocated by the runtime repository inside the fiscal document transaction.
+-- This table does not own payment finality or ExitAuthorization.
 
 CREATE TABLE IF NOT EXISTS pos.fiscal_documents (
     fiscal_document_id uuid NOT NULL,
@@ -112,16 +113,16 @@ CREATE INDEX IF NOT EXISTS ix_fiscal_documents__seq_policy
 CREATE INDEX IF NOT EXISTS ix_fiscal_documents__document_number
     ON pos.fiscal_documents (fiscal_document_number);
 
-COMMENT ON TABLE pos.fiscal_documents IS 'Fiscal document header/core posture with nullable fiscal numbering fields. Does not allocate fiscal numbers, mutate counters, own payment finality, or own ExitAuthorization.';
-COMMENT ON COLUMN pos.fiscal_documents.fiscal_identity_id IS 'Optional fiscal identity reference for future fiscal numbering. Nullable until runtime allocation and identity selection rules are implemented.';
-COMMENT ON COLUMN pos.fiscal_documents.fiscal_sequence_policy_id IS 'Optional fiscal sequence policy reference used by future runtime allocation. Nullable until fiscal number assignment is implemented.';
-COMMENT ON COLUMN pos.fiscal_documents.fiscal_sequence_value IS 'Optional allocated fiscal sequence value. Must be positive when present; runtime allocation remains future work.';
+COMMENT ON TABLE pos.fiscal_documents IS 'Fiscal document header/core posture with fiscal numbering fields allocated by runtime when prerequisites are satisfied. Does not own payment finality or ExitAuthorization.';
+COMMENT ON COLUMN pos.fiscal_documents.fiscal_identity_id IS 'Fiscal identity reference selected by runtime fiscal numbering. Nullable only for historical/unassigned shell posture.';
+COMMENT ON COLUMN pos.fiscal_documents.fiscal_sequence_policy_id IS 'Fiscal sequence policy reference selected by runtime fiscal numbering. Nullable only for historical/unassigned shell posture.';
+COMMENT ON COLUMN pos.fiscal_documents.fiscal_sequence_value IS 'Allocated fiscal sequence value. Must be positive when present.';
 COMMENT ON COLUMN pos.fiscal_documents.fiscal_document_number IS 'Optional formatted fiscal document number. Authoritative fiscal number storage must use this column, not document_context.';
 COMMENT ON COLUMN pos.fiscal_documents.fiscal_series IS 'Optional fiscal series or book/register reference copied at assignment time when approved.';
 COMMENT ON COLUMN pos.fiscal_documents.fiscal_number_prefix_text IS 'Optional prefix copied from the sequence policy at fiscal number assignment time.';
 COMMENT ON COLUMN pos.fiscal_documents.fiscal_number_suffix_text IS 'Optional suffix copied from the sequence policy at fiscal number assignment time.';
-COMMENT ON COLUMN pos.fiscal_documents.fiscal_number_assigned_at IS 'Optional timestamp for future durable fiscal number assignment. Runtime allocation is not implemented by this table artifact.';
-COMMENT ON COLUMN pos.fiscal_documents.fiscal_number_assigned_by_ref IS 'Optional service or actor reference for future fiscal number assignment; reference only.';
+COMMENT ON COLUMN pos.fiscal_documents.fiscal_number_assigned_at IS 'Timestamp for durable fiscal number assignment when allocated by runtime.';
+COMMENT ON COLUMN pos.fiscal_documents.fiscal_number_assigned_by_ref IS 'Service or actor reference for fiscal number assignment; reference only.';
 COMMENT ON COLUMN pos.fiscal_documents.central_pms_parking_session_ref IS 'Reference to Central PMS parking session context; POS Server does not own parking session lifecycle.';
 COMMENT ON COLUMN pos.fiscal_documents.central_pms_payment_attempt_ref IS 'Reference to Central PMS PaymentAttempt context; POS Server does not own PaymentAttempt lifecycle.';
 COMMENT ON COLUMN pos.fiscal_documents.central_pms_payment_confirmation_ref IS 'Reference to Central PMS PaymentConfirmation context; POS Server does not own PaymentConfirmation lifecycle.';

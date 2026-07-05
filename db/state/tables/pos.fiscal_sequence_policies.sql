@@ -1,6 +1,6 @@
 -- ExitPass POS Server Slice 4 table artifact.
 -- Fiscal sequence policy state/posture only.
--- This table does not create PostgreSQL sequences, allocate fiscal numbers, or implement issuance behavior.
+-- Runtime fiscal numbering resolves policies from this table; PostgreSQL sequences are not used.
 
 CREATE TABLE IF NOT EXISTS pos.fiscal_sequence_policies (
     fiscal_sequence_policy_id uuid NOT NULL,
@@ -48,8 +48,7 @@ CREATE TABLE IF NOT EXISTS pos.fiscal_sequence_policies (
     )
 );
 
-COMMENT ON TABLE pos.fiscal_sequence_policies IS 'Configurable fiscal sequence policy posture by Site POS Server and sequence family. Does not create PostgreSQL sequence objects or number allocation behavior.';
+COMMENT ON TABLE pos.fiscal_sequence_policies IS 'Configurable fiscal sequence policy by Site POS Server and sequence family. Runtime allocation resolves eligible policies from this table without PostgreSQL sequence objects.';
 COMMENT ON COLUMN pos.fiscal_sequence_policies.sequence_family_code_id IS 'Controlled-code reference for sequence family, such as future SI or adjustment family.';
 COMMENT ON COLUMN pos.fiscal_sequence_policies.document_type_code_id IS 'Optional controlled-code reference for document type where the sequence policy is document-type-specific.';
 COMMENT ON COLUMN pos.fiscal_sequence_policies.policy_context IS 'Flexible policy context for unresolved numbering attributes. Must remain a JSON object when present.';
-
