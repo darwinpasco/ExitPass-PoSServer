@@ -524,6 +524,9 @@ public sealed class FiscalDocumentCreationEndpointTests
         Assert.Equal(first.FiscalDocumentId, second.FiscalDocumentId);
         Assert.Equal(first.FiscalSequenceValue, second.FiscalSequenceValue);
         Assert.Equal(first.FiscalDocumentNumber, second.FiscalDocumentNumber);
+        Assert.Equal(first.FiscalNumberAssignedAt, second.FiscalNumberAssignedAt);
+        Assert.Equal(first.FiscalIdentityId, second.FiscalIdentityId);
+        Assert.Equal(first.FiscalSequencePolicyId, second.FiscalSequencePolicyId);
         Assert.Equal(1, repository.CreateCount);
     }
 

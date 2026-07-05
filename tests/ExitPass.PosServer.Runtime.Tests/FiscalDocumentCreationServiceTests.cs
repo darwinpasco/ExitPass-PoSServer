@@ -91,6 +91,9 @@ public sealed class FiscalDocumentCreationServiceTests
         Assert.Equal(first.Draft!.FiscalDocumentId, second.Draft!.FiscalDocumentId);
         Assert.Equal(first.Draft.FiscalSequenceValue, second.Draft.FiscalSequenceValue);
         Assert.Equal(first.Draft.FiscalDocumentNumber, second.Draft.FiscalDocumentNumber);
+        Assert.Equal(first.Draft.FiscalNumberAssignedAt, second.Draft.FiscalNumberAssignedAt);
+        Assert.Equal(first.Draft.DocumentLines[0].NetAmountMinorUnits, second.Draft.DocumentLines[0].NetAmountMinorUnits);
+        Assert.Equal(first.Draft.Tenders[0].PaymentFinalityRef, second.Draft.Tenders[0].PaymentFinalityRef);
     }
 
     [Fact]

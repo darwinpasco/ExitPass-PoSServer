@@ -106,6 +106,15 @@ public sealed class FiscalDocumentApiPostgresSmokeTests
         Assert.Equal("-A", getBody.Document.FiscalNumberSuffixText);
         Assert.NotNull(getBody.Document.FiscalNumberAssignedAt);
         Assert.Equal("pos-server:system", getBody.Document.FiscalNumberAssignedByRef);
+        Assert.Equal(
+            "fiscal_document_creation:10000000000000000000000000000001:10000000000000000000000000000101",
+            getBody.Document.IdempotencyScope);
+        Assert.Equal("central-finality-success", getBody.Document.IdempotencyKey);
+        Assert.Equal("upstream_finality_ref", getBody.Document.IdempotencyKeySource);
+        Assert.NotNull(getBody.Document.SemanticRequestHash);
+        Assert.Equal(64, getBody.Document.SemanticRequestHash.Length);
+        Assert.Equal("sha256:v1", getBody.Document.SemanticRequestHashVersion);
+        Assert.Equal("matched", getBody.Document.SemanticRequestHashStatus);
 
         using var replayResponse = await client.PostAsJsonAsync("/v1/fiscal-documents/", request);
         var replayBody = await replayResponse.Content.ReadFromJsonAsync<CreateFiscalDocumentResponse>();
@@ -120,6 +129,27 @@ public sealed class FiscalDocumentApiPostgresSmokeTests
         Assert.Equal(FiscalDocumentStatusCodeId, replayBody.FiscalDocumentStatusCodeId);
         Assert.Equal(1, replayBody.FiscalSequenceValue);
         Assert.Equal("SI-00000001-A", replayBody.FiscalDocumentNumber);
+
+        var conflictRequest = request with
+        {
+            DocumentLines =
+            [
+                request.DocumentLines![0] with
+                {
+                    GrossAmountMinorUnits = 13000,
+                    NetAmountMinorUnits = 12000
+                }
+            ]
+        };
+        using var conflictResponse = await client.PostAsJsonAsync("/v1/fiscal-documents/", conflictRequest);
+        var conflictBody = await conflictResponse.Content.ReadFromJsonAsync<CreateFiscalDocumentResponse>();
+
+        Assert.Equal(HttpStatusCode.Conflict, conflictResponse.StatusCode);
+        Assert.NotNull(conflictBody);
+        Assert.False(conflictBody.Succeeded);
+        Assert.Equal("fiscal_document_idempotency_conflict", conflictBody.Code);
+        Assert.Equal("do_not_retry_without_request_change", conflictBody.ErrorPosture);
+        Assert.Equal("not_assigned", conflictBody.FiscalNumberAssignmentState);
 
         using var missingGetResponse = await client.GetAsync($"/v1/fiscal-documents/{Guid.Parse("99999999-9999-9999-9999-999999999999")}");
         var missingGetBody = await missingGetResponse.Content.ReadFromJsonAsync<GetFiscalDocumentResponse>();
@@ -141,10 +171,21 @@ public sealed class FiscalDocumentApiPostgresSmokeTests
         Assert.Equal(1, await CountAsync(connection, "pos.fiscal_tax_details", "fiscal_document_id = @id", "id", fiscalDocumentId));
         Assert.Equal(1, await CountAsync(connection, "pos.fiscal_discount_privilege_details", "fiscal_document_id = @id", "id", fiscalDocumentId));
         Assert.Equal(1, await CountAsync(connection, "pos.fiscal_totals", "fiscal_document_id = @id", "id", fiscalDocumentId));
+        Assert.Equal(1, await CountAsync(connection, "pos.idempotency_records", "linked_fiscal_document_id = @id", "id", fiscalDocumentId));
 
         Assert.Equal("central-finality-success", await ScalarStringAsync(
             connection,
             "select payment_finality_ref from pos.fiscal_documents where fiscal_document_id = @id",
+            fiscalDocumentId));
+        var semanticRequestHash = await ScalarStringAsync(
+            connection,
+            "select semantic_request_hash from pos.idempotency_records where linked_fiscal_document_id = @id",
+            fiscalDocumentId);
+        Assert.NotNull(semanticRequestHash);
+        Assert.Equal(64, semanticRequestHash.Length);
+        Assert.Equal("sha256:v1", await ScalarStringAsync(
+            connection,
+            "select idempotency_context ->> 'semantic_request_hash_version' from pos.idempotency_records where linked_fiscal_document_id = @id",
             fiscalDocumentId));
         Assert.Equal("evidence-ref-success", await ScalarStringAsync(
             connection,
@@ -240,6 +281,52 @@ public sealed class FiscalDocumentApiPostgresSmokeTests
     }
 
     [Fact]
+    public async Task MissingFiscalIdentityBlocksNumberingAllocation()
+    {
+        await AssertNumberingPrerequisiteFailureAsync(
+            async connection =>
+            {
+                await ExecuteSqlAsync(
+                    connection,
+                    "delete from pos.site_pos_server_fiscal_identity_history where site_pos_server_id = @site_pos_server_id;",
+                    command => command.Parameters.AddWithValue("site_pos_server_id", SitePosServerId));
+            },
+            "fiscal_identity_not_found");
+    }
+
+    [Fact]
+    public async Task MissingSequencePolicyBlocksNumberingAllocation()
+    {
+        await AssertNumberingPrerequisiteFailureAsync(
+            async connection =>
+            {
+                await ExecuteSqlAsync(
+                    connection,
+                    "delete from pos.fiscal_sequence_states where fiscal_sequence_policy_id = @fiscal_sequence_policy_id;",
+                    command => command.Parameters.AddWithValue("fiscal_sequence_policy_id", FiscalSequencePolicyId));
+                await ExecuteSqlAsync(
+                    connection,
+                    "delete from pos.fiscal_sequence_policies where fiscal_sequence_policy_id = @fiscal_sequence_policy_id;",
+                    command => command.Parameters.AddWithValue("fiscal_sequence_policy_id", FiscalSequencePolicyId));
+            },
+            "fiscal_sequence_policy_not_found");
+    }
+
+    [Fact]
+    public async Task MissingSequenceStateBlocksNumberingAllocation()
+    {
+        await AssertNumberingPrerequisiteFailureAsync(
+            async connection =>
+            {
+                await ExecuteSqlAsync(
+                    connection,
+                    "delete from pos.fiscal_sequence_states where fiscal_sequence_policy_id = @fiscal_sequence_policy_id;",
+                    command => command.Parameters.AddWithValue("fiscal_sequence_policy_id", FiscalSequencePolicyId));
+            },
+            "fiscal_sequence_state_not_found");
+    }
+
+    [Fact]
     public async Task ConcurrentFiscalDocumentPostsReceiveDistinctFiscalNumbers()
     {
         if (!TryGetSmokeConnectionString(out var connectionString))
@@ -282,6 +369,56 @@ public sealed class FiscalDocumentApiPostgresSmokeTests
             connection,
             "select current_sequence_value from pos.fiscal_sequence_states where fiscal_sequence_policy_id = @id",
             FiscalSequencePolicyId));
+    }
+
+    private async Task AssertNumberingPrerequisiteFailureAsync(
+        Func<NpgsqlConnection, Task> breakFixtureAsync,
+        string expectedCode)
+    {
+        if (!TryGetSmokeConnectionString(out var connectionString))
+        {
+            return;
+        }
+
+        await RebuildDisposableDatabaseAsync(connectionString);
+        await InsertDisposableSmokeFixtureAsync(connectionString);
+
+        await using (var setupConnection = new NpgsqlConnection(connectionString))
+        {
+            await setupConnection.OpenAsync();
+            await breakFixtureAsync(setupConnection);
+        }
+
+        await using var app = await StartApiAsync(connectionString);
+        using var client = CreateClient(app);
+
+        using var response = await client.PostAsJsonAsync("/v1/fiscal-documents/", CreateValidRequest(expectedCode));
+        var body = await response.Content.ReadFromJsonAsync<CreateFiscalDocumentResponse>();
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        Assert.NotNull(body);
+        Assert.False(body.Succeeded);
+        Assert.Equal(expectedCode, body.Code);
+        Assert.Equal("not_assigned", body.FiscalNumberAssignmentState);
+        Assert.Equal("retry_after_configuration_correction", body.ErrorPosture);
+        Assert.Null(body.FiscalDocumentId);
+
+        await using var verifyConnection = new NpgsqlConnection(connectionString);
+        await verifyConnection.OpenAsync();
+        Assert.Equal(0, await CountAsync(
+            verifyConnection,
+            "pos.fiscal_documents",
+            "payment_finality_ref = @ref",
+            "ref",
+            $"central-finality-{expectedCode}"));
+
+        if (expectedCode != "fiscal_sequence_policy_not_found")
+        {
+            Assert.Equal(0, await ScalarLongAsync(
+                verifyConnection,
+                "select current_sequence_value from pos.fiscal_sequence_states where fiscal_sequence_policy_id = @id",
+                FiscalSequencePolicyId));
+        }
     }
 
     private bool TryGetSmokeConnectionString(out string connectionString)

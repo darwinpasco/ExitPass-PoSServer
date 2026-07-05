@@ -8,6 +8,9 @@ namespace ExitPass.PosServer.Runtime.FiscalDocuments;
 
 public static class FiscalDocumentSemanticRequestHasher
 {
+    public const string Version = "sha256:v1";
+    public const string Status = "calculated";
+
     private static readonly JsonSerializerOptions SerializerOptions = new()
     {
         DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull
