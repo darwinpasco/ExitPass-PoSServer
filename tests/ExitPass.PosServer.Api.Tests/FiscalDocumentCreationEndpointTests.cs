@@ -502,6 +502,27 @@ public sealed class FiscalDocumentCreationEndpointTests
     }
 
     [Fact]
+    public void LinesAliasProducesSameSemanticHashAsDocumentLines()
+    {
+        var documentLinesRequest = ValidRequest();
+        var linesAliasRequest = documentLinesRequest with
+        {
+            DocumentLines = null,
+            Lines = documentLinesRequest.DocumentLines
+        };
+
+        var documentLinesCommand = FiscalDocumentCreationEndpoint.MapToCommand(documentLinesRequest);
+        var linesAliasCommand = FiscalDocumentCreationEndpoint.MapToCommand(linesAliasRequest);
+
+        Assert.Equal(
+            FiscalDocumentSemanticRequestHasher.Canonicalize(documentLinesCommand),
+            FiscalDocumentSemanticRequestHasher.Canonicalize(linesAliasCommand));
+        Assert.Equal(
+            FiscalDocumentSemanticRequestHasher.Hash(documentLinesCommand),
+            FiscalDocumentSemanticRequestHasher.Hash(linesAliasCommand));
+    }
+
+    [Fact]
     public async Task DuplicateSameIdempotencyKeyAndSemanticRequestReturnsOriginalFiscalDocumentId()
     {
         var repository = new RecordingFiscalDocumentRepository();
