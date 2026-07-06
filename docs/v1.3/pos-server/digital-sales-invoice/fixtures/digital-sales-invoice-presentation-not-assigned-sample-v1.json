@@ -1,0 +1,319 @@
+{
+  "fixtureId": "digital-sales-invoice-presentation-not-assigned-sample-v1",
+  "fixtureKind": "ui_print_preview_consumer_sample",
+  "succeeded": true,
+  "code": "presented",
+  "message": "Digital Sales Invoice presentation model created.",
+  "fiscalNumberAssignmentState": "not_assigned",
+  "fiscalDocumentStatusCodeId": "dddddddd-dddd-dddd-dddd-dddddddddddd",
+  "templateContract": {
+    "templateContractVersion": "digital-sales-invoice-json-v1",
+    "fiscalTemplateFamily": "PH_DIGITAL_SALES_INVOICE",
+    "renderFormat": "application/json"
+  },
+  "presentation": {
+    "presentationVersion": "digital-sales-invoice-presentation-json-v1",
+    "sourceTemplateContractVersion": "digital-sales-invoice-json-v1",
+    "fiscalTemplateFamily": "PH_DIGITAL_SALES_INVOICE",
+    "renderFormat": "application/json",
+    "numberingState": "not_assigned",
+    "documentTitle": "Digital Sales Invoice",
+    "notices": [
+      {
+        "code": "fiscal_number_not_assigned",
+        "severity": "warning",
+        "message": "Fiscal number has not been assigned; presentation remains display-only and must not imply issued numbering."
+      }
+    ],
+    "sections": [
+      {
+        "name": "header",
+        "label": "Header",
+        "sortOrder": 10,
+        "posture": "required",
+        "rows": [
+          {
+            "key": "header.documentTitle",
+            "label": "Document Title",
+            "valueKind": "text",
+            "posture": "required",
+            "displayValue": "Digital Sales Invoice",
+            "rawValue": "Digital Sales Invoice"
+          },
+          {
+            "key": "header.presentationVersion",
+            "label": "Presentation Version",
+            "valueKind": "identifier",
+            "posture": "required",
+            "displayValue": "digital-sales-invoice-presentation-json-v1",
+            "rawValue": "digital-sales-invoice-presentation-json-v1"
+          }
+        ]
+      },
+      {
+        "name": "sellerSitePosIdentity",
+        "label": "Seller / Site / POS Identity",
+        "sortOrder": 20,
+        "posture": "required",
+        "rows": [
+          {
+            "key": "sellerSitePosIdentity.sitePosServerId",
+            "label": "Site POS Server ID",
+            "valueKind": "identifier",
+            "posture": "required",
+            "displayValue": "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb",
+            "rawValue": "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb"
+          },
+          {
+            "key": "sellerSitePosIdentity.fiscalIdentityId",
+            "label": "Fiscal Identity ID",
+            "valueKind": "identifier",
+            "posture": "not_available",
+            "displayValue": null,
+            "rawValue": null
+          }
+        ]
+      },
+      {
+        "name": "documentIdentity",
+        "label": "Document Identity",
+        "sortOrder": 30,
+        "posture": "required",
+        "rows": [
+          {
+            "key": "documentIdentity.fiscalDocumentId",
+            "label": "Fiscal Document ID",
+            "valueKind": "identifier",
+            "posture": "required",
+            "displayValue": "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
+            "rawValue": "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"
+          },
+          {
+            "key": "documentIdentity.businessDayDate",
+            "label": "Business Day",
+            "valueKind": "dateTime",
+            "posture": "optional",
+            "displayValue": "2026-07-01",
+            "rawValue": "2026-07-01"
+          }
+        ]
+      },
+      {
+        "name": "fiscalNumbering",
+        "label": "Fiscal Numbering",
+        "sortOrder": 40,
+        "posture": "required",
+        "rows": [
+          {
+            "key": "fiscalNumbering.fiscalNumberAssignmentState",
+            "label": "Fiscal Number Assignment State",
+            "valueKind": "status",
+            "posture": "required",
+            "displayValue": "not_assigned",
+            "rawValue": "not_assigned"
+          },
+          {
+            "key": "fiscalNumbering.fiscalDocumentNumber",
+            "label": "Fiscal Document Number",
+            "valueKind": "identifier",
+            "posture": "not_available",
+            "displayValue": null,
+            "rawValue": null
+          },
+          {
+            "key": "fiscalNumbering.fiscalNumberAssignedAt",
+            "label": "Fiscal Number Assigned At",
+            "valueKind": "dateTime",
+            "posture": "not_available",
+            "displayValue": null,
+            "rawValue": null
+          }
+        ]
+      },
+      {
+        "name": "parkingPaymentReferences",
+        "label": "Parking / Payment References",
+        "sortOrder": 50,
+        "posture": "optional",
+        "rows": [
+          {
+            "key": "parkingPaymentReferences.centralPmsParkingSessionRef",
+            "label": "Central PMS Parking Session Ref",
+            "valueKind": "identifier",
+            "posture": "optional",
+            "displayValue": "parking-session-sample-001",
+            "rawValue": "parking-session-sample-001"
+          },
+          {
+            "key": "parkingPaymentReferences.paymentFinalityRef",
+            "label": "Payment Finality Ref",
+            "valueKind": "identifier",
+            "posture": "optional",
+            "displayValue": "central-finality-sample-001",
+            "rawValue": "central-finality-sample-001"
+          }
+        ]
+      },
+      {
+        "name": "lineItems",
+        "label": "Line Items",
+        "sortOrder": 60,
+        "posture": "required",
+        "rows": [
+          {
+            "key": "lineItems[0000].description",
+            "label": "Description",
+            "valueKind": "text",
+            "posture": "required",
+            "displayValue": "Parking fee",
+            "rawValue": "Parking fee"
+          },
+          {
+            "key": "lineItems[0000].netAmount",
+            "label": "Net Amount",
+            "valueKind": "amount",
+            "posture": "required",
+            "displayValue": "PHP 115.00",
+            "rawValue": 11500
+          }
+        ]
+      },
+      {
+        "name": "discounts",
+        "label": "Discounts",
+        "sortOrder": 70,
+        "posture": "optional",
+        "rows": [
+          {
+            "key": "discounts[0000].discountAmount",
+            "label": "Discount Amount",
+            "valueKind": "amount",
+            "posture": "optional",
+            "displayValue": "PHP 10.00",
+            "rawValue": 1000
+          }
+        ]
+      },
+      {
+        "name": "taxes",
+        "label": "Taxes",
+        "sortOrder": 80,
+        "posture": "optional",
+        "rows": [
+          {
+            "key": "taxes[0000].taxAmount",
+            "label": "Tax Amount",
+            "valueKind": "amount",
+            "posture": "optional",
+            "displayValue": "PHP 0.00",
+            "rawValue": 0
+          }
+        ]
+      },
+      {
+        "name": "tenders",
+        "label": "Tenders",
+        "sortOrder": 90,
+        "posture": "required",
+        "rows": [
+          {
+            "key": "tenders[0000].amount",
+            "label": "Tender Amount",
+            "valueKind": "amount",
+            "posture": "required",
+            "displayValue": "PHP 125.00",
+            "rawValue": 12500
+          }
+        ]
+      },
+      {
+        "name": "totals",
+        "label": "Totals",
+        "sortOrder": 100,
+        "posture": "required",
+        "rows": [
+          {
+            "key": "totals[0000].amount",
+            "label": "Total Amount",
+            "valueKind": "amount",
+            "posture": "required",
+            "displayValue": "PHP 125.00",
+            "rawValue": 12500
+          }
+        ]
+      },
+      {
+        "name": "auditHashStatus",
+        "label": "Audit / Hash / Status",
+        "sortOrder": 110,
+        "posture": "required",
+        "rows": [
+          {
+            "key": "auditHashStatus.semanticRequestHashVersion",
+            "label": "Semantic Request Hash Version",
+            "valueKind": "identifier",
+            "posture": "optional",
+            "displayValue": "sha256:v1",
+            "rawValue": "sha256:v1"
+          }
+        ]
+      },
+      {
+        "name": "footerDisclaimers",
+        "label": "Footer / Disclaimers",
+        "sortOrder": 120,
+        "posture": "placeholder",
+        "rows": [
+          {
+            "key": "footerDisclaimers.placeholders[0000]",
+            "label": "Footer Placeholder",
+            "valueKind": "placeholder",
+            "posture": "placeholder",
+            "displayValue": "Placeholder only - not final statutory text.",
+            "rawValue": "Placeholder only - not final statutory text."
+          }
+        ]
+      },
+      {
+        "name": "deferredPlaceholders",
+        "label": "Deferred Placeholders",
+        "sortOrder": 130,
+        "posture": "deferred",
+        "rows": [
+          {
+            "key": "deferredPlaceholders.qrCode",
+            "label": "QR Code",
+            "valueKind": "deferred",
+            "posture": "deferred",
+            "displayValue": "QR code rendering is not part of this JSON fixture.",
+            "rawValue": "QR code rendering is not part of this JSON fixture."
+          },
+          {
+            "key": "deferredPlaceholders.pdfDocument",
+            "label": "PDF Document",
+            "valueKind": "deferred",
+            "posture": "deferred",
+            "displayValue": "PDF generation is not part of this JSON fixture.",
+            "rawValue": "PDF generation is not part of this JSON fixture."
+          },
+          {
+            "key": "deferredPlaceholders.htmlDocument",
+            "label": "HTML Document",
+            "valueKind": "deferred",
+            "posture": "deferred",
+            "displayValue": "HTML rendering is not part of this JSON fixture.",
+            "rawValue": "HTML rendering is not part of this JSON fixture."
+          },
+          {
+            "key": "deferredPlaceholders.finalBirTemplateText",
+            "label": "Final BIR Template Text",
+            "valueKind": "deferred",
+            "posture": "deferred",
+            "displayValue": "Final statutory wording is deferred.",
+            "rawValue": "Final statutory wording is deferred."
+          }
+        ]
+      }
+    ]
+  }
+}
