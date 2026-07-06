@@ -36,6 +36,7 @@ public static class FiscalDocumentServiceCollectionExtensions
         services.AddScoped<FiscalDocumentCreationService>();
         services.AddScoped<FiscalDocumentReadService>();
         services.AddScoped<DigitalSalesInvoiceRenderService>();
+        services.AddScoped<DigitalSalesInvoicePresentationAdapter>();
 
         return services;
     }

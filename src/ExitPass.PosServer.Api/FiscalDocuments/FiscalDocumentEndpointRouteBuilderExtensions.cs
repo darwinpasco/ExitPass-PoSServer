@@ -44,6 +44,22 @@ public static class FiscalDocumentEndpointRouteBuilderExtensions
             return Results.Json(response, statusCode: response.HttpStatusCode);
         });
 
+        group.MapGet("/{fiscalDocumentId:guid}/digital-sales-invoice/presentation", async (
+            Guid fiscalDocumentId,
+            DigitalSalesInvoiceRenderService renderService,
+            DigitalSalesInvoicePresentationAdapter presentationAdapter,
+            CancellationToken cancellationToken) =>
+        {
+            var response = await DigitalSalesInvoicePresentationEndpoint.GetByFiscalDocumentIdAsync(
+                    fiscalDocumentId,
+                    renderService,
+                    presentationAdapter,
+                    cancellationToken)
+                .ConfigureAwait(false);
+
+            return Results.Json(response, statusCode: response.HttpStatusCode);
+        });
+
         return group;
     }
 }
