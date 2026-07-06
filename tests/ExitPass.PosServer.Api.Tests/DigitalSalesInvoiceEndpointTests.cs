@@ -24,6 +24,12 @@ public sealed class DigitalSalesInvoiceEndpointTests
         Assert.Equal(StatusCodes.Status200OK, response.HttpStatusCode);
         Assert.Equal("assigned", response.FiscalNumberAssignmentState);
         Assert.Equal(document.FiscalDocumentStatusCodeId, response.FiscalDocumentStatusCodeId);
+        Assert.NotNull(response.TemplateContract);
+        Assert.Equal("digital-sales-invoice-json-v1", response.TemplateContract.TemplateContractVersion);
+        Assert.Equal("PH_DIGITAL_SALES_INVOICE", response.TemplateContract.FiscalTemplateFamily);
+        Assert.Equal("application/json", response.TemplateContract.RenderFormat);
+        Assert.Equal("structured_fiscal_data_only", response.TemplateContract.DisplayResponsibility);
+        Assert.Contains(response.TemplateContract.SupportedPostures, posture => posture.Name == "not_available");
         Assert.NotNull(response.Render);
         Assert.Equal(document.FiscalDocumentId, response.Render.FiscalDocumentId);
         Assert.Equal("SI-00000001-A", response.Render.FiscalDocumentNumber);
@@ -36,6 +42,39 @@ public sealed class DigitalSalesInvoiceEndpointTests
         Assert.Equal("sha256:v1", response.Render.SemanticRequestHashVersion);
         Assert.Equal("matched", response.Render.SemanticRequestHashStatus);
         Assert.Equal("placeholder_only", response.Render.Footer.RenderingStatus);
+    }
+
+    [Fact]
+    public async Task AssignedFiscalDocumentIncludesRequiredTemplateSectionsAndPostures()
+    {
+        var document = ValidReadModel(assignedNumber: true);
+        var service = new DigitalSalesInvoiceRenderService(new FiscalDocumentReadService(new StubFiscalDocumentReader(document)));
+
+        var response = await DigitalSalesInvoiceEndpoint.GetByFiscalDocumentIdAsync(document.FiscalDocumentId, service);
+
+        Assert.NotNull(response.TemplateContract);
+        var sectionNames = response.TemplateContract.Sections.Select(section => section.Name).ToArray();
+        Assert.Contains("header", sectionNames);
+        Assert.Contains("seller_site_pos_identity", sectionNames);
+        Assert.Contains("document_identity", sectionNames);
+        Assert.Contains("fiscal_numbering", sectionNames);
+        Assert.Contains("parking_payment_references", sectionNames);
+        Assert.Contains("line_items", sectionNames);
+        Assert.Contains("discounts", sectionNames);
+        Assert.Contains("taxes", sectionNames);
+        Assert.Contains("tenders", sectionNames);
+        Assert.Contains("totals", sectionNames);
+        Assert.Contains("audit_hash_status", sectionNames);
+        Assert.Contains("footer_disclaimers", sectionNames);
+        Assert.Contains("deferred_placeholders", sectionNames);
+
+        Assert.Contains(response.TemplateContract.Sections, section => section.Name == "line_items" && section.Posture == "required");
+        Assert.Contains(response.TemplateContract.Sections, section => section.Name == "discounts" && section.Posture == "optional");
+        Assert.Contains(response.TemplateContract.Sections, section => section.Name == "footer_disclaimers" && section.Posture == "placeholder");
+        Assert.Contains(response.TemplateContract.Sections, section => section.Name == "deferred_placeholders" && section.Posture == "deferred");
+        Assert.Contains(response.TemplateContract.Fields, field => field.Path == "header.templateContractVersion" && field.Posture == "required");
+        Assert.Contains(response.TemplateContract.Fields, field => field.Path == "footerDisclaimers" && field.Posture == "placeholder");
+        Assert.Contains(response.TemplateContract.Fields, field => field.Path == "deferredPlaceholders.pdfDocument" && field.Posture == "deferred");
     }
 
     [Fact]
@@ -54,6 +93,9 @@ public sealed class DigitalSalesInvoiceEndpointTests
         Assert.Null(response.Render.FiscalDocumentNumber);
         Assert.Null(response.Render.FiscalSequenceValue);
         Assert.Null(response.Render.FiscalNumberAssignedAt);
+        Assert.NotNull(response.TemplateContract);
+        Assert.Contains(response.TemplateContract.Fields, field => field.Path == "fiscalNumbering.fiscalNumberAssignmentState" && field.Posture == "required");
+        Assert.Contains(response.TemplateContract.Fields, field => field.Path == "fiscalNumbering.fiscalDocumentNumber" && field.Posture == "optional");
     }
 
     [Fact]
@@ -68,6 +110,7 @@ public sealed class DigitalSalesInvoiceEndpointTests
         Assert.Equal("fiscal_document_not_found", response.Code);
         Assert.Equal("not_assigned", response.FiscalNumberAssignmentState);
         Assert.Equal(StatusCodes.Status404NotFound, response.HttpStatusCode);
+        Assert.Null(response.TemplateContract);
         Assert.Null(response.Render);
     }
 
@@ -83,6 +126,7 @@ public sealed class DigitalSalesInvoiceEndpointTests
         Assert.Equal("persistence_not_configured", response.Code);
         Assert.Equal("not_assigned", response.FiscalNumberAssignmentState);
         Assert.Equal(StatusCodes.Status503ServiceUnavailable, response.HttpStatusCode);
+        Assert.Null(response.TemplateContract);
     }
 
     [Fact]
@@ -145,6 +189,30 @@ public sealed class DigitalSalesInvoiceEndpointTests
                 }
             }
         }
+    }
+
+    [Fact]
+    public async Task TemplateContractDoesNotExposeGeneratedPdfHtmlOrQrOutputs()
+    {
+        var document = ValidReadModel(assignedNumber: true);
+        var service = new DigitalSalesInvoiceRenderService(new FiscalDocumentReadService(new StubFiscalDocumentReader(document)));
+
+        var response = await DigitalSalesInvoiceEndpoint.GetByFiscalDocumentIdAsync(document.FiscalDocumentId, service);
+
+        Assert.NotNull(response.TemplateContract);
+        Assert.NotNull(response.Render);
+        var renderProperties = typeof(DigitalSalesInvoiceRenderModel)
+            .GetProperties(BindingFlags.Public | BindingFlags.Instance)
+            .Select(property => property.Name)
+            .ToArray();
+        Assert.DoesNotContain("PdfDocument", renderProperties);
+        Assert.DoesNotContain("HtmlDocument", renderProperties);
+        Assert.DoesNotContain("QrCode", renderProperties);
+        Assert.Contains(response.TemplateContract.DeferredPlaceholders, placeholder => placeholder.Name == "pdfDocument" && placeholder.Posture == "deferred");
+        Assert.Contains(response.TemplateContract.DeferredPlaceholders, placeholder => placeholder.Name == "htmlDocument" && placeholder.Posture == "deferred");
+        Assert.Contains(response.TemplateContract.DeferredPlaceholders, placeholder => placeholder.Name == "qrCode" && placeholder.Posture == "deferred");
+        Assert.Contains(response.TemplateContract.DisplayResponsibilityNotes, note => note.Contains("structured fiscal data", StringComparison.OrdinalIgnoreCase));
+        Assert.Contains(response.TemplateContract.DisplayResponsibilityNotes, note => note.Contains("renderer", StringComparison.OrdinalIgnoreCase));
     }
 
     private static FiscalDocumentReadModel ValidReadModel(bool assignedNumber) =>

@@ -7,6 +7,7 @@ public sealed record GetDigitalSalesInvoiceResponse(
     bool Succeeded,
     string Code,
     string Message,
+    DigitalSalesInvoiceTemplateContractModel? TemplateContract = null,
     DigitalSalesInvoiceRenderModel? Render = null,
     string? FiscalNumberAssignmentState = null,
     Guid? FiscalDocumentStatusCodeId = null,

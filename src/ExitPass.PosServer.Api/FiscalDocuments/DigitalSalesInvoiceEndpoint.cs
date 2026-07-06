@@ -51,6 +51,7 @@ public static class DigitalSalesInvoiceEndpoint
                 true,
                 "rendered",
                 result.Message,
+                DigitalSalesInvoiceTemplateContract.Create(),
                 result.Render,
                 FiscalNumberAssignmentState: result.Render?.FiscalNumberAssignmentState,
                 FiscalDocumentStatusCodeId: result.Render?.FiscalDocumentStatusCodeId,
