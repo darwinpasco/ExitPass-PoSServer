@@ -8,6 +8,7 @@ namespace ExitPass.PosServer.Runtime.FiscalDocuments;
 
 public static class FiscalDocumentSemanticRequestHasher
 {
+    public const string Algorithm = "SHA-256";
     public const string Version = "sha256:v1";
     public const string Status = "calculated";
 
@@ -21,7 +22,21 @@ public static class FiscalDocumentSemanticRequestHasher
         ArgumentNullException.ThrowIfNull(command);
         ArgumentNullException.ThrowIfNull(command.PayableBasis);
 
-        var payload = new SortedDictionary<string, object?>
+        var json = Canonicalize(command);
+        var bytes = SHA256.HashData(Encoding.UTF8.GetBytes(json));
+        return Convert.ToHexString(bytes).ToLowerInvariant();
+    }
+
+    public static string Canonicalize(FiscalDocumentCreationCommand command)
+    {
+        ArgumentNullException.ThrowIfNull(command);
+        ArgumentNullException.ThrowIfNull(command.PayableBasis);
+
+        return JsonSerializer.Serialize(BuildCanonicalPayload(command), SerializerOptions);
+    }
+
+    private static SortedDictionary<string, object?> BuildCanonicalPayload(FiscalDocumentCreationCommand command) =>
+        new()
         {
             ["business_day_date"] = command.BusinessDayDate?.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture),
             ["central_pms_parking_session_ref"] = Normalize(command.CentralPmsParkingSessionRef),
@@ -45,7 +60,7 @@ public static class FiscalDocumentSemanticRequestHasher
             ["fiscal_document_status_code_id"] = command.FiscalDocumentStatusCodeId,
             ["fiscal_document_type_code_id"] = command.FiscalDocumentTypeCodeId,
             ["fiscal_document_type_code_key"] = Normalize(command.FiscalDocumentTypeCodeKey),
-            ["payable_basis"] = NormalizePayableBasis(command.PayableBasis),
+            ["payable_basis"] = NormalizePayableBasis(command.PayableBasis!),
             ["payment_finality_ref"] = Normalize(command.PaymentFinalityRef),
             ["reference_context"] = NormalizeDictionary(command.ReferenceContext),
             ["site_pos_server_id"] = command.SitePosServerId,
@@ -67,11 +82,6 @@ public static class FiscalDocumentSemanticRequestHasher
                 .ToArray(),
             ["vendor_ack_ref"] = Normalize(command.VendorAckRef)
         };
-
-        var json = JsonSerializer.Serialize(payload, SerializerOptions);
-        var bytes = SHA256.HashData(Encoding.UTF8.GetBytes(json));
-        return Convert.ToHexString(bytes).ToLowerInvariant();
-    }
 
     private static SortedDictionary<string, object?> NormalizePayableBasis(FiscalizationPayableBasisInput payableBasis) =>
         new()

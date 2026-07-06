@@ -14,6 +14,18 @@ This note records the POS Server runtime foundation required before Central PMS 
 - Semantic request hash: POS Server-calculated SHA-256 hash over normalized fiscal document semantics.
 - Semantic request hash version: `sha256:v1`.
 
+## Semantic Hash Parity Fixture
+
+The POS Server parity fixture for Central PMS FEQ retry readiness is:
+
+- Fixture path: `docs/v1.3/pos-server/fiscal-numbering/fixtures/pos_server_semantic_hash_sha256_v1_representative_fixture.json`
+- Canonical source version: `sha256:v1`
+- Hash algorithm/version: `SHA-256` / `sha256:v1`
+- Expected representative hash: `6a490379e4275a57f0a0695ff9dbd1271c4480adaeeefb9b6bfbd11e4d1ed201`
+- Canonical source fact count: `20`
+
+Central PMS can prove parity by reading `canonical_source_text` from the fixture, hashing that exact UTF-8 text with SHA-256, and comparing the lowercase hex digest to `expected_sha256_hash`. The `representative_create_request_facts` object documents safe request facts for mapping review; it is not production data and contains no secrets, customer PII, raw payment provider payloads, or raw statutory evidence.
+
 Persisted/read fiscal numbering fields currently include:
 
 - `fiscal_identity_id`
