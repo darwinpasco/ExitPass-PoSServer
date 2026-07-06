@@ -139,7 +139,9 @@ public sealed class DigitalSalesInvoiceEndpointTests
 
         using var provider = services.BuildServiceProvider();
         var service = provider.GetRequiredService<DigitalSalesInvoiceRenderService>();
+        var adapter = provider.GetRequiredService<DigitalSalesInvoicePresentationAdapter>();
         Assert.NotNull(service);
+        Assert.NotNull(adapter);
     }
 
     [Fact]
@@ -148,7 +150,10 @@ public sealed class DigitalSalesInvoiceEndpointTests
         var source = File.ReadAllText(FindApiSourcePath("FiscalDocumentEndpointRouteBuilderExtensions.cs"));
 
         Assert.Contains("/{fiscalDocumentId:guid}/digital-sales-invoice", source, StringComparison.Ordinal);
+        Assert.Contains("/{fiscalDocumentId:guid}/digital-sales-invoice/presentation", source, StringComparison.Ordinal);
         Assert.Contains("DigitalSalesInvoiceEndpoint.GetByFiscalDocumentIdAsync", source, StringComparison.Ordinal);
+        Assert.Contains("DigitalSalesInvoicePresentationEndpoint.GetByFiscalDocumentIdAsync", source, StringComparison.Ordinal);
+        Assert.Contains("Results.Json(response, statusCode: response.HttpStatusCode)", source, StringComparison.Ordinal);
         Assert.DoesNotContain("MapPost(\"/{fiscalDocumentId:guid}/digital-sales-invoice", source, StringComparison.Ordinal);
     }
 
@@ -176,7 +181,12 @@ public sealed class DigitalSalesInvoiceEndpointTests
             typeof(DigitalSalesInvoiceTenderRenderModel),
             typeof(DigitalSalesInvoiceTaxDetailRenderModel),
             typeof(DigitalSalesInvoiceDiscountRenderModel),
-            typeof(DigitalSalesInvoiceTotalRenderModel)
+            typeof(DigitalSalesInvoiceTotalRenderModel),
+            typeof(GetDigitalSalesInvoicePresentationResponse),
+            typeof(DigitalSalesInvoicePresentationModel),
+            typeof(DigitalSalesInvoicePresentationSectionModel),
+            typeof(DigitalSalesInvoicePresentationRowModel),
+            typeof(DigitalSalesInvoicePresentationNoticeModel)
         };
 
         foreach (var type in responseTypes)
@@ -213,6 +223,147 @@ public sealed class DigitalSalesInvoiceEndpointTests
         Assert.Contains(response.TemplateContract.DeferredPlaceholders, placeholder => placeholder.Name == "qrCode" && placeholder.Posture == "deferred");
         Assert.Contains(response.TemplateContract.DisplayResponsibilityNotes, note => note.Contains("structured fiscal data", StringComparison.OrdinalIgnoreCase));
         Assert.Contains(response.TemplateContract.DisplayResponsibilityNotes, note => note.Contains("renderer", StringComparison.OrdinalIgnoreCase));
+    }
+
+    [Fact]
+    public async Task PresentationEndpointMapsAssignedFiscalDocumentToPresentationResponse()
+    {
+        var document = ValidReadModel(assignedNumber: true);
+        var service = new DigitalSalesInvoiceRenderService(new FiscalDocumentReadService(new StubFiscalDocumentReader(document)));
+        var adapter = new DigitalSalesInvoicePresentationAdapter();
+
+        var response = await DigitalSalesInvoicePresentationEndpoint.GetByFiscalDocumentIdAsync(document.FiscalDocumentId, service, adapter);
+
+        Assert.True(response.Succeeded);
+        Assert.Equal("presented", response.Code);
+        Assert.Equal(StatusCodes.Status200OK, response.HttpStatusCode);
+        Assert.Equal("assigned", response.FiscalNumberAssignmentState);
+        Assert.Equal(document.FiscalDocumentStatusCodeId, response.FiscalDocumentStatusCodeId);
+        Assert.NotNull(response.TemplateContract);
+        Assert.NotNull(response.Presentation);
+        Assert.Equal("digital-sales-invoice-presentation-json-v1", response.Presentation.PresentationVersion);
+        Assert.Equal("digital-sales-invoice-json-v1", response.Presentation.SourceTemplateContractVersion);
+        Assert.Equal("PH_DIGITAL_SALES_INVOICE", response.Presentation.FiscalTemplateFamily);
+        Assert.Equal("application/json", response.Presentation.RenderFormat);
+        Assert.Equal(
+            [
+                "header",
+                "sellerSitePosIdentity",
+                "documentIdentity",
+                "fiscalNumbering",
+                "parkingPaymentReferences",
+                "lineItems",
+                "discounts",
+                "taxes",
+                "tenders",
+                "totals",
+                "auditHashStatus",
+                "footerDisclaimers",
+                "deferredPlaceholders"
+            ],
+            response.Presentation.Sections.Select(section => section.Name).ToArray());
+        Assert.Contains(
+            response.Presentation.Sections.Single(section => section.Name == "fiscalNumbering").Rows,
+            row => row.Key == "fiscalNumbering.fiscalDocumentNumber" &&
+                   row.DisplayValue == "SI-00000001-A");
+    }
+
+    [Fact]
+    public async Task PresentationEndpointMapsUnassignedFiscalDocumentToWarningNotice()
+    {
+        var document = ValidReadModel(assignedNumber: false);
+        var service = new DigitalSalesInvoiceRenderService(new FiscalDocumentReadService(new StubFiscalDocumentReader(document)));
+        var adapter = new DigitalSalesInvoicePresentationAdapter();
+
+        var response = await DigitalSalesInvoicePresentationEndpoint.GetByFiscalDocumentIdAsync(document.FiscalDocumentId, service, adapter);
+
+        Assert.True(response.Succeeded);
+        Assert.NotNull(response.Presentation);
+        Assert.Equal("not_assigned", response.Presentation.NumberingState);
+        Assert.Contains(response.Presentation.Notices, notice =>
+            notice.Code == "fiscal_number_not_assigned" &&
+            notice.Severity == "warning");
+        Assert.Contains(
+            response.Presentation.Sections.Single(section => section.Name == "fiscalNumbering").Rows,
+            row => row.Key == "fiscalNumbering.fiscalDocumentNumber" &&
+                   row.Posture == "not_available" &&
+                   row.RawValue is null);
+    }
+
+    [Fact]
+    public async Task PresentationEndpointMissingFiscalDocumentFailsClosed()
+    {
+        var documentId = Guid.Parse("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa");
+        var service = new DigitalSalesInvoiceRenderService(new FiscalDocumentReadService(new StubFiscalDocumentReader(null)));
+        var adapter = new DigitalSalesInvoicePresentationAdapter();
+
+        var response = await DigitalSalesInvoicePresentationEndpoint.GetByFiscalDocumentIdAsync(documentId, service, adapter);
+
+        Assert.False(response.Succeeded);
+        Assert.Equal("fiscal_document_not_found", response.Code);
+        Assert.Equal("not_assigned", response.FiscalNumberAssignmentState);
+        Assert.Equal(StatusCodes.Status404NotFound, response.HttpStatusCode);
+        Assert.Null(response.TemplateContract);
+        Assert.Null(response.Presentation);
+    }
+
+    [Fact]
+    public async Task PresentationEndpointDoesNotMutateOrAllocateFiscalNumbering()
+    {
+        var document = ValidReadModel(assignedNumber: false);
+        var originalUpdatedAt = document.UpdatedAt;
+        var reader = new StubFiscalDocumentReader(document);
+        var service = new DigitalSalesInvoiceRenderService(new FiscalDocumentReadService(reader));
+        var adapter = new DigitalSalesInvoicePresentationAdapter();
+
+        var response = await DigitalSalesInvoicePresentationEndpoint.GetByFiscalDocumentIdAsync(document.FiscalDocumentId, service, adapter);
+
+        Assert.True(response.Succeeded);
+        Assert.Equal(1, reader.ReadCount);
+        Assert.Equal(originalUpdatedAt, document.UpdatedAt);
+        Assert.Null(document.FiscalDocumentNumber);
+        Assert.Null(document.FiscalSequenceValue);
+        Assert.Null(document.FiscalNumberAssignedAt);
+    }
+
+    [Fact]
+    public async Task PresentationEndpointPersistenceNotConfiguredFailsClosed()
+    {
+        var service = new DigitalSalesInvoiceRenderService(
+            new FiscalDocumentReadService(new PersistenceNotConfiguredFiscalDocumentReader()));
+        var adapter = new DigitalSalesInvoicePresentationAdapter();
+
+        var response = await DigitalSalesInvoicePresentationEndpoint.GetByFiscalDocumentIdAsync(Guid.NewGuid(), service, adapter);
+
+        Assert.False(response.Succeeded);
+        Assert.Equal("persistence_not_configured", response.Code);
+        Assert.Equal("not_assigned", response.FiscalNumberAssignmentState);
+        Assert.Equal(StatusCodes.Status503ServiceUnavailable, response.HttpStatusCode);
+        Assert.Null(response.TemplateContract);
+        Assert.Null(response.Presentation);
+    }
+
+    [Fact]
+    public async Task PresentationEndpointDoesNotExposeGeneratedPdfHtmlOrQrOutputs()
+    {
+        var document = ValidReadModel(assignedNumber: true);
+        var service = new DigitalSalesInvoiceRenderService(new FiscalDocumentReadService(new StubFiscalDocumentReader(document)));
+        var adapter = new DigitalSalesInvoicePresentationAdapter();
+
+        var response = await DigitalSalesInvoicePresentationEndpoint.GetByFiscalDocumentIdAsync(document.FiscalDocumentId, service, adapter);
+
+        Assert.NotNull(response.Presentation);
+        Assert.DoesNotContain(
+            response.Presentation.Sections.SelectMany(section => section.Rows),
+            row => row.Key.EndsWith(".generatedContent", StringComparison.OrdinalIgnoreCase) ||
+                   row.Key.EndsWith(".documentBytes", StringComparison.OrdinalIgnoreCase));
+        Assert.All(
+            response.Presentation.Sections.Single(section => section.Name == "deferredPlaceholders").Rows,
+            row =>
+            {
+                Assert.Equal("deferred", row.Posture);
+                Assert.Equal("deferred", row.ValueKind);
+            });
     }
 
     private static FiscalDocumentReadModel ValidReadModel(bool assignedNumber) =>
@@ -361,7 +512,12 @@ public sealed class DigitalSalesInvoiceEndpointTests
             this.document = document;
         }
 
-        public Task<FiscalDocumentReadModel?> GetByIdAsync(Guid fiscalDocumentId, CancellationToken cancellationToken) =>
-            Task.FromResult(document?.FiscalDocumentId == fiscalDocumentId ? document : null);
+        public int ReadCount { get; private set; }
+
+        public Task<FiscalDocumentReadModel?> GetByIdAsync(Guid fiscalDocumentId, CancellationToken cancellationToken)
+        {
+            ReadCount++;
+            return Task.FromResult(document?.FiscalDocumentId == fiscalDocumentId ? document : null);
+        }
     }
 }
