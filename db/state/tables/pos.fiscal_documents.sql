@@ -24,6 +24,17 @@ CREATE TABLE IF NOT EXISTS pos.fiscal_documents (
     payment_finality_ref text NULL,
     vendor_ack_ref text NULL,
     business_day_date date NULL,
+    void_status text NULL,
+    void_reason_code text NULL,
+    void_reason_text text NULL,
+    void_requested_by_ref text NULL,
+    void_requested_at timestamptz NULL,
+    voided_at timestamptz NULL,
+    void_idempotency_key text NULL,
+    void_semantic_request_hash text NULL,
+    void_correlation_id text NULL,
+    void_source_system_ref text NULL,
+    void_business_day_date date NULL,
     document_context jsonb NULL,
     is_active boolean NOT NULL DEFAULT true,
     created_at timestamptz NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -89,6 +100,53 @@ CREATE TABLE IF NOT EXISTS pos.fiscal_documents (
     CONSTRAINT ck_fiscal_documents__vendor_ack_ref CHECK (
         vendor_ack_ref IS NULL OR char_length(btrim(vendor_ack_ref)) > 0
     ),
+    CONSTRAINT ck_fiscal_documents__void_status CHECK (
+        void_status IS NULL OR char_length(btrim(void_status)) > 0
+    ),
+    CONSTRAINT ck_fiscal_documents__void_reason_code CHECK (
+        void_reason_code IS NULL OR char_length(btrim(void_reason_code)) > 0
+    ),
+    CONSTRAINT ck_fiscal_documents__void_reason_text CHECK (
+        void_reason_text IS NULL OR char_length(btrim(void_reason_text)) > 0
+    ),
+    CONSTRAINT ck_fiscal_documents__void_requested_by_ref CHECK (
+        void_requested_by_ref IS NULL OR char_length(btrim(void_requested_by_ref)) > 0
+    ),
+    CONSTRAINT ck_fiscal_documents__void_idempotency_key CHECK (
+        void_idempotency_key IS NULL OR char_length(btrim(void_idempotency_key)) > 0
+    ),
+    CONSTRAINT ck_fiscal_documents__void_semantic_hash CHECK (
+        void_semantic_request_hash IS NULL OR char_length(btrim(void_semantic_request_hash)) > 0
+    ),
+    CONSTRAINT ck_fiscal_documents__void_correlation_id CHECK (
+        void_correlation_id IS NULL OR char_length(btrim(void_correlation_id)) > 0
+    ),
+    CONSTRAINT ck_fiscal_documents__void_source_system_ref CHECK (
+        void_source_system_ref IS NULL OR char_length(btrim(void_source_system_ref)) > 0
+    ),
+    CONSTRAINT ck_fiscal_documents__void_record_consistency CHECK (
+        (
+            void_status IS NULL
+            AND void_reason_code IS NULL
+            AND void_requested_by_ref IS NULL
+            AND void_requested_at IS NULL
+            AND voided_at IS NULL
+            AND void_idempotency_key IS NULL
+            AND void_semantic_request_hash IS NULL
+            AND void_correlation_id IS NULL
+        )
+        OR
+        (
+            void_status IS NOT NULL
+            AND void_reason_code IS NOT NULL
+            AND void_requested_by_ref IS NOT NULL
+            AND void_requested_at IS NOT NULL
+            AND voided_at IS NOT NULL
+            AND void_idempotency_key IS NOT NULL
+            AND void_semantic_request_hash IS NOT NULL
+            AND void_correlation_id IS NOT NULL
+        )
+    ),
     CONSTRAINT ck_fiscal_documents__document_context_object CHECK (
         document_context IS NULL OR jsonb_typeof(document_context) = 'object'
     )
@@ -128,4 +186,15 @@ COMMENT ON COLUMN pos.fiscal_documents.central_pms_payment_attempt_ref IS 'Refer
 COMMENT ON COLUMN pos.fiscal_documents.central_pms_payment_confirmation_ref IS 'Reference to Central PMS PaymentConfirmation context; POS Server does not own PaymentConfirmation lifecycle.';
 COMMENT ON COLUMN pos.fiscal_documents.payment_finality_ref IS 'Reference to Central PMS payment finality context only; not POS-owned payment finality.';
 COMMENT ON COLUMN pos.fiscal_documents.vendor_ack_ref IS 'Reference to vendor acknowledgement context only; not vendor authority.';
+COMMENT ON COLUMN pos.fiscal_documents.void_status IS 'Void/cancellation runtime posture. Does not delete, reuse, unburn, reset, or decrement the original fiscal number.';
+COMMENT ON COLUMN pos.fiscal_documents.void_reason_code IS 'Reference-safe runtime void reason code captured by the POS Server void API.';
+COMMENT ON COLUMN pos.fiscal_documents.void_reason_text IS 'Optional reference-safe void reason text. Must not contain raw evidence, credentials, or sensitive payloads.';
+COMMENT ON COLUMN pos.fiscal_documents.void_requested_by_ref IS 'Reference to actor or upstream system requesting the void; reference only.';
+COMMENT ON COLUMN pos.fiscal_documents.void_requested_at IS 'Request timestamp supplied by caller or defaulted by POS Server runtime.';
+COMMENT ON COLUMN pos.fiscal_documents.voided_at IS 'Timestamp when POS Server durably recorded fiscal document void/cancellation.';
+COMMENT ON COLUMN pos.fiscal_documents.void_idempotency_key IS 'Idempotency key that recorded the fiscal document void/cancellation.';
+COMMENT ON COLUMN pos.fiscal_documents.void_semantic_request_hash IS 'Semantic hash of meaningful void/cancellation request facts.';
+COMMENT ON COLUMN pos.fiscal_documents.void_correlation_id IS 'Correlation reference for tracing the void/cancellation request; reference only.';
+COMMENT ON COLUMN pos.fiscal_documents.void_source_system_ref IS 'Optional source-system reference for the void/cancellation request.';
+COMMENT ON COLUMN pos.fiscal_documents.void_business_day_date IS 'Optional business day supplied for the void/cancellation request.';
 COMMENT ON COLUMN pos.fiscal_documents.document_context IS 'Flexible header context for unresolved fiscal document attributes. Must remain a JSON object and is not authoritative fiscal number storage.';

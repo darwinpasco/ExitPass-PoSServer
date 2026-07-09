@@ -11,4 +11,12 @@ public sealed class InvalidPersistenceConfigurationFiscalDocumentRepository : IF
     {
         throw new FiscalDocumentInvalidPersistenceConfigurationException();
     }
+
+    public Task<FiscalDocumentVoidPersistenceResult> VoidAsync(
+        FiscalDocumentVoidCommand command,
+        FiscalDocumentVoidIdempotency idempotency,
+        CancellationToken cancellationToken)
+    {
+        throw new FiscalDocumentInvalidPersistenceConfigurationException();
+    }
 }

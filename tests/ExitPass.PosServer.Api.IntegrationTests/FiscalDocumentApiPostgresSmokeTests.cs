@@ -19,6 +19,7 @@ public sealed class FiscalDocumentApiPostgresSmokeTests
     private static readonly Guid SitePosServerId = Guid.Parse("10000000-0000-0000-0000-000000000001");
     private static readonly Guid FiscalDocumentTypeCodeId = Guid.Parse("10000000-0000-0000-0000-000000000101");
     private static readonly Guid FiscalDocumentStatusCodeId = Guid.Parse("10000000-0000-0000-0000-000000000102");
+    private static readonly Guid FiscalDocumentVoidedStatusCodeId = Guid.Parse("10000000-0000-0000-0000-000000000103");
     private static readonly Guid FiscalLineTypeCodeId = Guid.Parse("10000000-0000-0000-0000-000000000201");
     private static readonly Guid FiscalTenderTypeCodeId = Guid.Parse("10000000-0000-0000-0000-000000000301");
     private static readonly Guid FiscalTaxTypeCodeId = Guid.Parse("10000000-0000-0000-0000-000000000401");
@@ -160,18 +161,49 @@ public sealed class FiscalDocumentApiPostgresSmokeTests
         Assert.Equal("fiscal_document_not_found", missingGetBody.Code);
         Assert.Equal("not_assigned", missingGetBody.FiscalNumberAssignmentState);
 
+        var voidRequest = new VoidFiscalDocumentRequest(
+            "void-key-success",
+            "operator_error",
+            "Smoke void correction",
+            "api-smoke-operator",
+            DateTimeOffset.Parse("2026-07-09T04:30:00Z"),
+            "corr-void-success",
+            "api-smoke",
+            new DateOnly(2026, 7, 1));
+        using var voidResponse = await client.PostAsJsonAsync($"/v1/fiscal-documents/{fiscalDocumentId}/void", voidRequest);
+        var voidBody = await voidResponse.Content.ReadFromJsonAsync<VoidFiscalDocumentResponse>();
+
+        Assert.Equal(HttpStatusCode.OK, voidResponse.StatusCode);
+        Assert.NotNull(voidBody);
+        Assert.True(voidBody.Succeeded);
+        Assert.Equal("accepted", voidBody.Code);
+        Assert.Equal("newly_voided", voidBody.ResultClassification);
+        Assert.Equal(fiscalDocumentId, voidBody.FiscalDocumentId);
+        Assert.Equal("SI-00000001-A", voidBody.FiscalDocumentNumber);
+        Assert.Equal(1, voidBody.FiscalSequenceValue);
+        Assert.Equal("voided", voidBody.FiscalDocumentStatus);
+        Assert.Equal("recorded", voidBody.VoidStatus);
+
+        using var voidReplayResponse = await client.PostAsJsonAsync($"/v1/fiscal-documents/{fiscalDocumentId}/void", voidRequest);
+        var voidReplayBody = await voidReplayResponse.Content.ReadFromJsonAsync<VoidFiscalDocumentResponse>();
+
+        Assert.Equal(HttpStatusCode.OK, voidReplayResponse.StatusCode);
+        Assert.NotNull(voidReplayBody);
+        Assert.True(voidReplayBody.Succeeded);
+        Assert.Equal("idempotent_replay", voidReplayBody.ResultClassification);
+
         await using var connection = new NpgsqlConnection(connectionString);
         await connection.OpenAsync();
 
         Assert.Equal(1, await CountAsync(connection, "pos.fiscal_documents", "fiscal_document_id = @id", "id", fiscalDocumentId));
-        Assert.Equal(1, await CountAsync(connection, "pos.fiscal_document_status_history", "fiscal_document_id = @id", "id", fiscalDocumentId));
+        Assert.Equal(2, await CountAsync(connection, "pos.fiscal_document_status_history", "fiscal_document_id = @id", "id", fiscalDocumentId));
         Assert.Equal(0, await CountAsync(connection, "pos.fiscal_document_links", "source_fiscal_document_id = @id", "id", fiscalDocumentId));
         Assert.Equal(1, await CountAsync(connection, "pos.fiscal_document_lines", "fiscal_document_id = @id", "id", fiscalDocumentId));
         Assert.Equal(1, await CountAsync(connection, "pos.fiscal_tenders", "fiscal_document_id = @id", "id", fiscalDocumentId));
         Assert.Equal(1, await CountAsync(connection, "pos.fiscal_tax_details", "fiscal_document_id = @id", "id", fiscalDocumentId));
         Assert.Equal(1, await CountAsync(connection, "pos.fiscal_discount_privilege_details", "fiscal_document_id = @id", "id", fiscalDocumentId));
         Assert.Equal(1, await CountAsync(connection, "pos.fiscal_totals", "fiscal_document_id = @id", "id", fiscalDocumentId));
-        Assert.Equal(1, await CountAsync(connection, "pos.idempotency_records", "linked_fiscal_document_id = @id", "id", fiscalDocumentId));
+        Assert.Equal(2, await CountAsync(connection, "pos.idempotency_records", "linked_fiscal_document_id = @id", "id", fiscalDocumentId));
 
         Assert.Equal("central-finality-success", await ScalarStringAsync(
             connection,
@@ -199,6 +231,22 @@ public sealed class FiscalDocumentApiPostgresSmokeTests
             connection,
             "select last_issued_sequence_value from pos.fiscal_sequence_states where fiscal_sequence_policy_id = @id",
             FiscalSequencePolicyId));
+        Assert.Equal("recorded", await ScalarStringAsync(
+            connection,
+            "select void_status from pos.fiscal_documents where fiscal_document_id = @id",
+            fiscalDocumentId));
+        Assert.Equal("operator_error", await ScalarStringAsync(
+            connection,
+            "select void_reason_code from pos.fiscal_documents where fiscal_document_id = @id",
+            fiscalDocumentId));
+        Assert.Equal("void-key-success", await ScalarStringAsync(
+            connection,
+            "select void_idempotency_key from pos.fiscal_documents where fiscal_document_id = @id",
+            fiscalDocumentId));
+        Assert.Equal(FiscalDocumentVoidedStatusCodeId.ToString("D"), await ScalarStringAsync(
+            connection,
+            "select fiscal_document_status_code_id::text from pos.fiscal_documents where fiscal_document_id = @id",
+            fiscalDocumentId));
 
         Assert.Equal(0, await CountTextMarkerAsync(connection, "raw_id"));
         Assert.Equal(0, await CountTextMarkerAsync(connection, "payment_payload"));
@@ -814,9 +862,18 @@ public sealed class FiscalDocumentApiPostgresSmokeTests
             "API Smoke Fiscal Document Status",
             "Disposable smoke-test fiscal document status code set.",
             FiscalDocumentStatusCodeId,
-            "created_smoke",
-            "Created Smoke",
-            "Disposable smoke-test created status posture."),
+            "issued",
+            "Issued Smoke",
+            "Disposable smoke-test issued status posture."),
+        new(
+            Guid.Parse("20000000-0000-0000-0000-000000000102"),
+            "api_smoke_fiscal_document_status",
+            "API Smoke Fiscal Document Status",
+            "Disposable smoke-test fiscal document status code set.",
+            FiscalDocumentVoidedStatusCodeId,
+            "voided",
+            "Voided Smoke",
+            "Disposable smoke-test voided status posture."),
         new(
             Guid.Parse("20000000-0000-0000-0000-000000000201"),
             "api_smoke_fiscal_line_type",

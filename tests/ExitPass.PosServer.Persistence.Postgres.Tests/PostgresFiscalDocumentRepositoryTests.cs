@@ -147,6 +147,62 @@ public sealed class PostgresFiscalDocumentRepositoryTests
     }
 
     [Fact]
+    public void VoidSqlLocksDocumentUpdatesStatusHistoryAndDoesNotAllocateSequence()
+    {
+        var voidSql = PostgresFiscalDocumentSql.SelectFiscalDocumentForVoidUpdate +
+            PostgresFiscalDocumentSql.SelectVoidFiscalDocumentStatusCode +
+            PostgresFiscalDocumentSql.UpdateFiscalDocumentVoided +
+            PostgresFiscalDocumentSql.InsertFiscalDocumentVoidStatusHistory;
+
+        Assert.Contains("from pos.fiscal_documents", voidSql, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("for update of document", voidSql, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("update pos.fiscal_documents", voidSql, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("void_status = 'recorded'", voidSql, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("void_reason_code = @void_reason_code", voidSql, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("void_idempotency_key = @void_idempotency_key", voidSql, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("void_semantic_request_hash = @void_semantic_request_hash", voidSql, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("insert into pos.fiscal_document_status_history", voidSql, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("prior_fiscal_document_status_code_id", voidSql, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("@voided_fiscal_document_status_code_id", voidSql, StringComparison.Ordinal);
+        Assert.DoesNotContain("update pos.fiscal_sequence_states", voidSql, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("last_issued_sequence_value", voidSql, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("current_sequence_value =", voidSql, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("insert into pos.fiscal_documents", voidSql, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("pos.digital_si", voidSql, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("pos.fiscal_report", voidSql, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("exit", voidSql, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("gate", voidSql, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void VoidRepositoryUsesIdempotencyAndStatusTransitionInSingleTransaction()
+    {
+        var repositorySource = File.ReadAllText(FindRepositorySourcePath());
+
+        Assert.Contains("PostgresFiscalDocumentSql.SelectFiscalDocumentForVoidUpdate,", repositorySource, StringComparison.Ordinal);
+        Assert.Contains("PostgresFiscalDocumentSql.InsertIdempotencyRecord,", repositorySource, StringComparison.Ordinal);
+        Assert.Contains("PostgresFiscalDocumentSql.SelectIdempotencyRecordForUpdate,", repositorySource, StringComparison.Ordinal);
+        Assert.Contains("PostgresFiscalDocumentSql.UpdateFiscalDocumentVoided,", repositorySource, StringComparison.Ordinal);
+        Assert.Contains("PostgresFiscalDocumentSql.InsertFiscalDocumentVoidStatusHistory,", repositorySource, StringComparison.Ordinal);
+        Assert.Contains("PostgresFiscalDocumentSql.UpdateIdempotencyRecordCompleted,", repositorySource, StringComparison.Ordinal);
+
+        var voidLockIndex = repositorySource.IndexOf("var lockedDocument = await ReadFiscalDocumentForVoidUpdateAsync", StringComparison.Ordinal);
+        var statusResolveIndex = repositorySource.IndexOf("var voidedStatusCodeId = await ResolveVoidedStatusCodeIdAsync", StringComparison.Ordinal);
+        var idempotencyInsertIndex = repositorySource.LastIndexOf("InsertIdempotencyRecord,", StringComparison.Ordinal);
+        var idempotencyLockIndex = repositorySource.LastIndexOf("SelectIdempotencyRecordForUpdate,", StringComparison.Ordinal);
+        var updateIndex = repositorySource.IndexOf("UpdateFiscalDocumentVoided,", StringComparison.Ordinal);
+        var historyIndex = repositorySource.IndexOf("InsertFiscalDocumentVoidStatusHistory,", StringComparison.Ordinal);
+        var completeIndex = repositorySource.LastIndexOf("UpdateIdempotencyRecordCompleted,", StringComparison.Ordinal);
+
+        Assert.True(voidLockIndex < statusResolveIndex);
+        Assert.True(statusResolveIndex < idempotencyInsertIndex);
+        Assert.True(idempotencyInsertIndex < idempotencyLockIndex);
+        Assert.True(idempotencyLockIndex < updateIndex);
+        Assert.True(updateIndex < historyIndex);
+        Assert.True(historyIndex < completeIndex);
+    }
+
+    [Fact]
     public void FiscalIdentityResolutionSqlUsesSiteHistoryAndEffectiveActiveFiltersOnly()
     {
         var identitySql = PostgresFiscalDocumentSql.SelectEligibleFiscalIdentity +
@@ -196,6 +252,22 @@ public sealed class PostgresFiscalDocumentRepositoryTests
         Assert.Contains("fiscal_number_assigned_by_ref", headerSql, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("fiscal_sequence_states", headerSql, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("fiscal_counter_states", headerSql, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void FiscalDocumentSchemaPersistsVoidFactsWithoutChangingNumberColumns()
+    {
+        var schema = File.ReadAllText(FindTableSourcePath("pos.fiscal_documents.sql"));
+
+        Assert.Contains("void_status text", schema, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("void_reason_code text", schema, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("void_requested_by_ref text", schema, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("void_idempotency_key text", schema, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("void_semantic_request_hash text", schema, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("void_correlation_id text", schema, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("void_record_consistency", schema, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("fiscal_document_number text", schema, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("fiscal_sequence_value bigint", schema, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]
@@ -632,5 +704,32 @@ public sealed class PostgresFiscalDocumentRepositoryTests
         }
 
         throw new FileNotFoundException("Could not locate PostgresFiscalDocumentRepository.cs.");
+    }
+
+    private static string FindTableSourcePath(string fileName, [CallerFilePath] string testFilePath = "")
+    {
+        var testSourceDirectory = Path.GetDirectoryName(testFilePath) ?? string.Empty;
+        foreach (var startDirectory in new[] { testSourceDirectory, AppContext.BaseDirectory, Directory.GetCurrentDirectory() })
+        {
+            var current = new DirectoryInfo(startDirectory);
+            while (current is not null)
+            {
+                var candidate = Path.Combine(
+                    current.FullName,
+                    "db",
+                    "state",
+                    "tables",
+                    fileName);
+
+                if (File.Exists(candidate))
+                {
+                    return candidate;
+                }
+
+                current = current.Parent;
+            }
+        }
+
+        throw new FileNotFoundException($"Could not locate {fileName}.");
     }
 }
