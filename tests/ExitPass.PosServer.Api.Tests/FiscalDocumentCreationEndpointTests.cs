@@ -979,5 +979,11 @@ public sealed class FiscalDocumentCreationEndpointTests
             records.Add(key, (idempotency.SemanticRequestHash, resolvedDraft));
             return Task.FromResult(FiscalDocumentPersistenceResult.Created(resolvedDraft));
         }
+
+        public Task<FiscalDocumentVoidPersistenceResult> VoidAsync(
+            FiscalDocumentVoidCommand command,
+            FiscalDocumentVoidIdempotency idempotency,
+            CancellationToken cancellationToken) =>
+            throw new NotSupportedException();
     }
 }

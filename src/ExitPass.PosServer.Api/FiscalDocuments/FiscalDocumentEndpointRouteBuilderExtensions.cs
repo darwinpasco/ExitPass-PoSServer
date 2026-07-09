@@ -30,6 +30,19 @@ public static class FiscalDocumentEndpointRouteBuilderExtensions
             return Results.Json(response, statusCode: response.HttpStatusCode);
         });
 
+        group.MapPost("/{fiscalDocumentId:guid}/void", async (
+            Guid fiscalDocumentId,
+            VoidFiscalDocumentRequest request,
+            FiscalDocumentVoidService service,
+            CancellationToken cancellationToken) =>
+        {
+            var response = await FiscalDocumentVoidEndpoint
+                .VoidAsync(fiscalDocumentId, request, service, cancellationToken)
+                .ConfigureAwait(false);
+
+            return Results.Json(response, statusCode: response.HttpStatusCode);
+        });
+
         group.MapGet("/{fiscalDocumentId:guid}/digital-sales-invoice", async (
             Guid fiscalDocumentId,
             DigitalSalesInvoiceRenderService service,

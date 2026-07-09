@@ -11,4 +11,12 @@ public sealed class PersistenceNotConfiguredFiscalDocumentRepository : IFiscalDo
     {
         throw new FiscalDocumentPersistenceNotConfiguredException();
     }
+
+    public Task<FiscalDocumentVoidPersistenceResult> VoidAsync(
+        FiscalDocumentVoidCommand command,
+        FiscalDocumentVoidIdempotency idempotency,
+        CancellationToken cancellationToken)
+    {
+        throw new FiscalDocumentPersistenceNotConfiguredException();
+    }
 }

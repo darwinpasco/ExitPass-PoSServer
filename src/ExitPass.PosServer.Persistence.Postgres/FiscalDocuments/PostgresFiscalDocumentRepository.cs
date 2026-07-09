@@ -7,6 +7,12 @@ namespace ExitPass.PosServer.Persistence.Postgres.FiscalDocuments;
 
 public sealed class PostgresFiscalDocumentRepository : IFiscalDocumentRepository
 {
+    private static readonly HashSet<string> VoidableStatusCodeKeys = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "issued",
+        "recorded"
+    };
+
     private readonly NpgsqlDataSource dataSource;
 
     public PostgresFiscalDocumentRepository(NpgsqlDataSource dataSource)
@@ -210,6 +216,150 @@ public sealed class PostgresFiscalDocumentRepository : IFiscalDocumentRepository
         {
             throw new FiscalDocumentPersistenceException(
                 "Fiscal document persistence write failed.",
+                ex);
+        }
+    }
+
+    public async Task<FiscalDocumentVoidPersistenceResult> VoidAsync(
+        FiscalDocumentVoidCommand command,
+        FiscalDocumentVoidIdempotency idempotency,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            await using var connection = await dataSource.OpenConnectionAsync(cancellationToken).ConfigureAwait(false);
+            await using var transaction = await connection.BeginTransactionAsync(cancellationToken).ConfigureAwait(false);
+
+            try
+            {
+                var lockedDocument = await ReadFiscalDocumentForVoidUpdateAsync(
+                    connection,
+                    transaction,
+                    command.FiscalDocumentId,
+                    cancellationToken).ConfigureAwait(false);
+
+                if (lockedDocument is null)
+                {
+                    throw new FiscalDocumentVoidNotFoundException();
+                }
+
+                if (IsAlreadyVoided(lockedDocument))
+                {
+                    if (string.Equals(lockedDocument.VoidIdempotencyKey, idempotency.Key, StringComparison.Ordinal) &&
+                        string.Equals(lockedDocument.VoidSemanticRequestHash, idempotency.SemanticRequestHash, StringComparison.Ordinal))
+                    {
+                        await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
+                        return FiscalDocumentVoidPersistenceResult.Replayed(ToVoidRecord(lockedDocument, idempotency.Key, command.CorrelationId));
+                    }
+
+                    throw new FiscalDocumentVoidIdempotencyConflictException();
+                }
+
+                if (!VoidableStatusCodeKeys.Contains(lockedDocument.CurrentStatusCodeKey))
+                {
+                    throw new FiscalDocumentVoidInvalidStateException(
+                        "Only issued or recorded fiscal documents can be voided.");
+                }
+
+                var voidedStatusCodeId = await ResolveVoidedStatusCodeIdAsync(
+                    connection,
+                    transaction,
+                    lockedDocument.CurrentStatusCodeSetId,
+                    cancellationToken).ConfigureAwait(false);
+
+                await using var insertIdempotencyCommand = new NpgsqlCommand(
+                    PostgresFiscalDocumentSql.InsertIdempotencyRecord,
+                    connection,
+                    transaction);
+                AddInsertVoidIdempotencyParameters(insertIdempotencyCommand, command, idempotency, lockedDocument, voidedStatusCodeId);
+                await insertIdempotencyCommand.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
+
+                await using var selectIdempotencyCommand = new NpgsqlCommand(
+                    PostgresFiscalDocumentSql.SelectIdempotencyRecordForUpdate,
+                    connection,
+                    transaction);
+                AddVoidIdempotencyKeyParameters(selectIdempotencyCommand, idempotency);
+                await using var idempotencyReader = await selectIdempotencyCommand
+                    .ExecuteReaderAsync(cancellationToken)
+                    .ConfigureAwait(false);
+
+                if (!await idempotencyReader.ReadAsync(cancellationToken).ConfigureAwait(false))
+                {
+                    throw new InvalidOperationException("Fiscal document void idempotency record was not available after insert.");
+                }
+
+                var existingSemanticHash = idempotencyReader.GetString(0);
+                var linkedFiscalDocumentId = idempotencyReader.IsDBNull(1)
+                    ? (Guid?)null
+                    : idempotencyReader.GetGuid(1);
+                await idempotencyReader.CloseAsync().ConfigureAwait(false);
+
+                if (!string.Equals(existingSemanticHash, idempotency.SemanticRequestHash, StringComparison.Ordinal))
+                {
+                    throw new FiscalDocumentVoidIdempotencyConflictException();
+                }
+
+                if (linkedFiscalDocumentId is not null)
+                {
+                    if (linkedFiscalDocumentId.Value != command.FiscalDocumentId)
+                    {
+                        throw new FiscalDocumentVoidIdempotencyConflictException();
+                    }
+
+                    await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
+                    return FiscalDocumentVoidPersistenceResult.Replayed(ToVoidRecord(lockedDocument, idempotency.Key, command.CorrelationId));
+                }
+
+                var voidedAt = DateTimeOffset.UtcNow;
+
+                await using var updateDocumentCommand = new NpgsqlCommand(
+                    PostgresFiscalDocumentSql.UpdateFiscalDocumentVoided,
+                    connection,
+                    transaction);
+                AddVoidUpdateParameters(updateDocumentCommand, command, idempotency, voidedStatusCodeId, voidedAt);
+                await updateDocumentCommand.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
+
+                await using var statusHistoryCommand = new NpgsqlCommand(
+                    PostgresFiscalDocumentSql.InsertFiscalDocumentVoidStatusHistory,
+                    connection,
+                    transaction);
+                AddVoidStatusHistoryParameters(statusHistoryCommand, command, lockedDocument, voidedStatusCodeId, voidedAt);
+                await statusHistoryCommand.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
+
+                await using var completeIdempotencyCommand = new NpgsqlCommand(
+                    PostgresFiscalDocumentSql.UpdateIdempotencyRecordCompleted,
+                    connection,
+                    transaction);
+                AddVoidIdempotencyCompletionParameters(completeIdempotencyCommand, command, idempotency);
+                await completeIdempotencyCommand.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
+
+                await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
+
+                var record = new FiscalDocumentVoidRecord(
+                    lockedDocument.FiscalDocumentId,
+                    lockedDocument.FiscalDocumentNumber,
+                    lockedDocument.FiscalSequenceValue,
+                    "voided",
+                    "recorded",
+                    voidedAt,
+                    command.ReasonCode,
+                    command.ReasonText,
+                    command.RequestedByRef,
+                    idempotency.Key,
+                    command.CorrelationId);
+
+                return FiscalDocumentVoidPersistenceResult.NewlyVoided(record);
+            }
+            catch
+            {
+                await transaction.RollbackAsync(cancellationToken).ConfigureAwait(false);
+                throw;
+            }
+        }
+        catch (Exception ex) when (ex is NpgsqlException or TimeoutException)
+        {
+            throw new FiscalDocumentPersistenceException(
+                "Fiscal document void persistence write failed.",
                 ex);
         }
     }
@@ -482,6 +632,83 @@ public sealed class PostgresFiscalDocumentRepository : IFiscalDocumentRepository
         return Convert.ToInt64(value);
     }
 
+    private static async Task<LockedFiscalDocumentVoidState?> ReadFiscalDocumentForVoidUpdateAsync(
+        NpgsqlConnection connection,
+        NpgsqlTransaction transaction,
+        Guid fiscalDocumentId,
+        CancellationToken cancellationToken)
+    {
+        await using var command = new NpgsqlCommand(
+            PostgresFiscalDocumentSql.SelectFiscalDocumentForVoidUpdate,
+            connection,
+            transaction);
+        command.Parameters.AddWithValue("fiscal_document_id", fiscalDocumentId);
+
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
+        if (!await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
+        {
+            return null;
+        }
+
+        return new LockedFiscalDocumentVoidState(
+            reader.GetGuid(0),
+            reader.IsDBNull(1) ? null : reader.GetString(1),
+            reader.IsDBNull(2) ? null : reader.GetInt64(2),
+            reader.GetGuid(3),
+            reader.GetGuid(4),
+            reader.GetString(5),
+            reader.GetGuid(6),
+            reader.IsDBNull(7) ? null : reader.GetString(7),
+            reader.IsDBNull(8) ? null : reader.GetString(8),
+            reader.IsDBNull(9) ? null : reader.GetString(9),
+            reader.IsDBNull(10) ? null : reader.GetString(10),
+            reader.IsDBNull(11) ? null : ReadDateTimeOffset(reader, 11),
+            reader.IsDBNull(12) ? null : reader.GetString(12),
+            reader.IsDBNull(13) ? null : reader.GetString(13),
+            reader.IsDBNull(14) ? null : reader.GetString(14));
+    }
+
+    private static async Task<Guid> ResolveVoidedStatusCodeIdAsync(
+        NpgsqlConnection connection,
+        NpgsqlTransaction transaction,
+        Guid currentStatusCodeSetId,
+        CancellationToken cancellationToken)
+    {
+        var statusIds = await ReadGuidListAsync(
+            connection,
+            transaction,
+            PostgresFiscalDocumentSql.SelectVoidFiscalDocumentStatusCode,
+            command => command.Parameters.AddWithValue("controlled_code_set_id", currentStatusCodeSetId),
+            cancellationToken).ConfigureAwait(false);
+
+        return statusIds.Count == 1
+            ? statusIds[0]
+            : throw new FiscalDocumentVoidInvalidStateException(
+                "Fiscal document void requires exactly one active voided status code in the current fiscal document status code set.");
+    }
+
+    private static bool IsAlreadyVoided(LockedFiscalDocumentVoidState lockedDocument) =>
+        string.Equals(lockedDocument.VoidStatus, "recorded", StringComparison.OrdinalIgnoreCase) ||
+        string.Equals(lockedDocument.CurrentStatusCodeKey, "voided", StringComparison.OrdinalIgnoreCase) ||
+        string.Equals(lockedDocument.CurrentStatusCodeKey, "cancelled", StringComparison.OrdinalIgnoreCase);
+
+    private static FiscalDocumentVoidRecord ToVoidRecord(
+        LockedFiscalDocumentVoidState lockedDocument,
+        string idempotencyKey,
+        string correlationId) =>
+        new(
+            lockedDocument.FiscalDocumentId,
+            lockedDocument.FiscalDocumentNumber,
+            lockedDocument.FiscalSequenceValue,
+            "voided",
+            lockedDocument.VoidStatus ?? "recorded",
+            lockedDocument.VoidedAt ?? DateTimeOffset.UtcNow,
+            lockedDocument.VoidReasonCode ?? "other",
+            lockedDocument.VoidReasonText,
+            lockedDocument.VoidRequestedByRef ?? "unknown",
+            idempotencyKey,
+            lockedDocument.VoidCorrelationId ?? correlationId);
+
     private static void AddInsertIdempotencyParameters(
         NpgsqlCommand command,
         FiscalDocumentDraft draft,
@@ -498,7 +725,31 @@ public sealed class PostgresFiscalDocumentRepository : IFiscalDocumentRepository
         contextParameter.Value = PostgresFiscalDocumentSql.CreateIdempotencyContextJson(draft, idempotency);
     }
 
+    private static void AddInsertVoidIdempotencyParameters(
+        NpgsqlCommand command,
+        FiscalDocumentVoidCommand voidCommand,
+        FiscalDocumentVoidIdempotency idempotency,
+        LockedFiscalDocumentVoidState lockedDocument,
+        Guid voidedStatusCodeId)
+    {
+        command.Parameters.AddWithValue("idempotency_record_id", Guid.NewGuid());
+        command.Parameters.AddWithValue("idempotency_scope", idempotency.Scope);
+        command.Parameters.AddWithValue("idempotency_key", idempotency.Key);
+        command.Parameters.AddWithValue("semantic_request_hash", idempotency.SemanticRequestHash);
+        command.Parameters.AddWithValue("operation_type_code_id", lockedDocument.FiscalDocumentTypeCodeId);
+        command.Parameters.AddWithValue("operation_status_code_id", voidedStatusCodeId);
+
+        var contextParameter = command.Parameters.Add("idempotency_context", NpgsqlDbType.Jsonb);
+        contextParameter.Value = PostgresFiscalDocumentSql.CreateVoidIdempotencyContextJson(voidCommand, idempotency);
+    }
+
     private static void AddIdempotencyKeyParameters(NpgsqlCommand command, FiscalIssuanceIdempotency idempotency)
+    {
+        command.Parameters.AddWithValue("idempotency_scope", idempotency.Scope);
+        command.Parameters.AddWithValue("idempotency_key", idempotency.Key);
+    }
+
+    private static void AddVoidIdempotencyKeyParameters(NpgsqlCommand command, FiscalDocumentVoidIdempotency idempotency)
     {
         command.Parameters.AddWithValue("idempotency_scope", idempotency.Scope);
         command.Parameters.AddWithValue("idempotency_key", idempotency.Key);
@@ -512,6 +763,53 @@ public sealed class PostgresFiscalDocumentRepository : IFiscalDocumentRepository
         AddIdempotencyKeyParameters(command, idempotency);
         command.Parameters.AddWithValue("fiscal_document_id", draft.FiscalDocumentId);
         command.Parameters.AddWithValue("replay_result_ref", draft.FiscalDocumentId.ToString("D"));
+    }
+
+    private static void AddVoidIdempotencyCompletionParameters(
+        NpgsqlCommand command,
+        FiscalDocumentVoidCommand voidCommand,
+        FiscalDocumentVoidIdempotency idempotency)
+    {
+        AddVoidIdempotencyKeyParameters(command, idempotency);
+        command.Parameters.AddWithValue("fiscal_document_id", voidCommand.FiscalDocumentId);
+        command.Parameters.AddWithValue("replay_result_ref", voidCommand.FiscalDocumentId.ToString("D"));
+    }
+
+    private static void AddVoidUpdateParameters(
+        NpgsqlCommand command,
+        FiscalDocumentVoidCommand voidCommand,
+        FiscalDocumentVoidIdempotency idempotency,
+        Guid voidedStatusCodeId,
+        DateTimeOffset voidedAt)
+    {
+        command.Parameters.AddWithValue("fiscal_document_id", voidCommand.FiscalDocumentId);
+        command.Parameters.AddWithValue("voided_fiscal_document_status_code_id", voidedStatusCodeId);
+        command.Parameters.AddWithValue("void_reason_code", voidCommand.ReasonCode);
+        command.Parameters.AddWithValue("void_reason_text", (object?)voidCommand.ReasonText ?? DBNull.Value);
+        command.Parameters.AddWithValue("void_requested_by_ref", voidCommand.RequestedByRef);
+        command.Parameters.AddWithValue("void_requested_at", voidCommand.RequestedAt);
+        command.Parameters.AddWithValue("voided_at", voidedAt);
+        command.Parameters.AddWithValue("void_idempotency_key", idempotency.Key);
+        command.Parameters.AddWithValue("void_semantic_request_hash", idempotency.SemanticRequestHash);
+        command.Parameters.AddWithValue("void_correlation_id", voidCommand.CorrelationId);
+        command.Parameters.AddWithValue("void_source_system_ref", (object?)voidCommand.SourceSystemRef ?? DBNull.Value);
+        command.Parameters.AddWithValue("void_business_day_date", (object?)voidCommand.BusinessDayDate ?? DBNull.Value);
+    }
+
+    private static void AddVoidStatusHistoryParameters(
+        NpgsqlCommand command,
+        FiscalDocumentVoidCommand voidCommand,
+        LockedFiscalDocumentVoidState lockedDocument,
+        Guid voidedStatusCodeId,
+        DateTimeOffset voidedAt)
+    {
+        command.Parameters.AddWithValue("fiscal_document_status_history_id", Guid.NewGuid());
+        command.Parameters.AddWithValue("fiscal_document_id", voidCommand.FiscalDocumentId);
+        command.Parameters.AddWithValue("prior_fiscal_document_status_code_id", lockedDocument.FiscalDocumentStatusCodeId);
+        command.Parameters.AddWithValue("voided_fiscal_document_status_code_id", voidedStatusCodeId);
+        command.Parameters.AddWithValue("void_reason_text", (object?)voidCommand.ReasonText ?? DBNull.Value);
+        command.Parameters.AddWithValue("voided_at", voidedAt);
+        command.Parameters.AddWithValue("void_requested_by_ref", voidCommand.RequestedByRef);
     }
 
     private static void AddFiscalDocumentParameters(NpgsqlCommand command, FiscalDocumentDraft draft)
@@ -570,6 +868,23 @@ public sealed class PostgresFiscalDocumentRepository : IFiscalDocumentRepository
         string? PrefixText,
         string? SuffixText,
         int? PaddingLength);
+
+    private sealed record LockedFiscalDocumentVoidState(
+        Guid FiscalDocumentId,
+        string? FiscalDocumentNumber,
+        long? FiscalSequenceValue,
+        Guid FiscalDocumentTypeCodeId,
+        Guid FiscalDocumentStatusCodeId,
+        string CurrentStatusCodeKey,
+        Guid CurrentStatusCodeSetId,
+        string? VoidStatus,
+        string? VoidReasonCode,
+        string? VoidReasonText,
+        string? VoidRequestedByRef,
+        DateTimeOffset? VoidedAt,
+        string? VoidIdempotencyKey,
+        string? VoidSemanticRequestHash,
+        string? VoidCorrelationId);
 
     private static void AddStatusHistoryParameters(NpgsqlCommand command, FiscalDocumentDraft draft)
     {

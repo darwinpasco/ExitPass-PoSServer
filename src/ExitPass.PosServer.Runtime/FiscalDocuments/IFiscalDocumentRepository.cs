@@ -6,4 +6,9 @@ public interface IFiscalDocumentRepository
         FiscalDocumentDraft draft,
         FiscalIssuanceIdempotency idempotency,
         CancellationToken cancellationToken);
+
+    Task<FiscalDocumentVoidPersistenceResult> VoidAsync(
+        FiscalDocumentVoidCommand command,
+        FiscalDocumentVoidIdempotency idempotency,
+        CancellationToken cancellationToken);
 }

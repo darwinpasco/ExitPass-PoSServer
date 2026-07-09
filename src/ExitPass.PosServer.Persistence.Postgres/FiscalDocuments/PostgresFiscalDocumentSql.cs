@@ -172,6 +172,88 @@ public static class PostgresFiscalDocumentSql
           and idempotency_key = @idempotency_key;
         """;
 
+    public const string SelectFiscalDocumentForVoidUpdate = """
+        select
+            document.fiscal_document_id,
+            document.fiscal_document_number,
+            document.fiscal_sequence_value,
+            document.fiscal_document_type_code_id,
+            document.fiscal_document_status_code_id,
+            current_status.code_key,
+            current_status.controlled_code_set_id,
+            document.void_status,
+            document.void_reason_code,
+            document.void_reason_text,
+            document.void_requested_by_ref,
+            document.voided_at,
+            document.void_idempotency_key,
+            document.void_semantic_request_hash,
+            document.void_correlation_id
+        from pos.fiscal_documents document
+        inner join pos.controlled_codes current_status
+            on current_status.controlled_code_id = document.fiscal_document_status_code_id
+        where document.fiscal_document_id = @fiscal_document_id
+          and document.is_active = true
+        for update of document;
+        """;
+
+    public const string SelectVoidFiscalDocumentStatusCode = """
+        select controlled_code_id
+        from pos.controlled_codes
+        where controlled_code_set_id = @controlled_code_set_id
+          and code_key = 'voided'
+          and is_active = true
+          and (effective_start_at is null or effective_start_at <= current_timestamp)
+          and (effective_end_at is null or effective_end_at > current_timestamp)
+        order by controlled_code_id
+        limit 2;
+        """;
+
+    public const string UpdateFiscalDocumentVoided = """
+        update pos.fiscal_documents
+        set
+            fiscal_document_status_code_id = @voided_fiscal_document_status_code_id,
+            void_status = 'recorded',
+            void_reason_code = @void_reason_code,
+            void_reason_text = @void_reason_text,
+            void_requested_by_ref = @void_requested_by_ref,
+            void_requested_at = @void_requested_at,
+            voided_at = @voided_at,
+            void_idempotency_key = @void_idempotency_key,
+            void_semantic_request_hash = @void_semantic_request_hash,
+            void_correlation_id = @void_correlation_id,
+            void_source_system_ref = @void_source_system_ref,
+            void_business_day_date = @void_business_day_date,
+            updated_at = current_timestamp
+        where fiscal_document_id = @fiscal_document_id;
+        """;
+
+    public const string InsertFiscalDocumentVoidStatusHistory = """
+        insert into pos.fiscal_document_status_history (
+            fiscal_document_status_history_id,
+            fiscal_document_id,
+            prior_fiscal_document_status_code_id,
+            new_fiscal_document_status_code_id,
+            status_reason_code_id,
+            status_reason_text,
+            changed_at,
+            actor_ref,
+            service_identity_ref,
+            created_at
+        ) values (
+            @fiscal_document_status_history_id,
+            @fiscal_document_id,
+            @prior_fiscal_document_status_code_id,
+            @voided_fiscal_document_status_code_id,
+            null,
+            @void_reason_text,
+            @voided_at,
+            @void_requested_by_ref,
+            'pos-server:fiscal-document-void-runtime',
+            current_timestamp
+        );
+        """;
+
     public const string InsertFiscalDocument = """
         insert into pos.fiscal_documents (
             fiscal_document_id,
@@ -534,6 +616,28 @@ public static class PostgresFiscalDocumentSql
             fiscal_document_type_code_id = draft.FiscalDocumentTypeCodeId,
             payable_basis_ref = draft.PayableBasisRef,
             upstream_finality_ref = draft.UpstreamFinalityRef
+        };
+
+        return JsonSerializer.Serialize(context);
+    }
+
+    public static string CreateVoidIdempotencyContextJson(FiscalDocumentVoidCommand command, FiscalDocumentVoidIdempotency idempotency)
+    {
+        var context = new
+        {
+            source = "pos_server_runtime_fiscal_document_void",
+            posture = "idempotency_with_fiscal_document_status_transition_only",
+            idempotency_scope = idempotency.Scope,
+            idempotency_key_source = "void_request_idempotency_key",
+            semantic_request_hash = idempotency.SemanticRequestHash,
+            semantic_request_hash_version = FiscalDocumentVoidSemanticRequestHasher.Version,
+            semantic_request_hash_status = FiscalDocumentVoidSemanticRequestHasher.Status,
+            fiscal_document_id = command.FiscalDocumentId,
+            reason_code = command.ReasonCode,
+            requested_by_ref = command.RequestedByRef,
+            correlation_id = command.CorrelationId,
+            source_system_ref = command.SourceSystemRef,
+            business_day_date = command.BusinessDayDate
         };
 
         return JsonSerializer.Serialize(context);
