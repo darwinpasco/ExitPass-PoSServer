@@ -48,7 +48,11 @@ public sealed class FiscalDocumentReadEndpointTests
             IdempotencyKeySource = "upstream_finality_ref",
             SemanticRequestHash = new string('a', 64),
             SemanticRequestHashVersion = "sha256:v1",
-            SemanticRequestHashStatus = "matched"
+            SemanticRequestHashStatus = "matched",
+            FiscalDocumentStatusCodeKey = "voided",
+            VoidStatus = "recorded",
+            VoidReasonCode = "operator_error",
+            VoidedAt = assignedAt.AddMinutes(5)
         };
         var service = new FiscalDocumentReadService(new StubFiscalDocumentReader(document));
 
@@ -74,6 +78,10 @@ public sealed class FiscalDocumentReadEndpointTests
         Assert.Equal(new string('a', 64), response.Document.SemanticRequestHash);
         Assert.Equal("sha256:v1", response.Document.SemanticRequestHashVersion);
         Assert.Equal("matched", response.Document.SemanticRequestHashStatus);
+        Assert.Equal("voided", response.Document.FiscalDocumentStatusCodeKey);
+        Assert.Equal("recorded", response.Document.VoidStatus);
+        Assert.Equal("operator_error", response.Document.VoidReasonCode);
+        Assert.Equal(assignedAt.AddMinutes(5), response.Document.VoidedAt);
     }
 
     [Fact]
@@ -253,7 +261,9 @@ public sealed class FiscalDocumentReadEndpointTests
             null,
             null,
             Guid.Parse("cccccccc-cccc-cccc-cccc-cccccccccccc"),
+            null,
             Guid.Parse("dddddddd-dddd-dddd-dddd-dddddddddddd"),
+            null,
             null,
             null,
             null,
@@ -274,6 +284,9 @@ public sealed class FiscalDocumentReadEndpointTests
             "central-finality-001",
             "vendor-ack-001",
             new DateOnly(2026, 7, 1),
+            null,
+            null,
+            null,
             "{\"source_system\":\"central_pms\"}",
             true,
             DateTimeOffset.UtcNow,

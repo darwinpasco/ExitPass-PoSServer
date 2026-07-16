@@ -84,14 +84,32 @@ public static class DigitalSalesInvoicePresentationEndpoint
                     : StatusCodes.Status400BadRequest);
         }
 
+        var render = renderResult.Render;
+
         return new GetDigitalSalesInvoicePresentationResponse(
             true,
             "presented",
             presentationResult.Message,
             templateContract,
             presentationResult.Presentation,
-            FiscalNumberAssignmentState: renderResult.Render?.FiscalNumberAssignmentState,
-            FiscalDocumentStatusCodeId: renderResult.Render?.FiscalDocumentStatusCodeId,
+            FiscalNumberAssignmentState: render?.FiscalNumberAssignmentState,
+            FiscalDocumentStatusCodeId: render?.FiscalDocumentStatusCodeId,
+            FiscalDocumentStatus: render?.FiscalDocumentStatusCodeKey,
+            FiscalDocumentTypeCodeId: render?.FiscalDocumentTypeCodeId,
+            FiscalDocumentType: render?.FiscalDocumentTypeCodeKey,
+            FiscalDocumentId: render?.FiscalDocumentId,
+            FiscalDocumentNumber: render?.FiscalDocumentNumber,
+            FiscalSeries: render?.FiscalSeries,
+            FiscalNumberPrefixText: render?.FiscalNumberPrefixText,
+            FiscalNumberSuffixText: render?.FiscalNumberSuffixText,
+            FiscalNumberAssignedAt: render?.FiscalNumberAssignedAt,
+            RecordedAt: render?.CreatedAt,
+            VoidStatus: render?.VoidStatus,
+            VoidReasonCode: render?.VoidReasonCode,
+            VoidedAt: render?.VoidedAt,
+            PresentationVersion: presentationResult.Presentation.PresentationVersion,
+            TemplateVersion: templateContract.TemplateContractVersion,
+            ContentType: templateContract.RenderFormat,
             HttpStatusCode: StatusCodes.Status200OK);
     }
 }
