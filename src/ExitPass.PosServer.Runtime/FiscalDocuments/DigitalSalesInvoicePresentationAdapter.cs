@@ -91,8 +91,14 @@ public sealed class DigitalSalesInvoicePresentationAdapter
         [
             Row("documentIdentity.fiscalDocumentId", "Fiscal Document ID", "identifier", FieldPosture(contract, "documentIdentity.fiscalDocumentId"), render.FiscalDocumentId),
             Row("documentIdentity.fiscalDocumentTypeCodeId", "Fiscal Document Type Code ID", "identifier", FieldPosture(contract, "documentIdentity.fiscalDocumentTypeCodeId"), render.FiscalDocumentTypeCodeId),
+            Row("documentIdentity.fiscalDocumentTypeCodeKey", "Fiscal Document Type", "status", FieldPosture(contract, "documentIdentity.fiscalDocumentTypeCodeKey"), render.FiscalDocumentTypeCodeKey),
             Row("documentIdentity.fiscalDocumentStatusCodeId", "Fiscal Document Status Code ID", "identifier", FieldPosture(contract, "documentIdentity.fiscalDocumentStatusCodeId"), render.FiscalDocumentStatusCodeId),
-            Row("documentIdentity.businessDayDate", "Business Day", "dateTime", FieldPosture(contract, "documentIdentity.businessDayDate"), render.BusinessDayDate, FormatDate(render.BusinessDayDate))
+            Row("documentIdentity.fiscalDocumentStatusCodeKey", "Fiscal Document Status", "status", FieldPosture(contract, "documentIdentity.fiscalDocumentStatusCodeKey"), render.FiscalDocumentStatusCodeKey),
+            Row("documentIdentity.businessDayDate", "Business Day", "dateTime", FieldPosture(contract, "documentIdentity.businessDayDate"), render.BusinessDayDate, FormatDate(render.BusinessDayDate)),
+            Row("documentIdentity.recordedAt", "Recorded At", "dateTime", FieldPosture(contract, "documentIdentity.recordedAt"), render.CreatedAt, FormatTimestamp(render.CreatedAt)),
+            Row("documentIdentity.voidStatus", "Void Status", "status", FieldPosture(contract, "documentIdentity.voidStatus"), render.VoidStatus),
+            Row("documentIdentity.voidReasonCode", "Void Reason", "status", FieldPosture(contract, "documentIdentity.voidReasonCode"), render.VoidReasonCode),
+            Row("documentIdentity.voidedAt", "Voided At", "dateTime", FieldPosture(contract, "documentIdentity.voidedAt"), render.VoidedAt, FormatTimestamp(render.VoidedAt))
         ];
 
     private static IReadOnlyList<DigitalSalesInvoicePresentationRowModel> FiscalNumberingRows(
@@ -202,6 +208,7 @@ public sealed class DigitalSalesInvoicePresentationAdapter
                 return new[]
                 {
                     Row($"{key}.tenderTypeCodeId", "Tender Type Code ID", "identifier", FieldPosture(contract, "tenders"), tender.TenderTypeCodeId),
+                    Row($"{key}.tenderTypeCodeKey", "Tender Type", "status", FieldPosture(contract, "tenders.tenderTypeCodeKey"), tender.TenderTypeCodeKey),
                     AmountRow($"{key}.amount", "Tender Amount", FieldPosture(contract, "tenders"), tender.AmountMinorUnits, tender.CurrencyCode),
                     Row($"{key}.centralPmsPaymentAttemptRef", "Central PMS Payment Attempt Ref", "identifier", FieldPosture(contract, "tenders"), tender.CentralPmsPaymentAttemptRef),
                     Row($"{key}.centralPmsPaymentConfirmationRef", "Central PMS Payment Confirmation Ref", "identifier", FieldPosture(contract, "tenders"), tender.CentralPmsPaymentConfirmationRef),

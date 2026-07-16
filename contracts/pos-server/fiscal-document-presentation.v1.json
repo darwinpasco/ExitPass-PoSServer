@@ -1,0 +1,110 @@
+{
+  "contractVersion": "fiscal-document-presentation.v1",
+  "sourceRepository": "ExitPass-PoSServer",
+  "sourceBranch": "feature/fiscal-document-receipt-presentation-contract",
+  "sourceCommit": "c0fa9c5",
+  "method": "GET",
+  "route": "/v1/fiscal-documents/{fiscalDocumentId}/digital-sales-invoice/presentation",
+  "selectedAuthoritativeEndpoint": true,
+  "contentType": "application/json",
+  "presentationVersion": "digital-sales-invoice-presentation-json-v1",
+  "templateVersion": "digital-sales-invoice-json-v1",
+  "requiredHeaders": [
+    {
+      "name": "Accept",
+      "value": "application/json",
+      "required": false
+    },
+    {
+      "name": "X-Correlation-Id",
+      "value": "caller supplied correlation id",
+      "required": false,
+      "notes": "Use the existing POS Server correlation convention when middleware is configured."
+    }
+  ],
+  "responseFields": [
+    { "name": "succeeded", "type": "boolean", "required": true },
+    { "name": "code", "type": "string", "required": true },
+    { "name": "message", "type": "string", "required": true },
+    { "name": "templateContract", "type": "object", "required": false },
+    { "name": "presentation", "type": "object", "required": false },
+    { "name": "fiscalNumberAssignmentState", "type": "string", "required": false },
+    { "name": "fiscalDocumentStatusCodeId", "type": "uuid", "required": false },
+    { "name": "fiscalDocumentStatus", "type": "string", "required": false },
+    { "name": "fiscalDocumentTypeCodeId", "type": "uuid", "required": false },
+    { "name": "fiscalDocumentType", "type": "string", "required": false },
+    { "name": "fiscalDocumentId", "type": "uuid", "required": false },
+    { "name": "fiscalDocumentNumber", "type": "string", "required": false },
+    { "name": "fiscalSeries", "type": "string", "required": false },
+    { "name": "fiscalNumberPrefixText", "type": "string", "required": false },
+    { "name": "fiscalNumberSuffixText", "type": "string", "required": false },
+    { "name": "fiscalNumberAssignedAt", "type": "date-time", "required": false },
+    { "name": "recordedAt", "type": "date-time", "required": false },
+    { "name": "voidStatus", "type": "string", "required": false },
+    { "name": "voidReasonCode", "type": "string", "required": false },
+    { "name": "voidedAt", "type": "date-time", "required": false },
+    { "name": "presentationVersion", "type": "string", "required": false },
+    { "name": "templateVersion", "type": "string", "required": false },
+    { "name": "contentType", "type": "string", "required": false }
+  ],
+  "presentationPayload": {
+    "owner": "POS Server",
+    "shape": "DigitalSalesInvoicePresentationModel",
+    "sections": [
+      "header",
+      "sellerSitePosIdentity",
+      "documentIdentity",
+      "fiscalNumbering",
+      "parkingPaymentReferences",
+      "lineItems",
+      "discounts",
+      "taxes",
+      "tenders",
+      "totals",
+      "auditHashStatus",
+      "footerDisclaimers",
+      "deferredPlaceholders"
+    ],
+    "cashTenderPath": "presentation.sections[name=tenders].rows[key=tenders[0000].tenderTypeCodeKey]",
+    "notes": [
+      "Downstream systems transport or display the POS Server-owned presentation payload.",
+      "Downstream systems must not reconstruct fiscal document content, fiscal numbering, lines, discounts, taxes, totals, tender presentation, or void posture independently.",
+      "The contract does not include print job state, reprint state, generated PDF, generated HTML, or generated QR bytes."
+    ]
+  },
+  "statusCodes": [
+    {
+      "httpStatus": 200,
+      "code": "presented",
+      "meaning": "Authoritative presentation returned for recorded or safely presentable fiscal document."
+    },
+    {
+      "httpStatus": 400,
+      "code": "digital_sales_invoice_presentation_failed",
+      "meaning": "Stored/read presentation source is malformed, inconsistent, or not safely adaptable."
+    },
+    {
+      "httpStatus": 404,
+      "code": "fiscal_document_not_found",
+      "meaning": "Fiscal document does not exist."
+    },
+    {
+      "httpStatus": 503,
+      "code": "persistence_not_configured",
+      "meaning": "POS Server persistence dependency is unavailable or not configured."
+    },
+    {
+      "httpStatus": 503,
+      "code": "invalid_persistence_configuration",
+      "meaning": "POS Server persistence configuration is invalid."
+    },
+    {
+      "httpStatus": 503,
+      "code": "persistence_read_failed",
+      "meaning": "POS Server could not safely read presentation source data."
+    }
+  ],
+  "fixtures": [
+    "docs/v1.3/pos-server/digital-sales-invoice/fixtures/fiscal-document-presentation-contract-v1.json"
+  ]
+}

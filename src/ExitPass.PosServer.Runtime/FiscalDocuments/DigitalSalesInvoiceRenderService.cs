@@ -38,7 +38,9 @@ public sealed class DigitalSalesInvoiceRenderService
             document.ChannelTerminalId,
             document.FiscalIdentityId,
             document.FiscalDocumentTypeCodeId,
+            document.FiscalDocumentTypeCodeKey,
             document.FiscalDocumentStatusCodeId,
+            document.FiscalDocumentStatusCodeKey,
             numberingAssigned ? "assigned" : "not_assigned",
             document.FiscalSequencePolicyId,
             document.FiscalSequenceValue,
@@ -57,6 +59,9 @@ public sealed class DigitalSalesInvoiceRenderService
             document.SemanticRequestHash,
             document.SemanticRequestHashVersion,
             document.SemanticRequestHashStatus,
+            document.VoidStatus,
+            document.VoidReasonCode,
+            document.VoidedAt,
             document.CreatedAt,
             document.UpdatedAt,
             document.Lines.Select(MapLine).ToArray(),
@@ -109,6 +114,7 @@ public sealed class DigitalSalesInvoiceRenderService
     private static DigitalSalesInvoiceTenderRenderModel MapTender(FiscalTenderReadModel tender) =>
         new(
             tender.TenderTypeCodeId,
+            tender.TenderTypeCodeKey,
             tender.AmountMinorUnits,
             tender.CurrencyCode,
             tender.CentralPmsPaymentAttemptRef,

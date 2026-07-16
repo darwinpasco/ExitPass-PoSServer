@@ -29,6 +29,12 @@ public sealed class DigitalSalesInvoicePresentationAdapterTests
             row.Key == "fiscalNumbering.fiscalDocumentNumber" &&
             row.DisplayValue == "SI-00000001-A" &&
             row.Posture == "optional");
+        Assert.Contains(Section(result.Presentation, "documentIdentity").Rows, row =>
+            row.Key == "documentIdentity.fiscalDocumentStatusCodeKey" &&
+            row.DisplayValue == "recorded");
+        Assert.Contains(Section(result.Presentation, "tenders").Rows, row =>
+            row.Key == "tenders[0000].tenderTypeCodeKey" &&
+            row.DisplayValue == "cash");
     }
 
     [Fact]
@@ -222,7 +228,9 @@ public sealed class DigitalSalesInvoicePresentationAdapterTests
             Guid.Parse("99999999-9999-9999-9999-999999999999"),
             assignedNumber ? Guid.Parse("eeeeeeee-eeee-eeee-eeee-eeeeeeeeeeee") : null,
             Guid.Parse("cccccccc-cccc-cccc-cccc-cccccccccccc"),
+            "sales_invoice",
             Guid.Parse("dddddddd-dddd-dddd-dddd-dddddddddddd"),
+            "recorded",
             assignedNumber ? "assigned" : "not_assigned",
             assignedNumber ? Guid.Parse("ffffffff-ffff-ffff-ffff-ffffffffffff") : null,
             assignedNumber ? 1 : null,
@@ -241,6 +249,9 @@ public sealed class DigitalSalesInvoicePresentationAdapterTests
             new string('a', 64),
             "sha256:v1",
             "matched",
+            null,
+            null,
+            null,
             DateTimeOffset.Parse("2026-07-01T08:00:00Z"),
             DateTimeOffset.Parse("2026-07-01T08:01:00Z"),
             [Line(1, "Parking fee", 12500)],
@@ -287,6 +298,7 @@ public sealed class DigitalSalesInvoicePresentationAdapterTests
         long amountMinorUnits) =>
         new(
             Guid.Parse("22222222-2222-2222-2222-222222222222"),
+            "cash",
             amountMinorUnits,
             "PHP",
             $"payment-attempt-{providerRef}",

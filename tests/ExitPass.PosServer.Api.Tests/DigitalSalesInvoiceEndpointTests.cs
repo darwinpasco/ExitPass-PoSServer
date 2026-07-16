@@ -239,6 +239,19 @@ public sealed class DigitalSalesInvoiceEndpointTests
         Assert.Equal(StatusCodes.Status200OK, response.HttpStatusCode);
         Assert.Equal("assigned", response.FiscalNumberAssignmentState);
         Assert.Equal(document.FiscalDocumentStatusCodeId, response.FiscalDocumentStatusCodeId);
+        Assert.Equal(document.FiscalDocumentStatusCodeKey, response.FiscalDocumentStatus);
+        Assert.Equal(document.FiscalDocumentTypeCodeId, response.FiscalDocumentTypeCodeId);
+        Assert.Equal(document.FiscalDocumentTypeCodeKey, response.FiscalDocumentType);
+        Assert.Equal(document.FiscalDocumentId, response.FiscalDocumentId);
+        Assert.Equal(document.FiscalDocumentNumber, response.FiscalDocumentNumber);
+        Assert.Equal(document.FiscalSeries, response.FiscalSeries);
+        Assert.Equal(document.FiscalNumberPrefixText, response.FiscalNumberPrefixText);
+        Assert.Equal(document.FiscalNumberSuffixText, response.FiscalNumberSuffixText);
+        Assert.Equal(document.FiscalNumberAssignedAt, response.FiscalNumberAssignedAt);
+        Assert.Equal(document.CreatedAt, response.RecordedAt);
+        Assert.Equal("digital-sales-invoice-presentation-json-v1", response.PresentationVersion);
+        Assert.Equal("digital-sales-invoice-json-v1", response.TemplateVersion);
+        Assert.Equal("application/json", response.ContentType);
         Assert.NotNull(response.TemplateContract);
         Assert.NotNull(response.Presentation);
         Assert.Equal("digital-sales-invoice-presentation-json-v1", response.Presentation.PresentationVersion);
@@ -266,6 +279,10 @@ public sealed class DigitalSalesInvoiceEndpointTests
             response.Presentation.Sections.Single(section => section.Name == "fiscalNumbering").Rows,
             row => row.Key == "fiscalNumbering.fiscalDocumentNumber" &&
                    row.DisplayValue == "SI-00000001-A");
+        Assert.Contains(
+            response.Presentation.Sections.Single(section => section.Name == "tenders").Rows,
+            row => row.Key == "tenders[0000].tenderTypeCodeKey" &&
+                   row.DisplayValue == "cash");
     }
 
     [Fact]
@@ -373,7 +390,9 @@ public sealed class DigitalSalesInvoiceEndpointTests
             Guid.Parse("99999999-9999-9999-9999-999999999999"),
             assignedNumber ? Guid.Parse("eeeeeeee-eeee-eeee-eeee-eeeeeeeeeeee") : null,
             Guid.Parse("cccccccc-cccc-cccc-cccc-cccccccccccc"),
+            "sales_invoice",
             Guid.Parse("dddddddd-dddd-dddd-dddd-dddddddddddd"),
+            assignedNumber ? "recorded" : null,
             assignedNumber ? Guid.Parse("ffffffff-ffff-ffff-ffff-ffffffffffff") : null,
             assignedNumber ? 1 : null,
             assignedNumber ? "SI-00000001-A" : null,
@@ -394,6 +413,9 @@ public sealed class DigitalSalesInvoiceEndpointTests
             "central-finality-001",
             "vendor-ack-001",
             new DateOnly(2026, 7, 1),
+            null,
+            null,
+            null,
             "{\"source_system\":\"central_pms\"}",
             true,
             DateTimeOffset.Parse("2026-07-01T08:00:00Z"),
@@ -426,6 +448,7 @@ public sealed class DigitalSalesInvoiceEndpointTests
                     Guid.Parse("10000000-0000-0000-0000-000000000301"),
                     Guid.Parse("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"),
                     Guid.Parse("22222222-2222-2222-2222-222222222222"),
+                    "cash",
                     12500,
                     "PHP",
                     "payment-attempt-001",

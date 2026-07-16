@@ -6,7 +6,9 @@ public sealed record DigitalSalesInvoiceRenderModel(
     Guid? ChannelTerminalId,
     Guid? FiscalIdentityId,
     Guid FiscalDocumentTypeCodeId,
+    string? FiscalDocumentTypeCodeKey,
     Guid FiscalDocumentStatusCodeId,
+    string? FiscalDocumentStatusCodeKey,
     string FiscalNumberAssignmentState,
     Guid? FiscalSequencePolicyId,
     long? FiscalSequenceValue,
@@ -25,6 +27,9 @@ public sealed record DigitalSalesInvoiceRenderModel(
     string? SemanticRequestHash,
     string? SemanticRequestHashVersion,
     string? SemanticRequestHashStatus,
+    string? VoidStatus,
+    string? VoidReasonCode,
+    DateTimeOffset? VoidedAt,
     DateTimeOffset CreatedAt,
     DateTimeOffset UpdatedAt,
     IReadOnlyList<DigitalSalesInvoiceLineRenderModel> Lines,
@@ -70,6 +75,7 @@ public sealed record DigitalSalesInvoiceTaxDetailRenderModel(
 
 public sealed record DigitalSalesInvoiceTenderRenderModel(
     Guid TenderTypeCodeId,
+    string? TenderTypeCodeKey,
     long AmountMinorUnits,
     string CurrencyCode,
     string? CentralPmsPaymentAttemptRef,

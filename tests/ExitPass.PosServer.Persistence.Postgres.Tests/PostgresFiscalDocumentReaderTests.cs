@@ -57,6 +57,12 @@ public sealed class PostgresFiscalDocumentReaderTests
         Assert.Contains("fiscal_number_suffix_text", source, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("fiscal_number_assigned_at", source, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("fiscal_number_assigned_by_ref", source, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("type_code.code_key", source, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("status_code.code_key", source, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("tender_type_code.code_key", source, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("void_status", source, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("void_reason_code", source, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("voided_at", source, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("idempotency_scope", source, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("idempotency_key", source, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("semantic_request_hash", source, StringComparison.OrdinalIgnoreCase);
@@ -74,7 +80,7 @@ public sealed class PostgresFiscalDocumentReaderTests
         Assert.Contains("order by changed_at, fiscal_document_status_history_id", source, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("order by created_at, fiscal_document_link_id", source, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("order by line_sequence, fiscal_document_line_id", source, StringComparison.OrdinalIgnoreCase);
-        Assert.Contains("order by created_at, fiscal_tender_id", source, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("order by tender.created_at, tender.fiscal_tender_id", source, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("order by created_at, fiscal_tax_detail_id", source, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("order by created_at, fiscal_discount_privilege_detail_id", source, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("order by total_type_code_id, fiscal_total_id", source, StringComparison.OrdinalIgnoreCase);

@@ -74,7 +74,9 @@ public sealed class PostgresFiscalDocumentReader : IFiscalDocumentReader
                 document.channel_terminal_id,
                 document.fiscal_identity_id,
                 document.fiscal_document_type_code_id,
+                type_code.code_key,
                 document.fiscal_document_status_code_id,
+                status_code.code_key,
                 document.fiscal_sequence_policy_id,
                 document.fiscal_sequence_value,
                 document.fiscal_document_number,
@@ -101,11 +103,18 @@ public sealed class PostgresFiscalDocumentReader : IFiscalDocumentReader
                 document.payment_finality_ref,
                 document.vendor_ack_ref,
                 document.business_day_date,
+                document.void_status,
+                document.void_reason_code,
+                document.voided_at,
                 document.document_context::text,
                 document.is_active,
                 document.created_at,
                 document.updated_at
             from pos.fiscal_documents document
+            left join pos.controlled_codes type_code
+                on type_code.controlled_code_id = document.fiscal_document_type_code_id
+            left join pos.controlled_codes status_code
+                on status_code.controlled_code_id = document.fiscal_document_status_code_id
             left join lateral (
                 select
                     idempotency_scope,
@@ -133,31 +142,36 @@ public sealed class PostgresFiscalDocumentReader : IFiscalDocumentReader
             GetNullableGuid(reader, 2),
             GetNullableGuid(reader, 3),
             reader.GetGuid(4),
-            reader.GetGuid(5),
-            GetNullableGuid(reader, 6),
-            GetNullableInt64(reader, 7),
-            GetSafeString(reader, 8),
-            GetSafeString(reader, 9),
+            GetSafeString(reader, 5),
+            reader.GetGuid(6),
+            GetSafeString(reader, 7),
+            GetNullableGuid(reader, 8),
+            GetNullableInt64(reader, 9),
             GetSafeString(reader, 10),
             GetSafeString(reader, 11),
-            GetNullableDateTimeOffset(reader, 12),
+            GetSafeString(reader, 12),
             GetSafeString(reader, 13),
-            GetSafeString(reader, 14),
+            GetNullableDateTimeOffset(reader, 14),
             GetSafeString(reader, 15),
             GetSafeString(reader, 16),
             GetSafeString(reader, 17),
-            GetSafeString(reader, 18) ?? (reader.IsDBNull(17) ? null : FiscalDocumentSemanticRequestHasher.Version),
+            GetSafeString(reader, 18),
             GetSafeString(reader, 19),
-            GetSafeString(reader, 20),
+            GetSafeString(reader, 20) ?? (reader.IsDBNull(19) ? null : FiscalDocumentSemanticRequestHasher.Version),
             GetSafeString(reader, 21),
             GetSafeString(reader, 22),
             GetSafeString(reader, 23),
             GetSafeString(reader, 24),
-            GetNullableDateOnly(reader, 25),
+            GetSafeString(reader, 25),
             GetSafeString(reader, 26),
-            reader.GetBoolean(27),
-            reader.GetFieldValue<DateTimeOffset>(28),
-            reader.GetFieldValue<DateTimeOffset>(29),
+            GetNullableDateOnly(reader, 27),
+            GetSafeString(reader, 28),
+            GetSafeString(reader, 29),
+            GetNullableDateTimeOffset(reader, 30),
+            GetSafeString(reader, 31),
+            reader.GetBoolean(32),
+            reader.GetFieldValue<DateTimeOffset>(33),
+            reader.GetFieldValue<DateTimeOffset>(34),
             [],
             [],
             [],
@@ -326,6 +340,7 @@ public sealed class PostgresFiscalDocumentReader : IFiscalDocumentReader
                 fiscal_tender_id,
                 fiscal_document_id,
                 tender_type_code_id,
+                tender_type_code.code_key,
                 amount_minor_units,
                 currency_code,
                 central_pms_payment_attempt_ref,
@@ -335,9 +350,11 @@ public sealed class PostgresFiscalDocumentReader : IFiscalDocumentReader
                 tender_context::text,
                 created_at,
                 updated_at
-            from pos.fiscal_tenders
-            where fiscal_document_id = @fiscal_document_id
-            order by created_at, fiscal_tender_id;
+            from pos.fiscal_tenders tender
+            left join pos.controlled_codes tender_type_code
+                on tender_type_code.controlled_code_id = tender.tender_type_code_id
+            where tender.fiscal_document_id = @fiscal_document_id
+            order by tender.created_at, tender.fiscal_tender_id;
             """,
             fiscalDocumentId);
 
@@ -349,15 +366,16 @@ public sealed class PostgresFiscalDocumentReader : IFiscalDocumentReader
                 reader.GetGuid(0),
                 reader.GetGuid(1),
                 reader.GetGuid(2),
-                reader.GetInt64(3),
-                reader.GetString(4),
-                GetSafeString(reader, 5),
+                GetSafeString(reader, 3),
+                reader.GetInt64(4),
+                reader.GetString(5),
                 GetSafeString(reader, 6),
                 GetSafeString(reader, 7),
                 GetSafeString(reader, 8),
                 GetSafeString(reader, 9),
-                reader.GetFieldValue<DateTimeOffset>(10),
-                reader.GetFieldValue<DateTimeOffset>(11)));
+                GetSafeString(reader, 10),
+                reader.GetFieldValue<DateTimeOffset>(11),
+                reader.GetFieldValue<DateTimeOffset>(12)));
         }
 
         return results;
