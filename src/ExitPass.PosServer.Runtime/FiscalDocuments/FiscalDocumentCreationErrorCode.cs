@@ -27,5 +27,9 @@ public enum FiscalDocumentCreationErrorCode
     FiscalSequenceStateNotFound = 22,
     FiscalSequenceStateNotEffective = 23,
     FiscalNumberAllocationFailed = 24,
-    FiscalDocumentNumberFormatFailed = 25
+    FiscalDocumentNumberFormatFailed = 25,
+    SalesInvoiceHeaderProfileNotFound = 26,
+    SalesInvoiceHeaderProfileAmbiguous = 27,
+    SalesInvoiceHeaderProfileIncomplete = 28,
+    SalesInvoiceHeaderProfileUnsupportedVersion = 29
 }

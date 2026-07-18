@@ -52,7 +52,9 @@ public static class FiscalDocumentCreationEndpoint
             request.FiscalDocumentTypeCodeKey ?? string.Empty,
             MapPayableBasis(request.PayableBasis, request.UpstreamFinalityRef),
             request.SitePosServerId,
+            request.SiteId,
             request.ChannelTerminalId,
+            request.RuntimeTerminalRef,
             request.FiscalDocumentTypeCodeId,
             request.FiscalDocumentStatusCodeId,
             request.BusinessDayDate,
@@ -146,7 +148,11 @@ public static class FiscalDocumentCreationEndpoint
             FiscalDocumentCreationErrorCode.FiscalSequenceStateNotFound or
             FiscalDocumentCreationErrorCode.FiscalSequenceStateNotEffective or
             FiscalDocumentCreationErrorCode.FiscalNumberAllocationFailed or
-            FiscalDocumentCreationErrorCode.FiscalDocumentNumberFormatFailed => "retry_after_configuration_correction",
+            FiscalDocumentCreationErrorCode.FiscalDocumentNumberFormatFailed or
+            FiscalDocumentCreationErrorCode.SalesInvoiceHeaderProfileNotFound or
+            FiscalDocumentCreationErrorCode.SalesInvoiceHeaderProfileAmbiguous or
+            FiscalDocumentCreationErrorCode.SalesInvoiceHeaderProfileIncomplete or
+            FiscalDocumentCreationErrorCode.SalesInvoiceHeaderProfileUnsupportedVersion => "retry_after_configuration_correction",
             _ => "do_not_retry_without_request_change"
         };
 
@@ -286,6 +292,10 @@ public static class FiscalDocumentCreationEndpoint
             FiscalDocumentCreationErrorCode.FiscalSequenceStateNotEffective => "fiscal_sequence_state_not_effective",
             FiscalDocumentCreationErrorCode.FiscalNumberAllocationFailed => "fiscal_number_allocation_failed",
             FiscalDocumentCreationErrorCode.FiscalDocumentNumberFormatFailed => "fiscal_document_number_format_failed",
+            FiscalDocumentCreationErrorCode.SalesInvoiceHeaderProfileNotFound => "sales_invoice_header_profile_not_found",
+            FiscalDocumentCreationErrorCode.SalesInvoiceHeaderProfileAmbiguous => "sales_invoice_header_profile_ambiguous",
+            FiscalDocumentCreationErrorCode.SalesInvoiceHeaderProfileIncomplete => "sales_invoice_header_profile_incomplete",
+            FiscalDocumentCreationErrorCode.SalesInvoiceHeaderProfileUnsupportedVersion => "sales_invoice_header_profile_unsupported_version",
             _ => "fiscal_document_creation_failed"
         };
 }

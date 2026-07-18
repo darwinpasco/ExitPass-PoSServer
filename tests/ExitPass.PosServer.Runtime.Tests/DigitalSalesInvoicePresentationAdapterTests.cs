@@ -72,6 +72,7 @@ public sealed class DigitalSalesInvoicePresentationAdapterTests
         Assert.Equal(
             [
                 "header",
+                "salesInvoiceHeaderSnapshot",
                 "sellerSitePosIdentity",
                 "documentIdentity",
                 "fiscalNumbering",
@@ -172,6 +173,46 @@ public sealed class DigitalSalesInvoicePresentationAdapterTests
             Assert.Equal("deferred", row.Posture);
             Assert.Equal("deferred", row.ValueKind);
         });
+    }
+
+    [Fact]
+    public void PresentationUsesImmutableSalesInvoiceHeaderSnapshotWhenPresent()
+    {
+        var snapshot = new SalesInvoiceHeaderSnapshot(
+            Guid.Parse("dddddddd-0000-0000-0000-000000000001"),
+            Guid.Parse("cccccccc-0000-0000-0000-000000000001"),
+            "v1",
+            "GOVERNED TEST BUSINESS NAME",
+            "GOVERNED TEST ADDRESS",
+            "TEST-TIN-0001",
+            "TEST-SERIAL-0001",
+            "TEST-MIN-0001",
+            "GOVERNED TEST PARKING LOCATION",
+            "RUNTIME-TERMINAL-001",
+            "TEST-BIR-ACCREDITATION-0001",
+            new DateOnly(2026, 1, 15),
+            new DateOnly(2027, 1, 15),
+            "TEST-PTU-0001",
+            new DateOnly(2026, 2, 10),
+            "THIS SERVES AS YOUR SALES INVOICE",
+            "CUSTOMER SERVICE TEST FOOTER",
+            SalesInvoiceHeaderProfileVersions.TemplateVersion,
+            SalesInvoiceHeaderProfileVersions.PresentationVersion,
+            DateTimeOffset.Parse("2026-07-18T08:00:00Z"),
+            DateTimeOffset.Parse("2026-07-18T08:00:01Z"));
+        var render = ValidRenderModel(assignedNumber: true) with { SalesInvoiceHeaderSnapshot = snapshot };
+        var adapter = new DigitalSalesInvoicePresentationAdapter();
+
+        var result = adapter.Adapt(DigitalSalesInvoiceRenderResult.Success(render), DigitalSalesInvoiceTemplateContract.Create());
+
+        Assert.True(result.Succeeded);
+        Assert.NotNull(result.Presentation);
+        var rows = Section(result.Presentation, "salesInvoiceHeaderSnapshot").Rows;
+        Assert.Contains(rows, row => row.Key == "salesInvoiceHeaderSnapshot.registeredBusinessName" && row.DisplayValue == "GOVERNED TEST BUSINESS NAME");
+        Assert.Contains(rows, row => row.Key == "salesInvoiceHeaderSnapshot.birAccreditationIssuedDate" && row.DisplayValue == "2026-01-15");
+        Assert.Contains(rows, row => row.Key == "salesInvoiceHeaderSnapshot.birAccreditationValidUntil" && row.DisplayValue == "2027-01-15");
+        Assert.Contains(rows, row => row.Key == "salesInvoiceHeaderSnapshot.ptuIssuedDate" && row.DisplayValue == "2026-02-10");
+        Assert.Contains(rows, row => row.Key == "salesInvoiceHeaderSnapshot.terminalId" && row.DisplayValue == "RUNTIME-TERMINAL-001");
     }
 
     [Fact]

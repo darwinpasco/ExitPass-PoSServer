@@ -29,8 +29,12 @@ public static class FiscalDocumentServiceCollectionExtensions
         else
         {
             services.TryAddSingleton(_ => NpgsqlDataSource.Create(connectionString));
-            services.TryAddScoped<IFiscalDocumentRepository, PostgresFiscalDocumentRepository>();
+            services.TryAddScoped<IFiscalDocumentRepository>(provider =>
+                new PostgresFiscalDocumentRepository(
+                    provider.GetRequiredService<NpgsqlDataSource>(),
+                    IsSalesInvoiceHeaderProfileRequired(configuration)));
             services.TryAddScoped<IFiscalDocumentReader, PostgresFiscalDocumentReader>();
+            services.TryAddScoped<ISalesInvoiceHeaderProfileRepository, PostgresSalesInvoiceHeaderProfileRepository>();
         }
 
         services.AddScoped<FiscalDocumentCreationService>();
@@ -41,6 +45,13 @@ public static class FiscalDocumentServiceCollectionExtensions
 
         return services;
     }
+
+    private static bool IsSalesInvoiceHeaderProfileRequired(IConfiguration configuration) =>
+        string.Equals(
+            configuration["POS_REQUIRE_COMPLETE_SALES_INVOICE_HEADER_PROFILE"] ??
+            configuration["PosServer:FiscalDocuments:RequireCompleteSalesInvoiceHeaderProfile"],
+            "true",
+            StringComparison.OrdinalIgnoreCase);
 
     private static bool IsValidNpgsqlConnectionString(string connectionString)
     {

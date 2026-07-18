@@ -49,7 +49,8 @@ public sealed class PostgresFiscalDocumentReader : IFiscalDocumentReader
                 Tenders = await ReadTendersAsync(connection, fiscalDocumentId, cancellationToken).ConfigureAwait(false),
                 TaxDetails = await ReadTaxDetailsAsync(connection, fiscalDocumentId, cancellationToken).ConfigureAwait(false),
                 DiscountPrivilegeDetails = await ReadDiscountPrivilegeDetailsAsync(connection, fiscalDocumentId, cancellationToken).ConfigureAwait(false),
-                Totals = await ReadTotalsAsync(connection, fiscalDocumentId, cancellationToken).ConfigureAwait(false)
+                Totals = await ReadTotalsAsync(connection, fiscalDocumentId, cancellationToken).ConfigureAwait(false),
+                SalesInvoiceHeaderSnapshot = await ReadHeaderSnapshotAsync(connection, fiscalDocumentId, cancellationToken).ConfigureAwait(false)
             };
         }
         catch (Exception ex) when (ex is NpgsqlException or TimeoutException or InvalidOperationException)
@@ -224,6 +225,46 @@ public sealed class PostgresFiscalDocumentReader : IFiscalDocumentReader
         }
 
         return results;
+    }
+
+    private static async Task<SalesInvoiceHeaderSnapshot?> ReadHeaderSnapshotAsync(
+        NpgsqlConnection connection,
+        Guid fiscalDocumentId,
+        CancellationToken cancellationToken)
+    {
+        await using var command = CreateCommand(
+            connection,
+            PostgresFiscalDocumentSql.SelectReplayFiscalDocumentHeaderSnapshot,
+            fiscalDocumentId);
+
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
+        if (!await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
+        {
+            return null;
+        }
+
+        return new SalesInvoiceHeaderSnapshot(
+            reader.GetGuid(0),
+            reader.GetGuid(1),
+            reader.GetString(2),
+            reader.GetString(3),
+            reader.GetString(4),
+            reader.GetString(5),
+            reader.GetString(6),
+            reader.GetString(7),
+            reader.GetString(8),
+            reader.IsDBNull(9) ? null : reader.GetString(9),
+            reader.GetString(10),
+            GetDateOnly(reader, 11),
+            GetDateOnly(reader, 12),
+            reader.GetString(13),
+            GetDateOnly(reader, 14),
+            reader.GetString(15),
+            reader.GetString(16),
+            reader.GetString(17),
+            reader.GetString(18),
+            reader.GetFieldValue<DateTimeOffset>(19),
+            reader.GetFieldValue<DateTimeOffset>(20));
     }
 
     private static async Task<IReadOnlyList<FiscalDocumentLinkReadModel>> ReadLinksAsync(
@@ -542,6 +583,9 @@ public sealed class PostgresFiscalDocumentReader : IFiscalDocumentReader
 
     private static DateOnly? GetNullableDateOnly(NpgsqlDataReader reader, int ordinal) =>
         reader.IsDBNull(ordinal) ? null : reader.GetFieldValue<DateOnly>(ordinal);
+
+    private static DateOnly GetDateOnly(NpgsqlDataReader reader, int ordinal) =>
+        reader.GetFieldValue<DateOnly>(ordinal);
 
     private static DateTimeOffset? GetNullableDateTimeOffset(NpgsqlDataReader reader, int ordinal) =>
         reader.IsDBNull(ordinal) ? null : reader.GetFieldValue<DateTimeOffset>(ordinal);

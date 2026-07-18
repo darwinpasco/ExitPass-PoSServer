@@ -175,6 +175,34 @@ public sealed class FiscalDocumentSemanticRequestHasherTests
     }
 
     [Fact]
+    public void ProfileResolutionInputsAndSnapshotFactsDoNotChangeSha256V1CanonicalSource()
+    {
+        var original = RepresentativeCommand();
+        var changedProfileContext = original with
+        {
+            SiteId = Guid.Parse("10000000-0000-0000-0000-000000000099"),
+            RuntimeTerminalRef = "runtime-terminal-after-profile-foundation-002"
+        };
+
+        var canonicalSource = FiscalDocumentSemanticRequestHasher.Canonicalize(original);
+
+        Assert.Equal(canonicalSource, FiscalDocumentSemanticRequestHasher.Canonicalize(changedProfileContext));
+        Assert.Equal(ExpectedRepresentativeHash, FiscalDocumentSemanticRequestHasher.Hash(changedProfileContext));
+        Assert.DoesNotContain("site_id", canonicalSource, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("runtime_terminal_ref", canonicalSource, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("sales_invoice_header_profile_id", canonicalSource, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("profile_version", canonicalSource, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("registered_business_name", canonicalSource, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("registered_business_address", canonicalSource, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("tin", canonicalSource, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("bir_accreditation", canonicalSource, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("ptu", canonicalSource, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("legal_statement", canonicalSource, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("customer_service_footer", canonicalSource, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("snapshot", canonicalSource, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
     public void IdempotencyResolverUsesRepresentativeScopeKeyAndSha256V1Hash()
     {
         var idempotency = FiscalIssuanceIdempotencyResolver.Resolve(RepresentativeCommand());
@@ -208,7 +236,9 @@ public sealed class FiscalDocumentSemanticRequestHasherTests
                     ("source_system", "central_pms"),
                     ("basis_source", "payment_confirmation"))),
             SitePosServerId: Guid.Parse("10000000-0000-0000-0000-000000000001"),
+            SiteId: Guid.Parse("10000000-0000-0000-0000-000000000091"),
             ChannelTerminalId: Guid.Parse("10000000-0000-0000-0000-000000000011"),
+            RuntimeTerminalRef: "runtime-terminal-parity-001",
             FiscalDocumentTypeCodeId: Guid.Parse("10000000-0000-0000-0000-000000000101"),
             FiscalDocumentStatusCodeId: Guid.Parse("10000000-0000-0000-0000-000000000102"),
             BusinessDayDate: new DateOnly(2026, 7, 6),

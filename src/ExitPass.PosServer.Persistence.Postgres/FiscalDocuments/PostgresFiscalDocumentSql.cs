@@ -5,6 +5,114 @@ namespace ExitPass.PosServer.Persistence.Postgres.FiscalDocuments;
 
 public static class PostgresFiscalDocumentSql
 {
+    public const string SelectEffectiveSalesInvoiceHeaderProfileForUpdate = """
+        select
+            profile.sales_invoice_header_profile_id,
+            profile.fiscal_identity_id,
+            profile.site_id,
+            profile.site_pos_server_id,
+            profile.profile_version,
+            profile.template_version,
+            profile.presentation_version,
+            profile.pos_serial_number,
+            profile.machine_identification_number,
+            profile.parking_location_display,
+            profile.bir_accreditation_number,
+            profile.bir_accreditation_issued_date,
+            profile.bir_accreditation_valid_until,
+            profile.ptu_number,
+            profile.ptu_issued_date,
+            profile.sales_invoice_legal_statement,
+            profile.customer_service_footer,
+            profile.effective_from,
+            profile.effective_to,
+            profile.lifecycle_status,
+            profile.approved_at,
+            profile.approved_by_ref,
+            profile.retired_at,
+            profile.created_at,
+            profile.updated_at,
+            profile.created_by_ref,
+            profile.updated_by_ref,
+            identity.registered_business_name,
+            identity.registered_business_address,
+            identity.tin,
+            identity.taxpayer_classification,
+            identity.fiscal_identity_status,
+            identity.created_at,
+            identity.updated_at,
+            identity.created_by_ref,
+            identity.updated_by_ref
+        from pos.sales_invoice_header_profiles profile
+        inner join pos.fiscal_identities identity
+            on identity.fiscal_identity_id = profile.fiscal_identity_id
+        where profile.site_pos_server_id = @site_pos_server_id
+          and (@site_id is null or profile.site_id = @site_id)
+          and profile.lifecycle_status = 'APPROVED'
+          and profile.retired_at is null
+          and profile.effective_from <= @effective_at
+          and (profile.effective_to is null or profile.effective_to > @effective_at)
+        order by profile.effective_from, profile.sales_invoice_header_profile_id
+        limit 2
+        for update of profile;
+        """;
+
+    public const string InsertFiscalDocumentHeaderSnapshot = """
+        insert into pos.fiscal_document_header_snapshots (
+            fiscal_document_header_snapshot_id,
+            fiscal_document_id,
+            fiscal_identity_id,
+            sales_invoice_header_profile_id,
+            profile_version,
+            registered_business_name,
+            registered_business_address,
+            tin,
+            pos_serial_number,
+            machine_identification_number,
+            parking_location_display,
+            terminal_id,
+            bir_accreditation_number,
+            bir_accreditation_issued_date,
+            bir_accreditation_valid_until,
+            ptu_number,
+            ptu_issued_date,
+            sales_invoice_legal_statement,
+            customer_service_footer,
+            template_version,
+            presentation_version,
+            effective_at,
+            snapshot_created_at,
+            snapshot_json,
+            created_at
+        ) values (
+            @fiscal_document_header_snapshot_id,
+            @fiscal_document_id,
+            @fiscal_identity_id,
+            @sales_invoice_header_profile_id,
+            @profile_version,
+            @registered_business_name,
+            @registered_business_address,
+            @tin,
+            @pos_serial_number,
+            @machine_identification_number,
+            @parking_location_display,
+            @terminal_id,
+            @bir_accreditation_number,
+            @bir_accreditation_issued_date,
+            @bir_accreditation_valid_until,
+            @ptu_number,
+            @ptu_issued_date,
+            @sales_invoice_legal_statement,
+            @customer_service_footer,
+            @template_version,
+            @presentation_version,
+            @effective_at,
+            @snapshot_created_at,
+            @snapshot_json,
+            current_timestamp
+        );
+        """;
+
     public const string SelectEligibleFiscalIdentity = """
         select
             history.fiscal_identity_id
@@ -105,6 +213,33 @@ public static class PostgresFiscalDocumentSql
             fiscal_number_assigned_at,
             fiscal_number_assigned_by_ref
         from pos.fiscal_documents
+        where fiscal_document_id = @fiscal_document_id;
+        """;
+
+    public const string SelectReplayFiscalDocumentHeaderSnapshot = """
+        select
+            fiscal_identity_id,
+            sales_invoice_header_profile_id,
+            profile_version,
+            registered_business_name,
+            registered_business_address,
+            tin,
+            pos_serial_number,
+            machine_identification_number,
+            parking_location_display,
+            terminal_id,
+            bir_accreditation_number,
+            bir_accreditation_issued_date,
+            bir_accreditation_valid_until,
+            ptu_number,
+            ptu_issued_date,
+            sales_invoice_legal_statement,
+            customer_service_footer,
+            template_version,
+            presentation_version,
+            effective_at,
+            snapshot_created_at
+        from pos.fiscal_document_header_snapshots
         where fiscal_document_id = @fiscal_document_id;
         """;
 
@@ -519,7 +654,9 @@ public static class PostgresFiscalDocumentSql
         var context = new
         {
             site_pos_server_ref = draft.SitePosServerRef,
+            site_id = draft.SiteId,
             fiscal_document_type_code_key = draft.FiscalDocumentTypeCodeKey,
+            runtime_terminal_ref = draft.RuntimeTerminalRef,
             payable_basis_ref = draft.PayableBasisRef,
             upstream_finality_ref = draft.UpstreamFinalityRef,
             currency_code = draft.CurrencyCode,
@@ -534,6 +671,7 @@ public static class PostgresFiscalDocumentSql
             fiscal_number_suffix_text = draft.FiscalNumberSuffixText,
             fiscal_number_assigned_at = draft.FiscalNumberAssignedAt,
             fiscal_number_assigned_by_ref = draft.FiscalNumberAssignedByRef,
+            sales_invoice_header_snapshot = draft.SalesInvoiceHeaderSnapshot,
             fiscal_document_links = draft.DocumentLinks.Select(link => new
             {
                 target_fiscal_document_id = link.TargetFiscalDocumentId,
@@ -619,6 +757,12 @@ public static class PostgresFiscalDocumentSql
         };
 
         return JsonSerializer.Serialize(context);
+    }
+
+    public static string CreateSalesInvoiceHeaderSnapshotJson(SalesInvoiceHeaderSnapshot snapshot)
+    {
+        ArgumentNullException.ThrowIfNull(snapshot);
+        return JsonSerializer.Serialize(snapshot);
     }
 
     public static string CreateVoidIdempotencyContextJson(FiscalDocumentVoidCommand command, FiscalDocumentVoidIdempotency idempotency)

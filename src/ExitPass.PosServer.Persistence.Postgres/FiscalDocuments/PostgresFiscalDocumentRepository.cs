@@ -14,10 +14,15 @@ public sealed class PostgresFiscalDocumentRepository : IFiscalDocumentRepository
     };
 
     private readonly NpgsqlDataSource dataSource;
+    private readonly bool requireCompleteSalesInvoiceHeaderProfile;
+    private readonly SalesInvoiceHeaderProfileService salesInvoiceHeaderProfileService = new();
 
-    public PostgresFiscalDocumentRepository(NpgsqlDataSource dataSource)
+    public PostgresFiscalDocumentRepository(
+        NpgsqlDataSource dataSource,
+        bool requireCompleteSalesInvoiceHeaderProfile = false)
     {
         this.dataSource = dataSource ?? throw new ArgumentNullException(nameof(dataSource));
+        this.requireCompleteSalesInvoiceHeaderProfile = requireCompleteSalesInvoiceHeaderProfile;
     }
 
     public async Task<FiscalDocumentPersistenceResult> CreateAsync(
@@ -107,12 +112,30 @@ public sealed class PostgresFiscalDocumentRepository : IFiscalDocumentRepository
                     FiscalNumberAssignedByRef = assignment.FiscalNumberAssignedByRef
                 };
 
+                var headerSnapshot = await ResolveSalesInvoiceHeaderSnapshotAsync(
+                    connection,
+                    transaction,
+                    resolvedDraft,
+                    assignment.FiscalNumberAssignedAt,
+                    cancellationToken).ConfigureAwait(false);
+                resolvedDraft = resolvedDraft with { SalesInvoiceHeaderSnapshot = headerSnapshot };
+
                 await using var documentCommand = new NpgsqlCommand(
                     PostgresFiscalDocumentSql.InsertFiscalDocument,
                     connection,
                     transaction);
                 AddFiscalDocumentParameters(documentCommand, resolvedDraft);
                 await documentCommand.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
+
+                if (resolvedDraft.SalesInvoiceHeaderSnapshot is not null)
+                {
+                    await using var snapshotCommand = new NpgsqlCommand(
+                        PostgresFiscalDocumentSql.InsertFiscalDocumentHeaderSnapshot,
+                        connection,
+                        transaction);
+                    AddHeaderSnapshotParameters(snapshotCommand, resolvedDraft);
+                    await snapshotCommand.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
+                }
 
                 await using var statusHistoryCommand = new NpgsqlCommand(
                     PostgresFiscalDocumentSql.InsertFiscalDocumentStatusHistory,
@@ -470,6 +493,129 @@ public sealed class PostgresFiscalDocumentRepository : IFiscalDocumentRepository
             "pos-server:system");
     }
 
+    private async Task<SalesInvoiceHeaderSnapshot?> ResolveSalesInvoiceHeaderSnapshotAsync(
+        NpgsqlConnection connection,
+        NpgsqlTransaction transaction,
+        FiscalDocumentDraft draft,
+        DateTimeOffset effectiveAt,
+        CancellationToken cancellationToken)
+    {
+        if (draft.SiteId is null && requireCompleteSalesInvoiceHeaderProfile)
+        {
+            throw new FiscalDocumentFiscalContextException(
+                FiscalDocumentCreationErrorCode.SalesInvoiceHeaderProfileNotFound,
+                "Sales Invoice header profile enforcement requires siteId in the issuance context.");
+        }
+
+        var profiles = await ReadEffectiveSalesInvoiceHeaderProfilesAsync(
+            connection,
+            transaction,
+            draft,
+            effectiveAt,
+            cancellationToken).ConfigureAwait(false);
+
+        var resolution = profiles.Count switch
+        {
+            0 => SalesInvoiceHeaderProfileResolutionResult.NotFound(),
+            > 1 => SalesInvoiceHeaderProfileResolutionResult.Ambiguous(),
+            _ => salesInvoiceHeaderProfileService.ResolveEffective(
+                profiles,
+                profiles[0].SiteId,
+                draft.SitePosServerId,
+                effectiveAt)
+        };
+
+        if (resolution.Status == SalesInvoiceHeaderProfileResolutionStatus.Resolved &&
+            resolution.Profile is not null)
+        {
+            return salesInvoiceHeaderProfileService.CreateSnapshot(
+                resolution.Profile,
+                draft.RuntimeTerminalRef,
+                effectiveAt,
+                effectiveAt);
+        }
+
+        if (!requireCompleteSalesInvoiceHeaderProfile)
+        {
+            return null;
+        }
+
+        throw new FiscalDocumentFiscalContextException(
+            resolution.Status switch
+            {
+                SalesInvoiceHeaderProfileResolutionStatus.Ambiguous => FiscalDocumentCreationErrorCode.SalesInvoiceHeaderProfileAmbiguous,
+                SalesInvoiceHeaderProfileResolutionStatus.Incomplete => FiscalDocumentCreationErrorCode.SalesInvoiceHeaderProfileIncomplete,
+                SalesInvoiceHeaderProfileResolutionStatus.UnsupportedVersion => FiscalDocumentCreationErrorCode.SalesInvoiceHeaderProfileUnsupportedVersion,
+                _ => FiscalDocumentCreationErrorCode.SalesInvoiceHeaderProfileNotFound
+            },
+            $"Sales Invoice header profile resolution failed: {string.Join(", ", resolution.Completeness.FailureCodes)}.");
+    }
+
+    private static async Task<IReadOnlyList<SalesInvoiceHeaderProfile>> ReadEffectiveSalesInvoiceHeaderProfilesAsync(
+        NpgsqlConnection connection,
+        NpgsqlTransaction transaction,
+        FiscalDocumentDraft draft,
+        DateTimeOffset effectiveAt,
+        CancellationToken cancellationToken)
+    {
+        await using var command = new NpgsqlCommand(
+            PostgresFiscalDocumentSql.SelectEffectiveSalesInvoiceHeaderProfileForUpdate,
+            connection,
+            transaction);
+        command.Parameters.AddWithValue("site_pos_server_id", draft.SitePosServerId);
+        command.Parameters.AddWithValue("site_id", (object?)draft.SiteId ?? DBNull.Value);
+        command.Parameters.AddWithValue("effective_at", effectiveAt);
+
+        var profiles = new List<SalesInvoiceHeaderProfile>();
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
+        while (await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
+        {
+            var fiscalIdentity = new FiscalIdentityProfile(
+                reader.GetGuid(1),
+                reader.GetString(27),
+                reader.GetString(28),
+                reader.GetString(29),
+                reader.IsDBNull(30) ? null : reader.GetString(30),
+                reader.GetString(31),
+                ReadDateTimeOffset(reader, 32),
+                ReadDateTimeOffset(reader, 33),
+                reader.IsDBNull(34) ? null : reader.GetString(34),
+                reader.IsDBNull(35) ? null : reader.GetString(35));
+
+            profiles.Add(new SalesInvoiceHeaderProfile(
+                reader.GetGuid(0),
+                reader.GetGuid(1),
+                reader.GetGuid(2),
+                reader.GetGuid(3),
+                reader.GetString(4),
+                reader.GetString(5),
+                reader.GetString(6),
+                reader.IsDBNull(7) ? null : reader.GetString(7),
+                reader.IsDBNull(8) ? null : reader.GetString(8),
+                reader.IsDBNull(9) ? null : reader.GetString(9),
+                reader.IsDBNull(10) ? null : reader.GetString(10),
+                ReadNullableDateOnly(reader, 11),
+                ReadNullableDateOnly(reader, 12),
+                reader.IsDBNull(13) ? null : reader.GetString(13),
+                ReadNullableDateOnly(reader, 14),
+                reader.IsDBNull(15) ? null : reader.GetString(15),
+                reader.IsDBNull(16) ? null : reader.GetString(16),
+                ReadDateTimeOffset(reader, 17),
+                reader.IsDBNull(18) ? null : ReadDateTimeOffset(reader, 18),
+                reader.GetString(19),
+                reader.IsDBNull(20) ? null : ReadDateTimeOffset(reader, 20),
+                reader.IsDBNull(21) ? null : reader.GetString(21),
+                reader.IsDBNull(22) ? null : ReadDateTimeOffset(reader, 22),
+                ReadDateTimeOffset(reader, 23),
+                ReadDateTimeOffset(reader, 24),
+                reader.IsDBNull(25) ? null : reader.GetString(25),
+                reader.IsDBNull(26) ? null : reader.GetString(26),
+                fiscalIdentity));
+        }
+
+        return profiles;
+    }
+
     private static async Task<Guid> ResolveMissingSequenceStateErrorAsync(
         NpgsqlConnection connection,
         NpgsqlTransaction transaction,
@@ -510,7 +656,7 @@ public sealed class PostgresFiscalDocumentRepository : IFiscalDocumentRepository
             throw new InvalidOperationException("Idempotency record references a fiscal document that could not be found.");
         }
 
-        return draft with
+        var replayed = draft with
         {
             ResolvedFiscalIdentityId = reader.IsDBNull(0) ? null : reader.GetGuid(0),
             ResolvedFiscalSequencePolicyId = reader.IsDBNull(1) ? null : reader.GetGuid(1),
@@ -522,6 +668,58 @@ public sealed class PostgresFiscalDocumentRepository : IFiscalDocumentRepository
             FiscalNumberAssignedAt = reader.IsDBNull(7) ? null : ReadDateTimeOffset(reader, 7),
             FiscalNumberAssignedByRef = reader.IsDBNull(8) ? null : reader.GetString(8)
         };
+
+        await reader.CloseAsync().ConfigureAwait(false);
+        return replayed with
+        {
+            SalesInvoiceHeaderSnapshot = await ReadHeaderSnapshotAsync(
+                connection,
+                transaction,
+                draft.FiscalDocumentId,
+                cancellationToken).ConfigureAwait(false)
+        };
+    }
+
+    private static async Task<SalesInvoiceHeaderSnapshot?> ReadHeaderSnapshotAsync(
+        NpgsqlConnection connection,
+        NpgsqlTransaction transaction,
+        Guid fiscalDocumentId,
+        CancellationToken cancellationToken)
+    {
+        await using var command = new NpgsqlCommand(
+            PostgresFiscalDocumentSql.SelectReplayFiscalDocumentHeaderSnapshot,
+            connection,
+            transaction);
+        command.Parameters.AddWithValue("fiscal_document_id", fiscalDocumentId);
+
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
+        if (!await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
+        {
+            return null;
+        }
+
+        return new SalesInvoiceHeaderSnapshot(
+            reader.GetGuid(0),
+            reader.GetGuid(1),
+            reader.GetString(2),
+            reader.GetString(3),
+            reader.GetString(4),
+            reader.GetString(5),
+            reader.GetString(6),
+            reader.GetString(7),
+            reader.GetString(8),
+            reader.IsDBNull(9) ? null : reader.GetString(9),
+            reader.GetString(10),
+            ReadDateOnly(reader, 11),
+            ReadDateOnly(reader, 12),
+            reader.GetString(13),
+            ReadDateOnly(reader, 14),
+            reader.GetString(15),
+            reader.GetString(16),
+            reader.GetString(17),
+            reader.GetString(18),
+            ReadDateTimeOffset(reader, 19),
+            ReadDateTimeOffset(reader, 20));
     }
 
     private static async Task<IReadOnlyList<FiscalSequencePolicyCandidate>> ReadFiscalSequencePoliciesAsync(
@@ -839,6 +1037,39 @@ public sealed class PostgresFiscalDocumentRepository : IFiscalDocumentRepository
         contextParameter.Value = PostgresFiscalDocumentSql.CreateDocumentContextJson(draft);
     }
 
+    private static void AddHeaderSnapshotParameters(NpgsqlCommand command, FiscalDocumentDraft draft)
+    {
+        var snapshot = draft.SalesInvoiceHeaderSnapshot ??
+            throw new InvalidOperationException("Sales Invoice header snapshot is required.");
+
+        command.Parameters.AddWithValue("fiscal_document_header_snapshot_id", Guid.NewGuid());
+        command.Parameters.AddWithValue("fiscal_document_id", draft.FiscalDocumentId);
+        command.Parameters.AddWithValue("fiscal_identity_id", snapshot.FiscalIdentityId);
+        command.Parameters.AddWithValue("sales_invoice_header_profile_id", snapshot.SalesInvoiceHeaderProfileId);
+        command.Parameters.AddWithValue("profile_version", snapshot.ProfileVersion);
+        command.Parameters.AddWithValue("registered_business_name", snapshot.RegisteredBusinessName);
+        command.Parameters.AddWithValue("registered_business_address", snapshot.RegisteredBusinessAddress);
+        command.Parameters.AddWithValue("tin", snapshot.Tin);
+        command.Parameters.AddWithValue("pos_serial_number", snapshot.PosSerialNumber);
+        command.Parameters.AddWithValue("machine_identification_number", snapshot.MachineIdentificationNumber);
+        command.Parameters.AddWithValue("parking_location_display", snapshot.ParkingLocationDisplay);
+        command.Parameters.AddWithValue("terminal_id", (object?)snapshot.TerminalId ?? DBNull.Value);
+        command.Parameters.AddWithValue("bir_accreditation_number", snapshot.BirAccreditationNumber);
+        command.Parameters.AddWithValue("bir_accreditation_issued_date", snapshot.BirAccreditationIssuedDate);
+        command.Parameters.AddWithValue("bir_accreditation_valid_until", snapshot.BirAccreditationValidUntil);
+        command.Parameters.AddWithValue("ptu_number", snapshot.PtuNumber);
+        command.Parameters.AddWithValue("ptu_issued_date", snapshot.PtuIssuedDate);
+        command.Parameters.AddWithValue("sales_invoice_legal_statement", snapshot.SalesInvoiceLegalStatement);
+        command.Parameters.AddWithValue("customer_service_footer", snapshot.CustomerServiceFooter);
+        command.Parameters.AddWithValue("template_version", snapshot.TemplateVersion);
+        command.Parameters.AddWithValue("presentation_version", snapshot.PresentationVersion);
+        command.Parameters.AddWithValue("effective_at", snapshot.EffectiveAt);
+        command.Parameters.AddWithValue("snapshot_created_at", snapshot.SnapshotCreatedAt);
+
+        var snapshotJsonParameter = command.Parameters.Add("snapshot_json", NpgsqlDbType.Jsonb);
+        snapshotJsonParameter.Value = PostgresFiscalDocumentSql.CreateSalesInvoiceHeaderSnapshotJson(snapshot);
+    }
+
     private static void AddSequenceStateUpdateParameters(
         NpgsqlCommand command,
         FiscalDocumentNumberAssignment assignment)
@@ -858,6 +1089,20 @@ public sealed class PostgresFiscalDocumentRepository : IFiscalDocumentRepository
             _ => throw new InvalidOperationException("PostgreSQL timestamp value could not be read.")
         };
     }
+
+    private static DateOnly ReadDateOnly(NpgsqlDataReader reader, int ordinal)
+    {
+        var value = reader.GetValue(ordinal);
+        return value switch
+        {
+            DateOnly dateOnly => dateOnly,
+            DateTime dateTime => DateOnly.FromDateTime(dateTime),
+            _ => throw new InvalidOperationException("PostgreSQL date value could not be read.")
+        };
+    }
+
+    private static DateOnly? ReadNullableDateOnly(NpgsqlDataReader reader, int ordinal) =>
+        reader.IsDBNull(ordinal) ? null : ReadDateOnly(reader, ordinal);
 
     private static string? NormalizeOptionalPolicyText(string? value) =>
         string.IsNullOrWhiteSpace(value) ? null : value.Trim();

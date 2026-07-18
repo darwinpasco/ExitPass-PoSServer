@@ -202,11 +202,13 @@ public sealed class FiscalDocumentCreationService
         var draft = new FiscalDocumentDraft(
             Guid.NewGuid(),
             command.SitePosServerId.Value,
+            command.SiteId,
             command.ChannelTerminalId,
             command.FiscalDocumentTypeCodeId.Value,
             command.FiscalDocumentStatusCodeId.Value,
             command.SitePosServerRef.Trim(),
             command.FiscalDocumentTypeCodeKey.Trim(),
+            NormalizeOptionalReference(command.RuntimeTerminalRef),
             command.PayableBasis.PayableBasisRef.Trim(),
             command.PayableBasis.UpstreamFinalityRef.Trim(),
             command.PayableBasis.CurrencyCode.Trim().ToUpperInvariant(),

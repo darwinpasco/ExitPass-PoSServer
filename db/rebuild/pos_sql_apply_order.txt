@@ -4,11 +4,13 @@ db/state/tables/pos.controlled_codes.sql
 db/state/tables/pos.site_pos_servers.sql
 db/state/tables/pos.fiscal_identities.sql
 db/state/tables/pos.site_pos_server_fiscal_identity_history.sql
+db/state/tables/pos.sales_invoice_header_profiles.sql
 db/state/tables/pos.channel_terminals.sql
 db/state/tables/pos.channel_terminal_capabilities.sql
 db/state/tables/pos.channel_terminal_status_history.sql
 db/state/tables/pos.fiscal_sequence_policies.sql
 db/state/tables/pos.fiscal_documents.sql
+db/state/tables/pos.fiscal_document_header_snapshots.sql
 db/state/tables/pos.fiscal_document_status_history.sql
 db/state/tables/pos.fiscal_document_links.sql
 db/state/tables/pos.fiscal_document_lines.sql

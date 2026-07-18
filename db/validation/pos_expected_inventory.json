@@ -3,7 +3,7 @@
   "expected_schemas": [
     "pos"
   ],
-  "expected_table_count": 51,
+  "expected_table_count": 53,
   "expected_tables": [
     "pos.access_audit",
     "pos.annex_e_reports",
@@ -26,6 +26,7 @@
     "pos.fiscal_anchor_refs",
     "pos.fiscal_counter_states",
     "pos.fiscal_discount_privilege_details",
+    "pos.fiscal_document_header_snapshots",
     "pos.fiscal_document_lines",
     "pos.fiscal_document_links",
     "pos.fiscal_document_status_history",
@@ -53,6 +54,7 @@
     "pos.reprint_output_refs",
     "pos.reprint_requests",
     "pos.security_reference_contexts",
+    "pos.sales_invoice_header_profiles",
     "pos.site_pos_server_fiscal_identity_history",
     "pos.site_pos_servers",
     "pos.x_z_reports"
@@ -64,12 +66,14 @@
       "pos.site_pos_servers",
       "pos.fiscal_identities",
       "pos.site_pos_server_fiscal_identity_history",
+      "pos.sales_invoice_header_profiles",
       "pos.channel_terminals",
       "pos.channel_terminal_capabilities",
       "pos.channel_terminal_status_history"
     ],
     "slice_2_fiscal_document_core": [
       "pos.fiscal_documents",
+      "pos.fiscal_document_header_snapshots",
       "pos.fiscal_document_status_history",
       "pos.fiscal_document_links"
     ],

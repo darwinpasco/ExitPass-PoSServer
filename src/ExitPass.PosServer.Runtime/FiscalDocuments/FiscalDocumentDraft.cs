@@ -3,11 +3,13 @@ namespace ExitPass.PosServer.Runtime.FiscalDocuments;
 public sealed record FiscalDocumentDraft(
     Guid FiscalDocumentId,
     Guid SitePosServerId,
+    Guid? SiteId,
     Guid? ChannelTerminalId,
     Guid FiscalDocumentTypeCodeId,
     Guid FiscalDocumentStatusCodeId,
     string SitePosServerRef,
     string FiscalDocumentTypeCodeKey,
+    string? RuntimeTerminalRef,
     string PayableBasisRef,
     string UpstreamFinalityRef,
     string CurrencyCode,
@@ -33,4 +35,5 @@ public sealed record FiscalDocumentDraft(
     string? FiscalNumberPrefixText = null,
     string? FiscalNumberSuffixText = null,
     DateTimeOffset? FiscalNumberAssignedAt = null,
-    string? FiscalNumberAssignedByRef = null);
+    string? FiscalNumberAssignedByRef = null,
+    SalesInvoiceHeaderSnapshot? SalesInvoiceHeaderSnapshot = null);
