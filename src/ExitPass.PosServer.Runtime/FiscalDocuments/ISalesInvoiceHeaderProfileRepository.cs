@@ -10,12 +10,29 @@ public interface ISalesInvoiceHeaderProfileRepository
         Guid fiscalIdentityId,
         CancellationToken cancellationToken);
 
+    Task<FiscalIdentityProfile> UpdateFiscalIdentityAsync(
+        FiscalIdentityProfile identity,
+        CancellationToken cancellationToken);
+
+    Task<bool> IsFiscalIdentityInGovernedUseAsync(
+        Guid fiscalIdentityId,
+        CancellationToken cancellationToken);
+
     Task<SalesInvoiceHeaderProfile> CreateHeaderProfileAsync(
         SalesInvoiceHeaderProfile profile,
         CancellationToken cancellationToken);
 
     Task<SalesInvoiceHeaderProfile?> GetHeaderProfileAsync(
         Guid salesInvoiceHeaderProfileId,
+        CancellationToken cancellationToken);
+
+    Task<IReadOnlyList<SalesInvoiceHeaderProfile>> ListHeaderProfilesAsync(
+        Guid? siteId,
+        Guid? sitePosServerId,
+        CancellationToken cancellationToken);
+
+    Task<SalesInvoiceHeaderProfile> UpdateHeaderProfileDraftAsync(
+        SalesInvoiceHeaderProfile profile,
         CancellationToken cancellationToken);
 
     Task<SalesInvoiceHeaderProfile> ApproveHeaderProfileAsync(
@@ -34,5 +51,9 @@ public interface ISalesInvoiceHeaderProfileRepository
         Guid siteId,
         Guid sitePosServerId,
         DateTimeOffset effectiveAt,
+        CancellationToken cancellationToken);
+
+    Task<SalesInvoiceHeaderProfileUsage> GetHeaderProfileUsageAsync(
+        Guid salesInvoiceHeaderProfileId,
         CancellationToken cancellationToken);
 }

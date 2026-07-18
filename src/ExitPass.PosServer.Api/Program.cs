@@ -4,5 +4,8 @@ var builder = WebApplication.CreateBuilder(args);
 builder.Services.AddPosServerFiscalDocumentApi(builder.Configuration);
 
 var app = builder.Build();
+app.UseAuthentication();
+app.UseAuthorization();
 app.MapFiscalDocumentEndpoints();
+app.MapSalesInvoiceHeaderProfileAdminEndpoints();
 app.Run();

@@ -20,11 +20,13 @@ public static class FiscalDocumentServiceCollectionExtensions
         {
             services.TryAddScoped<IFiscalDocumentRepository, PersistenceNotConfiguredFiscalDocumentRepository>();
             services.TryAddScoped<IFiscalDocumentReader, PersistenceNotConfiguredFiscalDocumentReader>();
+            services.TryAddScoped<ISalesInvoiceHeaderProfileRepository, PersistenceNotConfiguredSalesInvoiceHeaderProfileRepository>();
         }
         else if (!IsValidNpgsqlConnectionString(connectionString))
         {
             services.TryAddScoped<IFiscalDocumentRepository, InvalidPersistenceConfigurationFiscalDocumentRepository>();
             services.TryAddScoped<IFiscalDocumentReader, InvalidPersistenceConfigurationFiscalDocumentReader>();
+            services.TryAddScoped<ISalesInvoiceHeaderProfileRepository, PersistenceNotConfiguredSalesInvoiceHeaderProfileRepository>();
         }
         else
         {
@@ -42,6 +44,25 @@ public static class FiscalDocumentServiceCollectionExtensions
         services.AddScoped<FiscalDocumentReadService>();
         services.AddScoped<DigitalSalesInvoiceRenderService>();
         services.AddScoped<DigitalSalesInvoicePresentationAdapter>();
+        services.AddScoped(provider => new SalesInvoiceHeaderProfileAdminService(
+            provider.GetRequiredService<ISalesInvoiceHeaderProfileRepository>(),
+            IsSalesInvoiceHeaderProfileRequired(configuration)));
+
+        services
+            .AddAuthentication(SalesInvoiceHeaderProfileAdminAuthorization.AuthenticationScheme)
+            .AddScheme<PosServerAdminApiKeyAuthenticationOptions, PosServerAdminApiKeyAuthenticationHandler>(
+                SalesInvoiceHeaderProfileAdminAuthorization.AuthenticationScheme,
+                _ => { });
+        services.AddAuthorization(options =>
+        {
+            options.AddPolicy(
+                SalesInvoiceHeaderProfileAdminAuthorization.PolicyName,
+                policy => policy
+                    .AddAuthenticationSchemes(SalesInvoiceHeaderProfileAdminAuthorization.AuthenticationScheme)
+                    .RequireClaim(
+                        SalesInvoiceHeaderProfileAdminAuthorization.PermissionClaimType,
+                        SalesInvoiceHeaderProfileAdminAuthorization.RequiredPermission));
+        });
 
         return services;
     }

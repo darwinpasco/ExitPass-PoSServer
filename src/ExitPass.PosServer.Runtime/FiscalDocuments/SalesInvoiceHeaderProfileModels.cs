@@ -117,3 +117,13 @@ public sealed record SalesInvoiceHeaderProfileResolutionResult(
         SalesInvoiceHeaderProfileCompletenessResult completeness) =>
         new(SalesInvoiceHeaderProfileResolutionStatus.Incomplete, profile, completeness);
 }
+
+public sealed record SalesInvoiceHeaderProfileUsage(
+    Guid SalesInvoiceHeaderProfileId,
+    string? ProfileVersion,
+    Guid? FiscalIdentityId,
+    DateTimeOffset? FirstSnapshotCreatedAt,
+    DateTimeOffset? LatestSnapshotCreatedAt,
+    long FiscalDocumentCount,
+    IReadOnlyList<Guid> SampleFiscalDocumentIds,
+    bool DestructiveMutationBlocked);
