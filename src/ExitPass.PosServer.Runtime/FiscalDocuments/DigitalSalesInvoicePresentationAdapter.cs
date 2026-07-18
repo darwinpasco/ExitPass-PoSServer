@@ -29,18 +29,19 @@ public sealed class DigitalSalesInvoicePresentationAdapter
         var sections = new List<DigitalSalesInvoicePresentationSectionModel>
         {
             Section(templateContract, "header", "Header", 10, HeaderRows(render, templateContract)),
-            Section(templateContract, "sellerSitePosIdentity", "Seller / Site / POS Identity", 20, SellerSiteRows(render, templateContract)),
-            Section(templateContract, "documentIdentity", "Document Identity", 30, DocumentIdentityRows(render, templateContract)),
-            Section(templateContract, "fiscalNumbering", "Fiscal Numbering", 40, FiscalNumberingRows(render, templateContract)),
-            Section(templateContract, "parkingPaymentReferences", "Parking / Payment References", 50, ParkingPaymentRows(render, templateContract)),
-            Section(templateContract, "lineItems", "Line Items", 60, LineRows(render, templateContract)),
-            Section(templateContract, "discounts", "Discounts", 70, DiscountRows(render, templateContract)),
-            Section(templateContract, "taxes", "Taxes", 80, TaxRows(render, templateContract)),
-            Section(templateContract, "tenders", "Tenders", 90, TenderRows(render, templateContract)),
-            Section(templateContract, "totals", "Totals", 100, TotalRows(render, templateContract)),
-            Section(templateContract, "auditHashStatus", "Audit / Hash / Status", 110, AuditRows(render, templateContract)),
-            Section(templateContract, "footerDisclaimers", "Footer / Disclaimers", 120, FooterRows(render, templateContract)),
-            Section(templateContract, "deferredPlaceholders", "Deferred Placeholders", 130, DeferredRows(templateContract))
+            Section(templateContract, "salesInvoiceHeaderSnapshot", "Sales Invoice Header Snapshot", 20, SalesInvoiceHeaderSnapshotRows(render, templateContract)),
+            Section(templateContract, "sellerSitePosIdentity", "Seller / Site / POS Identity", 30, SellerSiteRows(render, templateContract)),
+            Section(templateContract, "documentIdentity", "Document Identity", 40, DocumentIdentityRows(render, templateContract)),
+            Section(templateContract, "fiscalNumbering", "Fiscal Numbering", 50, FiscalNumberingRows(render, templateContract)),
+            Section(templateContract, "parkingPaymentReferences", "Parking / Payment References", 60, ParkingPaymentRows(render, templateContract)),
+            Section(templateContract, "lineItems", "Line Items", 70, LineRows(render, templateContract)),
+            Section(templateContract, "discounts", "Discounts", 80, DiscountRows(render, templateContract)),
+            Section(templateContract, "taxes", "Taxes", 90, TaxRows(render, templateContract)),
+            Section(templateContract, "tenders", "Tenders", 100, TenderRows(render, templateContract)),
+            Section(templateContract, "totals", "Totals", 110, TotalRows(render, templateContract)),
+            Section(templateContract, "auditHashStatus", "Audit / Hash / Status", 120, AuditRows(render, templateContract)),
+            Section(templateContract, "footerDisclaimers", "Footer / Disclaimers", 130, FooterRows(render, templateContract)),
+            Section(templateContract, "deferredPlaceholders", "Deferred Placeholders", 140, DeferredRows(templateContract))
         };
 
         var notices = new List<DigitalSalesInvoicePresentationNoticeModel>();
@@ -75,6 +76,37 @@ public sealed class DigitalSalesInvoicePresentationAdapter
             Row("header.presentationVersion", "Presentation Version", "identifier", "required", PresentationVersion),
             Row("header.numberingState", "Numbering State", "status", "required", render.FiscalNumberAssignmentState)
         ];
+
+    private static IReadOnlyList<DigitalSalesInvoicePresentationRowModel> SalesInvoiceHeaderSnapshotRows(
+        DigitalSalesInvoiceRenderModel render,
+        DigitalSalesInvoiceTemplateContractModel contract)
+    {
+        var snapshot = render.SalesInvoiceHeaderSnapshot;
+        return
+        [
+            Row("salesInvoiceHeaderSnapshot.fiscalIdentityId", "Fiscal Identity ID", "identifier", "optional", snapshot?.FiscalIdentityId),
+            Row("salesInvoiceHeaderSnapshot.salesInvoiceHeaderProfileId", "Sales Invoice Header Profile ID", "identifier", "optional", snapshot?.SalesInvoiceHeaderProfileId),
+            Row("salesInvoiceHeaderSnapshot.profileVersion", "Profile Version", "identifier", FieldPosture(contract, "salesInvoiceHeaderSnapshot.profileVersion"), snapshot?.ProfileVersion),
+            Row("salesInvoiceHeaderSnapshot.registeredBusinessName", "Registered Business Name", "text", FieldPosture(contract, "salesInvoiceHeaderSnapshot.registeredBusinessName"), snapshot?.RegisteredBusinessName),
+            Row("salesInvoiceHeaderSnapshot.registeredBusinessAddress", "Registered Business Address", "text", FieldPosture(contract, "salesInvoiceHeaderSnapshot.registeredBusinessAddress"), snapshot?.RegisteredBusinessAddress),
+            Row("salesInvoiceHeaderSnapshot.tin", "TIN", "identifier", FieldPosture(contract, "salesInvoiceHeaderSnapshot.tin"), snapshot?.Tin),
+            Row("salesInvoiceHeaderSnapshot.posSerialNumber", "POS Serial Number", "identifier", FieldPosture(contract, "salesInvoiceHeaderSnapshot.posSerialNumber"), snapshot?.PosSerialNumber),
+            Row("salesInvoiceHeaderSnapshot.machineIdentificationNumber", "MIN", "identifier", FieldPosture(contract, "salesInvoiceHeaderSnapshot.machineIdentificationNumber"), snapshot?.MachineIdentificationNumber),
+            Row("salesInvoiceHeaderSnapshot.parkingLocationDisplay", "Parking Location", "text", FieldPosture(contract, "salesInvoiceHeaderSnapshot.parkingLocationDisplay"), snapshot?.ParkingLocationDisplay),
+            Row("salesInvoiceHeaderSnapshot.terminalId", "Terminal ID", "identifier", FieldPosture(contract, "salesInvoiceHeaderSnapshot.terminalId"), snapshot?.TerminalId),
+            Row("salesInvoiceHeaderSnapshot.birAccreditationNumber", "BIR Accreditation Number", "identifier", FieldPosture(contract, "salesInvoiceHeaderSnapshot.birAccreditationNumber"), snapshot?.BirAccreditationNumber),
+            Row("salesInvoiceHeaderSnapshot.birAccreditationIssuedDate", "BIR Accreditation Issued Date", "dateTime", FieldPosture(contract, "salesInvoiceHeaderSnapshot.birAccreditationIssuedDate"), snapshot?.BirAccreditationIssuedDate, FormatDate(snapshot?.BirAccreditationIssuedDate)),
+            Row("salesInvoiceHeaderSnapshot.birAccreditationValidUntil", "BIR Accreditation Valid Until", "dateTime", FieldPosture(contract, "salesInvoiceHeaderSnapshot.birAccreditationValidUntil"), snapshot?.BirAccreditationValidUntil, FormatDate(snapshot?.BirAccreditationValidUntil)),
+            Row("salesInvoiceHeaderSnapshot.ptuNumber", "PTU Number", "identifier", FieldPosture(contract, "salesInvoiceHeaderSnapshot.ptuNumber"), snapshot?.PtuNumber),
+            Row("salesInvoiceHeaderSnapshot.ptuIssuedDate", "PTU Issued Date", "dateTime", FieldPosture(contract, "salesInvoiceHeaderSnapshot.ptuIssuedDate"), snapshot?.PtuIssuedDate, FormatDate(snapshot?.PtuIssuedDate)),
+            Row("salesInvoiceHeaderSnapshot.salesInvoiceLegalStatement", "Sales Invoice Legal Statement", "text", FieldPosture(contract, "salesInvoiceHeaderSnapshot.salesInvoiceLegalStatement"), snapshot?.SalesInvoiceLegalStatement),
+            Row("salesInvoiceHeaderSnapshot.customerServiceFooter", "Customer Service Footer", "text", FieldPosture(contract, "salesInvoiceHeaderSnapshot.customerServiceFooter"), snapshot?.CustomerServiceFooter),
+            Row("salesInvoiceHeaderSnapshot.templateVersion", "Template Version", "identifier", FieldPosture(contract, "salesInvoiceHeaderSnapshot.templateVersion"), snapshot?.TemplateVersion),
+            Row("salesInvoiceHeaderSnapshot.presentationVersion", "Presentation Version", "identifier", FieldPosture(contract, "salesInvoiceHeaderSnapshot.presentationVersion"), snapshot?.PresentationVersion),
+            Row("salesInvoiceHeaderSnapshot.effectiveAt", "Effective At", "dateTime", "optional", snapshot?.EffectiveAt, snapshot is null ? null : FormatTimestamp(snapshot.EffectiveAt)),
+            Row("salesInvoiceHeaderSnapshot.snapshotCreatedAt", "Snapshot Created At", "dateTime", "optional", snapshot?.SnapshotCreatedAt, snapshot is null ? null : FormatTimestamp(snapshot.SnapshotCreatedAt))
+        ];
+    }
 
     private static IReadOnlyList<DigitalSalesInvoicePresentationRowModel> SellerSiteRows(
         DigitalSalesInvoiceRenderModel render,
@@ -323,6 +355,7 @@ public sealed class DigitalSalesInvoicePresentationAdapter
         presentationSectionName switch
         {
             "sellerSitePosIdentity" => "seller_site_pos_identity",
+            "salesInvoiceHeaderSnapshot" => "sales_invoice_header_snapshot",
             "documentIdentity" => "document_identity",
             "fiscalNumbering" => "fiscal_numbering",
             "parkingPaymentReferences" => "parking_payment_references",

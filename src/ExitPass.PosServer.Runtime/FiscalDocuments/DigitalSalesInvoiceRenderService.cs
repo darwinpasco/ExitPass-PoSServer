@@ -71,7 +71,8 @@ public sealed class DigitalSalesInvoiceRenderService
             document.Totals.Select(MapTotal).ToArray(),
             new DigitalSalesInvoiceFooterRenderModel(
                 "placeholder_only",
-                FooterPlaceholders));
+                FooterPlaceholders),
+            document.SalesInvoiceHeaderSnapshot);
     }
 
     private static DigitalSalesInvoiceLineRenderModel MapLine(FiscalDocumentLineReadModel line) =>

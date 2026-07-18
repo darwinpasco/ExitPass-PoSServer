@@ -42,7 +42,8 @@ public sealed record FiscalDocumentReadModel(
     IReadOnlyList<FiscalTenderReadModel> Tenders,
     IReadOnlyList<FiscalTaxDetailReadModel> TaxDetails,
     IReadOnlyList<FiscalDiscountPrivilegeDetailReadModel> DiscountPrivilegeDetails,
-    IReadOnlyList<FiscalTotalReadModel> Totals);
+    IReadOnlyList<FiscalTotalReadModel> Totals,
+    SalesInvoiceHeaderSnapshot? SalesInvoiceHeaderSnapshot = null);
 
 public sealed record FiscalDocumentStatusHistoryReadModel(
     Guid FiscalDocumentStatusHistoryId,

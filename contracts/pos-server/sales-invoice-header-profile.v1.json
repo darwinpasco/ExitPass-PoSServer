@@ -1,0 +1,121 @@
+{
+  "contractVersion": "sales-invoice-header-profile.v1",
+  "sourceRepository": "ExitPass-PoSServer",
+  "sourceBranch": "feature/fiscal-identity-sales-invoice-header-profile",
+  "fiscalIdentityFields": [
+    "fiscalIdentityId",
+    "registeredBusinessName",
+    "registeredBusinessAddress",
+    "tin",
+    "taxpayerClassification",
+    "status",
+    "createdAt",
+    "updatedAt",
+    "createdByRef",
+    "updatedByRef"
+  ],
+  "headerProfileFields": [
+    "salesInvoiceHeaderProfileId",
+    "fiscalIdentityId",
+    "siteId",
+    "sitePosServerId",
+    "profileVersion",
+    "templateVersion",
+    "presentationVersion",
+    "posSerialNumber",
+    "machineIdentificationNumber",
+    "parkingLocationDisplay",
+    "birAccreditationNumber",
+    "birAccreditationIssuedDate",
+    "birAccreditationValidUntil",
+    "ptuNumber",
+    "ptuIssuedDate",
+    "salesInvoiceLegalStatement",
+    "customerServiceFooter",
+    "effectiveFrom",
+    "effectiveTo",
+    "lifecycleStatus",
+    "approvedAt",
+    "approvedByRef",
+    "retiredAt",
+    "createdAt",
+    "updatedAt",
+    "createdByRef",
+    "updatedByRef"
+  ],
+  "lifecycleStates": [
+    "DRAFT",
+    "APPROVED",
+    "RETIRED"
+  ],
+  "supportedTemplateVersion": "digital-sales-invoice-json-v1",
+  "supportedPresentationVersion": "digital-sales-invoice-presentation-json-v1",
+  "completenessRules": [
+    "registered business name is required",
+    "registered business address is required",
+    "TIN is required",
+    "POS serial number is required",
+    "MIN is required",
+    "BIR accreditation number is required",
+    "BIR accreditation issued date is required",
+    "BIR accreditation valid-until date is required and must not precede issued date",
+    "PTU number is required",
+    "PTU issued date is required",
+    "parking-location display is required",
+    "template and presentation versions must match governed POS Server versions",
+    "profile must be APPROVED and effective for the issuing Site POS Server"
+  ],
+  "effectiveResolutionRules": [
+    "profile belongs to requested siteId",
+    "profile belongs to requested sitePosServerId",
+    "profile lifecycleStatus is APPROVED",
+    "effectiveFrom is less than or equal to effectiveAt",
+    "effectiveTo is null or greater than effectiveAt",
+    "retired profiles do not resolve",
+    "more than one effective profile is ambiguous and fails closed"
+  ],
+  "snapshotFields": [
+    "fiscalIdentityId",
+    "salesInvoiceHeaderProfileId",
+    "profileVersion",
+    "registeredBusinessName",
+    "registeredBusinessAddress",
+    "tin",
+    "posSerialNumber",
+    "machineIdentificationNumber",
+    "parkingLocationDisplay",
+    "terminalId",
+    "birAccreditationNumber",
+    "birAccreditationIssuedDate",
+    "birAccreditationValidUntil",
+    "ptuNumber",
+    "ptuIssuedDate",
+    "salesInvoiceLegalStatement",
+    "customerServiceFooter",
+    "templateVersion",
+    "presentationVersion",
+    "effectiveAt",
+    "snapshotCreatedAt"
+  ],
+  "safeErrorPostures": [
+    "sales_invoice_header_profile_not_found",
+    "sales_invoice_header_profile_ambiguous",
+    "sales_invoice_header_profile_incomplete",
+    "sales_invoice_header_profile_unsupported_version"
+  ],
+  "historicalImmutability": [
+    "issued fiscal document presentations read fiscal_document_header_snapshots when present",
+    "retiring or superseding a profile does not change old snapshots",
+    "runtime terminal ID is copied from issuance context and is not a profile field",
+    "no print, exit, gate, Central PMS, APT, or delivery behavior is included"
+  ],
+  "enforcementSetting": {
+    "name": "POS_REQUIRE_COMPLETE_SALES_INVOICE_HEADER_PROFILE",
+    "default": false,
+    "whenFalse": "existing issuance remains compatible; complete effective profiles are snapshotted when present",
+    "whenTrue": "issuance requires exactly one complete effective profile before fiscal document creation"
+  },
+  "fixtures": [
+    "docs/v1.3/pos-server/sales-invoice-header-profile/fixtures/sales-invoice-header-profile-v1.json"
+  ]
+}

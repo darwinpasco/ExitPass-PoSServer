@@ -1,0 +1,106 @@
+{
+  "fixtureId": "sales-invoice-header-profile-v1",
+  "contractVersion": "sales-invoice-header-profile.v1",
+  "fiscalIdentity": {
+    "fiscalIdentityId": "dddddddd-0000-0000-0000-000000000001",
+    "registeredBusinessName": "GOVERNED TEST BUSINESS NAME",
+    "registeredBusinessAddress": "GOVERNED TEST ADDRESS",
+    "tin": "TEST-TIN-0001",
+    "taxpayerClassification": "VAT_REGISTERED_TEST",
+    "status": "APPROVED"
+  },
+  "profiles": [
+    {
+      "caseId": "complete-approved-effective-profile",
+      "salesInvoiceHeaderProfileId": "cccccccc-0000-0000-0000-000000000001",
+      "profileVersion": "v1",
+      "lifecycleStatus": "APPROVED",
+      "siteId": "aaaaaaaa-0000-0000-0000-000000000001",
+      "sitePosServerId": "bbbbbbbb-0000-0000-0000-000000000001",
+      "templateVersion": "digital-sales-invoice-json-v1",
+      "presentationVersion": "digital-sales-invoice-presentation-json-v1",
+      "posSerialNumber": "TEST-SERIAL-0001",
+      "machineIdentificationNumber": "TEST-MIN-0001",
+      "parkingLocationDisplay": "GOVERNED TEST PARKING LOCATION",
+      "birAccreditationNumber": "TEST-BIR-ACCREDITATION-0001",
+      "birAccreditationIssuedDate": "2026-01-15",
+      "birAccreditationValidUntil": "2027-01-15",
+      "ptuNumber": "TEST-PTU-0001",
+      "ptuIssuedDate": "2026-02-10",
+      "salesInvoiceLegalStatement": "THIS SERVES AS YOUR SALES INVOICE",
+      "customerServiceFooter": "CUSTOMER SERVICE TEST FOOTER",
+      "effectiveFrom": "2026-07-01T00:00:00Z",
+      "effectiveTo": null
+    },
+    {
+      "caseId": "future-dated-approved-profile",
+      "salesInvoiceHeaderProfileId": "cccccccc-0000-0000-0000-000000000002",
+      "profileVersion": "future-v1",
+      "lifecycleStatus": "APPROVED",
+      "effectiveFrom": "2026-08-01T00:00:00Z"
+    },
+    {
+      "caseId": "expired-profile",
+      "salesInvoiceHeaderProfileId": "cccccccc-0000-0000-0000-000000000003",
+      "profileVersion": "expired-v1",
+      "lifecycleStatus": "APPROVED",
+      "effectiveFrom": "2026-06-01T00:00:00Z",
+      "effectiveTo": "2026-07-01T00:00:00Z"
+    },
+    {
+      "caseId": "draft-profile",
+      "salesInvoiceHeaderProfileId": "cccccccc-0000-0000-0000-000000000004",
+      "profileVersion": "draft-v1",
+      "lifecycleStatus": "DRAFT"
+    },
+    {
+      "caseId": "incomplete-profile",
+      "salesInvoiceHeaderProfileId": "cccccccc-0000-0000-0000-000000000005",
+      "profileVersion": "incomplete-v1",
+      "missingFields": [
+        "registeredBusinessName",
+        "tin",
+        "posSerialNumber",
+        "machineIdentificationNumber",
+        "birAccreditationNumber",
+        "birAccreditationIssuedDate",
+        "birAccreditationValidUntil",
+        "ptuNumber",
+        "ptuIssuedDate",
+        "parkingLocationDisplay"
+      ]
+    },
+    {
+      "caseId": "superseding-profile-version",
+      "salesInvoiceHeaderProfileId": "cccccccc-0000-0000-0000-000000000006",
+      "profileVersion": "v2",
+      "parkingLocationDisplay": "GOVERNED TEST PARKING LOCATION V2",
+      "effectiveFrom": "2026-07-18T09:00:00Z"
+    }
+  ],
+  "issuedFiscalDocumentWithImmutableSnapshot": {
+    "fiscalDocumentId": "eeeeeeee-0000-0000-0000-000000000001",
+    "runtimeTerminalRef": "RUNTIME-TERMINAL-001",
+    "snapshot": {
+      "fiscalIdentityId": "dddddddd-0000-0000-0000-000000000001",
+      "salesInvoiceHeaderProfileId": "cccccccc-0000-0000-0000-000000000001",
+      "profileVersion": "v1",
+      "registeredBusinessName": "GOVERNED TEST BUSINESS NAME",
+      "registeredBusinessAddress": "GOVERNED TEST ADDRESS",
+      "tin": "TEST-TIN-0001",
+      "posSerialNumber": "TEST-SERIAL-0001",
+      "machineIdentificationNumber": "TEST-MIN-0001",
+      "parkingLocationDisplay": "GOVERNED TEST PARKING LOCATION",
+      "terminalId": "RUNTIME-TERMINAL-001",
+      "birAccreditationNumber": "TEST-BIR-ACCREDITATION-0001",
+      "birAccreditationIssuedDate": "2026-01-15",
+      "birAccreditationValidUntil": "2027-01-15",
+      "ptuNumber": "TEST-PTU-0001",
+      "ptuIssuedDate": "2026-02-10",
+      "salesInvoiceLegalStatement": "THIS SERVES AS YOUR SALES INVOICE",
+      "customerServiceFooter": "CUSTOMER SERVICE TEST FOOTER",
+      "templateVersion": "digital-sales-invoice-json-v1",
+      "presentationVersion": "digital-sales-invoice-presentation-json-v1"
+    }
+  }
+}

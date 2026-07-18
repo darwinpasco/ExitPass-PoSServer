@@ -261,6 +261,7 @@ public sealed class DigitalSalesInvoiceEndpointTests
         Assert.Equal(
             [
                 "header",
+                "salesInvoiceHeaderSnapshot",
                 "sellerSitePosIdentity",
                 "documentIdentity",
                 "fiscalNumbering",

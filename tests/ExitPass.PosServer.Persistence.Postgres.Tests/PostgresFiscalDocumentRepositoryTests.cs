@@ -590,11 +590,13 @@ public sealed class PostgresFiscalDocumentRepositoryTests
         new(
             Guid.Parse("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"),
             Guid.Parse("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb"),
+            Guid.Parse("99999999-9999-9999-9999-999999999999"),
             null,
             Guid.Parse("cccccccc-cccc-cccc-cccc-cccccccccccc"),
             Guid.Parse("dddddddd-dddd-dddd-dddd-dddddddddddd"),
             "site-pos-server-001",
             "sales_invoice",
+            "runtime-terminal-001",
             "payable-basis-001",
             "central-finality-001",
             "PHP",
