@@ -106,9 +106,18 @@ public sealed class SalesInvoiceHeaderProfilePersistenceTests
         var source = File.ReadAllText(FindProfileRepositorySourcePath());
 
         Assert.Contains("CreateFiscalIdentityAsync", source, StringComparison.Ordinal);
+        Assert.Contains("UpdateFiscalIdentityAsync", source, StringComparison.Ordinal);
+        Assert.Contains("IsFiscalIdentityInGovernedUseAsync", source, StringComparison.Ordinal);
         Assert.Contains("CreateHeaderProfileAsync", source, StringComparison.Ordinal);
+        Assert.Contains("ListHeaderProfilesAsync", source, StringComparison.Ordinal);
+        Assert.Contains("UpdateHeaderProfileDraftAsync", source, StringComparison.Ordinal);
         Assert.Contains("ApproveHeaderProfileAsync", source, StringComparison.Ordinal);
         Assert.Contains("RetireHeaderProfileAsync", source, StringComparison.Ordinal);
+        Assert.Contains("GetHeaderProfileUsageAsync", source, StringComparison.Ordinal);
+        Assert.Contains("lifecycle_status = 'DRAFT'", source, StringComparison.Ordinal);
+        Assert.Contains("lifecycle_status = 'RETIRED'", source, StringComparison.Ordinal);
+        Assert.Contains("effective_to = case", source, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("pos.fiscal_document_header_snapshots", source, StringComparison.Ordinal);
         Assert.DoesNotContain("delete from", source, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("print", source, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("exit_authorization", source, StringComparison.OrdinalIgnoreCase);

@@ -83,6 +83,65 @@ public sealed class PostgresSalesInvoiceHeaderProfileRepository : ISalesInvoiceH
             : null;
     }
 
+    public async Task<FiscalIdentityProfile> UpdateFiscalIdentityAsync(
+        FiscalIdentityProfile identity,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(identity);
+        await using var connection = await dataSource.OpenConnectionAsync(cancellationToken).ConfigureAwait(false);
+        await using var command = new NpgsqlCommand(
+            """
+            update pos.fiscal_identities
+            set registered_business_name = @registered_business_name,
+                registered_business_address = @registered_business_address,
+                tin = @tin,
+                taxpayer_classification = @taxpayer_classification,
+                fiscal_identity_status = @fiscal_identity_status,
+                updated_at = @updated_at,
+                updated_by_ref = @updated_by_ref
+            where fiscal_identity_id = @fiscal_identity_id;
+            """,
+            connection);
+        command.Parameters.AddWithValue("fiscal_identity_id", identity.FiscalIdentityId);
+        command.Parameters.AddWithValue("registered_business_name", identity.RegisteredBusinessName);
+        command.Parameters.AddWithValue("registered_business_address", identity.RegisteredBusinessAddress);
+        command.Parameters.AddWithValue("tin", identity.Tin);
+        command.Parameters.AddWithValue("taxpayer_classification", (object?)identity.TaxpayerClassification ?? DBNull.Value);
+        command.Parameters.AddWithValue("fiscal_identity_status", identity.Status);
+        command.Parameters.AddWithValue("updated_at", identity.UpdatedAt);
+        command.Parameters.AddWithValue("updated_by_ref", (object?)identity.UpdatedByRef ?? DBNull.Value);
+        var rows = await command.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
+        if (rows == 0)
+        {
+            throw new InvalidOperationException("Fiscal Identity was not found.");
+        }
+
+        return identity;
+    }
+
+    public async Task<bool> IsFiscalIdentityInGovernedUseAsync(
+        Guid fiscalIdentityId,
+        CancellationToken cancellationToken)
+    {
+        await using var connection = await dataSource.OpenConnectionAsync(cancellationToken).ConfigureAwait(false);
+        await using var command = new NpgsqlCommand(
+            """
+            select exists (
+                select 1
+                from pos.sales_invoice_header_profiles profile
+                where profile.fiscal_identity_id = @fiscal_identity_id
+                  and profile.lifecycle_status in ('APPROVED', 'RETIRED')
+            ) or exists (
+                select 1
+                from pos.fiscal_document_header_snapshots snapshot
+                where snapshot.fiscal_identity_id = @fiscal_identity_id
+            );
+            """,
+            connection);
+        command.Parameters.AddWithValue("fiscal_identity_id", fiscalIdentityId);
+        return (bool)(await command.ExecuteScalarAsync(cancellationToken).ConfigureAwait(false) ?? false);
+    }
+
     public async Task<SalesInvoiceHeaderProfile> CreateHeaderProfileAsync(
         SalesInvoiceHeaderProfile profile,
         CancellationToken cancellationToken)
@@ -169,6 +228,81 @@ public sealed class PostgresSalesInvoiceHeaderProfileRepository : ISalesInvoiceH
         return await ReadHeaderProfileAsync(connection, salesInvoiceHeaderProfileId, cancellationToken).ConfigureAwait(false);
     }
 
+    public async Task<IReadOnlyList<SalesInvoiceHeaderProfile>> ListHeaderProfilesAsync(
+        Guid? siteId,
+        Guid? sitePosServerId,
+        CancellationToken cancellationToken)
+    {
+        await using var connection = await dataSource.OpenConnectionAsync(cancellationToken).ConfigureAwait(false);
+        await using var command = new NpgsqlCommand(
+            HeaderProfileSelectSql + """
+             where (@site_id is null or profile.site_id = @site_id)
+               and (@site_pos_server_id is null or profile.site_pos_server_id = @site_pos_server_id)
+             order by profile.site_id, profile.site_pos_server_id, profile.profile_version, profile.effective_from;
+            """,
+            connection);
+        command.Parameters.AddWithValue("site_id", (object?)siteId ?? DBNull.Value);
+        command.Parameters.AddWithValue("site_pos_server_id", (object?)sitePosServerId ?? DBNull.Value);
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
+        var profiles = new List<SalesInvoiceHeaderProfile>();
+        while (await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
+        {
+            profiles.Add(ReadHeaderProfile(reader));
+        }
+
+        return profiles;
+    }
+
+    public async Task<SalesInvoiceHeaderProfile> UpdateHeaderProfileDraftAsync(
+        SalesInvoiceHeaderProfile profile,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(profile);
+        await using var connection = await dataSource.OpenConnectionAsync(cancellationToken).ConfigureAwait(false);
+        var existing = await ReadHeaderProfileAsync(connection, profile.SalesInvoiceHeaderProfileId, cancellationToken).ConfigureAwait(false) ??
+            throw new InvalidOperationException("Sales Invoice header profile was not found.");
+        if (!string.Equals(existing.LifecycleStatus, SalesInvoiceHeaderProfileLifecycle.Draft, StringComparison.Ordinal))
+        {
+            throw new InvalidOperationException("Only DRAFT Sales Invoice header profiles may be updated.");
+        }
+
+        await using var command = new NpgsqlCommand(
+            """
+            update pos.sales_invoice_header_profiles
+            set fiscal_identity_id = @fiscal_identity_id,
+                site_id = @site_id,
+                site_pos_server_id = @site_pos_server_id,
+                profile_version = @profile_version,
+                template_version = @template_version,
+                presentation_version = @presentation_version,
+                pos_serial_number = @pos_serial_number,
+                machine_identification_number = @machine_identification_number,
+                parking_location_display = @parking_location_display,
+                bir_accreditation_number = @bir_accreditation_number,
+                bir_accreditation_issued_date = @bir_accreditation_issued_date,
+                bir_accreditation_valid_until = @bir_accreditation_valid_until,
+                ptu_number = @ptu_number,
+                ptu_issued_date = @ptu_issued_date,
+                sales_invoice_legal_statement = @sales_invoice_legal_statement,
+                customer_service_footer = @customer_service_footer,
+                effective_from = @effective_from,
+                effective_to = @effective_to,
+                updated_at = @updated_at,
+                updated_by_ref = @updated_by_ref
+            where sales_invoice_header_profile_id = @sales_invoice_header_profile_id
+              and lifecycle_status = 'DRAFT';
+            """,
+            connection);
+        AddHeaderProfileParameters(command, profile);
+        var rows = await command.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
+        if (rows == 0)
+        {
+            throw new InvalidOperationException("Only DRAFT Sales Invoice header profiles may be updated.");
+        }
+
+        return profile;
+    }
+
     public async Task<SalesInvoiceHeaderProfile> ApproveHeaderProfileAsync(
         Guid salesInvoiceHeaderProfileId,
         DateTimeOffset approvedAt,
@@ -184,6 +318,11 @@ public sealed class PostgresSalesInvoiceHeaderProfileRepository : ISalesInvoiceH
         await using var transaction = await connection.BeginTransactionAsync(cancellationToken).ConfigureAwait(false);
         var profile = await ReadHeaderProfileAsync(connection, salesInvoiceHeaderProfileId, cancellationToken, transaction).ConfigureAwait(false) ??
             throw new InvalidOperationException("Sales Invoice header profile was not found.");
+        if (!string.Equals(profile.LifecycleStatus, SalesInvoiceHeaderProfileLifecycle.Draft, StringComparison.Ordinal))
+        {
+            throw new InvalidOperationException("Only DRAFT Sales Invoice header profiles may be approved.");
+        }
+
         var approved = profile with
         {
             LifecycleStatus = SalesInvoiceHeaderProfileLifecycle.Approved,
@@ -192,6 +331,12 @@ public sealed class PostgresSalesInvoiceHeaderProfileRepository : ISalesInvoiceH
             UpdatedAt = approvedAt,
             UpdatedByRef = approvedByRef.Trim()
         };
+        var completeness = profileService.EvaluateCompleteness(approved, approved.SiteId, approved.SitePosServerId, approved.EffectiveFrom);
+        if (!completeness.IsComplete)
+        {
+            throw new InvalidOperationException("Sales Invoice header profile is incomplete.");
+        }
+
         var existing = await ReadProfilesForSitePosServerAsync(connection, approved.SitePosServerId, cancellationToken, transaction).ConfigureAwait(false);
         profileService.ValidateNoApprovedOverlap(approved, existing);
 
@@ -229,12 +374,20 @@ public sealed class PostgresSalesInvoiceHeaderProfileRepository : ISalesInvoiceH
         await using var connection = await dataSource.OpenConnectionAsync(cancellationToken).ConfigureAwait(false);
         var existing = await ReadHeaderProfileAsync(connection, salesInvoiceHeaderProfileId, cancellationToken).ConfigureAwait(false) ??
             throw new InvalidOperationException("Sales Invoice header profile was not found.");
+        if (!string.Equals(existing.LifecycleStatus, SalesInvoiceHeaderProfileLifecycle.Approved, StringComparison.Ordinal))
+        {
+            throw new InvalidOperationException("Only APPROVED Sales Invoice header profiles may be retired.");
+        }
 
         await using var command = new NpgsqlCommand(
             """
             update pos.sales_invoice_header_profiles
             set lifecycle_status = 'RETIRED',
                 retired_at = @retired_at,
+                effective_to = case
+                    when effective_to is null or effective_to > @retired_at then @retired_at
+                    else effective_to
+                end,
                 updated_at = @retired_at,
                 updated_by_ref = @retired_by_ref
             where sales_invoice_header_profile_id = @sales_invoice_header_profile_id;
@@ -248,6 +401,7 @@ public sealed class PostgresSalesInvoiceHeaderProfileRepository : ISalesInvoiceH
         {
             LifecycleStatus = SalesInvoiceHeaderProfileLifecycle.Retired,
             RetiredAt = retiredAt,
+            EffectiveTo = existing.EffectiveTo is null || existing.EffectiveTo > retiredAt ? retiredAt : existing.EffectiveTo,
             UpdatedAt = retiredAt,
             UpdatedByRef = retiredByRef.Trim()
         };
@@ -262,6 +416,60 @@ public sealed class PostgresSalesInvoiceHeaderProfileRepository : ISalesInvoiceH
         await using var connection = await dataSource.OpenConnectionAsync(cancellationToken).ConfigureAwait(false);
         var profiles = await ReadProfilesForSitePosServerAsync(connection, sitePosServerId, cancellationToken).ConfigureAwait(false);
         return profileService.ResolveEffective(profiles, siteId, sitePosServerId, effectiveAt);
+    }
+
+    public async Task<SalesInvoiceHeaderProfileUsage> GetHeaderProfileUsageAsync(
+        Guid salesInvoiceHeaderProfileId,
+        CancellationToken cancellationToken)
+    {
+        await using var connection = await dataSource.OpenConnectionAsync(cancellationToken).ConfigureAwait(false);
+        var profile = await ReadHeaderProfileAsync(connection, salesInvoiceHeaderProfileId, cancellationToken).ConfigureAwait(false);
+        await using var command = new NpgsqlCommand(
+            """
+            with usage as (
+                select fiscal_document_id, snapshot_created_at
+                from pos.fiscal_document_header_snapshots
+                where sales_invoice_header_profile_id = @sales_invoice_header_profile_id
+            ),
+            sample as (
+                select fiscal_document_id
+                from usage
+                order by snapshot_created_at, fiscal_document_id
+                limit 25
+            )
+            select
+                (select count(*)::bigint from usage),
+                (select min(snapshot_created_at) from usage),
+                (select max(snapshot_created_at) from usage),
+                coalesce((select array_agg(fiscal_document_id order by fiscal_document_id) from sample), array[]::uuid[]);
+            """,
+            connection);
+        command.Parameters.AddWithValue("sales_invoice_header_profile_id", salesInvoiceHeaderProfileId);
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
+        if (!await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
+        {
+            return new SalesInvoiceHeaderProfileUsage(
+                salesInvoiceHeaderProfileId,
+                profile?.ProfileVersion,
+                profile?.FiscalIdentityId,
+                null,
+                null,
+                0,
+                [],
+                profile?.HasBeenSnapshotted == true);
+        }
+
+        var count = reader.GetInt64(0);
+        var sampleIds = reader.GetFieldValue<Guid[]>(3);
+        return new SalesInvoiceHeaderProfileUsage(
+            salesInvoiceHeaderProfileId,
+            profile?.ProfileVersion,
+            profile?.FiscalIdentityId,
+            reader.IsDBNull(1) ? null : ReadDateTimeOffset(reader, 1),
+            reader.IsDBNull(2) ? null : ReadDateTimeOffset(reader, 2),
+            count,
+            sampleIds,
+            count > 0 || profile?.HasBeenSnapshotted == true);
     }
 
     private static void AddFiscalIdentityParameters(NpgsqlCommand command, FiscalIdentityProfile identity)

@@ -1,0 +1,97 @@
+namespace ExitPass.PosServer.Runtime.FiscalDocuments;
+
+public sealed record CreateFiscalIdentityProfileCommand(
+    string RegisteredBusinessName,
+    string RegisteredBusinessAddress,
+    string Tin,
+    string? TaxpayerClassification,
+    string? Status,
+    string ActorRef,
+    DateTimeOffset RequestedAt);
+
+public sealed record UpdateFiscalIdentityProfileCommand(
+    Guid FiscalIdentityId,
+    string RegisteredBusinessName,
+    string RegisteredBusinessAddress,
+    string Tin,
+    string? TaxpayerClassification,
+    string? Status,
+    string ActorRef,
+    DateTimeOffset RequestedAt);
+
+public sealed record CreateSalesInvoiceHeaderProfileCommand(
+    Guid FiscalIdentityId,
+    Guid SiteId,
+    Guid SitePosServerId,
+    string ProfileVersion,
+    string TemplateVersion,
+    string PresentationVersion,
+    string? PosSerialNumber,
+    string? MachineIdentificationNumber,
+    string? ParkingLocationDisplay,
+    string? BirAccreditationNumber,
+    DateOnly? BirAccreditationIssuedDate,
+    DateOnly? BirAccreditationValidUntil,
+    string? PtuNumber,
+    DateOnly? PtuIssuedDate,
+    string? SalesInvoiceLegalStatement,
+    string? CustomerServiceFooter,
+    DateTimeOffset EffectiveFrom,
+    DateTimeOffset? EffectiveTo,
+    string ActorRef,
+    DateTimeOffset RequestedAt);
+
+public sealed record UpdateSalesInvoiceHeaderProfileDraftCommand(
+    Guid SalesInvoiceHeaderProfileId,
+    Guid FiscalIdentityId,
+    Guid SiteId,
+    Guid SitePosServerId,
+    string ProfileVersion,
+    string TemplateVersion,
+    string PresentationVersion,
+    string? PosSerialNumber,
+    string? MachineIdentificationNumber,
+    string? ParkingLocationDisplay,
+    string? BirAccreditationNumber,
+    DateOnly? BirAccreditationIssuedDate,
+    DateOnly? BirAccreditationValidUntil,
+    string? PtuNumber,
+    DateOnly? PtuIssuedDate,
+    string? SalesInvoiceLegalStatement,
+    string? CustomerServiceFooter,
+    DateTimeOffset EffectiveFrom,
+    DateTimeOffset? EffectiveTo,
+    string ActorRef,
+    DateTimeOffset RequestedAt);
+
+public sealed record ValidateSalesInvoiceHeaderProfileResult(
+    Guid SalesInvoiceHeaderProfileId,
+    string LifecycleStatus,
+    bool IsComplete,
+    IReadOnlyList<string> FailureCodes,
+    IReadOnlyDictionary<string, string> Messages,
+    string TemplateVersionPosture,
+    string PresentationVersionPosture,
+    string EffectiveWindowPosture,
+    string OverlapPosture,
+    string FiscalIdentityPosture,
+    DateTimeOffset EvaluatedAt);
+
+public sealed record SalesInvoiceHeaderProfileReadiness(
+    Guid SiteId,
+    Guid SitePosServerId,
+    DateTimeOffset EffectiveAt,
+    string ResolutionStatus,
+    Guid? SalesInvoiceHeaderProfileId,
+    string? ProfileVersion,
+    Guid? FiscalIdentityId,
+    string? LifecycleStatus,
+    bool IsComplete,
+    bool EnforcementRequired,
+    IReadOnlyList<string> FailureCodes,
+    string BirAccreditationPosture,
+    string PtuPosture,
+    string SupportedVersionPosture,
+    string OverlapPosture,
+    DateTimeOffset? LastUpdatedAt,
+    DateTimeOffset EvaluatedAt);

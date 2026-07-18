@@ -75,4 +75,168 @@ public static class FiscalDocumentEndpointRouteBuilderExtensions
 
         return group;
     }
+
+    public static IEndpointRouteBuilder MapSalesInvoiceHeaderProfileAdminEndpoints(this IEndpointRouteBuilder endpoints)
+    {
+        var fiscalIdentityGroup = endpoints
+            .MapGroup("/v1/admin/fiscal-identities")
+            .RequireAuthorization(SalesInvoiceHeaderProfileAdminAuthorization.PolicyName);
+
+        fiscalIdentityGroup.MapPost("/", async (
+            CreateFiscalIdentityRequest request,
+            SalesInvoiceHeaderProfileAdminService service,
+            HttpContext httpContext,
+            CancellationToken cancellationToken) =>
+        {
+            var response = await SalesInvoiceHeaderProfileAdminEndpoint
+                .CreateFiscalIdentityAsync(request, service, httpContext, cancellationToken)
+                .ConfigureAwait(false);
+            return Results.Json(response, statusCode: response.HttpStatusCode);
+        });
+
+        fiscalIdentityGroup.MapGet("/{fiscalIdentityId:guid}", async (
+            Guid fiscalIdentityId,
+            SalesInvoiceHeaderProfileAdminService service,
+            HttpContext httpContext,
+            CancellationToken cancellationToken) =>
+        {
+            var response = await SalesInvoiceHeaderProfileAdminEndpoint
+                .GetFiscalIdentityAsync(fiscalIdentityId, service, httpContext, cancellationToken)
+                .ConfigureAwait(false);
+            return Results.Json(response, statusCode: response.HttpStatusCode);
+        });
+
+        fiscalIdentityGroup.MapPatch("/{fiscalIdentityId:guid}", async (
+            Guid fiscalIdentityId,
+            UpdateFiscalIdentityRequest request,
+            SalesInvoiceHeaderProfileAdminService service,
+            HttpContext httpContext,
+            CancellationToken cancellationToken) =>
+        {
+            var response = await SalesInvoiceHeaderProfileAdminEndpoint
+                .UpdateFiscalIdentityAsync(fiscalIdentityId, request, service, httpContext, cancellationToken)
+                .ConfigureAwait(false);
+            return Results.Json(response, statusCode: response.HttpStatusCode);
+        });
+
+        var profileGroup = endpoints
+            .MapGroup("/v1/admin/sales-invoice-header-profiles")
+            .RequireAuthorization(SalesInvoiceHeaderProfileAdminAuthorization.PolicyName);
+
+        profileGroup.MapPost("/", async (
+            CreateSalesInvoiceHeaderProfileRequest request,
+            SalesInvoiceHeaderProfileAdminService service,
+            HttpContext httpContext,
+            CancellationToken cancellationToken) =>
+        {
+            var response = await SalesInvoiceHeaderProfileAdminEndpoint
+                .CreateHeaderProfileAsync(request, service, httpContext, cancellationToken)
+                .ConfigureAwait(false);
+            return Results.Json(response, statusCode: response.HttpStatusCode);
+        });
+
+        profileGroup.MapGet("/", async (
+            Guid? siteId,
+            Guid? sitePosServerId,
+            SalesInvoiceHeaderProfileAdminService service,
+            HttpContext httpContext,
+            CancellationToken cancellationToken) =>
+        {
+            var response = await SalesInvoiceHeaderProfileAdminEndpoint
+                .ListHeaderProfilesAsync(siteId, sitePosServerId, service, httpContext, cancellationToken)
+                .ConfigureAwait(false);
+            return Results.Json(response, statusCode: response.HttpStatusCode);
+        });
+
+        profileGroup.MapGet("/effective-readiness", async (
+            Guid siteId,
+            Guid sitePosServerId,
+            DateTimeOffset? effectiveAt,
+            SalesInvoiceHeaderProfileAdminService service,
+            HttpContext httpContext,
+            CancellationToken cancellationToken) =>
+        {
+            var response = await SalesInvoiceHeaderProfileAdminEndpoint
+                .GetEffectiveReadinessAsync(siteId, sitePosServerId, effectiveAt, service, httpContext, cancellationToken)
+                .ConfigureAwait(false);
+            return Results.Json(response, statusCode: response.HttpStatusCode);
+        });
+
+        profileGroup.MapGet("/{salesInvoiceHeaderProfileId:guid}", async (
+            Guid salesInvoiceHeaderProfileId,
+            SalesInvoiceHeaderProfileAdminService service,
+            HttpContext httpContext,
+            CancellationToken cancellationToken) =>
+        {
+            var response = await SalesInvoiceHeaderProfileAdminEndpoint
+                .GetHeaderProfileAsync(salesInvoiceHeaderProfileId, service, httpContext, cancellationToken)
+                .ConfigureAwait(false);
+            return Results.Json(response, statusCode: response.HttpStatusCode);
+        });
+
+        profileGroup.MapPatch("/{salesInvoiceHeaderProfileId:guid}", async (
+            Guid salesInvoiceHeaderProfileId,
+            CreateSalesInvoiceHeaderProfileRequest request,
+            SalesInvoiceHeaderProfileAdminService service,
+            HttpContext httpContext,
+            CancellationToken cancellationToken) =>
+        {
+            var response = await SalesInvoiceHeaderProfileAdminEndpoint
+                .UpdateHeaderProfileDraftAsync(salesInvoiceHeaderProfileId, request, service, httpContext, cancellationToken)
+                .ConfigureAwait(false);
+            return Results.Json(response, statusCode: response.HttpStatusCode);
+        });
+
+        profileGroup.MapPost("/{salesInvoiceHeaderProfileId:guid}/validate", async (
+            Guid salesInvoiceHeaderProfileId,
+            SalesInvoiceHeaderProfileAdminService service,
+            HttpContext httpContext,
+            CancellationToken cancellationToken) =>
+        {
+            var response = await SalesInvoiceHeaderProfileAdminEndpoint
+                .ValidateHeaderProfileAsync(salesInvoiceHeaderProfileId, service, httpContext, cancellationToken)
+                .ConfigureAwait(false);
+            return Results.Json(response, statusCode: response.HttpStatusCode);
+        });
+
+        profileGroup.MapPost("/{salesInvoiceHeaderProfileId:guid}/approve", async (
+            Guid salesInvoiceHeaderProfileId,
+            ApproveSalesInvoiceHeaderProfileRequest request,
+            SalesInvoiceHeaderProfileAdminService service,
+            HttpContext httpContext,
+            CancellationToken cancellationToken) =>
+        {
+            var response = await SalesInvoiceHeaderProfileAdminEndpoint
+                .ApproveHeaderProfileAsync(salesInvoiceHeaderProfileId, request, service, httpContext, cancellationToken)
+                .ConfigureAwait(false);
+            return Results.Json(response, statusCode: response.HttpStatusCode);
+        });
+
+        profileGroup.MapPost("/{salesInvoiceHeaderProfileId:guid}/retire", async (
+            Guid salesInvoiceHeaderProfileId,
+            RetireSalesInvoiceHeaderProfileRequest request,
+            SalesInvoiceHeaderProfileAdminService service,
+            HttpContext httpContext,
+            CancellationToken cancellationToken) =>
+        {
+            var response = await SalesInvoiceHeaderProfileAdminEndpoint
+                .RetireHeaderProfileAsync(salesInvoiceHeaderProfileId, request, service, httpContext, cancellationToken)
+                .ConfigureAwait(false);
+            return Results.Json(response, statusCode: response.HttpStatusCode);
+        });
+
+        profileGroup.MapGet("/{salesInvoiceHeaderProfileId:guid}/usage", async (
+            Guid salesInvoiceHeaderProfileId,
+            SalesInvoiceHeaderProfileAdminService service,
+            HttpContext httpContext,
+            CancellationToken cancellationToken) =>
+        {
+            var response = await SalesInvoiceHeaderProfileAdminEndpoint
+                .GetHeaderProfileUsageAsync(salesInvoiceHeaderProfileId, service, httpContext, cancellationToken)
+                .ConfigureAwait(false);
+            return Results.Json(response, statusCode: response.HttpStatusCode);
+        });
+
+        return endpoints;
+    }
 }

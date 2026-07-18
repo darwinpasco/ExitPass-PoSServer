@@ -1,0 +1,233 @@
+{
+  "contractVersion": "sales-invoice-header-profile-admin-api.v1",
+  "owner": "POS Server",
+  "purpose": "Minimal secured administration API for Fiscal Identities and Sales Invoice Header Profiles.",
+  "authorization": {
+    "policy": "SalesInvoiceHeaderProfileAdministration",
+    "authenticationScheme": "PosServerAdminApiKey",
+    "requiredPermission": "sales_invoice_header_profile.admin",
+    "requiredHeaders": [
+      "X-PosServer-Admin-Key",
+      "X-Correlation-Id"
+    ],
+    "optionalHeaders": [
+      "X-PosServer-Admin-Permission"
+    ],
+    "apiKeyPosture": {
+      "permissionSource": "server-derived",
+      "configuredMapping": "Each trusted API key identity is mapped by POS Server configuration to an allowlisted permission set.",
+      "secretStorage": "API key material is supplied by deployment configuration and is not stored in this contract, source fixtures, responses, or logs.",
+      "secretComparison": "Secret key material is compared using constant-time comparison where practical.",
+      "disabledCredentialBehavior": "Disabled or revoked configured keys fail authentication without revealing whether the key identity exists."
+    },
+    "permissionHeaderPosture": {
+      "accepted": true,
+      "required": false,
+      "purpose": "Optional requested-permission declaration for diagnostics or compatibility.",
+      "grantAuthority": false,
+      "rule": "X-PosServer-Admin-Permission never grants sales_invoice_header_profile.admin. Permission claims are emitted only from the authenticated key identity's server-side allowlist.",
+      "inconsistentHeaderBehavior": "A supplied permission outside the authenticated identity's server-side allowlist is rejected by authorization because no matching permission claim is emitted.",
+      "malformedHeaderBehavior": "Malformed, duplicate, whitespace-only, or comma-separated permission header values cannot elevate access."
+    },
+    "permissionMapping": {
+      "servicePermission": "sales_invoice_header_profile.admin",
+      "intendedCaller": "future Management Platform service integration",
+      "excludedCallers": [
+        "APT",
+        "cashier-facing clients",
+        "receipt presentation clients",
+        "fiscal issuance callers"
+      ]
+    }
+  },
+  "routes": [
+    {
+      "method": "POST",
+      "route": "/v1/admin/fiscal-identities",
+      "operation": "createFiscalIdentity"
+    },
+    {
+      "method": "GET",
+      "route": "/v1/admin/fiscal-identities/{fiscalIdentityId}",
+      "operation": "getFiscalIdentity"
+    },
+    {
+      "method": "PATCH",
+      "route": "/v1/admin/fiscal-identities/{fiscalIdentityId}",
+      "operation": "updateFiscalIdentityBeforeGovernedUse"
+    },
+    {
+      "method": "POST",
+      "route": "/v1/admin/sales-invoice-header-profiles",
+      "operation": "createDraftHeaderProfile"
+    },
+    {
+      "method": "GET",
+      "route": "/v1/admin/sales-invoice-header-profiles/{salesInvoiceHeaderProfileId}",
+      "operation": "getHeaderProfile"
+    },
+    {
+      "method": "GET",
+      "route": "/v1/admin/sales-invoice-header-profiles?siteId={siteId}&sitePosServerId={sitePosServerId}",
+      "operation": "listHeaderProfiles"
+    },
+    {
+      "method": "PATCH",
+      "route": "/v1/admin/sales-invoice-header-profiles/{salesInvoiceHeaderProfileId}",
+      "operation": "updateDraftHeaderProfile"
+    },
+    {
+      "method": "POST",
+      "route": "/v1/admin/sales-invoice-header-profiles/{salesInvoiceHeaderProfileId}/validate",
+      "operation": "validateHeaderProfileCompleteness"
+    },
+    {
+      "method": "POST",
+      "route": "/v1/admin/sales-invoice-header-profiles/{salesInvoiceHeaderProfileId}/approve",
+      "operation": "approveHeaderProfile"
+    },
+    {
+      "method": "POST",
+      "route": "/v1/admin/sales-invoice-header-profiles/{salesInvoiceHeaderProfileId}/retire",
+      "operation": "retireHeaderProfile"
+    },
+    {
+      "method": "GET",
+      "route": "/v1/admin/sales-invoice-header-profiles/effective-readiness?siteId={siteId}&sitePosServerId={sitePosServerId}&effectiveAt={effectiveAt}",
+      "operation": "getEffectiveReadiness"
+    },
+    {
+      "method": "GET",
+      "route": "/v1/admin/sales-invoice-header-profiles/{salesInvoiceHeaderProfileId}/usage",
+      "operation": "getHeaderProfileUsage"
+    }
+  ],
+  "fiscalIdentityFields": [
+    "fiscalIdentityId",
+    "registeredBusinessName",
+    "registeredBusinessAddress",
+    "tin",
+    "taxpayerClassification",
+    "status",
+    "createdAt",
+    "updatedAt",
+    "createdByRef",
+    "updatedByRef"
+  ],
+  "headerProfileFields": [
+    "salesInvoiceHeaderProfileId",
+    "fiscalIdentityId",
+    "siteId",
+    "sitePosServerId",
+    "profileVersion",
+    "templateVersion",
+    "presentationVersion",
+    "posSerialNumber",
+    "machineIdentificationNumber",
+    "parkingLocationDisplay",
+    "birAccreditationNumber",
+    "birAccreditationIssuedDate",
+    "birAccreditationValidUntil",
+    "ptuNumber",
+    "ptuIssuedDate",
+    "salesInvoiceLegalStatement",
+    "customerServiceFooter",
+    "effectiveFrom",
+    "effectiveTo",
+    "lifecycleStatus",
+    "approvedAt",
+    "approvedByRef",
+    "retiredAt",
+    "createdAt",
+    "updatedAt",
+    "createdByRef",
+    "updatedByRef",
+    "hasBeenSnapshotted"
+  ],
+  "lifecycleRules": {
+    "states": [
+      "DRAFT",
+      "APPROVED",
+      "RETIRED"
+    ],
+    "draftUpdate": "Only DRAFT profiles may be edited in place.",
+    "approval": "Approval requires a DRAFT profile, complete governed fields, supported versions, valid BIR date ordering, valid effective window, existing Fiscal Identity, and no overlapping APPROVED effective window for the same Site POS Server.",
+    "retirement": "Only APPROVED profiles may be retired. Retirement records retiredAt and prevents future selection without changing historical snapshots.",
+    "immutability": "Used profiles and identities referenced by approved profiles or issued snapshots are not destructively deleted or mutated to obscure historical facts."
+  },
+  "validationResponse": {
+    "fields": [
+      "profileId",
+      "lifecycleState",
+      "isComplete",
+      "failureCodes",
+      "messages",
+      "templateVersionPosture",
+      "presentationVersionPosture",
+      "effectiveWindowPosture",
+      "overlapPosture",
+      "fiscalIdentityPosture",
+      "timestamp",
+      "correlationId"
+    ]
+  },
+  "readinessStatuses": [
+    "READY",
+    "NO_EFFECTIVE_PROFILE",
+    "INCOMPLETE",
+    "EXPIRED",
+    "AMBIGUOUS",
+    "UNSUPPORTED_VERSION",
+    "RETIRED"
+  ],
+  "usageResponse": {
+    "fields": [
+      "salesInvoiceHeaderProfileId",
+      "profileVersion",
+      "fiscalIdentityId",
+      "firstSnapshotCreatedAt",
+      "latestSnapshotCreatedAt",
+      "fiscalDocumentCount",
+      "sampleFiscalDocumentIds",
+      "destructiveMutationBlocked",
+      "correlationId"
+    ],
+    "receiptPayloadIncluded": false
+  },
+  "safeErrorCodes": [
+    "missing_correlation_id",
+    "fiscal_identity_not_found",
+    "sales_invoice_header_profile_not_found",
+    "duplicate_profile_version",
+    "invalid_lifecycle_transition",
+    "profile_not_draft",
+    "profile_incomplete",
+    "overlapping_approved_effective_window",
+    "fiscal_identity_immutable_after_use",
+    "profile_immutable_after_use",
+    "retirement_requires_approved_profile",
+    "persistence_not_configured"
+  ],
+  "statusCodes": {
+    "badRequest": 400,
+    "missingApiKey": 401,
+    "invalidApiKey": 401,
+    "disabledApiKey": 401,
+    "validKeyWithoutRequiredPermission": 403,
+    "forgedPermissionHeader": 403,
+    "notFound": 404,
+    "conflict": 409,
+    "unavailable": 503
+  },
+  "correlationBehavior": "X-Correlation-Id is required and echoed in safe responses.",
+  "outOfScope": [
+    "Management Platform UI",
+    "Operator Console UI",
+    "APT changes",
+    "receipt printing",
+    "print jobs",
+    "exit authorization",
+    "gate commands",
+    "Central PMS changes"
+  ]
+}
