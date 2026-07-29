@@ -1,0 +1,156 @@
+{
+  "contractVersion": "pos-server-applied-statutory-fiscal-facts.v1",
+  "sourceRepository": "ExitPass-PoSServer",
+  "sourceBranch": "feature/fiscal-issuance-applied-statutory-facts-contract",
+  "notes": [
+    "Non-production examples only.",
+    "No raw statutory ID numbers, beneficiary names, evidence images, signed URLs, credentials, or authorization headers are included.",
+    "Existing ordinary fiscal requests remain on POS Server sha256:v1.",
+    "Requests containing appliedStatutoryFiscalFacts require a later POS Server statutory semantic hash source version."
+  ],
+  "ordinaryTransactionWithoutStatutoryFacts": {
+    "expectedCompatibility": "accepted by existing ordinary fiscal issuance behavior",
+    "semanticHashSourceVersion": "sha256:v1",
+    "requestDelta": {
+      "appliedStatutoryFiscalFacts": null,
+      "centralPmsParkingSessionRef": "20000000-0000-4000-8000-000000000001",
+      "centralPmsPaymentAttemptRef": "20000000-0000-4000-8000-000000000002",
+      "centralPmsPaymentConfirmationRef": "20000000-0000-4000-8000-000000000003",
+      "payableBasis": {
+        "payableBasisRef": "PAYABLE-BASIS-ORDINARY-0001",
+        "upstreamFinalityRef": "PAYMENT-FINALITY-ORDINARY-0001",
+        "currencyCode": "PHP",
+        "payableAmountMinorUnits": 5000
+      }
+    }
+  },
+  "seniorCitizenAppliedTransaction": {
+    "expectedCompatibility": "requires future statutory semantic hash source version",
+    "semanticHashSourceVersion": "pos-server-fiscal-document-create:sha256:v2",
+    "appliedStatutoryFiscalFacts": {
+      "statutoryDiscountDecisionCommandId": "21000000-0000-4000-8000-000000000001",
+      "statutoryRequestReference": "21000000-0000-4000-8000-000000000002",
+      "statutoryPayableBasisApplicationCommandId": "21000000-0000-4000-8000-000000000003",
+      "statutoryValidationId": "21000000-0000-4000-8000-000000000004",
+      "parkingSessionId": "21000000-0000-4000-8000-000000000005",
+      "siteId": "21000000-0000-4000-8000-000000000006",
+      "siteGroupId": "21000000-0000-4000-8000-000000000007",
+      "entitlementType": "SENIOR_CITIZEN",
+      "benefitClassification": "VAT_EXEMPTION_AND_STATUTORY_DISCOUNT",
+      "policyReference": {
+        "resolutionBasis": "NATIONAL_LAW",
+        "appliedPolicyReferenceId": "21000000-0000-4000-8000-000000000008",
+        "policyCode": "TEST-SENIOR-CITIZEN-POLICY",
+        "nationalLawReference": "TEST-NATIONAL-LAW-REFERENCE"
+      },
+      "originalTariffSnapshotId": "21000000-0000-4000-8000-000000000009",
+      "appliedTariffSnapshotId": "21000000-0000-4000-8000-000000000010",
+      "originalAmountMinorUnits": 10000,
+      "vatExclusiveBasisAmountMinorUnits": 8929,
+      "vatAmountMinorUnits": 0,
+      "vatTreatment": "VAT_EXEMPT",
+      "statutoryDiscountAmountMinorUnits": 1786,
+      "finalPayableAmountMinorUnits": 7143,
+      "currency": "PHP",
+      "appliedAt": "2026-07-29T08:15:00+08:00",
+      "sourcePaymentChannel": "WEBPAY"
+    }
+  },
+  "pwdAppliedTransaction": {
+    "expectedCompatibility": "requires future statutory semantic hash source version",
+    "semanticHashSourceVersion": "pos-server-fiscal-document-create:sha256:v2",
+    "appliedStatutoryFiscalFacts": {
+      "statutoryDiscountDecisionCommandId": "22000000-0000-4000-8000-000000000001",
+      "statutoryRequestReference": "22000000-0000-4000-8000-000000000002",
+      "statutoryPayableBasisApplicationCommandId": "22000000-0000-4000-8000-000000000003",
+      "statutoryValidationId": "22000000-0000-4000-8000-000000000004",
+      "parkingSessionId": "22000000-0000-4000-8000-000000000005",
+      "siteId": "22000000-0000-4000-8000-000000000006",
+      "siteGroupId": "22000000-0000-4000-8000-000000000007",
+      "entitlementType": "PWD",
+      "benefitClassification": "VAT_EXEMPTION_AND_STATUTORY_DISCOUNT",
+      "policyReference": {
+        "resolutionBasis": "NATIONAL_LAW",
+        "appliedPolicyReferenceId": "22000000-0000-4000-8000-000000000008",
+        "policyCode": "TEST-PWD-POLICY",
+        "nationalLawReference": "TEST-NATIONAL-LAW-REFERENCE"
+      },
+      "originalTariffSnapshotId": "22000000-0000-4000-8000-000000000009",
+      "appliedTariffSnapshotId": "22000000-0000-4000-8000-000000000010",
+      "originalAmountMinorUnits": 12000,
+      "vatExclusiveBasisAmountMinorUnits": 10714,
+      "vatAmountMinorUnits": 0,
+      "vatTreatment": "VAT_EXEMPT",
+      "statutoryDiscountAmountMinorUnits": 2143,
+      "finalPayableAmountMinorUnits": 8571,
+      "currency": "PHP",
+      "appliedAt": "2026-07-29T09:25:00+08:00",
+      "sourcePaymentChannel": "ASSISTED_PAYMENT_TERMINAL",
+      "terminalCashTenderId": "22000000-0000-4000-8000-000000000011"
+    }
+  },
+  "freeParkingBenefit": {
+    "expectedCompatibility": "requires later zero-amount fiscal issuance decision before production use",
+    "semanticHashSourceVersion": "pos-server-fiscal-document-create:sha256:v2",
+    "appliedStatutoryFiscalFacts": {
+      "statutoryDiscountDecisionCommandId": "23000000-0000-4000-8000-000000000001",
+      "statutoryRequestReference": "23000000-0000-4000-8000-000000000002",
+      "statutoryPayableBasisApplicationCommandId": "23000000-0000-4000-8000-000000000003",
+      "statutoryValidationId": "23000000-0000-4000-8000-000000000004",
+      "parkingSessionId": "23000000-0000-4000-8000-000000000005",
+      "siteId": "23000000-0000-4000-8000-000000000006",
+      "siteGroupId": "23000000-0000-4000-8000-000000000007",
+      "entitlementType": "SENIOR_CITIZEN",
+      "benefitClassification": "FREE_PARKING",
+      "policyReference": {
+        "resolutionBasis": "LOCAL_ORDINANCE",
+        "appliedPolicyReferenceId": "23000000-0000-4000-8000-000000000008",
+        "policyCode": "TEST-FREE-PARKING-POLICY",
+        "ordinanceReference": "TEST-ORDINANCE-REFERENCE"
+      },
+      "originalTariffSnapshotId": "23000000-0000-4000-8000-000000000009",
+      "appliedTariffSnapshotId": "23000000-0000-4000-8000-000000000010",
+      "originalAmountMinorUnits": 7500,
+      "vatExclusiveBasisAmountMinorUnits": 6696,
+      "vatAmountMinorUnits": 804,
+      "vatTreatment": "VAT_INCLUSIVE_NO_EXEMPTION",
+      "statutoryDiscountAmountMinorUnits": 7500,
+      "finalPayableAmountMinorUnits": 0,
+      "currency": "PHP",
+      "appliedAt": "2026-07-29T10:35:00+08:00",
+      "sourcePaymentChannel": "WEBPAY"
+    }
+  },
+  "invalidPendingReviewExample": {
+    "expectedResult": {
+      "accepted": false,
+      "errorCode": "applied_statutory_facts_not_final"
+    },
+    "upstreamPosture": {
+      "decisionCommandStatus": "AWAITING_REVIEW",
+      "decisionResultStatus": "NOT_DECIDED",
+      "applicationCommandStatus": "RECEIVED",
+      "applicationResultClassification": "IN_PROGRESS",
+      "payableBasisReady": false
+    },
+    "prohibitedFiscalIssuanceReason": "A pending review is not a final payment-time statutory application."
+  },
+  "semanticConflictExample": {
+    "firstRequest": {
+      "idempotencyKey": "TEST-IDEMPOTENCY-STATUTORY-0001",
+      "statutoryPayableBasisApplicationCommandId": "24000000-0000-4000-8000-000000000001",
+      "finalPayableAmountMinorUnits": 7143,
+      "currency": "PHP"
+    },
+    "replayWithSameFacts": {
+      "expectedResult": "idempotent_replay_original_fiscal_document"
+    },
+    "replayWithChangedFacts": {
+      "idempotencyKey": "TEST-IDEMPOTENCY-STATUTORY-0001",
+      "statutoryPayableBasisApplicationCommandId": "24000000-0000-4000-8000-000000000001",
+      "finalPayableAmountMinorUnits": 8000,
+      "currency": "PHP",
+      "expectedResult": "semantic_conflict_no_second_fiscal_document"
+    }
+  }
+}
