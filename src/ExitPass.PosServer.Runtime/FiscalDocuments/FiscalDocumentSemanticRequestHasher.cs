@@ -10,6 +10,7 @@ public static class FiscalDocumentSemanticRequestHasher
 {
     public const string Algorithm = "SHA-256";
     public const string Version = "sha256:v1";
+    public const string StatutoryVersion = "pos-server-fiscal-document-create:sha256:v2";
     public const string Status = "calculated";
 
     private static readonly JsonSerializerOptions SerializerOptions = new()
@@ -32,7 +33,32 @@ public static class FiscalDocumentSemanticRequestHasher
         ArgumentNullException.ThrowIfNull(command);
         ArgumentNullException.ThrowIfNull(command.PayableBasis);
 
-        return JsonSerializer.Serialize(BuildCanonicalPayload(command), SerializerOptions);
+        return JsonSerializer.Serialize(BuildCanonicalPayloadForVersion(command), SerializerOptions);
+    }
+
+    public static string GetVersion(FiscalDocumentCreationCommand command)
+    {
+        ArgumentNullException.ThrowIfNull(command);
+        return command.AppliedStatutoryFiscalFacts is null ? Version : StatutoryVersion;
+    }
+
+    public static string GetVersion(FiscalDocumentDraft draft)
+    {
+        ArgumentNullException.ThrowIfNull(draft);
+        return draft.AppliedStatutoryFiscalFacts is null ? Version : StatutoryVersion;
+    }
+
+    private static SortedDictionary<string, object?> BuildCanonicalPayloadForVersion(
+        FiscalDocumentCreationCommand command)
+    {
+        var payload = BuildCanonicalPayload(command);
+        if (command.AppliedStatutoryFiscalFacts is not null)
+        {
+            payload["applied_statutory_fiscal_facts"] =
+                NormalizeAppliedStatutoryFiscalFacts(command.AppliedStatutoryFiscalFacts);
+        }
+
+        return payload;
     }
 
     private static SortedDictionary<string, object?> BuildCanonicalPayload(FiscalDocumentCreationCommand command) =>
@@ -185,6 +211,53 @@ public static class FiscalDocumentSemanticRequestHasher
             ["total_type_code_id"] = total.TotalTypeCodeId
         };
 
+    private static SortedDictionary<string, object?> NormalizeAppliedStatutoryFiscalFacts(
+        AppliedStatutoryFiscalFactsInput facts) =>
+        new()
+        {
+            ["applied_at"] = facts.AppliedAt?.ToUniversalTime().ToString("O", CultureInfo.InvariantCulture),
+            ["applied_tariff_snapshot_id"] = facts.AppliedTariffSnapshotId,
+            ["benefit_classification"] = NormalizeCode(facts.BenefitClassification),
+            ["currency"] = NormalizeCurrency(facts.Currency),
+            ["entitlement_type"] = NormalizeCode(facts.EntitlementType),
+            ["final_payable_amount_minor_units"] = facts.FinalPayableAmountMinorUnits,
+            ["original_amount_minor_units"] = facts.OriginalAmountMinorUnits,
+            ["original_tariff_snapshot_id"] = facts.OriginalTariffSnapshotId,
+            ["parking_session_id"] = facts.ParkingSessionId,
+            ["policy_reference"] = NormalizePolicyReference(facts.PolicyReference),
+            ["site_group_id"] = facts.SiteGroupId,
+            ["site_id"] = facts.SiteId,
+            ["source_payment_channel"] = NormalizeCode(facts.SourcePaymentChannel),
+            ["statutory_discount_amount_minor_units"] = facts.StatutoryDiscountAmountMinorUnits,
+            ["statutory_discount_decision_command_id"] = facts.StatutoryDiscountDecisionCommandId,
+            ["statutory_payable_basis_application_command_id"] = facts.StatutoryPayableBasisApplicationCommandId,
+            ["statutory_request_reference"] = facts.StatutoryRequestReference,
+            ["statutory_validation_id"] = facts.StatutoryValidationId,
+            ["terminal_cash_tender_id"] = facts.TerminalCashTenderId,
+            ["vat_amount_minor_units"] = facts.VatAmountMinorUnits,
+            ["vat_exclusive_basis_amount_minor_units"] = facts.VatExclusiveBasisAmountMinorUnits,
+            ["vat_treatment"] = NormalizeCode(facts.VatTreatment)
+        };
+
+    private static SortedDictionary<string, object?>? NormalizePolicyReference(
+        AppliedStatutoryPolicyReferenceInput? policyReference)
+    {
+        if (policyReference is null)
+        {
+            return null;
+        }
+
+        return new SortedDictionary<string, object?>
+        {
+            ["applied_policy_reference_id"] = policyReference.AppliedPolicyReferenceId,
+            ["national_law_reference"] = Normalize(policyReference.NationalLawReference),
+            ["ordinance_reference"] = Normalize(policyReference.OrdinanceReference),
+            ["policy_code"] = Normalize(policyReference.PolicyCode),
+            ["policy_version_id"] = policyReference.PolicyVersionId,
+            ["resolution_basis"] = NormalizeCode(policyReference.ResolutionBasis)
+        };
+    }
+
     private static SortedDictionary<string, string>? NormalizeDictionary(IReadOnlyDictionary<string, string>? values)
     {
         if (values is null || values.Count == 0)
@@ -201,6 +274,9 @@ public static class FiscalDocumentSemanticRequestHasher
     }
 
     private static string? Normalize(string? value) =>
+        string.IsNullOrWhiteSpace(value) ? null : value.Trim();
+
+    private static string? NormalizeCode(string? value) =>
         string.IsNullOrWhiteSpace(value) ? null : value.Trim();
 
     private static string? NormalizeCurrency(string? value) =>

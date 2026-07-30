@@ -38,7 +38,8 @@ public sealed record DigitalSalesInvoiceRenderModel(
     IReadOnlyList<DigitalSalesInvoiceTenderRenderModel> Tenders,
     IReadOnlyList<DigitalSalesInvoiceTotalRenderModel> Totals,
     DigitalSalesInvoiceFooterRenderModel Footer,
-    SalesInvoiceHeaderSnapshot? SalesInvoiceHeaderSnapshot = null);
+    SalesInvoiceHeaderSnapshot? SalesInvoiceHeaderSnapshot = null,
+    AppliedStatutoryFiscalFactsSnapshot? AppliedStatutoryFiscalFacts = null);
 
 public sealed record DigitalSalesInvoiceLineRenderModel(
     int LineSequence,

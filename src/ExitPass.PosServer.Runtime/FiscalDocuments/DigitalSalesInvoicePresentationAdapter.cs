@@ -44,6 +44,18 @@ public sealed class DigitalSalesInvoicePresentationAdapter
             Section(templateContract, "deferredPlaceholders", "Deferred Placeholders", 140, DeferredRows(templateContract))
         };
 
+        if (render.AppliedStatutoryFiscalFacts is not null)
+        {
+            sections.Insert(
+                8,
+                Section(
+                    templateContract,
+                    "appliedStatutoryFiscalFacts",
+                    "Applied Statutory Fiscal Facts",
+                    85,
+                    AppliedStatutoryFiscalFactsRows(render, templateContract)));
+        }
+
         var notices = new List<DigitalSalesInvoicePresentationNoticeModel>();
         if (!string.Equals(render.FiscalNumberAssignmentState, "assigned", StringComparison.OrdinalIgnoreCase))
         {
@@ -227,6 +239,32 @@ public sealed class DigitalSalesInvoicePresentationAdapter
             })
             .ToArray();
 
+    private static IReadOnlyList<DigitalSalesInvoicePresentationRowModel> AppliedStatutoryFiscalFactsRows(
+        DigitalSalesInvoiceRenderModel render,
+        DigitalSalesInvoiceTemplateContractModel contract)
+    {
+        var facts = render.AppliedStatutoryFiscalFacts;
+        var policy = facts?.PolicyReference;
+
+        return
+        [
+            Row("appliedStatutoryFiscalFacts.entitlementType", "Entitlement Type", "status", FieldPosture(contract, "appliedStatutoryFiscalFacts.entitlementType"), facts?.EntitlementType),
+            Row("appliedStatutoryFiscalFacts.benefitClassification", "Benefit Classification", "status", FieldPosture(contract, "appliedStatutoryFiscalFacts.benefitClassification"), facts?.BenefitClassification),
+            Row("appliedStatutoryFiscalFacts.policyResolutionBasis", "Policy Resolution Basis", "status", FieldPosture(contract, "appliedStatutoryFiscalFacts.policyResolutionBasis"), policy?.ResolutionBasis),
+            Row("appliedStatutoryFiscalFacts.policyCode", "Policy Code", "identifier", FieldPosture(contract, "appliedStatutoryFiscalFacts.policyCode"), policy?.PolicyCode),
+            Row("appliedStatutoryFiscalFacts.nationalLawReference", "National Law Reference", "identifier", FieldPosture(contract, "appliedStatutoryFiscalFacts.nationalLawReference"), policy?.NationalLawReference),
+            Row("appliedStatutoryFiscalFacts.ordinanceReference", "Ordinance Reference", "identifier", FieldPosture(contract, "appliedStatutoryFiscalFacts.ordinanceReference"), policy?.OrdinanceReference),
+            facts is null ? AmountRow("appliedStatutoryFiscalFacts.originalAmount", "Original Amount", "not_available", 0, "PHP") with { DisplayValue = null, RawValue = null } : AmountRow("appliedStatutoryFiscalFacts.originalAmount", "Original Amount", FieldPosture(contract, "appliedStatutoryFiscalFacts.originalAmount"), facts.OriginalAmountMinorUnits, facts.Currency),
+            facts is null ? AmountRow("appliedStatutoryFiscalFacts.vatExclusiveBasisAmount", "VAT-Exclusive Basis", "not_available", 0, "PHP") with { DisplayValue = null, RawValue = null } : AmountRow("appliedStatutoryFiscalFacts.vatExclusiveBasisAmount", "VAT-Exclusive Basis", FieldPosture(contract, "appliedStatutoryFiscalFacts.vatExclusiveBasisAmount"), facts.VatExclusiveBasisAmountMinorUnits, facts.Currency),
+            facts is null ? AmountRow("appliedStatutoryFiscalFacts.vatAmount", "VAT Amount", "not_available", 0, "PHP") with { DisplayValue = null, RawValue = null } : AmountRow("appliedStatutoryFiscalFacts.vatAmount", "VAT Amount", FieldPosture(contract, "appliedStatutoryFiscalFacts.vatAmount"), facts.VatAmountMinorUnits, facts.Currency),
+            Row("appliedStatutoryFiscalFacts.vatTreatment", "VAT Treatment", "status", FieldPosture(contract, "appliedStatutoryFiscalFacts.vatTreatment"), facts?.VatTreatment),
+            facts is null ? AmountRow("appliedStatutoryFiscalFacts.statutoryDiscountAmount", "Statutory Discount Amount", "not_available", 0, "PHP") with { DisplayValue = null, RawValue = null } : AmountRow("appliedStatutoryFiscalFacts.statutoryDiscountAmount", "Statutory Discount Amount", FieldPosture(contract, "appliedStatutoryFiscalFacts.statutoryDiscountAmount"), facts.StatutoryDiscountAmountMinorUnits, facts.Currency),
+            facts is null ? AmountRow("appliedStatutoryFiscalFacts.finalPayableAmount", "Final Payable Amount", "not_available", 0, "PHP") with { DisplayValue = null, RawValue = null } : AmountRow("appliedStatutoryFiscalFacts.finalPayableAmount", "Final Payable Amount", FieldPosture(contract, "appliedStatutoryFiscalFacts.finalPayableAmount"), facts.FinalPayableAmountMinorUnits, facts.Currency),
+            Row("appliedStatutoryFiscalFacts.sourcePaymentChannel", "Source Payment Channel", "status", FieldPosture(contract, "appliedStatutoryFiscalFacts.sourcePaymentChannel"), facts?.SourcePaymentChannel),
+            Row("appliedStatutoryFiscalFacts.appliedAt", "Applied At", "dateTime", FieldPosture(contract, "appliedStatutoryFiscalFacts.appliedAt"), facts?.AppliedAt, FormatTimestamp(facts?.AppliedAt))
+        ];
+    }
+
     private static IReadOnlyList<DigitalSalesInvoicePresentationRowModel> TenderRows(
         DigitalSalesInvoiceRenderModel render,
         DigitalSalesInvoiceTemplateContractModel contract) =>
@@ -360,6 +398,7 @@ public sealed class DigitalSalesInvoicePresentationAdapter
             "fiscalNumbering" => "fiscal_numbering",
             "parkingPaymentReferences" => "parking_payment_references",
             "lineItems" => "line_items",
+            "appliedStatutoryFiscalFacts" => "applied_statutory_fiscal_facts",
             "auditHashStatus" => "audit_hash_status",
             "footerDisclaimers" => "footer_disclaimers",
             "deferredPlaceholders" => "deferred_placeholders",

@@ -69,7 +69,8 @@ public static class FiscalDocumentCreationEndpoint
             request.TaxDetails?.Select(MapTaxDetail).ToArray(),
             request.DiscountPrivilegeDetails?.Select(MapDiscountPrivilegeDetail).ToArray(),
             request.Totals?.Select(MapTotal).ToArray(),
-            request.ReferenceContext);
+            request.ReferenceContext,
+            MapAppliedStatutoryFiscalFacts(request.AppliedStatutoryFiscalFacts));
 
     public static CreateFiscalDocumentResponse MapResult(FiscalDocumentCreationResult result)
     {
@@ -131,9 +132,13 @@ public static class FiscalDocumentCreationEndpoint
         !string.IsNullOrWhiteSpace(draft.FiscalNumberAssignedByRef);
 
     private static int ToHttpStatusCode(FiscalDocumentCreationErrorCode errorCode) =>
-        errorCode == FiscalDocumentCreationErrorCode.IdempotencyConflict
-            ? StatusCodes.Status409Conflict
-            : StatusCodes.Status400BadRequest;
+        errorCode switch
+        {
+            FiscalDocumentCreationErrorCode.IdempotencyConflict => StatusCodes.Status409Conflict,
+            FiscalDocumentCreationErrorCode.AppliedStatutoryFiscalFactsPersistenceSchemaNotConfigured =>
+                StatusCodes.Status503ServiceUnavailable,
+            _ => StatusCodes.Status400BadRequest
+        };
 
     private static string ToErrorPosture(FiscalDocumentCreationErrorCode errorCode) =>
         errorCode switch
@@ -153,6 +158,10 @@ public static class FiscalDocumentCreationEndpoint
             FiscalDocumentCreationErrorCode.SalesInvoiceHeaderProfileAmbiguous or
             FiscalDocumentCreationErrorCode.SalesInvoiceHeaderProfileIncomplete or
             FiscalDocumentCreationErrorCode.SalesInvoiceHeaderProfileUnsupportedVersion => "retry_after_configuration_correction",
+            FiscalDocumentCreationErrorCode.AppliedStatutoryFiscalFactsPersistenceSchemaNotConfigured =>
+                "retry_after_schema_upgrade",
+            FiscalDocumentCreationErrorCode.AppliedStatutoryControlledCodeUnavailable =>
+                "retry_after_configuration_correction",
             _ => "do_not_retry_without_request_change"
         };
 
@@ -252,6 +261,48 @@ public static class FiscalDocumentCreationEndpoint
             request.CurrencyCode ?? string.Empty,
             request.TotalContext);
 
+    private static AppliedStatutoryFiscalFactsInput? MapAppliedStatutoryFiscalFacts(
+        AppliedStatutoryFiscalFactsRequest? request) =>
+        request is null
+            ? null
+            : new AppliedStatutoryFiscalFactsInput(
+                request.StatutoryDiscountDecisionCommandId,
+                request.StatutoryRequestReference,
+                request.StatutoryPayableBasisApplicationCommandId,
+                request.StatutoryValidationId,
+                request.ParkingSessionId,
+                request.SiteId,
+                request.SiteGroupId,
+                request.EntitlementType,
+                request.BenefitClassification,
+                MapPolicyReference(request.PolicyReference),
+                request.OriginalTariffSnapshotId,
+                request.AppliedTariffSnapshotId,
+                request.OriginalAmountMinorUnits,
+                request.VatExclusiveBasisAmountMinorUnits,
+                request.VatAmountMinorUnits,
+                request.VatTreatment,
+                request.StatutoryDiscountAmountMinorUnits,
+                request.FinalPayableAmountMinorUnits,
+                request.Currency,
+                request.AppliedAt,
+                request.SourcePaymentChannel,
+                request.TerminalCashTenderId,
+                request.ExtensionData?.Keys.Order(StringComparer.Ordinal).ToArray());
+
+    private static AppliedStatutoryPolicyReferenceInput? MapPolicyReference(
+        AppliedStatutoryPolicyReferenceRequest? request) =>
+        request is null
+            ? null
+            : new AppliedStatutoryPolicyReferenceInput(
+                request.ResolutionBasis,
+                request.AppliedPolicyReferenceId,
+                request.PolicyCode,
+                request.PolicyVersionId,
+                request.NationalLawReference,
+                request.OrdinanceReference,
+                request.ExtensionData?.Keys.Order(StringComparer.Ordinal).ToArray());
+
     private static FiscalDiscountReferenceStatus MapDiscountStatus(string? status) =>
         status?.Trim().ToLowerInvariant() switch
         {
@@ -296,6 +347,26 @@ public static class FiscalDocumentCreationEndpoint
             FiscalDocumentCreationErrorCode.SalesInvoiceHeaderProfileAmbiguous => "sales_invoice_header_profile_ambiguous",
             FiscalDocumentCreationErrorCode.SalesInvoiceHeaderProfileIncomplete => "sales_invoice_header_profile_incomplete",
             FiscalDocumentCreationErrorCode.SalesInvoiceHeaderProfileUnsupportedVersion => "sales_invoice_header_profile_unsupported_version",
+            FiscalDocumentCreationErrorCode.AppliedStatutoryFiscalFactsPersistenceSchemaNotConfigured =>
+                "applied_statutory_fiscal_facts_persistence_schema_not_configured",
+            FiscalDocumentCreationErrorCode.AppliedStatutoryFactsIncomplete => "applied_statutory_facts_incomplete",
+            FiscalDocumentCreationErrorCode.AppliedStatutoryFactsNotFinal => "applied_statutory_facts_not_final",
+            FiscalDocumentCreationErrorCode.AppliedStatutoryUnsupportedEntitlementType =>
+                "applied_statutory_unsupported_entitlement_type",
+            FiscalDocumentCreationErrorCode.AppliedStatutoryUnsupportedBenefitClassification =>
+                "applied_statutory_unsupported_benefit_classification",
+            FiscalDocumentCreationErrorCode.AppliedStatutoryUnsupportedVatTreatment =>
+                "applied_statutory_unsupported_vat_treatment",
+            FiscalDocumentCreationErrorCode.AppliedStatutoryUnsupportedPolicyResolutionBasis =>
+                "applied_statutory_unsupported_policy_resolution_basis",
+            FiscalDocumentCreationErrorCode.AppliedStatutoryUnsupportedSourcePaymentChannel =>
+                "applied_statutory_unsupported_source_payment_channel",
+            FiscalDocumentCreationErrorCode.AppliedStatutoryCurrencyMismatch => "applied_statutory_currency_mismatch",
+            FiscalDocumentCreationErrorCode.AppliedStatutoryTotalMismatch => "applied_statutory_total_mismatch",
+            FiscalDocumentCreationErrorCode.AppliedStatutoryProhibitedPrivacyField =>
+                "applied_statutory_prohibited_privacy_field",
+            FiscalDocumentCreationErrorCode.AppliedStatutoryControlledCodeUnavailable =>
+                "applied_statutory_controlled_code_unavailable",
             _ => "fiscal_document_creation_failed"
         };
 }

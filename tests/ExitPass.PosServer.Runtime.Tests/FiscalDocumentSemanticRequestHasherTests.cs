@@ -214,6 +214,152 @@ public sealed class FiscalDocumentSemanticRequestHasherTests
         Assert.Equal(ExpectedRepresentativeHash, idempotency.SemanticRequestHash);
     }
 
+    [Fact]
+    public void AppliedStatutoryFactsUseSha256V2WithoutChangingOrdinaryV1()
+    {
+        var ordinary = RepresentativeCommand();
+        var statutory = StatutoryCommand();
+
+        Assert.Equal("sha256:v1", FiscalDocumentSemanticRequestHasher.GetVersion(ordinary));
+        Assert.Equal(ExpectedRepresentativeHash, FiscalDocumentSemanticRequestHasher.Hash(ordinary));
+        Assert.Equal(
+            "pos-server-fiscal-document-create:sha256:v2",
+            FiscalDocumentSemanticRequestHasher.GetVersion(statutory));
+
+        var canonicalSource = FiscalDocumentSemanticRequestHasher.Canonicalize(statutory);
+        var hash = FiscalDocumentSemanticRequestHasher.Hash(statutory);
+
+        Assert.Contains("applied_statutory_fiscal_facts", canonicalSource, StringComparison.Ordinal);
+        Assert.Contains("statutory_payable_basis_application_command_id", canonicalSource, StringComparison.Ordinal);
+        Assert.Contains("VAT_EXEMPTION_AND_STATUTORY_DISCOUNT", canonicalSource, StringComparison.Ordinal);
+        Assert.DoesNotContain("beneficiary_name", canonicalSource, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("evidence_image", canonicalSource, StringComparison.OrdinalIgnoreCase);
+        Assert.Equal(64, hash.Length);
+        Assert.NotEqual(ExpectedRepresentativeHash, hash);
+        Assert.Equal(hash, ComputeSha256LowerHex(canonicalSource));
+    }
+
+    [Theory]
+    [InlineData("decision")]
+    [InlineData("application")]
+    [InlineData("entitlement")]
+    [InlineData("benefit")]
+    [InlineData("policy")]
+    [InlineData("tariff")]
+    [InlineData("vat")]
+    [InlineData("discount")]
+    [InlineData("final")]
+    [InlineData("source")]
+    [InlineData("terminal_cash")]
+    public void AppliedStatutoryMaterialFactChangesChangeSha256V2Hash(string mutation)
+    {
+        var original = StatutoryCommand();
+        var changed = mutation switch
+        {
+            "decision" => original with
+            {
+                AppliedStatutoryFiscalFacts = original.AppliedStatutoryFiscalFacts! with
+                {
+                    StatutoryDiscountDecisionCommandId = Guid.Parse("21000000-0000-4000-8000-000000009901")
+                }
+            },
+            "application" => original with
+            {
+                AppliedStatutoryFiscalFacts = original.AppliedStatutoryFiscalFacts! with
+                {
+                    StatutoryPayableBasisApplicationCommandId = Guid.Parse("21000000-0000-4000-8000-000000009902")
+                }
+            },
+            "entitlement" => original with
+            {
+                AppliedStatutoryFiscalFacts = original.AppliedStatutoryFiscalFacts! with { EntitlementType = "PWD" }
+            },
+            "benefit" => original with
+            {
+                AppliedStatutoryFiscalFacts = original.AppliedStatutoryFiscalFacts! with { BenefitClassification = "REDUCED_PARKING_RATE" }
+            },
+            "policy" => original with
+            {
+                AppliedStatutoryFiscalFacts = original.AppliedStatutoryFiscalFacts! with
+                {
+                    PolicyReference = original.AppliedStatutoryFiscalFacts.PolicyReference! with
+                    {
+                        PolicyCode = "TEST-CHANGED-POLICY"
+                    }
+                }
+            },
+            "tariff" => original with
+            {
+                AppliedStatutoryFiscalFacts = original.AppliedStatutoryFiscalFacts! with
+                {
+                    AppliedTariffSnapshotId = Guid.Parse("21000000-0000-4000-8000-000000009903")
+                }
+            },
+            "vat" => original with
+            {
+                AppliedStatutoryFiscalFacts = original.AppliedStatutoryFiscalFacts! with { VatTreatment = "NON_VAT" }
+            },
+            "discount" => original with
+            {
+                AppliedStatutoryFiscalFacts = original.AppliedStatutoryFiscalFacts! with
+                {
+                    StatutoryDiscountAmountMinorUnits = 1787
+                }
+            },
+            "final" => original with
+            {
+                AppliedStatutoryFiscalFacts = original.AppliedStatutoryFiscalFacts! with { FinalPayableAmountMinorUnits = 7144 }
+            },
+            "source" => original with
+            {
+                AppliedStatutoryFiscalFacts = original.AppliedStatutoryFiscalFacts! with { SourcePaymentChannel = "OPERATOR_CONSOLE" }
+            },
+            "terminal_cash" => original with
+            {
+                AppliedStatutoryFiscalFacts = original.AppliedStatutoryFiscalFacts! with
+                {
+                    TerminalCashTenderId = Guid.Parse("21000000-0000-4000-8000-000000009904")
+                }
+            },
+            _ => original
+        };
+
+        Assert.NotEqual(
+            FiscalDocumentSemanticRequestHasher.Hash(original),
+            FiscalDocumentSemanticRequestHasher.Hash(changed));
+    }
+
+    [Theory]
+    [InlineData("VAT_EXEMPTION_ONLY")]
+    [InlineData("STATUTORY_DISCOUNT_ONLY")]
+    [InlineData("VAT_EXEMPTION_AND_STATUTORY_DISCOUNT")]
+    [InlineData("FREE_PARKING")]
+    [InlineData("REDUCED_PARKING_RATE")]
+    [InlineData("CAPPED_PARKING_FEE")]
+    public void AppliedStatutorySha256V2CanonicalizesEveryGovernedBenefitClassification(string benefitClassification)
+    {
+        var command = StatutoryCommand() with
+        {
+            AppliedStatutoryFiscalFacts = StatutoryCommand().AppliedStatutoryFiscalFacts! with
+            {
+                BenefitClassification = benefitClassification
+            }
+        };
+
+        var canonicalSource = FiscalDocumentSemanticRequestHasher.Canonicalize(command);
+        var hash = FiscalDocumentSemanticRequestHasher.Hash(command);
+
+        Assert.Equal(
+            "pos-server-fiscal-document-create:sha256:v2",
+            FiscalDocumentSemanticRequestHasher.GetVersion(command));
+        Assert.Contains(
+            $"\"benefit_classification\":\"{benefitClassification}\"",
+            canonicalSource,
+            StringComparison.Ordinal);
+        Assert.Equal(hash, ComputeSha256LowerHex(canonicalSource));
+        Assert.Equal(64, hash.Length);
+    }
+
     private static FiscalDocumentCreationCommand RepresentativeCommand() =>
         new(
             "site-pos-server-parity-001",
@@ -323,6 +469,38 @@ public sealed class FiscalDocumentSemanticRequestHasherTests
             ReferenceContext: Dictionary(
                 ("source_system", "central_pms"),
                 ("parity_fixture", "pos_server_sha256_v1")));
+
+    private static FiscalDocumentCreationCommand StatutoryCommand() =>
+        RepresentativeCommand() with
+        {
+            AppliedStatutoryFiscalFacts = new AppliedStatutoryFiscalFactsInput(
+                Guid.Parse("21000000-0000-4000-8000-000000000001"),
+                Guid.Parse("21000000-0000-4000-8000-000000000002"),
+                Guid.Parse("21000000-0000-4000-8000-000000000003"),
+                Guid.Parse("21000000-0000-4000-8000-000000000004"),
+                Guid.Parse("21000000-0000-4000-8000-000000000005"),
+                Guid.Parse("21000000-0000-4000-8000-000000000006"),
+                Guid.Parse("21000000-0000-4000-8000-000000000007"),
+                "SENIOR_CITIZEN",
+                "VAT_EXEMPTION_AND_STATUTORY_DISCOUNT",
+                new AppliedStatutoryPolicyReferenceInput(
+                    "NATIONAL_LAW",
+                    AppliedPolicyReferenceId: Guid.Parse("21000000-0000-4000-8000-000000000008"),
+                    PolicyCode: "TEST-SENIOR-CITIZEN-POLICY",
+                    NationalLawReference: "TEST-NATIONAL-LAW-REFERENCE"),
+                Guid.Parse("21000000-0000-4000-8000-000000000009"),
+                Guid.Parse("21000000-0000-4000-8000-000000000010"),
+                10000,
+                8929,
+                0,
+                "VAT_EXEMPT",
+                1786,
+                7143,
+                "PHP",
+                DateTimeOffset.Parse("2026-07-29T08:15:00+08:00"),
+                "WEBPAY",
+                TerminalCashTenderId: Guid.Parse("21000000-0000-4000-8000-000000000011"))
+        };
 
     private static Dictionary<string, string> Dictionary(params (string Key, string Value)[] entries) =>
         entries.ToDictionary(entry => entry.Key, entry => entry.Value, StringComparer.Ordinal);

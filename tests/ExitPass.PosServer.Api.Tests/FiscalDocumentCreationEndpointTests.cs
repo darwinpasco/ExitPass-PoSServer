@@ -1,4 +1,5 @@
 using System.Reflection;
+using System.Text.Json;
 using ExitPass.PosServer.Api.FiscalDocuments;
 using ExitPass.PosServer.Persistence.Postgres.FiscalDocuments;
 using ExitPass.PosServer.Runtime.FiscalDocuments;
@@ -111,6 +112,49 @@ public sealed class FiscalDocumentCreationEndpointTests
         Assert.False(response.Succeeded);
         Assert.Equal("sensitive_evidence_payload_not_allowed", response.Code);
         Assert.Equal(StatusCodes.Status400BadRequest, response.HttpStatusCode);
+    }
+
+    [Fact]
+    public async Task AppliedStatutoryFactsAreMappedAndAcceptedAfterFirstClassSchemaMerge()
+    {
+        var repository = new RecordingFiscalDocumentRepository();
+        var service = new FiscalDocumentCreationService(repository);
+        var request = ValidStatutoryRequest();
+
+        var response = await FiscalDocumentCreationEndpoint.CreateAsync(request, service);
+
+        Assert.True(response.Succeeded);
+        Assert.Equal("accepted", response.Code);
+        Assert.Equal(StatusCodes.Status202Accepted, response.HttpStatusCode);
+        Assert.Equal(1, repository.CreateCount);
+        Assert.NotNull(repository.LastDraft);
+        Assert.NotNull(repository.LastDraft.AppliedStatutoryFiscalFacts);
+        Assert.Equal("SENIOR_CITIZEN", repository.LastDraft.AppliedStatutoryFiscalFacts.EntitlementType);
+        Assert.Equal("VAT_EXEMPTION_AND_STATUTORY_DISCOUNT", repository.LastDraft.AppliedStatutoryFiscalFacts.BenefitClassification);
+        Assert.Equal(7143, repository.LastDraft.AppliedStatutoryFiscalFacts.FinalPayableAmountMinorUnits);
+    }
+
+    [Fact]
+    public async Task UnknownAppliedStatutoryFiscalFactsPropertyFailsClosed()
+    {
+        using var unknownValue = JsonDocument.Parse("\"TEST-SHOULD-NOT-BIND\"");
+        var request = ValidStatutoryRequest() with
+        {
+            AppliedStatutoryFiscalFacts = ValidAppliedStatutoryFiscalFacts() with
+            {
+                ExtensionData = new Dictionary<string, JsonElement>
+                {
+                    ["beneficiaryName"] = unknownValue.RootElement.Clone()
+                }
+            }
+        };
+
+        var response = await CreateWithRecordingRepository(request);
+
+        Assert.False(response.Succeeded);
+        Assert.Equal("applied_statutory_prohibited_privacy_field", response.Code);
+        Assert.Equal(StatusCodes.Status400BadRequest, response.HttpStatusCode);
+        Assert.Null(response.FiscalDocumentId);
     }
 
     [Fact]
@@ -849,6 +893,69 @@ public sealed class FiscalDocumentCreationEndpointTests
             TaxDetails: [ValidTaxDetail()],
             DiscountPrivilegeDetails: [ValidDiscountPrivilegeDetail()],
             Totals: [ValidTotal()]);
+
+    private static CreateFiscalDocumentRequest ValidStatutoryRequest()
+    {
+        var facts = ValidAppliedStatutoryFiscalFacts();
+        return ValidRequest() with
+        {
+            SiteId = facts.SiteId,
+            CentralPmsParkingSessionRef = facts.ParkingSessionId?.ToString("D"),
+            PayableBasis = ValidPayableBasis() with { PayableAmountMinorUnits = 7143 },
+            DocumentLines =
+            [
+                ValidLine(1) with
+                {
+                    UnitAmountMinorUnits = 10000,
+                    GrossAmountMinorUnits = 10000,
+                    DiscountAmountMinorUnits = 2857,
+                    TaxAmountMinorUnits = 0,
+                    NetAmountMinorUnits = 7143
+                }
+            ],
+            Tenders = [ValidTender() with { AmountMinorUnits = 7143 }],
+            TaxDetails = [ValidTaxDetail() with { TaxableAmountMinorUnits = 8929, TaxAmountMinorUnits = 0 }],
+            DiscountPrivilegeDetails =
+            [
+                ValidDiscountPrivilegeDetail() with
+                {
+                    BasisAmountMinorUnits = 10000,
+                    DiscountAmountMinorUnits = 1786,
+                    VatPrivilegeAmountMinorUnits = 1071
+                }
+            ],
+            Totals = [ValidTotal() with { AmountMinorUnits = 7143 }],
+            AppliedStatutoryFiscalFacts = facts
+        };
+    }
+
+    private static AppliedStatutoryFiscalFactsRequest ValidAppliedStatutoryFiscalFacts() =>
+        new(
+            Guid.Parse("21000000-0000-4000-8000-000000000001"),
+            Guid.Parse("21000000-0000-4000-8000-000000000002"),
+            Guid.Parse("21000000-0000-4000-8000-000000000003"),
+            Guid.Parse("21000000-0000-4000-8000-000000000004"),
+            Guid.Parse("21000000-0000-4000-8000-000000000005"),
+            Guid.Parse("21000000-0000-4000-8000-000000000006"),
+            Guid.Parse("21000000-0000-4000-8000-000000000007"),
+            "SENIOR_CITIZEN",
+            "VAT_EXEMPTION_AND_STATUTORY_DISCOUNT",
+            new AppliedStatutoryPolicyReferenceRequest(
+                "NATIONAL_LAW",
+                AppliedPolicyReferenceId: Guid.Parse("21000000-0000-4000-8000-000000000008"),
+                PolicyCode: "TEST-SENIOR-CITIZEN-POLICY",
+                NationalLawReference: "TEST-NATIONAL-LAW-REFERENCE"),
+            Guid.Parse("21000000-0000-4000-8000-000000000009"),
+            Guid.Parse("21000000-0000-4000-8000-000000000010"),
+            10000,
+            8929,
+            0,
+            "VAT_EXEMPT",
+            1786,
+            7143,
+            "PHP",
+            DateTimeOffset.Parse("2026-07-29T08:15:00+08:00"),
+            "WEBPAY");
 
     private static FiscalizationPayableBasisRequest ValidPayableBasis() =>
         new(

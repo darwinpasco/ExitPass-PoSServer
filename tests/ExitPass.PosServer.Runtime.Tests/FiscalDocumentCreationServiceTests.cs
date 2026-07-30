@@ -75,6 +75,161 @@ public sealed class FiscalDocumentCreationServiceTests
     }
 
     [Fact]
+    public async Task AppliedStatutoryFactsCreateSnapshotAndUseStatutoryHashVersion()
+    {
+        var repository = new RecordingFiscalDocumentRepository();
+        var service = new FiscalDocumentCreationService(repository);
+
+        var result = await service.CreateAsync(ValidStatutoryCommand());
+
+        Assert.True(result.Succeeded);
+        Assert.Equal(1, repository.CreateCount);
+        Assert.NotNull(repository.LastIdempotency);
+        Assert.NotNull(result.Draft);
+        Assert.NotNull(result.Draft.AppliedStatutoryFiscalFacts);
+        Assert.Equal(
+            FiscalDocumentSemanticRequestHasher.StatutoryVersion,
+            FiscalDocumentSemanticRequestHasher.GetVersion(ValidStatutoryCommand()));
+        Assert.Equal("SENIOR_CITIZEN", result.Draft.AppliedStatutoryFiscalFacts.EntitlementType);
+        Assert.Equal("VAT_EXEMPTION_AND_STATUTORY_DISCOUNT", result.Draft.AppliedStatutoryFiscalFacts.BenefitClassification);
+        Assert.Equal(7143, result.Draft.AppliedStatutoryFiscalFacts.FinalPayableAmountMinorUnits);
+    }
+
+    [Fact]
+    public async Task PresentButIncompleteAppliedStatutoryFactsAreRejectedBeforePersistence()
+    {
+        var repository = new RecordingFiscalDocumentRepository();
+        var service = new FiscalDocumentCreationService(repository);
+
+        var result = await service.CreateAsync(
+            ValidStatutoryCommand() with { AppliedStatutoryFiscalFacts = ValidAppliedStatutoryFiscalFacts() with { PolicyReference = null } });
+
+        Assert.False(result.Succeeded);
+        Assert.Equal(FiscalDocumentCreationErrorCode.AppliedStatutoryFactsIncomplete, result.ErrorCode);
+        Assert.Equal(0, repository.CreateCount);
+        Assert.Null(repository.LastIdempotency);
+    }
+
+    [Fact]
+    public async Task UnsupportedAppliedStatutoryCodesAreRejectedBeforePersistence()
+    {
+        var repository = new RecordingFiscalDocumentRepository();
+        var service = new FiscalDocumentCreationService(repository);
+
+        var result = await service.CreateAsync(
+            ValidStatutoryCommand() with
+            {
+                AppliedStatutoryFiscalFacts = ValidAppliedStatutoryFiscalFacts() with
+                {
+                    EntitlementType = "senior_citizen"
+                }
+            });
+
+        Assert.False(result.Succeeded);
+        Assert.Equal(FiscalDocumentCreationErrorCode.AppliedStatutoryUnsupportedEntitlementType, result.ErrorCode);
+        Assert.Equal(0, repository.CreateCount);
+    }
+
+    [Fact]
+    public async Task AppliedStatutoryCurrencyMismatchIsRejectedBeforePersistence()
+    {
+        var repository = new RecordingFiscalDocumentRepository();
+        var service = new FiscalDocumentCreationService(repository);
+
+        var result = await service.CreateAsync(
+            ValidStatutoryCommand() with
+            {
+                AppliedStatutoryFiscalFacts = ValidAppliedStatutoryFiscalFacts() with { Currency = "USD" }
+            });
+
+        Assert.False(result.Succeeded);
+        Assert.Equal(FiscalDocumentCreationErrorCode.AppliedStatutoryCurrencyMismatch, result.ErrorCode);
+        Assert.Equal(0, repository.CreateCount);
+    }
+
+    [Fact]
+    public async Task AppliedStatutoryTotalMismatchIsRejectedBeforePersistence()
+    {
+        var repository = new RecordingFiscalDocumentRepository();
+        var service = new FiscalDocumentCreationService(repository);
+
+        var result = await service.CreateAsync(
+            ValidStatutoryCommand() with
+            {
+                AppliedStatutoryFiscalFacts = ValidAppliedStatutoryFiscalFacts() with { FinalPayableAmountMinorUnits = 8000 }
+            });
+
+        Assert.False(result.Succeeded);
+        Assert.Equal(FiscalDocumentCreationErrorCode.AppliedStatutoryTotalMismatch, result.ErrorCode);
+        Assert.Equal(0, repository.CreateCount);
+    }
+
+    [Fact]
+    public async Task AppliedStatutoryProhibitedExtensionFieldIsRejectedBeforePersistence()
+    {
+        var repository = new RecordingFiscalDocumentRepository();
+        var service = new FiscalDocumentCreationService(repository);
+
+        var result = await service.CreateAsync(
+            ValidStatutoryCommand() with
+            {
+                AppliedStatutoryFiscalFacts = ValidAppliedStatutoryFiscalFacts() with
+                {
+                    UnknownFieldNames = ["beneficiaryName"]
+                }
+            });
+
+        Assert.False(result.Succeeded);
+        Assert.Equal(FiscalDocumentCreationErrorCode.AppliedStatutoryProhibitedPrivacyField, result.ErrorCode);
+        Assert.Equal(0, repository.CreateCount);
+    }
+
+    [Fact]
+    public async Task AptAppliedStatutoryFactsRequireTerminalCashTenderReference()
+    {
+        var repository = new RecordingFiscalDocumentRepository();
+        var service = new FiscalDocumentCreationService(repository);
+
+        var result = await service.CreateAsync(
+            ValidStatutoryCommand() with
+            {
+                AppliedStatutoryFiscalFacts = ValidAppliedStatutoryFiscalFacts() with
+                {
+                    SourcePaymentChannel = "ASSISTED_PAYMENT_TERMINAL",
+                    TerminalCashTenderId = null
+                }
+            });
+
+        Assert.False(result.Succeeded);
+        Assert.Equal(FiscalDocumentCreationErrorCode.AppliedStatutoryFactsIncomplete, result.ErrorCode);
+        Assert.Equal(0, repository.CreateCount);
+    }
+
+    [Fact]
+    public async Task AppliedStatutoryReplayReturnsOriginalSnapshotAndConflictDetectsMaterialChanges()
+    {
+        var repository = new RecordingFiscalDocumentRepository();
+        var service = new FiscalDocumentCreationService(repository);
+
+        var first = await service.CreateAsync(ValidStatutoryCommand());
+        var replay = await service.CreateAsync(ValidStatutoryCommand());
+        var conflict = await service.CreateAsync(
+            ValidStatutoryCommand() with
+            {
+                AppliedStatutoryFiscalFacts = ValidAppliedStatutoryFiscalFacts() with { BenefitClassification = "REDUCED_PARKING_RATE" }
+            });
+
+        Assert.True(first.Succeeded);
+        Assert.True(replay.Succeeded);
+        Assert.True(replay.Replayed);
+        Assert.Equal(first.Draft!.FiscalDocumentId, replay.Draft!.FiscalDocumentId);
+        Assert.Equal(first.Draft.AppliedStatutoryFiscalFacts, replay.Draft.AppliedStatutoryFiscalFacts);
+        Assert.False(conflict.Succeeded);
+        Assert.Equal(FiscalDocumentCreationErrorCode.IdempotencyConflict, conflict.ErrorCode);
+        Assert.Equal(1, repository.CreateCount);
+    }
+
+    [Fact]
     public async Task DuplicateSameIdempotencyKeyAndSemanticRequestReturnsOriginalDraft()
     {
         var repository = new RecordingFiscalDocumentRepository();
@@ -619,6 +774,69 @@ public sealed class FiscalDocumentCreationServiceTests
             TaxDetails: [ValidTaxDetail()],
             DiscountPrivilegeDetails: [ValidDiscountPrivilegeDetail()],
             Totals: [ValidTotal()]);
+
+    private static FiscalDocumentCreationCommand ValidStatutoryCommand()
+    {
+        var facts = ValidAppliedStatutoryFiscalFacts();
+        return ValidCommand() with
+        {
+            SiteId = facts.SiteId,
+            CentralPmsParkingSessionRef = facts.ParkingSessionId?.ToString("D"),
+            PayableBasis = ValidPayableBasis() with { PayableAmountMinorUnits = 7143 },
+            DocumentLines =
+            [
+                ValidLine(1) with
+                {
+                    UnitAmountMinorUnits = 10000,
+                    GrossAmountMinorUnits = 10000,
+                    DiscountAmountMinorUnits = 2857,
+                    TaxAmountMinorUnits = 0,
+                    NetAmountMinorUnits = 7143
+                }
+            ],
+            Tenders = [ValidTender() with { AmountMinorUnits = 7143 }],
+            TaxDetails = [ValidTaxDetail() with { TaxableAmountMinorUnits = 8929, TaxAmountMinorUnits = 0 }],
+            DiscountPrivilegeDetails =
+            [
+                ValidDiscountPrivilegeDetail() with
+                {
+                    BasisAmountMinorUnits = 10000,
+                    DiscountAmountMinorUnits = 1786,
+                    VatPrivilegeAmountMinorUnits = 1071
+                }
+            ],
+            Totals = [ValidTotal() with { AmountMinorUnits = 7143 }],
+            AppliedStatutoryFiscalFacts = facts
+        };
+    }
+
+    private static AppliedStatutoryFiscalFactsInput ValidAppliedStatutoryFiscalFacts() =>
+        new(
+            Guid.Parse("21000000-0000-4000-8000-000000000001"),
+            Guid.Parse("21000000-0000-4000-8000-000000000002"),
+            Guid.Parse("21000000-0000-4000-8000-000000000003"),
+            Guid.Parse("21000000-0000-4000-8000-000000000004"),
+            Guid.Parse("21000000-0000-4000-8000-000000000005"),
+            Guid.Parse("21000000-0000-4000-8000-000000000006"),
+            Guid.Parse("21000000-0000-4000-8000-000000000007"),
+            "SENIOR_CITIZEN",
+            "VAT_EXEMPTION_AND_STATUTORY_DISCOUNT",
+            new AppliedStatutoryPolicyReferenceInput(
+                "NATIONAL_LAW",
+                AppliedPolicyReferenceId: Guid.Parse("21000000-0000-4000-8000-000000000008"),
+                PolicyCode: "TEST-SENIOR-CITIZEN-POLICY",
+                NationalLawReference: "TEST-NATIONAL-LAW-REFERENCE"),
+            Guid.Parse("21000000-0000-4000-8000-000000000009"),
+            Guid.Parse("21000000-0000-4000-8000-000000000010"),
+            10000,
+            8929,
+            0,
+            "VAT_EXEMPT",
+            1786,
+            7143,
+            "PHP",
+            DateTimeOffset.Parse("2026-07-29T08:15:00+08:00"),
+            "WEBPAY");
 
     private static FiscalizationPayableBasisInput ValidPayableBasis() =>
         new(
