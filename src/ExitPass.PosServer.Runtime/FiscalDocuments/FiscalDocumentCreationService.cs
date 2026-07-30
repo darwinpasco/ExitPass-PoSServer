@@ -2,13 +2,74 @@ namespace ExitPass.PosServer.Runtime.FiscalDocuments;
 
 public sealed class FiscalDocumentCreationService
 {
+    private static readonly HashSet<string> EntitlementTypes = new(StringComparer.Ordinal)
+    {
+        "SENIOR_CITIZEN",
+        "PWD"
+    };
+
+    private static readonly HashSet<string> BenefitClassifications = new(StringComparer.Ordinal)
+    {
+        "VAT_EXEMPTION_ONLY",
+        "STATUTORY_DISCOUNT_ONLY",
+        "VAT_EXEMPTION_AND_STATUTORY_DISCOUNT",
+        "FREE_PARKING",
+        "REDUCED_PARKING_RATE",
+        "CAPPED_PARKING_FEE"
+    };
+
+    private static readonly HashSet<string> VatTreatments = new(StringComparer.Ordinal)
+    {
+        "VAT_EXEMPT",
+        "VAT_EXCLUSIVE",
+        "VAT_INCLUSIVE_NO_EXEMPTION",
+        "NON_VAT",
+        "ZERO_RATED",
+        "NOT_APPLICABLE"
+    };
+
+    private static readonly HashSet<string> PolicyResolutionBases = new(StringComparer.Ordinal)
+    {
+        "NATIONAL_LAW",
+        "LOCAL_ORDINANCE",
+        "MIXED",
+        "INTERNAL_POLICY_REFERENCE"
+    };
+
+    private static readonly HashSet<string> SourcePaymentChannels = new(StringComparer.Ordinal)
+    {
+        "WEBPAY",
+        "ASSISTED_PAYMENT_TERMINAL",
+        "OPERATOR_CONSOLE"
+    };
+
     private static readonly string[] SensitiveEvidenceMarkers =
     [
         "raw_id",
+        "senior_citizen_id",
+        "pwd_id",
+        "osca",
+        "beneficiary_name",
+        "beneficiary_address",
+        "birth_date",
         "id_image",
         "identity_document",
         "evidence_payload",
         "evidence_image",
+        "evidence_url",
+        "object_storage",
+        "signed_url",
+        "reviewer",
+        "approver",
+        "representative",
+        "caregiver",
+        "companion",
+        "driver_identity",
+        "raw_ordinance",
+        "ordinance_text",
+        "ocr",
+        "authorization",
+        "bearer",
         "credential",
         "payment_payload",
         "provider_callback",
@@ -199,6 +260,18 @@ public sealed class FiscalDocumentCreationService
             }
         }
 
+        var statutoryValidation = NormalizeAppliedStatutoryFiscalFacts(
+            command,
+            payableBasisCurrency,
+            tenders,
+            taxDetails,
+            discountPrivilegeDetails,
+            totals);
+        if (statutoryValidation.Failure is not null)
+        {
+            return statutoryValidation.Failure;
+        }
+
         var draft = new FiscalDocumentDraft(
             Guid.NewGuid(),
             command.SitePosServerId.Value,
@@ -229,7 +302,8 @@ public sealed class FiscalDocumentCreationService
                 .ThenBy(discount => discount.DiscountPrivilegeTypeCodeId)
                 .ToArray(),
             totals.Select(NormalizeTotal).OrderBy(total => total.TotalTypeCodeId).ToArray(),
-            discountReferences.ToArray());
+            discountReferences.ToArray(),
+            AppliedStatutoryFiscalFacts: statutoryValidation.Snapshot);
 
         try
         {
@@ -252,6 +326,232 @@ public sealed class FiscalDocumentCreationService
                 ex.ErrorCode,
                 ex.Message);
         }
+    }
+
+    private static (FiscalDocumentCreationResult? Failure, AppliedStatutoryFiscalFactsSnapshot? Snapshot)
+        NormalizeAppliedStatutoryFiscalFacts(
+            FiscalDocumentCreationCommand command,
+            string payableBasisCurrency,
+            IReadOnlyList<FiscalTenderInput> tenders,
+            IReadOnlyList<FiscalTaxDetailInput> taxDetails,
+            IReadOnlyList<FiscalDiscountPrivilegeDetailInput> discountPrivilegeDetails,
+            IReadOnlyList<FiscalTotalInput> totals)
+    {
+        var facts = command.AppliedStatutoryFiscalFacts;
+        if (facts is null)
+        {
+            return (null, null);
+        }
+
+        if ((facts.UnknownFieldNames?.Count ?? 0) > 0 ||
+            (facts.PolicyReference?.UnknownFieldNames?.Count ?? 0) > 0 ||
+            ContainsSensitiveEvidence(facts) ||
+            ContainsSensitiveEvidence(facts.PolicyReference))
+        {
+            return (FiscalDocumentCreationResult.Failure(
+                FiscalDocumentCreationErrorCode.AppliedStatutoryProhibitedPrivacyField,
+                "Applied statutory fiscal facts contain unsupported, prohibited, or privacy-sensitive fields."), null);
+        }
+
+        if (facts.StatutoryDiscountDecisionCommandId is null ||
+            facts.StatutoryDiscountDecisionCommandId == Guid.Empty ||
+            facts.StatutoryRequestReference is null ||
+            facts.StatutoryRequestReference == Guid.Empty ||
+            facts.StatutoryPayableBasisApplicationCommandId is null ||
+            facts.StatutoryPayableBasisApplicationCommandId == Guid.Empty ||
+            facts.StatutoryValidationId is null ||
+            facts.StatutoryValidationId == Guid.Empty ||
+            facts.ParkingSessionId is null ||
+            facts.ParkingSessionId == Guid.Empty ||
+            facts.SiteId is null ||
+            facts.SiteId == Guid.Empty ||
+            facts.SiteGroupId is null ||
+            facts.SiteGroupId == Guid.Empty ||
+            facts.PolicyReference is null ||
+            facts.OriginalTariffSnapshotId is null ||
+            facts.OriginalTariffSnapshotId == Guid.Empty ||
+            facts.AppliedTariffSnapshotId is null ||
+            facts.AppliedTariffSnapshotId == Guid.Empty ||
+            facts.OriginalAmountMinorUnits is null ||
+            facts.VatExclusiveBasisAmountMinorUnits is null ||
+            facts.VatAmountMinorUnits is null ||
+            facts.StatutoryDiscountAmountMinorUnits is null ||
+            facts.FinalPayableAmountMinorUnits is null ||
+            facts.AppliedAt is null)
+        {
+            return (FiscalDocumentCreationResult.Failure(
+                FiscalDocumentCreationErrorCode.AppliedStatutoryFactsIncomplete,
+                "Applied statutory fiscal facts require a complete final Central PMS payment-time application snapshot."), null);
+        }
+
+        var entitlementType = NormalizeRequiredCode(facts.EntitlementType);
+        if (!EntitlementTypes.Contains(entitlementType))
+        {
+            return (FiscalDocumentCreationResult.Failure(
+                FiscalDocumentCreationErrorCode.AppliedStatutoryUnsupportedEntitlementType,
+                "Applied statutory fiscal facts use an unsupported entitlement classification."), null);
+        }
+
+        var benefitClassification = NormalizeRequiredCode(facts.BenefitClassification);
+        if (!BenefitClassifications.Contains(benefitClassification))
+        {
+            return (FiscalDocumentCreationResult.Failure(
+                FiscalDocumentCreationErrorCode.AppliedStatutoryUnsupportedBenefitClassification,
+                "Applied statutory fiscal facts use an unsupported benefit classification."), null);
+        }
+
+        var vatTreatment = NormalizeRequiredCode(facts.VatTreatment);
+        if (!VatTreatments.Contains(vatTreatment))
+        {
+            return (FiscalDocumentCreationResult.Failure(
+                FiscalDocumentCreationErrorCode.AppliedStatutoryUnsupportedVatTreatment,
+                "Applied statutory fiscal facts use an unsupported VAT treatment classification."), null);
+        }
+
+        var sourcePaymentChannel = NormalizeRequiredCode(facts.SourcePaymentChannel);
+        if (!SourcePaymentChannels.Contains(sourcePaymentChannel))
+        {
+            return (FiscalDocumentCreationResult.Failure(
+                FiscalDocumentCreationErrorCode.AppliedStatutoryUnsupportedSourcePaymentChannel,
+                "Applied statutory fiscal facts use an unsupported source payment channel."), null);
+        }
+
+        var policyResolutionBasis = NormalizeRequiredCode(facts.PolicyReference.ResolutionBasis);
+        if (!PolicyResolutionBases.Contains(policyResolutionBasis))
+        {
+            return (FiscalDocumentCreationResult.Failure(
+                FiscalDocumentCreationErrorCode.AppliedStatutoryUnsupportedPolicyResolutionBasis,
+                "Applied statutory fiscal facts use an unsupported policy resolution basis."), null);
+        }
+
+        var policyReference = new AppliedStatutoryPolicyReferenceSnapshot(
+            policyResolutionBasis,
+            facts.PolicyReference.AppliedPolicyReferenceId,
+            NormalizeOptionalReference(facts.PolicyReference.PolicyCode),
+            facts.PolicyReference.PolicyVersionId,
+            NormalizeOptionalReference(facts.PolicyReference.NationalLawReference),
+            NormalizeOptionalReference(facts.PolicyReference.OrdinanceReference));
+
+        if (policyReference.AppliedPolicyReferenceId is null &&
+            policyReference.PolicyCode is null &&
+            policyReference.PolicyVersionId is null &&
+            policyReference.NationalLawReference is null &&
+            policyReference.OrdinanceReference is null)
+        {
+            return (FiscalDocumentCreationResult.Failure(
+                FiscalDocumentCreationErrorCode.AppliedStatutoryFactsIncomplete,
+                "Applied statutory fiscal facts require a safe policy authority reference."), null);
+        }
+
+        var currency = NormalizeCurrency(facts.Currency);
+        if (currency is null || currency != payableBasisCurrency)
+        {
+            return (FiscalDocumentCreationResult.Failure(
+                FiscalDocumentCreationErrorCode.AppliedStatutoryCurrencyMismatch,
+                "Applied statutory fiscal facts currency must match the fiscal payable basis."), null);
+        }
+
+        var originalAmount = facts.OriginalAmountMinorUnits.Value;
+        var vatExclusiveBasis = facts.VatExclusiveBasisAmountMinorUnits.Value;
+        var vatAmount = facts.VatAmountMinorUnits.Value;
+        var statutoryDiscountAmount = facts.StatutoryDiscountAmountMinorUnits.Value;
+        var finalPayableAmount = facts.FinalPayableAmountMinorUnits.Value;
+
+        if (originalAmount < 0 ||
+            vatExclusiveBasis < 0 ||
+            vatAmount < 0 ||
+            statutoryDiscountAmount < 0 ||
+            finalPayableAmount < 0 ||
+            facts.AppliedTariffSnapshotId == facts.OriginalTariffSnapshotId)
+        {
+            return (FiscalDocumentCreationResult.Failure(
+                FiscalDocumentCreationErrorCode.AppliedStatutoryFactsNotFinal,
+                "Applied statutory fiscal facts must represent a final nonnegative payment-time application snapshot."), null);
+        }
+
+        if (!string.Equals(
+                NormalizeOptionalReference(command.CentralPmsParkingSessionRef),
+                facts.ParkingSessionId.Value.ToString("D"),
+                StringComparison.OrdinalIgnoreCase) ||
+            command.SiteId is not null && command.SiteId != facts.SiteId)
+        {
+            return (FiscalDocumentCreationResult.Failure(
+                FiscalDocumentCreationErrorCode.AppliedStatutoryFactsNotFinal,
+                "Applied statutory fiscal facts must match the fiscalized parking and Site scope."), null);
+        }
+
+        if (sourcePaymentChannel == "ASSISTED_PAYMENT_TERMINAL" && facts.TerminalCashTenderId is null)
+        {
+            return (FiscalDocumentCreationResult.Failure(
+                FiscalDocumentCreationErrorCode.AppliedStatutoryFactsIncomplete,
+                "Applied statutory fiscal facts require terminal cash tender linkage for assisted payment terminal issuance."), null);
+        }
+
+        var tenderTotal = tenders.Sum(tender => tender.AmountMinorUnits);
+        var totalMax = totals.Count == 0 ? 0 : totals.Max(total => total.AmountMinorUnits);
+        var taxTotal = taxDetails.Sum(tax => tax.TaxAmountMinorUnits);
+        var discountTotal = discountPrivilegeDetails.Sum(discount => discount.DiscountAmountMinorUnits);
+        var vatPrivilegeTotal = discountPrivilegeDetails.Sum(discount => discount.VatPrivilegeAmountMinorUnits);
+
+        if (finalPayableAmount != command.PayableBasis!.PayableAmountMinorUnits ||
+            finalPayableAmount != tenderTotal ||
+            finalPayableAmount != totalMax ||
+            vatAmount != taxTotal ||
+            statutoryDiscountAmount > discountTotal + vatPrivilegeTotal ||
+            finalPayableAmount + statutoryDiscountAmount > originalAmount)
+        {
+            return (FiscalDocumentCreationResult.Failure(
+                FiscalDocumentCreationErrorCode.AppliedStatutoryTotalMismatch,
+                "Applied statutory fiscal facts must reconcile with fiscal payable basis, tenders, taxes, discounts, and totals."), null);
+        }
+
+        if (benefitClassification == "FREE_PARKING" && finalPayableAmount != 0)
+        {
+            return (FiscalDocumentCreationResult.Failure(
+                FiscalDocumentCreationErrorCode.AppliedStatutoryTotalMismatch,
+                "Free parking statutory facts must have a zero final payable amount."), null);
+        }
+
+        return (null, new AppliedStatutoryFiscalFactsSnapshot(
+            facts.StatutoryDiscountDecisionCommandId.Value,
+            facts.StatutoryRequestReference.Value,
+            facts.StatutoryPayableBasisApplicationCommandId.Value,
+            facts.StatutoryValidationId.Value,
+            facts.ParkingSessionId.Value,
+            facts.SiteId.Value,
+            facts.SiteGroupId.Value,
+            entitlementType,
+            benefitClassification,
+            policyReference,
+            facts.OriginalTariffSnapshotId.Value,
+            facts.AppliedTariffSnapshotId.Value,
+            originalAmount,
+            vatExclusiveBasis,
+            vatAmount,
+            vatTreatment,
+            statutoryDiscountAmount,
+            finalPayableAmount,
+            currency,
+            facts.AppliedAt.Value.ToUniversalTime(),
+            sourcePaymentChannel,
+            facts.TerminalCashTenderId,
+            DateTimeOffset.UtcNow));
+    }
+
+    private static string NormalizeRequiredCode(string? value) =>
+        string.IsNullOrWhiteSpace(value) ? string.Empty : value.Trim();
+
+    private static string? NormalizeCurrency(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return null;
+        }
+
+        var currency = value.Trim().ToUpperInvariant();
+        return currency.Length == 3 && currency.All(char.IsAsciiLetterUpper)
+            ? currency
+            : null;
     }
 
     private static string? NormalizeOptionalReference(string? value) =>
@@ -493,6 +793,38 @@ public sealed class FiscalDocumentCreationService
         }
 
         return totals.Any(total => ContainsSensitiveEvidence(total.TotalContext));
+    }
+
+    private static bool ContainsSensitiveEvidence(AppliedStatutoryFiscalFactsInput facts) =>
+        ContainsSensitiveEvidenceMarker(facts.EntitlementType) ||
+        ContainsSensitiveEvidenceMarker(facts.BenefitClassification) ||
+        ContainsSensitiveEvidenceMarker(facts.VatTreatment) ||
+        ContainsSensitiveEvidenceMarker(facts.Currency) ||
+        ContainsSensitiveEvidenceMarker(facts.SourcePaymentChannel) ||
+        ContainsSensitiveEvidence(facts.UnknownFieldNames);
+
+    private static bool ContainsSensitiveEvidence(AppliedStatutoryPolicyReferenceInput? policyReference)
+    {
+        if (policyReference is null)
+        {
+            return false;
+        }
+
+        return ContainsSensitiveEvidenceMarker(policyReference.ResolutionBasis) ||
+            ContainsSensitiveEvidenceMarker(policyReference.PolicyCode) ||
+            ContainsSensitiveEvidenceMarker(policyReference.NationalLawReference) ||
+            ContainsSensitiveEvidenceMarker(policyReference.OrdinanceReference) ||
+            ContainsSensitiveEvidence(policyReference.UnknownFieldNames);
+    }
+
+    private static bool ContainsSensitiveEvidence(IReadOnlyList<string>? values)
+    {
+        if (values is null)
+        {
+            return false;
+        }
+
+        return values.Any(ContainsSensitiveEvidenceMarker);
     }
 
     private static bool ContainsSensitiveEvidence(IReadOnlyList<FiscalDocumentLineInput>? documentLines)

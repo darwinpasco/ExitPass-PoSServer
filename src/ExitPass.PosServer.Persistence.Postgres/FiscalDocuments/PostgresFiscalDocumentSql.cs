@@ -47,7 +47,7 @@ public static class PostgresFiscalDocumentSql
         inner join pos.fiscal_identities identity
             on identity.fiscal_identity_id = profile.fiscal_identity_id
         where profile.site_pos_server_id = @site_pos_server_id
-          and (@site_id is null or profile.site_id = @site_id)
+          and (@site_id::uuid is null or profile.site_id = @site_id::uuid)
           and profile.lifecycle_status = 'APPROVED'
           and profile.retired_at is null
           and profile.effective_from <= @effective_at
@@ -243,6 +243,50 @@ public static class PostgresFiscalDocumentSql
         where fiscal_document_id = @fiscal_document_id;
         """;
 
+    public const string SelectAppliedStatutoryFiscalFacts = """
+        select
+            facts.statutory_discount_decision_command_id,
+            facts.statutory_request_reference,
+            facts.statutory_payable_basis_application_command_id,
+            facts.statutory_validation_id,
+            facts.parking_session_id,
+            facts.site_id,
+            facts.site_group_id,
+            entitlement.code_key,
+            benefit.code_key,
+            policy_basis.code_key,
+            facts.applied_policy_reference_id,
+            facts.policy_code,
+            facts.policy_version_id,
+            facts.national_law_reference,
+            facts.ordinance_reference,
+            facts.original_tariff_snapshot_id,
+            facts.applied_tariff_snapshot_id,
+            facts.original_amount_minor_units,
+            facts.vat_exclusive_basis_amount_minor_units,
+            facts.vat_amount_minor_units,
+            vat_treatment.code_key,
+            facts.statutory_discount_amount_minor_units,
+            facts.final_payable_amount_minor_units,
+            facts.currency_code,
+            facts.applied_at,
+            source_channel.code_key,
+            facts.terminal_cash_tender_id,
+            facts.snapshot_created_at
+        from pos.fiscal_document_applied_statutory_facts facts
+        inner join pos.controlled_codes entitlement
+            on entitlement.controlled_code_id = facts.entitlement_type_code_id
+        inner join pos.controlled_codes benefit
+            on benefit.controlled_code_id = facts.benefit_classification_code_id
+        inner join pos.controlled_codes policy_basis
+            on policy_basis.controlled_code_id = facts.policy_resolution_basis_code_id
+        inner join pos.controlled_codes vat_treatment
+            on vat_treatment.controlled_code_id = facts.vat_treatment_code_id
+        inner join pos.controlled_codes source_channel
+            on source_channel.controlled_code_id = facts.source_payment_channel_code_id
+        where facts.fiscal_document_id = @fiscal_document_id;
+        """;
+
     public const string CountFiscalSequencePolicies = """
         select count(*)
         from pos.fiscal_sequence_policies
@@ -342,6 +386,93 @@ public static class PostgresFiscalDocumentSql
           and (effective_end_at is null or effective_end_at > current_timestamp)
         order by controlled_code_id
         limit 2;
+        """;
+
+    public const string SelectActiveControlledCodeIdBySetAndCode = """
+        select code.controlled_code_id
+        from pos.controlled_codes code
+        inner join pos.controlled_code_sets code_set
+            on code_set.controlled_code_set_id = code.controlled_code_set_id
+        where code_set.code_set_key = @code_set_key
+          and code.code_key = @code_key
+          and code_set.is_active = true
+          and code.is_active = true
+          and (code_set.effective_start_at is null or code_set.effective_start_at <= current_timestamp)
+          and (code_set.effective_end_at is null or code_set.effective_end_at > current_timestamp)
+          and (code.effective_start_at is null or code.effective_start_at <= current_timestamp)
+          and (code.effective_end_at is null or code.effective_end_at > current_timestamp)
+        order by code.controlled_code_id
+        limit 2;
+        """;
+
+    public const string InsertAppliedStatutoryFiscalFacts = """
+        insert into pos.fiscal_document_applied_statutory_facts (
+            fiscal_document_applied_statutory_fact_id,
+            fiscal_document_id,
+            statutory_discount_decision_command_id,
+            statutory_request_reference,
+            statutory_payable_basis_application_command_id,
+            statutory_validation_id,
+            parking_session_id,
+            site_id,
+            site_group_id,
+            entitlement_type_code_id,
+            benefit_classification_code_id,
+            policy_resolution_basis_code_id,
+            applied_policy_reference_id,
+            policy_code,
+            policy_version_id,
+            national_law_reference,
+            ordinance_reference,
+            original_tariff_snapshot_id,
+            applied_tariff_snapshot_id,
+            original_amount_minor_units,
+            vat_exclusive_basis_amount_minor_units,
+            vat_amount_minor_units,
+            vat_treatment_code_id,
+            statutory_discount_amount_minor_units,
+            final_payable_amount_minor_units,
+            currency_code,
+            applied_at,
+            source_payment_channel_code_id,
+            terminal_cash_tender_id,
+            snapshot_created_at,
+            created_at,
+            updated_at
+        ) values (
+            @fiscal_document_applied_statutory_fact_id,
+            @fiscal_document_id,
+            @statutory_discount_decision_command_id,
+            @statutory_request_reference,
+            @statutory_payable_basis_application_command_id,
+            @statutory_validation_id,
+            @parking_session_id,
+            @site_id,
+            @site_group_id,
+            @entitlement_type_code_id,
+            @benefit_classification_code_id,
+            @policy_resolution_basis_code_id,
+            @applied_policy_reference_id,
+            @policy_code,
+            @policy_version_id,
+            @national_law_reference,
+            @ordinance_reference,
+            @original_tariff_snapshot_id,
+            @applied_tariff_snapshot_id,
+            @original_amount_minor_units,
+            @vat_exclusive_basis_amount_minor_units,
+            @vat_amount_minor_units,
+            @vat_treatment_code_id,
+            @statutory_discount_amount_minor_units,
+            @final_payable_amount_minor_units,
+            @currency_code,
+            @applied_at,
+            @source_payment_channel_code_id,
+            @terminal_cash_tender_id,
+            @snapshot_created_at,
+            @snapshot_created_at,
+            @snapshot_created_at
+        );
         """;
 
     public const string UpdateFiscalDocumentVoided = """
@@ -746,7 +877,7 @@ public static class PostgresFiscalDocumentSql
             idempotency_scope = idempotency.Scope,
             idempotency_key_source = "upstream_finality_ref",
             semantic_request_hash = idempotency.SemanticRequestHash,
-            semantic_request_hash_version = FiscalDocumentSemanticRequestHasher.Version,
+            semantic_request_hash_version = FiscalDocumentSemanticRequestHasher.GetVersion(draft),
             semantic_request_hash_status = FiscalDocumentSemanticRequestHasher.Status,
             operation_type_code_id_source = "fiscal_document_type_code_id",
             operation_status_code_id_source = "fiscal_document_status_code_id",

@@ -212,6 +212,25 @@ public sealed class PostgresFiscalDocumentRepository : IFiscalDocumentRepository
                     await totalCommand.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
                 }
 
+                if (resolvedDraft.AppliedStatutoryFiscalFacts is not null)
+                {
+                    var statutoryCodeIds = await ResolveAppliedStatutoryCodeIdsAsync(
+                        connection,
+                        transaction,
+                        resolvedDraft.AppliedStatutoryFiscalFacts,
+                        cancellationToken).ConfigureAwait(false);
+
+                    await using var statutoryCommand = new NpgsqlCommand(
+                        PostgresFiscalDocumentSql.InsertAppliedStatutoryFiscalFacts,
+                        connection,
+                        transaction);
+                    AddAppliedStatutoryFiscalFactsParameters(
+                        statutoryCommand,
+                        resolvedDraft,
+                        statutoryCodeIds);
+                    await statutoryCommand.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
+                }
+
                 await using var sequenceStateCommand = new NpgsqlCommand(
                     PostgresFiscalDocumentSql.UpdateFiscalSequenceStateIssued,
                     connection,
@@ -676,6 +695,11 @@ public sealed class PostgresFiscalDocumentRepository : IFiscalDocumentRepository
                 connection,
                 transaction,
                 draft.FiscalDocumentId,
+                cancellationToken).ConfigureAwait(false),
+            AppliedStatutoryFiscalFacts = await ReadAppliedStatutoryFactsAsync(
+                connection,
+                transaction,
+                draft.FiscalDocumentId,
                 cancellationToken).ConfigureAwait(false)
         };
     }
@@ -720,6 +744,27 @@ public sealed class PostgresFiscalDocumentRepository : IFiscalDocumentRepository
             reader.GetString(18),
             ReadDateTimeOffset(reader, 19),
             ReadDateTimeOffset(reader, 20));
+    }
+
+    private static async Task<AppliedStatutoryFiscalFactsSnapshot?> ReadAppliedStatutoryFactsAsync(
+        NpgsqlConnection connection,
+        NpgsqlTransaction transaction,
+        Guid fiscalDocumentId,
+        CancellationToken cancellationToken)
+    {
+        await using var command = new NpgsqlCommand(
+            PostgresFiscalDocumentSql.SelectAppliedStatutoryFiscalFacts,
+            connection,
+            transaction);
+        command.Parameters.AddWithValue("fiscal_document_id", fiscalDocumentId);
+
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
+        if (!await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
+        {
+            return null;
+        }
+
+        return ReadAppliedStatutoryFacts(reader);
     }
 
     private static async Task<IReadOnlyList<FiscalSequencePolicyCandidate>> ReadFiscalSequencePoliciesAsync(
@@ -815,6 +860,53 @@ public sealed class PostgresFiscalDocumentRepository : IFiscalDocumentRepository
         }
 
         return values;
+    }
+
+    private static async Task<AppliedStatutoryControlledCodeIds> ResolveAppliedStatutoryCodeIdsAsync(
+        NpgsqlConnection connection,
+        NpgsqlTransaction transaction,
+        AppliedStatutoryFiscalFactsSnapshot facts,
+        CancellationToken cancellationToken)
+    {
+        return new AppliedStatutoryControlledCodeIds(
+            await ResolveActiveControlledCodeIdAsync(connection, transaction, "statutory_entitlement_type", facts.EntitlementType, cancellationToken)
+                .ConfigureAwait(false),
+            await ResolveActiveControlledCodeIdAsync(connection, transaction, "statutory_benefit_classification", facts.BenefitClassification, cancellationToken)
+                .ConfigureAwait(false),
+            await ResolveActiveControlledCodeIdAsync(connection, transaction, "statutory_policy_resolution_basis", facts.PolicyReference.ResolutionBasis, cancellationToken)
+                .ConfigureAwait(false),
+            await ResolveActiveControlledCodeIdAsync(connection, transaction, "statutory_vat_treatment", facts.VatTreatment, cancellationToken)
+                .ConfigureAwait(false),
+            await ResolveActiveControlledCodeIdAsync(connection, transaction, "statutory_source_payment_channel", facts.SourcePaymentChannel, cancellationToken)
+                .ConfigureAwait(false));
+    }
+
+    private static async Task<Guid> ResolveActiveControlledCodeIdAsync(
+        NpgsqlConnection connection,
+        NpgsqlTransaction transaction,
+        string codeSetKey,
+        string codeKey,
+        CancellationToken cancellationToken)
+    {
+        var codeIds = await ReadGuidListAsync(
+            connection,
+            transaction,
+            PostgresFiscalDocumentSql.SelectActiveControlledCodeIdBySetAndCode,
+            command =>
+            {
+                command.Parameters.AddWithValue("code_set_key", codeSetKey);
+                command.Parameters.AddWithValue("code_key", codeKey);
+            },
+            cancellationToken).ConfigureAwait(false);
+
+        if (codeIds.Count == 1)
+        {
+            return codeIds[0];
+        }
+
+        throw new FiscalDocumentFiscalContextException(
+            FiscalDocumentCreationErrorCode.AppliedStatutoryControlledCodeUnavailable,
+            "Applied statutory fiscal facts require active governed POS Server controlled codes.");
     }
 
     private static async Task<long> ReadScalarInt64Async(
@@ -1107,6 +1199,38 @@ public sealed class PostgresFiscalDocumentRepository : IFiscalDocumentRepository
     private static string? NormalizeOptionalPolicyText(string? value) =>
         string.IsNullOrWhiteSpace(value) ? null : value.Trim();
 
+    private static AppliedStatutoryFiscalFactsSnapshot ReadAppliedStatutoryFacts(NpgsqlDataReader reader) =>
+        new(
+            reader.GetGuid(0),
+            reader.GetGuid(1),
+            reader.GetGuid(2),
+            reader.GetGuid(3),
+            reader.GetGuid(4),
+            reader.GetGuid(5),
+            reader.GetGuid(6),
+            reader.GetString(7),
+            reader.GetString(8),
+            new AppliedStatutoryPolicyReferenceSnapshot(
+                reader.GetString(9),
+                reader.IsDBNull(10) ? null : reader.GetGuid(10),
+                reader.IsDBNull(11) ? null : reader.GetString(11),
+                reader.IsDBNull(12) ? null : reader.GetGuid(12),
+                reader.IsDBNull(13) ? null : reader.GetString(13),
+                reader.IsDBNull(14) ? null : reader.GetString(14)),
+            reader.GetGuid(15),
+            reader.GetGuid(16),
+            reader.GetInt64(17),
+            reader.GetInt64(18),
+            reader.GetInt64(19),
+            reader.GetString(20),
+            reader.GetInt64(21),
+            reader.GetInt64(22),
+            reader.GetString(23),
+            ReadDateTimeOffset(reader, 24),
+            reader.GetString(25),
+            reader.IsDBNull(26) ? null : reader.GetGuid(26),
+            ReadDateTimeOffset(reader, 27));
+
     private sealed record FiscalSequencePolicyCandidate(
         Guid FiscalSequencePolicyId,
         string PolicyCode,
@@ -1130,6 +1254,13 @@ public sealed class PostgresFiscalDocumentRepository : IFiscalDocumentRepository
         string? VoidIdempotencyKey,
         string? VoidSemanticRequestHash,
         string? VoidCorrelationId);
+
+    private sealed record AppliedStatutoryControlledCodeIds(
+        Guid EntitlementTypeCodeId,
+        Guid BenefitClassificationCodeId,
+        Guid PolicyResolutionBasisCodeId,
+        Guid VatTreatmentCodeId,
+        Guid SourcePaymentChannelCodeId);
 
     private static void AddStatusHistoryParameters(NpgsqlCommand command, FiscalDocumentDraft draft)
     {
@@ -1263,5 +1394,47 @@ public sealed class PostgresFiscalDocumentRepository : IFiscalDocumentRepository
 
         var contextParameter = command.Parameters.Add("total_context", NpgsqlDbType.Jsonb);
         contextParameter.Value = (object?)PostgresFiscalDocumentSql.CreateTotalContextJson(total) ?? DBNull.Value;
+    }
+
+    private static void AddAppliedStatutoryFiscalFactsParameters(
+        NpgsqlCommand command,
+        FiscalDocumentDraft draft,
+        AppliedStatutoryControlledCodeIds codeIds)
+    {
+        var facts = draft.AppliedStatutoryFiscalFacts ??
+            throw new InvalidOperationException("Applied statutory fiscal facts are required.");
+        var policy = facts.PolicyReference;
+        var snapshotCreatedAt = facts.SnapshotCreatedAt ?? DateTimeOffset.UtcNow;
+
+        command.Parameters.AddWithValue("fiscal_document_applied_statutory_fact_id", Guid.NewGuid());
+        command.Parameters.AddWithValue("fiscal_document_id", draft.FiscalDocumentId);
+        command.Parameters.AddWithValue("statutory_discount_decision_command_id", facts.StatutoryDiscountDecisionCommandId);
+        command.Parameters.AddWithValue("statutory_request_reference", facts.StatutoryRequestReference);
+        command.Parameters.AddWithValue("statutory_payable_basis_application_command_id", facts.StatutoryPayableBasisApplicationCommandId);
+        command.Parameters.AddWithValue("statutory_validation_id", facts.StatutoryValidationId);
+        command.Parameters.AddWithValue("parking_session_id", facts.ParkingSessionId);
+        command.Parameters.AddWithValue("site_id", facts.SiteId);
+        command.Parameters.AddWithValue("site_group_id", facts.SiteGroupId);
+        command.Parameters.AddWithValue("entitlement_type_code_id", codeIds.EntitlementTypeCodeId);
+        command.Parameters.AddWithValue("benefit_classification_code_id", codeIds.BenefitClassificationCodeId);
+        command.Parameters.AddWithValue("policy_resolution_basis_code_id", codeIds.PolicyResolutionBasisCodeId);
+        command.Parameters.AddWithValue("applied_policy_reference_id", (object?)policy.AppliedPolicyReferenceId ?? DBNull.Value);
+        command.Parameters.AddWithValue("policy_code", (object?)policy.PolicyCode ?? DBNull.Value);
+        command.Parameters.AddWithValue("policy_version_id", (object?)policy.PolicyVersionId ?? DBNull.Value);
+        command.Parameters.AddWithValue("national_law_reference", (object?)policy.NationalLawReference ?? DBNull.Value);
+        command.Parameters.AddWithValue("ordinance_reference", (object?)policy.OrdinanceReference ?? DBNull.Value);
+        command.Parameters.AddWithValue("original_tariff_snapshot_id", facts.OriginalTariffSnapshotId);
+        command.Parameters.AddWithValue("applied_tariff_snapshot_id", facts.AppliedTariffSnapshotId);
+        command.Parameters.AddWithValue("original_amount_minor_units", facts.OriginalAmountMinorUnits);
+        command.Parameters.AddWithValue("vat_exclusive_basis_amount_minor_units", facts.VatExclusiveBasisAmountMinorUnits);
+        command.Parameters.AddWithValue("vat_amount_minor_units", facts.VatAmountMinorUnits);
+        command.Parameters.AddWithValue("vat_treatment_code_id", codeIds.VatTreatmentCodeId);
+        command.Parameters.AddWithValue("statutory_discount_amount_minor_units", facts.StatutoryDiscountAmountMinorUnits);
+        command.Parameters.AddWithValue("final_payable_amount_minor_units", facts.FinalPayableAmountMinorUnits);
+        command.Parameters.AddWithValue("currency_code", facts.Currency);
+        command.Parameters.AddWithValue("applied_at", facts.AppliedAt);
+        command.Parameters.AddWithValue("source_payment_channel_code_id", codeIds.SourcePaymentChannelCodeId);
+        command.Parameters.AddWithValue("terminal_cash_tender_id", (object?)facts.TerminalCashTenderId ?? DBNull.Value);
+        command.Parameters.AddWithValue("snapshot_created_at", snapshotCreatedAt);
     }
 }

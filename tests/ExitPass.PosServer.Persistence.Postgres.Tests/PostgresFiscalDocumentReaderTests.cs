@@ -1,3 +1,4 @@
+using ExitPass.PosServer.Persistence.Postgres.FiscalDocuments;
 using System.Runtime.CompilerServices;
 using Xunit;
 
@@ -19,6 +20,10 @@ public sealed class PostgresFiscalDocumentReaderTests
         Assert.Contains("from pos.fiscal_tax_details", source, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("from pos.fiscal_discount_privilege_details", source, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("from pos.fiscal_totals", source, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains(
+            "from pos.fiscal_document_applied_statutory_facts",
+            PostgresFiscalDocumentSql.SelectAppliedStatutoryFiscalFacts,
+            StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("pos.fiscal_report", source, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("pos.digital_si", source, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("pos.annex", source, StringComparison.OrdinalIgnoreCase);
@@ -68,8 +73,26 @@ public sealed class PostgresFiscalDocumentReaderTests
         Assert.Contains("semantic_request_hash", source, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("semantic_request_hash_version", source, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("matched", source, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("AppliedStatutoryFiscalFacts = appliedStatutoryFacts", source, StringComparison.Ordinal);
+        Assert.Contains("SemanticRequestHash = appliedStatutoryFacts is null ? header.SemanticRequestHash : null", source, StringComparison.Ordinal);
         Assert.Contains("GetNullableInt64(reader", source, StringComparison.Ordinal);
         Assert.Contains("GetNullableDateTimeOffset(reader", source, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void ReaderMapsAppliedStatutoryFactsThroughControlledCodeKeys()
+    {
+        var source = File.ReadAllText(FindReaderSourcePath());
+        var sql = PostgresFiscalDocumentSql.SelectAppliedStatutoryFiscalFacts;
+
+        Assert.Contains("PostgresFiscalDocumentSql.SelectAppliedStatutoryFiscalFacts", source, StringComparison.Ordinal);
+        Assert.Contains("entitlement.code_key", sql, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("benefit.code_key", sql, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("policy_basis.code_key", sql, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("vat_treatment.code_key", sql, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("source_channel.code_key", sql, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("beneficiary_name", source, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("evidence_url", source, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]

@@ -29,7 +29,8 @@ public sealed class PostgresFiscalDocumentRepositoryTests
             PostgresFiscalDocumentSql.InsertFiscalTender +
             PostgresFiscalDocumentSql.InsertFiscalTaxDetail +
             PostgresFiscalDocumentSql.InsertFiscalDiscountPrivilegeDetail +
-            PostgresFiscalDocumentSql.InsertFiscalTotal;
+            PostgresFiscalDocumentSql.InsertFiscalTotal +
+            PostgresFiscalDocumentSql.InsertAppliedStatutoryFiscalFacts;
 
         Assert.Contains("pos.site_pos_server_fiscal_identity_history", sql, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("pos.fiscal_identities", sql, StringComparison.OrdinalIgnoreCase);
@@ -44,6 +45,7 @@ public sealed class PostgresFiscalDocumentRepositoryTests
         Assert.Contains("insert into pos.fiscal_tax_details", sql, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("insert into pos.fiscal_discount_privilege_details", sql, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("insert into pos.fiscal_totals", sql, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("insert into pos.fiscal_document_applied_statutory_facts", sql, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("insert into pos.fiscal_sequence_policies", sql, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("update pos.fiscal_sequence_policies", sql, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("insert into pos.fiscal_sequence_states", sql, StringComparison.OrdinalIgnoreCase);
@@ -79,7 +81,9 @@ public sealed class PostgresFiscalDocumentRepositoryTests
             PostgresFiscalDocumentSql.InsertFiscalTender +
             PostgresFiscalDocumentSql.InsertFiscalTaxDetail +
             PostgresFiscalDocumentSql.InsertFiscalDiscountPrivilegeDetail +
-            PostgresFiscalDocumentSql.InsertFiscalTotal;
+            PostgresFiscalDocumentSql.InsertFiscalTotal +
+            PostgresFiscalDocumentSql.InsertAppliedStatutoryFiscalFacts +
+            PostgresFiscalDocumentSql.SelectActiveControlledCodeIdBySetAndCode;
         var untrusted = "payable-basis-001'); drop table pos.fiscal_documents; --";
 
         Assert.Contains("@site_pos_server_id", sql, StringComparison.Ordinal);
@@ -125,6 +129,15 @@ public sealed class PostgresFiscalDocumentRepositoryTests
         Assert.Contains("@fiscal_total_id", sql, StringComparison.Ordinal);
         Assert.Contains("@total_type_code_id", sql, StringComparison.Ordinal);
         Assert.Contains("@total_context", sql, StringComparison.Ordinal);
+        Assert.Contains("@statutory_discount_decision_command_id", sql, StringComparison.Ordinal);
+        Assert.Contains("@statutory_payable_basis_application_command_id", sql, StringComparison.Ordinal);
+        Assert.Contains("@entitlement_type_code_id", sql, StringComparison.Ordinal);
+        Assert.Contains("@benefit_classification_code_id", sql, StringComparison.Ordinal);
+        Assert.Contains("@policy_resolution_basis_code_id", sql, StringComparison.Ordinal);
+        Assert.Contains("@vat_treatment_code_id", sql, StringComparison.Ordinal);
+        Assert.Contains("@source_payment_channel_code_id", sql, StringComparison.Ordinal);
+        Assert.Contains("@code_set_key", sql, StringComparison.Ordinal);
+        Assert.Contains("@code_key", sql, StringComparison.Ordinal);
         Assert.Contains("@document_context", sql, StringComparison.Ordinal);
         Assert.DoesNotContain(untrusted, sql, StringComparison.Ordinal);
         Assert.DoesNotContain("drop table", sql, StringComparison.OrdinalIgnoreCase);
@@ -507,6 +520,23 @@ public sealed class PostgresFiscalDocumentRepositoryTests
     }
 
     [Fact]
+    public void StatutoryIdempotencyContextDocumentsSha256V2WithoutChangingOrdinaryV1()
+    {
+        var idempotency = new FiscalIssuanceIdempotency(
+            "fiscal_document_creation:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb:cccccccccccccccccccccccccccccccc",
+            "central-finality-001",
+            new string('b', 64));
+
+        var ordinaryJson = PostgresFiscalDocumentSql.CreateIdempotencyContextJson(ValidDraft(), idempotency);
+        var statutoryJson = PostgresFiscalDocumentSql.CreateIdempotencyContextJson(ValidStatutoryDraft(), idempotency);
+
+        Assert.Contains("sha256:v1", ordinaryJson, StringComparison.Ordinal);
+        Assert.Contains("pos-server-fiscal-document-create:sha256:v2", statutoryJson, StringComparison.Ordinal);
+        Assert.DoesNotContain("beneficiary_name", statutoryJson, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("evidence_image", statutoryJson, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
     public void LineContextPreservesReferenceOnlyJson()
     {
         var lineContext = PostgresFiscalDocumentSql.CreateLineContextJson(ValidDraft().DocumentLines[0]);
@@ -680,6 +710,67 @@ public sealed class PostgresFiscalDocumentRepositoryTests
             FiscalNumberSuffixText: "-A",
             FiscalNumberAssignedAt: DateTimeOffset.Parse("2026-07-01T00:00:00Z"),
             FiscalNumberAssignedByRef: "pos-server:system");
+
+    private static FiscalDocumentDraft ValidStatutoryDraft() =>
+        ValidDraft() with
+        {
+            PayableAmountMinorUnits = 7143,
+            CentralPmsParkingSessionRef = "21000000-0000-4000-8000-000000000005",
+            SiteId = Guid.Parse("21000000-0000-4000-8000-000000000006"),
+            DocumentLines =
+            [
+                ValidDraft().DocumentLines[0] with
+                {
+                    UnitAmountMinorUnits = 10000,
+                    GrossAmountMinorUnits = 10000,
+                    DiscountAmountMinorUnits = 2857,
+                    TaxAmountMinorUnits = 0,
+                    NetAmountMinorUnits = 7143
+                }
+            ],
+            Tenders = [ValidDraft().Tenders[0] with { AmountMinorUnits = 7143 }],
+            TaxDetails = [ValidDraft().TaxDetails[0] with { TaxableAmountMinorUnits = 8929, TaxAmountMinorUnits = 0 }],
+            DiscountPrivilegeDetails =
+            [
+                ValidDraft().DiscountPrivilegeDetails[0] with
+                {
+                    BasisAmountMinorUnits = 10000,
+                    DiscountAmountMinorUnits = 1786,
+                    VatPrivilegeAmountMinorUnits = 1071
+                }
+            ],
+            Totals = [ValidDraft().Totals[0] with { AmountMinorUnits = 7143 }],
+            AppliedStatutoryFiscalFacts = ValidAppliedStatutoryFiscalFactsSnapshot()
+        };
+
+    private static AppliedStatutoryFiscalFactsSnapshot ValidAppliedStatutoryFiscalFactsSnapshot() =>
+        new(
+            Guid.Parse("21000000-0000-4000-8000-000000000001"),
+            Guid.Parse("21000000-0000-4000-8000-000000000002"),
+            Guid.Parse("21000000-0000-4000-8000-000000000003"),
+            Guid.Parse("21000000-0000-4000-8000-000000000004"),
+            Guid.Parse("21000000-0000-4000-8000-000000000005"),
+            Guid.Parse("21000000-0000-4000-8000-000000000006"),
+            Guid.Parse("21000000-0000-4000-8000-000000000007"),
+            "SENIOR_CITIZEN",
+            "VAT_EXEMPTION_AND_STATUTORY_DISCOUNT",
+            new AppliedStatutoryPolicyReferenceSnapshot(
+                "NATIONAL_LAW",
+                AppliedPolicyReferenceId: Guid.Parse("21000000-0000-4000-8000-000000000008"),
+                PolicyCode: "TEST-SENIOR-CITIZEN-POLICY",
+                NationalLawReference: "TEST-NATIONAL-LAW-REFERENCE"),
+            Guid.Parse("21000000-0000-4000-8000-000000000009"),
+            Guid.Parse("21000000-0000-4000-8000-000000000010"),
+            10000,
+            8929,
+            0,
+            "VAT_EXEMPT",
+            1786,
+            7143,
+            "PHP",
+            DateTimeOffset.Parse("2026-07-29T08:15:00+08:00"),
+            "WEBPAY",
+            SnapshotCreatedAt: DateTimeOffset.Parse("2026-07-29T08:16:00+08:00"));
 
     private static string FindRepositorySourcePath([CallerFilePath] string testFilePath = "")
     {

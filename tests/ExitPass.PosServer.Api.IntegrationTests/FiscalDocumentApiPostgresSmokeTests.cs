@@ -56,6 +56,7 @@ public sealed class FiscalDocumentApiPostgresSmokeTests
 
         using var response = await client.PostAsJsonAsync("/v1/fiscal-documents/", request);
         var body = await response.Content.ReadFromJsonAsync<CreateFiscalDocumentResponse>();
+        WriteCreateResult("ordinary create", response.StatusCode, body);
 
         Assert.Equal(HttpStatusCode.Accepted, response.StatusCode);
         Assert.NotNull(body);
@@ -258,6 +259,143 @@ public sealed class FiscalDocumentApiPostgresSmokeTests
 
         Assert.Equal(0, await CountTablesLikeAsync(connection, "%exit%"));
         Assert.Equal(0, await CountTablesLikeAsync(connection, "%gate%"));
+    }
+
+    [Fact]
+    public async Task PostAppliedStatutoryFiscalDocumentPersistsReadbackAndPresentationSnapshot()
+    {
+        if (!TryGetSmokeConnectionString(out var connectionString))
+        {
+            return;
+        }
+
+        await RebuildDisposableDatabaseAsync(connectionString);
+        await InsertDisposableSmokeFixtureAsync(connectionString);
+
+        await using var app = await StartApiAsync(connectionString);
+        using var client = CreateClient(app);
+        var request = CreateValidStatutoryRequest("statutory-senior");
+
+        using var response = await client.PostAsJsonAsync("/v1/fiscal-documents/", request);
+        var body = await response.Content.ReadFromJsonAsync<CreateFiscalDocumentResponse>();
+        WriteCreateResult("statutory senior create", response.StatusCode, body);
+
+        Assert.Equal(HttpStatusCode.Accepted, response.StatusCode);
+        Assert.NotNull(body);
+        Assert.True(body.Succeeded);
+        Assert.Equal("newly_created", body.ResultClassification);
+        Assert.NotNull(body.FiscalDocumentId);
+
+        var fiscalDocumentId = body.FiscalDocumentId.Value;
+        using var getResponse = await client.GetAsync($"/v1/fiscal-documents/{fiscalDocumentId}");
+        var getBody = await getResponse.Content.ReadFromJsonAsync<GetFiscalDocumentResponse>();
+
+        Assert.Equal(HttpStatusCode.OK, getResponse.StatusCode);
+        Assert.NotNull(getBody?.Document);
+        Assert.NotNull(getBody.Document.AppliedStatutoryFiscalFacts);
+        Assert.Null(getBody.Document.SemanticRequestHash);
+        Assert.Equal("pos-server-fiscal-document-create:sha256:v2", getBody.Document.SemanticRequestHashVersion);
+        Assert.Equal("SENIOR_CITIZEN", getBody.Document.AppliedStatutoryFiscalFacts.EntitlementType);
+        Assert.Equal("VAT_EXEMPTION_AND_STATUTORY_DISCOUNT", getBody.Document.AppliedStatutoryFiscalFacts.BenefitClassification);
+        Assert.Equal("VAT_EXEMPT", getBody.Document.AppliedStatutoryFiscalFacts.VatTreatment);
+        Assert.Equal(7143, getBody.Document.AppliedStatutoryFiscalFacts.FinalPayableAmountMinorUnits);
+
+        using var presentationResponse = await client.GetAsync($"/v1/fiscal-documents/{fiscalDocumentId}/digital-sales-invoice/presentation");
+        var presentationBody = await presentationResponse.Content.ReadFromJsonAsync<GetDigitalSalesInvoicePresentationResponse>();
+
+        Assert.Equal(HttpStatusCode.OK, presentationResponse.StatusCode);
+        Assert.NotNull(presentationBody?.Presentation);
+        var statutorySection = Assert.Single(
+            presentationBody.Presentation.Sections,
+            section => section.Name == "appliedStatutoryFiscalFacts");
+        Assert.Contains(
+            statutorySection.Rows,
+            row => row.Key == "appliedStatutoryFiscalFacts.benefitClassification" &&
+                string.Equals(row.DisplayValue, "VAT_EXEMPTION_AND_STATUTORY_DISCOUNT", StringComparison.Ordinal));
+        Assert.DoesNotContain(
+            statutorySection.Rows,
+            row => row.Key.Contains("decision", StringComparison.OrdinalIgnoreCase) ||
+                row.Key.Contains("evidence", StringComparison.OrdinalIgnoreCase));
+
+        using var replayResponse = await client.PostAsJsonAsync("/v1/fiscal-documents/", request);
+        var replayBody = await replayResponse.Content.ReadFromJsonAsync<CreateFiscalDocumentResponse>();
+        WriteCreateResult("statutory senior replay", replayResponse.StatusCode, replayBody);
+
+        Assert.Equal(HttpStatusCode.Accepted, replayResponse.StatusCode);
+        Assert.NotNull(replayBody);
+        Assert.True(replayBody.Succeeded);
+        Assert.Equal("idempotent_replay", replayBody.ResultClassification);
+        Assert.Equal(fiscalDocumentId, replayBody.FiscalDocumentId);
+
+        var conflictRequest = request with
+        {
+            AppliedStatutoryFiscalFacts = request.AppliedStatutoryFiscalFacts! with
+            {
+                StatutoryRequestReference = Guid.Parse("21000000-0000-4000-8000-000000009999")
+            }
+        };
+        using var conflictResponse = await client.PostAsJsonAsync("/v1/fiscal-documents/", conflictRequest);
+        var conflictBody = await conflictResponse.Content.ReadFromJsonAsync<CreateFiscalDocumentResponse>();
+        WriteCreateResult("statutory material conflict", conflictResponse.StatusCode, conflictBody);
+
+        Assert.Equal(HttpStatusCode.Conflict, conflictResponse.StatusCode);
+        Assert.NotNull(conflictBody);
+        Assert.False(conflictBody.Succeeded);
+        Assert.Equal("fiscal_document_idempotency_conflict", conflictBody.Code);
+
+        var invalidRequest = CreateValidStatutoryRequest("invalid-finality") with
+        {
+            AppliedStatutoryFiscalFacts = CreateValidStatutoryRequest("invalid-finality").AppliedStatutoryFiscalFacts! with
+            {
+                AppliedTariffSnapshotId = Guid.Parse("21000000-0000-4000-8000-000000000009")
+            }
+        };
+        using var invalidResponse = await client.PostAsJsonAsync("/v1/fiscal-documents/", invalidRequest);
+        var invalidBody = await invalidResponse.Content.ReadFromJsonAsync<CreateFiscalDocumentResponse>();
+        WriteCreateResult("statutory invalid finality", invalidResponse.StatusCode, invalidBody);
+
+        Assert.Equal(HttpStatusCode.BadRequest, invalidResponse.StatusCode);
+        Assert.NotNull(invalidBody);
+        Assert.False(invalidBody.Succeeded);
+        Assert.Equal("applied_statutory_facts_not_final", invalidBody.Code);
+
+        var pwdRequest = CreateValidPwdStatutoryRequest("statutory-pwd");
+        using var pwdResponse = await client.PostAsJsonAsync("/v1/fiscal-documents/", pwdRequest);
+        var pwdBody = await pwdResponse.Content.ReadFromJsonAsync<CreateFiscalDocumentResponse>();
+        WriteCreateResult("statutory pwd create", pwdResponse.StatusCode, pwdBody);
+
+        Assert.Equal(HttpStatusCode.Accepted, pwdResponse.StatusCode);
+        Assert.NotNull(pwdBody);
+        Assert.True(pwdBody.Succeeded);
+        Assert.Equal(2, pwdBody.FiscalSequenceValue);
+        Assert.NotNull(pwdBody.FiscalDocumentId);
+
+        using var pwdGetResponse = await client.GetAsync($"/v1/fiscal-documents/{pwdBody.FiscalDocumentId}");
+        var pwdGetBody = await pwdGetResponse.Content.ReadFromJsonAsync<GetFiscalDocumentResponse>();
+
+        Assert.Equal(HttpStatusCode.OK, pwdGetResponse.StatusCode);
+        Assert.NotNull(pwdGetBody?.Document?.AppliedStatutoryFiscalFacts);
+        Assert.Equal("PWD", pwdGetBody.Document.AppliedStatutoryFiscalFacts.EntitlementType);
+        Assert.Equal("ASSISTED_PAYMENT_TERMINAL", pwdGetBody.Document.AppliedStatutoryFiscalFacts.SourcePaymentChannel);
+        Assert.Equal(Guid.Parse("22000000-0000-4000-8000-000000000011"), pwdGetBody.Document.AppliedStatutoryFiscalFacts.TerminalCashTenderId);
+
+        await using var connection = new NpgsqlConnection(connectionString);
+        await connection.OpenAsync();
+
+        Assert.Equal(1, await CountAsync(connection, "pos.fiscal_documents", "fiscal_document_id = @id", "id", fiscalDocumentId));
+        Assert.Equal(1, await CountAsync(connection, "pos.fiscal_document_applied_statutory_facts", "fiscal_document_id = @id", "id", fiscalDocumentId));
+        Assert.Equal(1, await CountAsync(connection, "pos.fiscal_document_applied_statutory_facts", "fiscal_document_id = @id", "id", pwdBody.FiscalDocumentId!.Value));
+        Assert.Equal(1, await CountAsync(connection, "pos.fiscal_document_status_history", "fiscal_document_id = @id", "id", fiscalDocumentId));
+        Assert.Equal(2, await ScalarLongAsync(
+            connection,
+            "select current_sequence_value from pos.fiscal_sequence_states where fiscal_sequence_policy_id = @id",
+            FiscalSequencePolicyId));
+        Assert.Equal("pos-server-fiscal-document-create:sha256:v2", await ScalarStringAsync(
+            connection,
+            "select idempotency_context ->> 'semantic_request_hash_version' from pos.idempotency_records where linked_fiscal_document_id = @id",
+            fiscalDocumentId));
+        Assert.Equal(0, await CountTextMarkerAsync(connection, "beneficiary_name"));
+        Assert.Equal(0, await CountTextMarkerAsync(connection, "evidence_image"));
     }
 
     [Fact]
@@ -501,6 +639,12 @@ public sealed class FiscalDocumentApiPostgresSmokeTests
         }
 
         return true;
+    }
+
+    private void WriteCreateResult(string scenario, HttpStatusCode statusCode, CreateFiscalDocumentResponse? body)
+    {
+        output.WriteLine(
+            $"{scenario}: status={statusCode}; code={body?.Code ?? "<null>"}; classification={body?.ResultClassification ?? "<null>"}; posture={body?.ErrorPosture ?? "<null>"}; message={body?.Message ?? "<null>"}");
     }
 
     private static async Task RebuildDisposableDatabaseAsync(string connectionString)
@@ -844,6 +988,238 @@ public sealed class FiscalDocumentApiPostgresSmokeTests
                     "PHP",
                     new Dictionary<string, string> { ["source_system"] = "central_pms" })
             ]);
+
+    private static CreateFiscalDocumentRequest CreateValidStatutoryRequest(string suffix)
+    {
+        var parkingSessionId = Guid.Parse("21000000-0000-4000-8000-000000000005");
+        var siteId = Guid.Parse("21000000-0000-4000-8000-000000000006");
+        var facts = new AppliedStatutoryFiscalFactsRequest(
+            Guid.Parse("21000000-0000-4000-8000-000000000001"),
+            Guid.Parse("21000000-0000-4000-8000-000000000002"),
+            Guid.Parse("21000000-0000-4000-8000-000000000003"),
+            Guid.Parse("21000000-0000-4000-8000-000000000004"),
+            parkingSessionId,
+            siteId,
+            Guid.Parse("21000000-0000-4000-8000-000000000007"),
+            "SENIOR_CITIZEN",
+            "VAT_EXEMPTION_AND_STATUTORY_DISCOUNT",
+            new AppliedStatutoryPolicyReferenceRequest(
+                "NATIONAL_LAW",
+                AppliedPolicyReferenceId: Guid.Parse("21000000-0000-4000-8000-000000000008"),
+                PolicyCode: "TEST-SENIOR-CITIZEN-POLICY",
+                NationalLawReference: "TEST-NATIONAL-LAW-REFERENCE"),
+            Guid.Parse("21000000-0000-4000-8000-000000000009"),
+            Guid.Parse("21000000-0000-4000-8000-000000000010"),
+            10000,
+            8929,
+            0,
+            "VAT_EXEMPT",
+            1786,
+            7143,
+            "PHP",
+            DateTimeOffset.Parse("2026-07-29T08:15:00+08:00"),
+            "WEBPAY");
+
+        return new CreateFiscalDocumentRequest(
+            "site-pos-server-smoke",
+            "sales_invoice_smoke",
+            new FiscalizationPayableBasisRequest(
+                $"payable-basis-{suffix}",
+                $"central-finality-{suffix}",
+                "PHP",
+                7143,
+                [new FiscalDiscountReferenceRequest(facts.StatutoryValidationId.ToString(), "approved", true)]),
+            SitePosServerId: SitePosServerId,
+            SiteId: siteId,
+            FiscalDocumentTypeCodeId: FiscalDocumentTypeCodeId,
+            FiscalDocumentStatusCodeId: FiscalDocumentStatusCodeId,
+            BusinessDayDate: new DateOnly(2026, 7, 1),
+            CentralPmsParkingSessionRef: parkingSessionId.ToString("D"),
+            CentralPmsPaymentAttemptRef: $"payment-attempt-{suffix}",
+            CentralPmsPaymentConfirmationRef: $"payment-confirmation-{suffix}",
+            PaymentFinalityRef: $"central-finality-{suffix}",
+            VendorAckRef: $"vendor-ack-{suffix}",
+            DocumentLines:
+            [
+                new CreateFiscalDocumentLineRequest(
+                    1,
+                    FiscalLineTypeCodeId,
+                    "Parking fee",
+                    1,
+                    10000,
+                    10000,
+                    2857,
+                    0,
+                    7143,
+                    "PHP",
+                    SourceRef: $"line-source-{suffix}",
+                    LineContext: new Dictionary<string, string> { ["source_system"] = "central_pms" })
+            ],
+            Tenders:
+            [
+                new CreateFiscalTenderRequest(
+                    FiscalTenderTypeCodeId,
+                    7143,
+                    "PHP",
+                    CentralPmsPaymentAttemptRef: $"payment-attempt-{suffix}",
+                    CentralPmsPaymentConfirmationRef: $"payment-confirmation-{suffix}",
+                    PaymentFinalityRef: $"central-finality-{suffix}",
+                    ProviderRef: $"provider-ref-{suffix}",
+                    TenderContext: new Dictionary<string, string> { ["source_system"] = "central_pms" })
+            ],
+            TaxDetails:
+            [
+                new CreateFiscalTaxDetailRequest(
+                    FiscalTaxTypeCodeId,
+                    FiscalTaxClassificationCodeId,
+                    8929,
+                    0,
+                    "PHP",
+                    LineSequence: 1,
+                    TaxRate: 0,
+                    TaxContext: new Dictionary<string, string> { ["source_system"] = "central_pms" })
+            ],
+            DiscountPrivilegeDetails:
+            [
+                new CreateFiscalDiscountPrivilegeDetailRequest(
+                    FiscalDiscountPrivilegeTypeCodeId,
+                    10000,
+                    1786,
+                    1071,
+                    "PHP",
+                    LineSequence: 1,
+                    ApprovalRef: facts.StatutoryValidationId.ToString(),
+                    DiscountPrivilegeContext: new Dictionary<string, string> { ["source_system"] = "central_pms" })
+            ],
+            Totals:
+            [
+                new CreateFiscalTotalRequest(
+                    FiscalTotalTypeCodeId,
+                    7143,
+                    "PHP",
+                    new Dictionary<string, string> { ["source_system"] = "central_pms" })
+            ],
+            AppliedStatutoryFiscalFacts: facts);
+    }
+
+    private static CreateFiscalDocumentRequest CreateValidPwdStatutoryRequest(string suffix)
+    {
+        var parkingSessionId = Guid.Parse("22000000-0000-4000-8000-000000000005");
+        var siteId = Guid.Parse("22000000-0000-4000-8000-000000000006");
+        var terminalCashTenderId = Guid.Parse("22000000-0000-4000-8000-000000000011");
+        var facts = new AppliedStatutoryFiscalFactsRequest(
+            Guid.Parse("22000000-0000-4000-8000-000000000001"),
+            Guid.Parse("22000000-0000-4000-8000-000000000002"),
+            Guid.Parse("22000000-0000-4000-8000-000000000003"),
+            Guid.Parse("22000000-0000-4000-8000-000000000004"),
+            parkingSessionId,
+            siteId,
+            Guid.Parse("22000000-0000-4000-8000-000000000007"),
+            "PWD",
+            "VAT_EXEMPTION_AND_STATUTORY_DISCOUNT",
+            new AppliedStatutoryPolicyReferenceRequest(
+                "NATIONAL_LAW",
+                AppliedPolicyReferenceId: Guid.Parse("22000000-0000-4000-8000-000000000008"),
+                PolicyCode: "TEST-PWD-POLICY",
+                NationalLawReference: "TEST-NATIONAL-LAW-REFERENCE"),
+            Guid.Parse("22000000-0000-4000-8000-000000000009"),
+            Guid.Parse("22000000-0000-4000-8000-000000000010"),
+            12000,
+            10714,
+            0,
+            "VAT_EXEMPT",
+            2143,
+            8571,
+            "PHP",
+            DateTimeOffset.Parse("2026-07-29T09:25:00+08:00"),
+            "ASSISTED_PAYMENT_TERMINAL",
+            terminalCashTenderId);
+
+        return new CreateFiscalDocumentRequest(
+            "site-pos-server-smoke",
+            "sales_invoice_smoke",
+            new FiscalizationPayableBasisRequest(
+                $"payable-basis-{suffix}",
+                $"central-finality-{suffix}",
+                "PHP",
+                8571,
+                [new FiscalDiscountReferenceRequest(facts.StatutoryValidationId.ToString(), "approved", true)]),
+            SitePosServerId: SitePosServerId,
+            SiteId: siteId,
+            FiscalDocumentTypeCodeId: FiscalDocumentTypeCodeId,
+            FiscalDocumentStatusCodeId: FiscalDocumentStatusCodeId,
+            BusinessDayDate: new DateOnly(2026, 7, 1),
+            CentralPmsParkingSessionRef: parkingSessionId.ToString("D"),
+            CentralPmsPaymentAttemptRef: $"payment-attempt-{suffix}",
+            CentralPmsPaymentConfirmationRef: $"payment-confirmation-{suffix}",
+            PaymentFinalityRef: $"central-finality-{suffix}",
+            VendorAckRef: $"vendor-ack-{suffix}",
+            DocumentLines:
+            [
+                new CreateFiscalDocumentLineRequest(
+                    1,
+                    FiscalLineTypeCodeId,
+                    "Parking fee",
+                    1,
+                    12000,
+                    12000,
+                    3429,
+                    0,
+                    8571,
+                    "PHP",
+                    SourceRef: $"line-source-{suffix}",
+                    LineContext: new Dictionary<string, string> { ["source_system"] = "central_pms" })
+            ],
+            Tenders:
+            [
+                new CreateFiscalTenderRequest(
+                    FiscalTenderTypeCodeId,
+                    8571,
+                    "PHP",
+                    CentralPmsPaymentAttemptRef: $"payment-attempt-{suffix}",
+                    CentralPmsPaymentConfirmationRef: $"payment-confirmation-{suffix}",
+                    PaymentFinalityRef: $"central-finality-{suffix}",
+                    ProviderRef: $"provider-ref-{suffix}",
+                    TenderContext: new Dictionary<string, string>
+                    {
+                        ["source_system"] = "central_pms",
+                        ["terminal_cash_tender_ref"] = terminalCashTenderId.ToString("D")
+                    })
+            ],
+            TaxDetails:
+            [
+                new CreateFiscalTaxDetailRequest(
+                    FiscalTaxTypeCodeId,
+                    FiscalTaxClassificationCodeId,
+                    10714,
+                    0,
+                    "PHP",
+                    LineSequence: 1,
+                    TaxRate: 0,
+                    TaxContext: new Dictionary<string, string> { ["source_system"] = "central_pms" })
+            ],
+            DiscountPrivilegeDetails:
+            [
+                new CreateFiscalDiscountPrivilegeDetailRequest(
+                    FiscalDiscountPrivilegeTypeCodeId,
+                    12000,
+                    2143,
+                    1286,
+                    "PHP",
+                    LineSequence: 1,
+                    ApprovalRef: facts.StatutoryValidationId.ToString(),
+                    DiscountPrivilegeContext: new Dictionary<string, string> { ["source_system"] = "central_pms" })
+            ],
+            Totals:
+            [
+                new CreateFiscalTotalRequest(
+                    FiscalTotalTypeCodeId,
+                    8571,
+                    "PHP",
+                    new Dictionary<string, string> { ["source_system"] = "central_pms" })
+            ],
+            AppliedStatutoryFiscalFacts: facts);
+    }
 
     private static IReadOnlyList<SmokeCode> SmokeCodes() =>
     [

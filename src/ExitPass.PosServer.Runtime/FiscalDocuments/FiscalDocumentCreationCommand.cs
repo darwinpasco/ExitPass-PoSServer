@@ -22,4 +22,39 @@ public sealed record FiscalDocumentCreationCommand(
     IReadOnlyList<FiscalTaxDetailInput>? TaxDetails = null,
     IReadOnlyList<FiscalDiscountPrivilegeDetailInput>? DiscountPrivilegeDetails = null,
     IReadOnlyList<FiscalTotalInput>? Totals = null,
-    IReadOnlyDictionary<string, string>? ReferenceContext = null);
+    IReadOnlyDictionary<string, string>? ReferenceContext = null,
+    AppliedStatutoryFiscalFactsInput? AppliedStatutoryFiscalFacts = null);
+
+public sealed record AppliedStatutoryFiscalFactsInput(
+    Guid? StatutoryDiscountDecisionCommandId,
+    Guid? StatutoryRequestReference,
+    Guid? StatutoryPayableBasisApplicationCommandId,
+    Guid? StatutoryValidationId,
+    Guid? ParkingSessionId,
+    Guid? SiteId,
+    Guid? SiteGroupId,
+    string? EntitlementType,
+    string? BenefitClassification,
+    AppliedStatutoryPolicyReferenceInput? PolicyReference,
+    Guid? OriginalTariffSnapshotId,
+    Guid? AppliedTariffSnapshotId,
+    long? OriginalAmountMinorUnits,
+    long? VatExclusiveBasisAmountMinorUnits,
+    long? VatAmountMinorUnits,
+    string? VatTreatment,
+    long? StatutoryDiscountAmountMinorUnits,
+    long? FinalPayableAmountMinorUnits,
+    string? Currency,
+    DateTimeOffset? AppliedAt,
+    string? SourcePaymentChannel,
+    Guid? TerminalCashTenderId = null,
+    IReadOnlyList<string>? UnknownFieldNames = null);
+
+public sealed record AppliedStatutoryPolicyReferenceInput(
+    string? ResolutionBasis,
+    Guid? AppliedPolicyReferenceId = null,
+    string? PolicyCode = null,
+    Guid? PolicyVersionId = null,
+    string? NationalLawReference = null,
+    string? OrdinanceReference = null,
+    IReadOnlyList<string>? UnknownFieldNames = null);

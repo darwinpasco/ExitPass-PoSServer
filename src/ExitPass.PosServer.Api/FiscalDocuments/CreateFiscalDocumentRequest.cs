@@ -1,3 +1,6 @@
+using System.Text.Json;
+using System.Text.Json.Serialization;
+
 namespace ExitPass.PosServer.Api.FiscalDocuments;
 
 public sealed record CreateFiscalDocumentRequest(
@@ -24,7 +27,48 @@ public sealed record CreateFiscalDocumentRequest(
     IReadOnlyList<CreateFiscalTaxDetailRequest>? TaxDetails = null,
     IReadOnlyList<CreateFiscalDiscountPrivilegeDetailRequest>? DiscountPrivilegeDetails = null,
     IReadOnlyList<CreateFiscalTotalRequest>? Totals = null,
-    IReadOnlyDictionary<string, string>? ReferenceContext = null);
+    IReadOnlyDictionary<string, string>? ReferenceContext = null,
+    AppliedStatutoryFiscalFactsRequest? AppliedStatutoryFiscalFacts = null);
+
+public sealed record AppliedStatutoryFiscalFactsRequest(
+    Guid? StatutoryDiscountDecisionCommandId,
+    Guid? StatutoryRequestReference,
+    Guid? StatutoryPayableBasisApplicationCommandId,
+    Guid? StatutoryValidationId,
+    Guid? ParkingSessionId,
+    Guid? SiteId,
+    Guid? SiteGroupId,
+    string? EntitlementType,
+    string? BenefitClassification,
+    AppliedStatutoryPolicyReferenceRequest? PolicyReference,
+    Guid? OriginalTariffSnapshotId,
+    Guid? AppliedTariffSnapshotId,
+    long? OriginalAmountMinorUnits,
+    long? VatExclusiveBasisAmountMinorUnits,
+    long? VatAmountMinorUnits,
+    string? VatTreatment,
+    long? StatutoryDiscountAmountMinorUnits,
+    long? FinalPayableAmountMinorUnits,
+    string? Currency,
+    DateTimeOffset? AppliedAt,
+    string? SourcePaymentChannel,
+    Guid? TerminalCashTenderId = null)
+{
+    [JsonExtensionData]
+    public IDictionary<string, JsonElement>? ExtensionData { get; init; }
+}
+
+public sealed record AppliedStatutoryPolicyReferenceRequest(
+    string? ResolutionBasis,
+    Guid? AppliedPolicyReferenceId = null,
+    string? PolicyCode = null,
+    Guid? PolicyVersionId = null,
+    string? NationalLawReference = null,
+    string? OrdinanceReference = null)
+{
+    [JsonExtensionData]
+    public IDictionary<string, JsonElement>? ExtensionData { get; init; }
+}
 
 public sealed record FiscalDocumentLinkRequest(
     Guid? TargetFiscalDocumentId,

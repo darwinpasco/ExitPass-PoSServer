@@ -41,8 +41,14 @@ public sealed class PostgresFiscalDocumentReader : IFiscalDocumentReader
                 return null;
             }
 
+            var appliedStatutoryFacts = await ReadAppliedStatutoryFactsAsync(
+                connection,
+                fiscalDocumentId,
+                cancellationToken).ConfigureAwait(false);
+
             return header with
             {
+                SemanticRequestHash = appliedStatutoryFacts is null ? header.SemanticRequestHash : null,
                 StatusHistory = await ReadStatusHistoryAsync(connection, fiscalDocumentId, cancellationToken).ConfigureAwait(false),
                 DocumentLinks = await ReadLinksAsync(connection, fiscalDocumentId, cancellationToken).ConfigureAwait(false),
                 Lines = await ReadLinesAsync(connection, fiscalDocumentId, cancellationToken).ConfigureAwait(false),
@@ -50,7 +56,8 @@ public sealed class PostgresFiscalDocumentReader : IFiscalDocumentReader
                 TaxDetails = await ReadTaxDetailsAsync(connection, fiscalDocumentId, cancellationToken).ConfigureAwait(false),
                 DiscountPrivilegeDetails = await ReadDiscountPrivilegeDetailsAsync(connection, fiscalDocumentId, cancellationToken).ConfigureAwait(false),
                 Totals = await ReadTotalsAsync(connection, fiscalDocumentId, cancellationToken).ConfigureAwait(false),
-                SalesInvoiceHeaderSnapshot = await ReadHeaderSnapshotAsync(connection, fiscalDocumentId, cancellationToken).ConfigureAwait(false)
+                SalesInvoiceHeaderSnapshot = await ReadHeaderSnapshotAsync(connection, fiscalDocumentId, cancellationToken).ConfigureAwait(false),
+                AppliedStatutoryFiscalFacts = appliedStatutoryFacts
             };
         }
         catch (Exception ex) when (ex is NpgsqlException or TimeoutException or InvalidOperationException)
@@ -227,6 +234,54 @@ public sealed class PostgresFiscalDocumentReader : IFiscalDocumentReader
         return results;
     }
 
+    private static async Task<AppliedStatutoryFiscalFactsSnapshot?> ReadAppliedStatutoryFactsAsync(
+        NpgsqlConnection connection,
+        Guid fiscalDocumentId,
+        CancellationToken cancellationToken)
+    {
+        await using var command = CreateCommand(
+            connection,
+            PostgresFiscalDocumentSql.SelectAppliedStatutoryFiscalFacts,
+            fiscalDocumentId);
+
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
+        if (!await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
+        {
+            return null;
+        }
+
+        return new AppliedStatutoryFiscalFactsSnapshot(
+            reader.GetGuid(0),
+            reader.GetGuid(1),
+            reader.GetGuid(2),
+            reader.GetGuid(3),
+            reader.GetGuid(4),
+            reader.GetGuid(5),
+            reader.GetGuid(6),
+            reader.GetString(7),
+            reader.GetString(8),
+            new AppliedStatutoryPolicyReferenceSnapshot(
+                reader.GetString(9),
+                GetNullableGuid(reader, 10),
+                GetSafeString(reader, 11),
+                GetNullableGuid(reader, 12),
+                GetSafeString(reader, 13),
+                GetSafeString(reader, 14)),
+            reader.GetGuid(15),
+            reader.GetGuid(16),
+            reader.GetInt64(17),
+            reader.GetInt64(18),
+            reader.GetInt64(19),
+            reader.GetString(20),
+            reader.GetInt64(21),
+            reader.GetInt64(22),
+            reader.GetString(23),
+            reader.GetFieldValue<DateTimeOffset>(24),
+            reader.GetString(25),
+            GetNullableGuid(reader, 26),
+            reader.GetFieldValue<DateTimeOffset>(27));
+    }
+
     private static async Task<SalesInvoiceHeaderSnapshot?> ReadHeaderSnapshotAsync(
         NpgsqlConnection connection,
         Guid fiscalDocumentId,
@@ -389,8 +444,8 @@ public sealed class PostgresFiscalDocumentReader : IFiscalDocumentReader
                 payment_finality_ref,
                 provider_ref,
                 tender_context::text,
-                created_at,
-                updated_at
+                tender.created_at,
+                tender.updated_at
             from pos.fiscal_tenders tender
             left join pos.controlled_codes tender_type_code
                 on tender_type_code.controlled_code_id = tender.tender_type_code_id

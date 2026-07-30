@@ -31,5 +31,17 @@ public enum FiscalDocumentCreationErrorCode
     SalesInvoiceHeaderProfileNotFound = 26,
     SalesInvoiceHeaderProfileAmbiguous = 27,
     SalesInvoiceHeaderProfileIncomplete = 28,
-    SalesInvoiceHeaderProfileUnsupportedVersion = 29
+    SalesInvoiceHeaderProfileUnsupportedVersion = 29,
+    AppliedStatutoryFiscalFactsPersistenceSchemaNotConfigured = 30,
+    AppliedStatutoryFactsIncomplete = 31,
+    AppliedStatutoryFactsNotFinal = 32,
+    AppliedStatutoryUnsupportedEntitlementType = 33,
+    AppliedStatutoryUnsupportedBenefitClassification = 34,
+    AppliedStatutoryUnsupportedVatTreatment = 35,
+    AppliedStatutoryUnsupportedPolicyResolutionBasis = 36,
+    AppliedStatutoryUnsupportedSourcePaymentChannel = 37,
+    AppliedStatutoryCurrencyMismatch = 38,
+    AppliedStatutoryTotalMismatch = 39,
+    AppliedStatutoryProhibitedPrivacyField = 40,
+    AppliedStatutoryControlledCodeUnavailable = 41
 }
