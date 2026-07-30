@@ -4,7 +4,7 @@
   "source_name": "POS Server Controlled-Code Source Index",
   "source_description": "Cumulative deterministic index of controlled-code source family files for approved low-risk source value slices.",
   "governance_owner": "Engineering",
-  "source_ref": "ExitPass_POS_Server_Controlled_Code_Source_Schema.md; ExitPass_POS_Server_Controlled_Code_UUID_Namespace_Decision.md; ExitPass_POS_Server_Controlled_Code_Value_Approval_Matrix.md; db/controlled-code-source-values-slice-1; db/controlled-code-source-values-slice-2; db/controlled-code-source-values-slice-3",
+  "source_ref": "ExitPass_POS_Server_Controlled_Code_Source_Schema.md; ExitPass_POS_Server_Controlled_Code_UUID_Namespace_Decision.md; ExitPass_POS_Server_Controlled_Code_Value_Approval_Matrix.md; db/controlled-code-source-values-slice-1; db/controlled-code-source-values-slice-2; db/controlled-code-source-values-slice-3; db/controlled-code-source-values-slice-4",
   "uuid_namespace": "d07a7416-af9c-556d-86cc-7061335f7c11",
   "uuid_name_inputs": {
     "code_set": "pos.controlled_code_sets:<code_set_key>",
@@ -105,11 +105,41 @@
       "code_set_key": "reference_data_validation_status",
       "path": "families/reference_data_validation_status.json",
       "governance_owner": "Engineering"
+    },
+    {
+      "code_set_key": "statutory_benefit_classification",
+      "path": "families/statutory_benefit_classification.json",
+      "governance_owner": "Engineering"
+    },
+    {
+      "code_set_key": "statutory_entitlement_type",
+      "path": "families/statutory_entitlement_type.json",
+      "governance_owner": "Engineering"
+    },
+    {
+      "code_set_key": "statutory_policy_resolution_basis",
+      "path": "families/statutory_policy_resolution_basis.json",
+      "governance_owner": "Engineering"
+    },
+    {
+      "code_set_key": "statutory_source_payment_channel",
+      "path": "families/statutory_source_payment_channel.json",
+      "governance_owner": "Engineering"
+    },
+    {
+      "code_set_key": "statutory_validation_error_code",
+      "path": "families/statutory_validation_error_code.json",
+      "governance_owner": "Engineering"
+    },
+    {
+      "code_set_key": "statutory_vat_treatment",
+      "path": "families/statutory_vat_treatment.json",
+      "governance_owner": "Engineering"
     }
   ],
   "notes": [
     "This index contains source metadata only and does not create generated SQL or database rows.",
     "Family sources are listed in deterministic code_set_key order.",
-    "Included slices are limited to approved low-risk lifecycle, operational, queue, idempotency, governance, validation, inventory, artifact, audit-result, and observability posture."
+    "Included slices are limited to approved low-risk lifecycle, operational, queue, idempotency, governance, validation, inventory, artifact, audit-result, observability, and applied statutory fiscal facts posture."
   ]
 }

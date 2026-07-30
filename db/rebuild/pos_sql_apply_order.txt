@@ -11,6 +11,7 @@ db/state/tables/pos.channel_terminal_status_history.sql
 db/state/tables/pos.fiscal_sequence_policies.sql
 db/state/tables/pos.fiscal_documents.sql
 db/state/tables/pos.fiscal_document_header_snapshots.sql
+db/state/tables/pos.fiscal_document_applied_statutory_facts.sql
 db/state/tables/pos.fiscal_document_status_history.sql
 db/state/tables/pos.fiscal_document_links.sql
 db/state/tables/pos.fiscal_document_lines.sql

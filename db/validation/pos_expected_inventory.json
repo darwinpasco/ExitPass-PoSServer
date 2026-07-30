@@ -3,7 +3,7 @@
   "expected_schemas": [
     "pos"
   ],
-  "expected_table_count": 53,
+  "expected_table_count": 54,
   "expected_tables": [
     "pos.access_audit",
     "pos.annex_e_reports",
@@ -26,6 +26,7 @@
     "pos.fiscal_anchor_refs",
     "pos.fiscal_counter_states",
     "pos.fiscal_discount_privilege_details",
+    "pos.fiscal_document_applied_statutory_facts",
     "pos.fiscal_document_header_snapshots",
     "pos.fiscal_document_lines",
     "pos.fiscal_document_links",
@@ -74,6 +75,7 @@
     "slice_2_fiscal_document_core": [
       "pos.fiscal_documents",
       "pos.fiscal_document_header_snapshots",
+      "pos.fiscal_document_applied_statutory_facts",
       "pos.fiscal_document_status_history",
       "pos.fiscal_document_links"
     ],
@@ -130,6 +132,12 @@
       "pos.security_reference_contexts"
     ]
   },
+  "expected_functions": [
+    "pos.reject_applied_stat_facts_mutation"
+  ],
+  "expected_triggers": [
+    "pos.fiscal_document_applied_statutory_facts.trg_fiscal_doc_applied_stat_facts_immutable"
+  ],
   "not_expected_yet": {
     "views": [],
     "functions": [],

@@ -12,14 +12,14 @@
     {
       "id": "P001",
       "severity": "P0",
-      "description": "Database functions are not approved in the current repository SQL state.",
-      "regex": "\\bCREATE\\s+(OR\\s+REPLACE\\s+)?FUNCTION\\b"
+      "description": "Database functions are not approved except the applied statutory fiscal facts immutability function.",
+      "regex": "\\bCREATE\\s+(OR\\s+REPLACE\\s+)?FUNCTION\\s+(?!pos\\.reject_applied_stat_facts_mutation\\b)"
     },
     {
       "id": "P002",
       "severity": "P0",
-      "description": "Database triggers are not approved in the current repository SQL state.",
-      "regex": "\\bCREATE\\s+(OR\\s+REPLACE\\s+)?TRIGGER\\b"
+      "description": "Database triggers are not approved except the applied statutory fiscal facts immutability trigger.",
+      "regex": "\\bCREATE\\s+(OR\\s+REPLACE\\s+)?TRIGGER\\s+(?!trg_fiscal_doc_applied_stat_facts_immutable\\b)"
     },
     {
       "id": "P003",
