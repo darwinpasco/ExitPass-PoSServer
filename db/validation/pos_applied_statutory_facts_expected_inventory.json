@@ -1,0 +1,113 @@
+{
+  "schema_version": "1.0",
+  "source": "Z-004 applied statutory fiscal facts schema",
+  "table": "pos.fiscal_document_applied_statutory_facts",
+  "columns": [
+    "fiscal_document_applied_statutory_fact_id",
+    "fiscal_document_id",
+    "statutory_discount_decision_command_id",
+    "statutory_request_reference",
+    "statutory_payable_basis_application_command_id",
+    "statutory_validation_id",
+    "parking_session_id",
+    "site_id",
+    "site_group_id",
+    "entitlement_type_code_id",
+    "benefit_classification_code_id",
+    "policy_resolution_basis_code_id",
+    "applied_policy_reference_id",
+    "policy_code",
+    "policy_version_id",
+    "national_law_reference",
+    "ordinance_reference",
+    "original_tariff_snapshot_id",
+    "applied_tariff_snapshot_id",
+    "original_amount_minor_units",
+    "vat_exclusive_basis_amount_minor_units",
+    "vat_amount_minor_units",
+    "vat_treatment_code_id",
+    "statutory_discount_amount_minor_units",
+    "final_payable_amount_minor_units",
+    "currency_code",
+    "applied_at",
+    "source_payment_channel_code_id",
+    "terminal_cash_tender_id",
+    "snapshot_created_at",
+    "created_at",
+    "updated_at"
+  ],
+  "primary_keys": [
+    "pk_fiscal_doc_applied_stat_facts"
+  ],
+  "foreign_keys": [
+    "fk_fiscal_doc_applied_stat_facts__document",
+    "fk_fiscal_doc_applied_stat_facts__entitlement",
+    "fk_fiscal_doc_applied_stat_facts__benefit",
+    "fk_fiscal_doc_applied_stat_facts__policy_basis",
+    "fk_fiscal_doc_applied_stat_facts__vat_treatment",
+    "fk_fiscal_doc_applied_stat_facts__source_channel"
+  ],
+  "unique_constraints": [
+    "uq_fiscal_doc_applied_stat_facts__document",
+    "uq_fiscal_doc_applied_stat_facts__decision",
+    "uq_fiscal_doc_applied_stat_facts__request_ref",
+    "uq_fiscal_doc_applied_stat_facts__application"
+  ],
+  "check_constraints": [
+    "ck_fiscal_doc_applied_stat_facts__policy_code",
+    "ck_fiscal_doc_applied_stat_facts__national_law",
+    "ck_fiscal_doc_applied_stat_facts__ordinance_ref",
+    "ck_fiscal_doc_applied_stat_facts__policy_ref",
+    "ck_fiscal_doc_applied_stat_facts__entitlement_code",
+    "ck_fiscal_doc_applied_stat_facts__benefit_code",
+    "ck_fiscal_doc_applied_stat_facts__policy_basis_code",
+    "ck_fiscal_doc_applied_stat_facts__vat_code",
+    "ck_fiscal_doc_applied_stat_facts__source_channel_code",
+    "ck_fiscal_doc_applied_stat_facts__tariff_refs",
+    "ck_fiscal_doc_applied_stat_facts__amounts",
+    "ck_fiscal_doc_applied_stat_facts__final_amount",
+    "ck_fiscal_doc_applied_stat_facts__currency",
+    "ck_fiscal_doc_applied_stat_facts__snapshot_time",
+    "ck_fiscal_doc_applied_stat_facts__audit_time"
+  ],
+  "indexes": [
+    "pk_fiscal_doc_applied_stat_facts",
+    "uq_fiscal_doc_applied_stat_facts__document",
+    "uq_fiscal_doc_applied_stat_facts__decision",
+    "uq_fiscal_doc_applied_stat_facts__request_ref",
+    "uq_fiscal_doc_applied_stat_facts__application",
+    "ix_fiscal_doc_applied_stat_facts__validation",
+    "ix_fiscal_doc_applied_stat_facts__parking_session",
+    "ix_fiscal_doc_applied_stat_facts__site",
+    "ix_fiscal_doc_applied_stat_facts__site_group",
+    "ix_fiscal_doc_applied_stat_facts__entitlement",
+    "ix_fiscal_doc_applied_stat_facts__benefit",
+    "ix_fiscal_doc_applied_stat_facts__policy_ref",
+    "ix_fiscal_doc_applied_stat_facts__policy_code",
+    "ix_fiscal_doc_applied_stat_facts__applied_tariff",
+    "ix_fiscal_doc_applied_stat_facts__vat_treatment",
+    "ix_fiscal_doc_applied_stat_facts__source_channel",
+    "ix_fiscal_doc_applied_stat_facts__terminal_cash"
+  ],
+  "functions": [
+    "pos.reject_applied_stat_facts_mutation"
+  ],
+  "triggers": [
+    "pos.fiscal_document_applied_statutory_facts.trg_fiscal_doc_applied_stat_facts_immutable"
+  ],
+  "prohibited_storage": [
+    "json",
+    "jsonb",
+    "xml",
+    "metadata",
+    "payload",
+    "request_body",
+    "evidence",
+    "beneficiary",
+    "reviewer",
+    "credential",
+    "authorization",
+    "password",
+    "secret"
+  ]
+}

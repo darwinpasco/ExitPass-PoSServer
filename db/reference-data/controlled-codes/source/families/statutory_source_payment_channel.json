@@ -1,0 +1,61 @@
+{
+  "schema_version": "1.0",
+  "source_key": "controlled_codes.statutory_source_payment_channel.v1",
+  "source_name": "Statutory Source Payment Channel Controlled Codes",
+  "source_description": "Source channel classifications for final Central PMS applied statutory fiscal facts.",
+  "governance_owner": "Engineering",
+  "source_ref": "ExitPass_POS_Server_Applied_Statutory_Fiscal_Facts_Contract_v1.0; db/controlled-code-source-values-slice-4",
+  "code_sets": [
+    {
+      "code_set_key": "statutory_source_payment_channel",
+      "display_name": "Statutory Source Payment Channel",
+      "description": "Controlled channel classifications. Values identify channel origin only and do not make WebPay, APT, or Operator Console statutory authorities.",
+      "governance_owner": "Engineering",
+      "source_ref": "ExitPass_POS_Server_Applied_Statutory_Fiscal_Facts_Contract_v1.0; db/controlled-code-source-values-slice-4",
+      "is_active": true,
+      "effective_start_at": "2026-07-30T00:00:00Z",
+      "effective_end_at": null,
+      "codes": [
+        {
+          "code_key": "WEBPAY",
+          "display_name": "WebPay",
+          "description": "Final applied statutory facts reached POS Server through the WebPay channel path.",
+          "source_ref": "db/controlled-code-source-values-slice-4",
+          "sort_order": 10,
+          "is_active": true,
+          "is_deprecated": false,
+          "effective_start_at": "2026-07-30T00:00:00Z",
+          "effective_end_at": null,
+          "replaced_by_code_key": null
+        },
+        {
+          "code_key": "ASSISTED_PAYMENT_TERMINAL",
+          "display_name": "Assisted Payment Terminal",
+          "description": "Final applied statutory facts reached POS Server through the APT channel path.",
+          "source_ref": "db/controlled-code-source-values-slice-4",
+          "sort_order": 20,
+          "is_active": true,
+          "is_deprecated": false,
+          "effective_start_at": "2026-07-30T00:00:00Z",
+          "effective_end_at": null,
+          "replaced_by_code_key": null
+        },
+        {
+          "code_key": "OPERATOR_CONSOLE",
+          "display_name": "Operator Console",
+          "description": "Final applied statutory facts reached POS Server through an operator-assisted channel path. Operator Console does not apply the payable basis.",
+          "source_ref": "db/controlled-code-source-values-slice-4",
+          "sort_order": 30,
+          "is_active": true,
+          "is_deprecated": false,
+          "effective_start_at": "2026-07-30T00:00:00Z",
+          "effective_end_at": null,
+          "replaced_by_code_key": null
+        }
+      ]
+    }
+  ],
+  "notes": [
+    "Central PMS remains the source authority for the final applied fiscal facts."
+  ]
+}

@@ -1,0 +1,97 @@
+{
+  "schema_version": "1.0",
+  "source_key": "controlled_codes.statutory_vat_treatment.v1",
+  "source_name": "Statutory VAT Treatment Controlled Codes",
+  "source_description": "VAT treatment classifications for final Central PMS applied statutory fiscal facts accepted by POS Server.",
+  "governance_owner": "Engineering",
+  "source_ref": "ExitPass_POS_Server_Applied_Statutory_Fiscal_Facts_Contract_v1.0; db/controlled-code-source-values-slice-4",
+  "code_sets": [
+    {
+      "code_set_key": "statutory_vat_treatment",
+      "display_name": "Statutory VAT Treatment",
+      "description": "Controlled VAT treatment classifications supplied by Central PMS. POS Server stores the supplied value and does not infer it from entitlement.",
+      "governance_owner": "Engineering",
+      "source_ref": "ExitPass_POS_Server_Applied_Statutory_Fiscal_Facts_Contract_v1.0; db/controlled-code-source-values-slice-4",
+      "is_active": true,
+      "effective_start_at": "2026-07-30T00:00:00Z",
+      "effective_end_at": null,
+      "codes": [
+        {
+          "code_key": "VAT_EXEMPT",
+          "display_name": "VAT Exempt",
+          "description": "Central PMS supplied VAT-exempt treatment.",
+          "source_ref": "db/controlled-code-source-values-slice-4",
+          "sort_order": 10,
+          "is_active": true,
+          "is_deprecated": false,
+          "effective_start_at": "2026-07-30T00:00:00Z",
+          "effective_end_at": null,
+          "replaced_by_code_key": null
+        },
+        {
+          "code_key": "VAT_EXCLUSIVE",
+          "display_name": "VAT Exclusive",
+          "description": "Central PMS supplied VAT-exclusive treatment.",
+          "source_ref": "db/controlled-code-source-values-slice-4",
+          "sort_order": 20,
+          "is_active": true,
+          "is_deprecated": false,
+          "effective_start_at": "2026-07-30T00:00:00Z",
+          "effective_end_at": null,
+          "replaced_by_code_key": null
+        },
+        {
+          "code_key": "VAT_INCLUSIVE_NO_EXEMPTION",
+          "display_name": "VAT Inclusive No Exemption",
+          "description": "Central PMS supplied VAT-inclusive treatment with no VAT exemption.",
+          "source_ref": "db/controlled-code-source-values-slice-4",
+          "sort_order": 30,
+          "is_active": true,
+          "is_deprecated": false,
+          "effective_start_at": "2026-07-30T00:00:00Z",
+          "effective_end_at": null,
+          "replaced_by_code_key": null
+        },
+        {
+          "code_key": "NON_VAT",
+          "display_name": "Non VAT",
+          "description": "Central PMS supplied non-VAT treatment.",
+          "source_ref": "db/controlled-code-source-values-slice-4",
+          "sort_order": 40,
+          "is_active": true,
+          "is_deprecated": false,
+          "effective_start_at": "2026-07-30T00:00:00Z",
+          "effective_end_at": null,
+          "replaced_by_code_key": null
+        },
+        {
+          "code_key": "ZERO_RATED",
+          "display_name": "Zero Rated",
+          "description": "Central PMS supplied zero-rated treatment.",
+          "source_ref": "db/controlled-code-source-values-slice-4",
+          "sort_order": 50,
+          "is_active": true,
+          "is_deprecated": false,
+          "effective_start_at": "2026-07-30T00:00:00Z",
+          "effective_end_at": null,
+          "replaced_by_code_key": null
+        },
+        {
+          "code_key": "NOT_APPLICABLE",
+          "display_name": "Not Applicable",
+          "description": "Central PMS supplied not-applicable VAT treatment.",
+          "source_ref": "db/controlled-code-source-values-slice-4",
+          "sort_order": 60,
+          "is_active": true,
+          "is_deprecated": false,
+          "effective_start_at": "2026-07-30T00:00:00Z",
+          "effective_end_at": null,
+          "replaced_by_code_key": null
+        }
+      ]
+    }
+  ],
+  "notes": [
+    "POS Server must not infer VAT treatment from entitlement type."
+  ]
+}

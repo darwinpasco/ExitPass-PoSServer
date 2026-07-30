@@ -1,0 +1,49 @@
+{
+  "schema_version": "1.0",
+  "source_key": "controlled_codes.statutory_entitlement_type.v1",
+  "source_name": "Statutory Entitlement Type Controlled Codes",
+  "source_description": "Entitlement classifications for final Central PMS applied statutory fiscal facts accepted by POS Server.",
+  "governance_owner": "Engineering",
+  "source_ref": "ExitPass_POS_Server_Applied_Statutory_Fiscal_Facts_Contract_v1.0; db/controlled-code-source-values-slice-4",
+  "code_sets": [
+    {
+      "code_set_key": "statutory_entitlement_type",
+      "display_name": "Statutory Entitlement Type",
+      "description": "Controlled entitlement classifications. Values do not approve eligibility and do not represent beneficiary identity.",
+      "governance_owner": "Engineering",
+      "source_ref": "ExitPass_POS_Server_Applied_Statutory_Fiscal_Facts_Contract_v1.0; db/controlled-code-source-values-slice-4",
+      "is_active": true,
+      "effective_start_at": "2026-07-30T00:00:00Z",
+      "effective_end_at": null,
+      "codes": [
+        {
+          "code_key": "SENIOR_CITIZEN",
+          "display_name": "Senior Citizen",
+          "description": "Central PMS supplied entitlement classification for a final applied statutory fiscal fact. No raw identity number is stored.",
+          "source_ref": "db/controlled-code-source-values-slice-4",
+          "sort_order": 10,
+          "is_active": true,
+          "is_deprecated": false,
+          "effective_start_at": "2026-07-30T00:00:00Z",
+          "effective_end_at": null,
+          "replaced_by_code_key": null
+        },
+        {
+          "code_key": "PWD",
+          "display_name": "PWD",
+          "description": "Central PMS supplied entitlement classification for a final applied statutory fiscal fact. No raw identity number is stored.",
+          "source_ref": "db/controlled-code-source-values-slice-4",
+          "sort_order": 20,
+          "is_active": true,
+          "is_deprecated": false,
+          "effective_start_at": "2026-07-30T00:00:00Z",
+          "effective_end_at": null,
+          "replaced_by_code_key": null
+        }
+      ]
+    }
+  ],
+  "notes": [
+    "Unknown entitlement values must fail closed until a future governed compatibility slice approves them."
+  ]
+}

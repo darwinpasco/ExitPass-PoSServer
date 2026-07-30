@@ -192,6 +192,7 @@ For each mode, the script writes:
 - Static checks are conservative text and metadata checks. They do not replace applying SQL to PostgreSQL.
 - Identifier-length checks cover detectable explicit identifiers such as constraint and object names.
 - Inventory checks compare expected schemas/tables and report functions, triggers, extensions, and sequences; they do not validate every column definition yet.
+- Inventory checks allow only functions and triggers explicitly listed in `db/validation/pos_expected_inventory.json`; all other functions and triggers remain prohibited drift.
 - Drift checks report drift only. They never update repository SQL or validation configuration.
 - Rebuild mode applies SQL to the provided target but does not create/drop the database.
 - ControlledCodeLoad mode validates controlled-code reference data by rebuilding schema, applying generated SQL files in deterministic filename order, repeating the latest generated SQL file for idempotency, and comparing loaded code-set/code-key inventory to JSON source.

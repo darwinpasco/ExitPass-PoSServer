@@ -1,0 +1,145 @@
+{
+  "schema_version": "1.0",
+  "source_key": "controlled_codes.statutory_validation_error_code.v1",
+  "source_name": "Statutory Validation Error Code Controlled Codes",
+  "source_description": "Safe validation error codes reserved for the later applied statutory fiscal facts runtime.",
+  "governance_owner": "Engineering",
+  "source_ref": "ExitPass_POS_Server_Applied_Statutory_Fiscal_Facts_Implementation_Handoff_v1.0; db/controlled-code-source-values-slice-4",
+  "code_sets": [
+    {
+      "code_set_key": "statutory_validation_error_code",
+      "display_name": "Statutory Validation Error Code",
+      "description": "Safe runtime validation code posture. Values do not contain beneficiary identity, evidence, SQL details, or stack traces.",
+      "governance_owner": "Engineering",
+      "source_ref": "ExitPass_POS_Server_Applied_Statutory_Fiscal_Facts_Implementation_Handoff_v1.0; db/controlled-code-source-values-slice-4",
+      "is_active": true,
+      "effective_start_at": "2026-07-30T00:00:00Z",
+      "effective_end_at": null,
+      "codes": [
+        {
+          "code_key": "applied_statutory_facts_required",
+          "display_name": "Applied Statutory Facts Required",
+          "description": "A statutory fiscal request requires the applied statutory fiscal facts object.",
+          "source_ref": "db/controlled-code-source-values-slice-4",
+          "sort_order": 10,
+          "is_active": true,
+          "is_deprecated": false,
+          "effective_start_at": "2026-07-30T00:00:00Z",
+          "effective_end_at": null,
+          "replaced_by_code_key": null
+        },
+        {
+          "code_key": "applied_statutory_facts_not_final",
+          "display_name": "Applied Statutory Facts Not Final",
+          "description": "The statutory facts do not represent a final Central PMS payment-time application.",
+          "source_ref": "db/controlled-code-source-values-slice-4",
+          "sort_order": 20,
+          "is_active": true,
+          "is_deprecated": false,
+          "effective_start_at": "2026-07-30T00:00:00Z",
+          "effective_end_at": null,
+          "replaced_by_code_key": null
+        },
+        {
+          "code_key": "applied_statutory_application_reference_required",
+          "display_name": "Applied Statutory Application Reference Required",
+          "description": "A final payable-basis application command reference is required.",
+          "source_ref": "db/controlled-code-source-values-slice-4",
+          "sort_order": 30,
+          "is_active": true,
+          "is_deprecated": false,
+          "effective_start_at": "2026-07-30T00:00:00Z",
+          "effective_end_at": null,
+          "replaced_by_code_key": null
+        },
+        {
+          "code_key": "applied_statutory_validation_reference_required",
+          "display_name": "Applied Statutory Validation Reference Required",
+          "description": "A statutory validation reference is required.",
+          "source_ref": "db/controlled-code-source-values-slice-4",
+          "sort_order": 40,
+          "is_active": true,
+          "is_deprecated": false,
+          "effective_start_at": "2026-07-30T00:00:00Z",
+          "effective_end_at": null,
+          "replaced_by_code_key": null
+        },
+        {
+          "code_key": "applied_statutory_unsupported_entitlement_type",
+          "display_name": "Applied Statutory Unsupported Entitlement Type",
+          "description": "The entitlement classification is unsupported for this contract version.",
+          "source_ref": "db/controlled-code-source-values-slice-4",
+          "sort_order": 50,
+          "is_active": true,
+          "is_deprecated": false,
+          "effective_start_at": "2026-07-30T00:00:00Z",
+          "effective_end_at": null,
+          "replaced_by_code_key": null
+        },
+        {
+          "code_key": "applied_statutory_unsupported_benefit_classification",
+          "display_name": "Applied Statutory Unsupported Benefit Classification",
+          "description": "The benefit classification is unsupported for this contract version.",
+          "source_ref": "db/controlled-code-source-values-slice-4",
+          "sort_order": 60,
+          "is_active": true,
+          "is_deprecated": false,
+          "effective_start_at": "2026-07-30T00:00:00Z",
+          "effective_end_at": null,
+          "replaced_by_code_key": null
+        },
+        {
+          "code_key": "applied_statutory_unsupported_vat_treatment",
+          "display_name": "Applied Statutory Unsupported VAT Treatment",
+          "description": "The VAT treatment classification is unsupported for this contract version.",
+          "source_ref": "db/controlled-code-source-values-slice-4",
+          "sort_order": 70,
+          "is_active": true,
+          "is_deprecated": false,
+          "effective_start_at": "2026-07-30T00:00:00Z",
+          "effective_end_at": null,
+          "replaced_by_code_key": null
+        },
+        {
+          "code_key": "applied_statutory_currency_mismatch",
+          "display_name": "Applied Statutory Currency Mismatch",
+          "description": "The statutory currency does not match the fiscal request currency posture.",
+          "source_ref": "db/controlled-code-source-values-slice-4",
+          "sort_order": 80,
+          "is_active": true,
+          "is_deprecated": false,
+          "effective_start_at": "2026-07-30T00:00:00Z",
+          "effective_end_at": null,
+          "replaced_by_code_key": null
+        },
+        {
+          "code_key": "applied_statutory_total_mismatch",
+          "display_name": "Applied Statutory Total Mismatch",
+          "description": "The statutory monetary values do not reconcile with the fiscal request totals.",
+          "source_ref": "db/controlled-code-source-values-slice-4",
+          "sort_order": 90,
+          "is_active": true,
+          "is_deprecated": false,
+          "effective_start_at": "2026-07-30T00:00:00Z",
+          "effective_end_at": null,
+          "replaced_by_code_key": null
+        },
+        {
+          "code_key": "applied_statutory_prohibited_privacy_field",
+          "display_name": "Applied Statutory Prohibited Privacy Field",
+          "description": "The request contains prohibited statutory identity, evidence, credential, or reviewer content.",
+          "source_ref": "db/controlled-code-source-values-slice-4",
+          "sort_order": 100,
+          "is_active": true,
+          "is_deprecated": false,
+          "effective_start_at": "2026-07-30T00:00:00Z",
+          "effective_end_at": null,
+          "replaced_by_code_key": null
+        }
+      ]
+    }
+  ],
+  "notes": [
+    "These values are safe error-code posture only and do not implement runtime behavior in this schema slice."
+  ]
+}

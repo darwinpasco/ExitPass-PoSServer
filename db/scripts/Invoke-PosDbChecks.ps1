@@ -713,6 +713,10 @@ function Compare-Inventory {
     $actualSchemas = @($Inventory.schemas | Sort-Object)
     $expectedTables = @($expected.expected_tables | Sort-Object)
     $actualTables = @($Inventory.tables | Sort-Object)
+    $expectedFunctions = @($expected.expected_functions | Sort-Object)
+    $actualFunctions = @($Inventory.functions | Sort-Object)
+    $expectedTriggers = @($expected.expected_triggers | Sort-Object)
+    $actualTriggers = @($Inventory.triggers | Sort-Object)
 
     $missingSchemas = @(Compare-Object -ReferenceObject $expectedSchemas -DifferenceObject $actualSchemas |
         Where-Object { $_.SideIndicator -eq '<=' } |
@@ -724,6 +728,18 @@ function Compare-Inventory {
         Where-Object { $_.SideIndicator -eq '<=' } |
         ForEach-Object { $_.InputObject })
     $unexpectedTables = @(Compare-Object -ReferenceObject $expectedTables -DifferenceObject $actualTables |
+        Where-Object { $_.SideIndicator -eq '=>' } |
+        ForEach-Object { $_.InputObject })
+    $missingFunctions = @(Compare-Object -ReferenceObject $expectedFunctions -DifferenceObject $actualFunctions |
+        Where-Object { $_.SideIndicator -eq '<=' } |
+        ForEach-Object { $_.InputObject })
+    $unexpectedFunctions = @(Compare-Object -ReferenceObject $expectedFunctions -DifferenceObject $actualFunctions |
+        Where-Object { $_.SideIndicator -eq '=>' } |
+        ForEach-Object { $_.InputObject })
+    $missingTriggers = @(Compare-Object -ReferenceObject $expectedTriggers -DifferenceObject $actualTriggers |
+        Where-Object { $_.SideIndicator -eq '<=' } |
+        ForEach-Object { $_.InputObject })
+    $unexpectedTriggers = @(Compare-Object -ReferenceObject $expectedTriggers -DifferenceObject $actualTriggers |
         Where-Object { $_.SideIndicator -eq '=>' } |
         ForEach-Object { $_.InputObject })
 
@@ -740,8 +756,14 @@ function Compare-Inventory {
         unexpected_tables = $unexpectedTables
         constraints_count = @($Inventory.constraints).Count
         indexes_count = @($Inventory.indexes).Count
+        expected_functions = $expectedFunctions
         functions = @($Inventory.functions)
+        missing_functions = $missingFunctions
+        unexpected_functions = $unexpectedFunctions
+        expected_triggers = $expectedTriggers
         triggers = @($Inventory.triggers)
+        missing_triggers = $missingTriggers
+        unexpected_triggers = $unexpectedTriggers
         extensions = @($Inventory.extensions)
         non_default_extensions = $nonDefaultExtensions
         sequences = @($Inventory.sequences)
@@ -752,8 +774,10 @@ function Compare-Inventory {
     foreach ($schema in $unexpectedSchemas) { Add-ValidationError $Result "$ModeName drift: unexpected schema $schema." }
     foreach ($table in $missingTables) { Add-ValidationError $Result "$ModeName drift: missing expected table $table." }
     foreach ($table in $unexpectedTables) { Add-ValidationError $Result "$ModeName drift: unexpected table $table." }
-    foreach ($function in @($Inventory.functions)) { Add-ValidationError $Result "$ModeName prohibited object: function $function exists in pos schema." }
-    foreach ($trigger in @($Inventory.triggers)) { Add-ValidationError $Result "$ModeName prohibited object: trigger $trigger exists in pos schema." }
+    foreach ($function in $missingFunctions) { Add-ValidationError $Result "$ModeName drift: missing expected function $function." }
+    foreach ($function in $unexpectedFunctions) { Add-ValidationError $Result "$ModeName prohibited object: unexpected function $function exists in pos schema." }
+    foreach ($trigger in $missingTriggers) { Add-ValidationError $Result "$ModeName drift: missing expected trigger $trigger." }
+    foreach ($trigger in $unexpectedTriggers) { Add-ValidationError $Result "$ModeName prohibited object: unexpected trigger $trigger exists in pos schema." }
     foreach ($sequence in @($Inventory.sequences)) { Add-ValidationError $Result "$ModeName prohibited object: sequence $sequence exists in pos schema." }
     foreach ($extension in $nonDefaultExtensions) { Add-ValidationError $Result "$ModeName prohibited object: non-default extension $extension exists in database." }
 }

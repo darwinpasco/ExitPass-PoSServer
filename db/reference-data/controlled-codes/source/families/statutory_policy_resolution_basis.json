@@ -1,0 +1,73 @@
+{
+  "schema_version": "1.0",
+  "source_key": "controlled_codes.statutory_policy_resolution_basis.v1",
+  "source_name": "Statutory Policy Resolution Basis Controlled Codes",
+  "source_description": "Safe policy-resolution basis classifications for final Central PMS applied statutory fiscal facts.",
+  "governance_owner": "Engineering",
+  "source_ref": "ExitPass_POS_Server_Applied_Statutory_Fiscal_Facts_Contract_v1.0; db/controlled-code-source-values-slice-4",
+  "code_sets": [
+    {
+      "code_set_key": "statutory_policy_resolution_basis",
+      "display_name": "Statutory Policy Resolution Basis",
+      "description": "Controlled source category for the policy reference resolved by Central PMS. Values do not store raw legal text or authorize POS Server policy selection.",
+      "governance_owner": "Engineering",
+      "source_ref": "ExitPass_POS_Server_Applied_Statutory_Fiscal_Facts_Contract_v1.0; db/controlled-code-source-values-slice-4",
+      "is_active": true,
+      "effective_start_at": "2026-07-30T00:00:00Z",
+      "effective_end_at": null,
+      "codes": [
+        {
+          "code_key": "NATIONAL_LAW",
+          "display_name": "National Law",
+          "description": "Central PMS resolved the benefit from a safe national-law policy reference.",
+          "source_ref": "db/controlled-code-source-values-slice-4",
+          "sort_order": 10,
+          "is_active": true,
+          "is_deprecated": false,
+          "effective_start_at": "2026-07-30T00:00:00Z",
+          "effective_end_at": null,
+          "replaced_by_code_key": null
+        },
+        {
+          "code_key": "LOCAL_ORDINANCE",
+          "display_name": "Local Ordinance",
+          "description": "Central PMS resolved the benefit from a safe local ordinance reference.",
+          "source_ref": "db/controlled-code-source-values-slice-4",
+          "sort_order": 20,
+          "is_active": true,
+          "is_deprecated": false,
+          "effective_start_at": "2026-07-30T00:00:00Z",
+          "effective_end_at": null,
+          "replaced_by_code_key": null
+        },
+        {
+          "code_key": "MIXED",
+          "display_name": "Mixed",
+          "description": "Central PMS resolved the benefit from both national and local safe policy references.",
+          "source_ref": "db/controlled-code-source-values-slice-4",
+          "sort_order": 30,
+          "is_active": true,
+          "is_deprecated": false,
+          "effective_start_at": "2026-07-30T00:00:00Z",
+          "effective_end_at": null,
+          "replaced_by_code_key": null
+        },
+        {
+          "code_key": "INTERNAL_POLICY_REFERENCE",
+          "display_name": "Internal Policy Reference",
+          "description": "Central PMS supplied a safe internal policy reference for audit and reconciliation.",
+          "source_ref": "db/controlled-code-source-values-slice-4",
+          "sort_order": 40,
+          "is_active": true,
+          "is_deprecated": false,
+          "effective_start_at": "2026-07-30T00:00:00Z",
+          "effective_end_at": null,
+          "replaced_by_code_key": null
+        }
+      ]
+    }
+  ],
+  "notes": [
+    "Raw ordinance or policy text remains prohibited."
+  ]
+}
