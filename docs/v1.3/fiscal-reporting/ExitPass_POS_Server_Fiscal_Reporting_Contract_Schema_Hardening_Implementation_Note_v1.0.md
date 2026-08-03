@@ -79,3 +79,17 @@ The final BIR formula/layout, Annex E form/profile, POSLog mapping, refund/retur
 ## 10. Exclusions
 
 No C# runtime, endpoint, renderer, printer, reprint, export generator, EJ writer, POSLog writer, report generation, fiscal-period close, controlled UAT, or production rollout is included.
+
+## 11. Z-006B1 Timestamp Constraint Correction
+
+Z-006B direct PostgreSQL proof found that the original `ck_x_z_reports__timestamps` rule required `generated_at >= period_end_at` for both report kinds. That incorrectly rejected an interim X observation while its reporting period remained `OPEN`.
+
+Z-006B1 preserves the constraint name and branches on the stable governed `fiscal_report_kind` identifiers. X Reading (`5dc3cc94-b3ab-5582-a598-e779871fc3e2`) now requires `generated_at >= period_start_at`; Z Reading (`1c628bc2-49c3-53e8-ae83-2082bcf28467`) still requires `generated_at >= period_end_at`. The existing kind-family check rejects every other discriminator in `pos.x_z_reports`.
+
+The correction changes no report lifecycle, period state, counter, GTA, sequence, fiscal-document, BIR, Annex E, child-table, retention, or immutability behavior. It implements no X or Z runtime and authorizes no report generation or period close.
+
+Validation used PostgreSQL 16.14 in disposable container `posserver-z006b1-pg-20260803-a1` on loopback port `55431`, without a persistent volume. Static, controlled-code load, reporting-schema proof, and complete validation modes passed. The focused proof accepted X at period start, during an `OPEN` period, immediately before period end, at period end, and after period end; it rejected X before period start and Z before period end; it accepted Z at and after period end. Wrong-family kind rejection, one-Z-per-period uniqueness, X/Z immutability, protected fiscal-state non-mutation, and transaction rollback also passed.
+
+Upgrade proof rebuilt exact `origin/dev`, committed one valid X and one valid Z baseline snapshot, applied the corrected state SQL, and replayed it a second time. Both rows remained unchanged. Clean and upgraded schema fingerprints matched across 893 columns, 689 constraints, 145 indexes, and 11 triggers. Expected inventory and drift checks passed. The Release build completed with zero warnings and errors, and all 312 tests passed with no failures or skips.
+
+The changed schema, contract, proof, and validation files contain no credential, connection string, private key, beneficiary identity, statutory identifier, evidence payload, reviewer identity, or authorization-header value. All synthetic proof rows are transactionally rolled back; all disposable validation resources are removed after validation.

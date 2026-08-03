@@ -50,9 +50,13 @@ The first-class snapshot stores document count, gross/net, VATable, VAT, VAT-exe
 
 An X Reading is read-only. It may create one immutable observation per operation key. Exact operation-key/hash replay returns the same snapshot; changed semantics conflict. A new operation key may create a later observation of the same open period. X never closes a period or advances reset, Z, sequence, or GTA state.
 
+`generated_at` is the immutable X observation time. It must be at or after `period_start_at`, may be before, at, or after `period_end_at`, and does not require the parent reporting period to leave `OPEN`.
+
 ## 6. Z Close Identity and Idempotency
 
 One fiscal reporting period can own at most one Z snapshot. Exact operation-key/hash replay must return it. Changed semantics or a second close identity must conflict without mutation. Future runtime must atomically commit the period close, Z snapshot, ranges/gaps, counter/GTA snapshot, and audit evidence. No Z close runtime exists in this slice.
+
+`generated_at` for a Z Reading must be at or after `period_end_at`. This period-final boundary remains distinct from the interim X observation rule.
 
 ## 7. BIR and Annex E
 

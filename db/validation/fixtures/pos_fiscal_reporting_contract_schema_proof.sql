@@ -625,6 +625,291 @@ BEGIN
 END;
 $$;
 
+SAVEPOINT x_z_timestamp_constraint_probe;
+
+INSERT INTO pos.fiscal_reporting_periods (
+    fiscal_reporting_period_id, fiscal_reporting_contract_version_id, site_pos_server_id,
+    fiscal_identity_id, period_status_code_id, business_day_date, period_start_at, period_end_at,
+    reporting_timezone_name, business_day_cutoff_local_time, currency_code, period_sequence,
+    opened_at, closing_started_at, closed_at, created_by_ref, updated_by_ref
+) VALUES
+    (
+        '46000000-0000-4000-8000-000000000521', 'f6766f48-62f0-513f-b9eb-e61c2f3e8c66',
+        '46000000-0000-4000-8000-000000000301', '46000000-0000-4000-8000-000000000302',
+        '1a6f7021-bc84-5c01-afaa-c5d6685633c8', '2026-08-02',
+        '2026-08-02T00:00:00Z', '2026-08-03T00:00:00Z', 'Etc/UTC', '00:00:00',
+        'PHP', 2, '2026-08-02T00:00:00Z', NULL, NULL, 'Z-006B1-PROOF', 'Z-006B1-PROOF'
+    ),
+    (
+        '46000000-0000-4000-8000-000000000522', 'f6766f48-62f0-513f-b9eb-e61c2f3e8c66',
+        '46000000-0000-4000-8000-000000000301', '46000000-0000-4000-8000-000000000302',
+        'af7ee931-a023-507e-81a4-17adf047eb94', '2026-08-03',
+        '2026-08-03T00:00:00Z', '2026-08-04T00:00:00Z', 'Etc/UTC', '00:00:00',
+        'PHP', 3, '2026-08-03T00:00:00Z', '2026-08-04T00:00:00Z',
+        '2026-08-04T00:00:01Z', 'Z-006B1-PROOF', 'Z-006B1-PROOF'
+    ),
+    (
+        '46000000-0000-4000-8000-000000000523', 'f6766f48-62f0-513f-b9eb-e61c2f3e8c66',
+        '46000000-0000-4000-8000-000000000301', '46000000-0000-4000-8000-000000000302',
+        'af7ee931-a023-507e-81a4-17adf047eb94', '2026-08-04',
+        '2026-08-04T00:00:00Z', '2026-08-05T00:00:00Z', 'Etc/UTC', '00:00:00',
+        'PHP', 4, '2026-08-04T00:00:00Z', '2026-08-05T00:00:00Z',
+        '2026-08-05T00:00:01Z', 'Z-006B1-PROOF', 'Z-006B1-PROOF'
+    ),
+    (
+        '46000000-0000-4000-8000-000000000524', 'f6766f48-62f0-513f-b9eb-e61c2f3e8c66',
+        '46000000-0000-4000-8000-000000000301', '46000000-0000-4000-8000-000000000302',
+        'af7ee931-a023-507e-81a4-17adf047eb94', '2026-08-05',
+        '2026-08-05T00:00:00Z', '2026-08-06T00:00:00Z', 'Etc/UTC', '00:00:00',
+        'PHP', 5, '2026-08-05T00:00:00Z', '2026-08-06T00:00:00Z',
+        '2026-08-06T00:00:01Z', 'Z-006B1-PROOF', 'Z-006B1-PROOF'
+    );
+
+INSERT INTO pos.fiscal_report_requests (
+    fiscal_report_request_id, fiscal_reporting_contract_version_id, fiscal_reporting_period_id,
+    site_pos_server_id, report_type_code_id, report_status_code_id, operation_idempotency_key,
+    semantic_request_hash, semantic_hash_version, business_day_date, requested_at,
+    requested_by_ref, service_identity_ref
+) VALUES
+    ('46000000-0000-4000-8000-000000000681', 'f6766f48-62f0-513f-b9eb-e61c2f3e8c66', '46000000-0000-4000-8000-000000000521', '46000000-0000-4000-8000-000000000301', '5dc3cc94-b3ab-5582-a598-e779871fc3e2', '84ef4d12-b3a1-5385-88b1-3a3eadeb8a04', 'Z-006B1-X-AT-START', repeat('4', 64), 'pos-server-fiscal-report-request:sha256:v1', '2026-08-02', '2026-08-02T00:00:00Z', 'Z-006B1-PROOF', 'Z-006B1-PROOF-SERVICE'),
+    ('46000000-0000-4000-8000-000000000682', 'f6766f48-62f0-513f-b9eb-e61c2f3e8c66', '46000000-0000-4000-8000-000000000521', '46000000-0000-4000-8000-000000000301', '5dc3cc94-b3ab-5582-a598-e779871fc3e2', '84ef4d12-b3a1-5385-88b1-3a3eadeb8a04', 'Z-006B1-X-DURING-OPEN', repeat('5', 64), 'pos-server-fiscal-report-request:sha256:v1', '2026-08-02', '2026-08-02T12:00:00Z', 'Z-006B1-PROOF', 'Z-006B1-PROOF-SERVICE'),
+    ('46000000-0000-4000-8000-000000000683', 'f6766f48-62f0-513f-b9eb-e61c2f3e8c66', '46000000-0000-4000-8000-000000000521', '46000000-0000-4000-8000-000000000301', '5dc3cc94-b3ab-5582-a598-e779871fc3e2', '84ef4d12-b3a1-5385-88b1-3a3eadeb8a04', 'Z-006B1-X-BEFORE-END', repeat('6', 64), 'pos-server-fiscal-report-request:sha256:v1', '2026-08-02', '2026-08-02T23:59:59Z', 'Z-006B1-PROOF', 'Z-006B1-PROOF-SERVICE'),
+    ('46000000-0000-4000-8000-000000000684', 'f6766f48-62f0-513f-b9eb-e61c2f3e8c66', '46000000-0000-4000-8000-000000000521', '46000000-0000-4000-8000-000000000301', '5dc3cc94-b3ab-5582-a598-e779871fc3e2', '84ef4d12-b3a1-5385-88b1-3a3eadeb8a04', 'Z-006B1-X-AT-END', repeat('7', 64), 'pos-server-fiscal-report-request:sha256:v1', '2026-08-02', '2026-08-03T00:00:00Z', 'Z-006B1-PROOF', 'Z-006B1-PROOF-SERVICE'),
+    ('46000000-0000-4000-8000-000000000685', 'f6766f48-62f0-513f-b9eb-e61c2f3e8c66', '46000000-0000-4000-8000-000000000521', '46000000-0000-4000-8000-000000000301', '5dc3cc94-b3ab-5582-a598-e779871fc3e2', '84ef4d12-b3a1-5385-88b1-3a3eadeb8a04', 'Z-006B1-X-AFTER-END', repeat('8', 64), 'pos-server-fiscal-report-request:sha256:v1', '2026-08-02', '2026-08-03T00:00:01Z', 'Z-006B1-PROOF', 'Z-006B1-PROOF-SERVICE'),
+    ('46000000-0000-4000-8000-000000000686', 'f6766f48-62f0-513f-b9eb-e61c2f3e8c66', '46000000-0000-4000-8000-000000000521', '46000000-0000-4000-8000-000000000301', '5dc3cc94-b3ab-5582-a598-e779871fc3e2', '84ef4d12-b3a1-5385-88b1-3a3eadeb8a04', 'Z-006B1-X-BEFORE-START', repeat('9', 64), 'pos-server-fiscal-report-request:sha256:v1', '2026-08-02', '2026-08-01T23:59:59Z', 'Z-006B1-PROOF', 'Z-006B1-PROOF-SERVICE'),
+    ('46000000-0000-4000-8000-000000000687', 'f6766f48-62f0-513f-b9eb-e61c2f3e8c66', '46000000-0000-4000-8000-000000000522', '46000000-0000-4000-8000-000000000301', '1c628bc2-49c3-53e8-ae83-2082bcf28467', '84ef4d12-b3a1-5385-88b1-3a3eadeb8a04', 'Z-006B1-Z-BEFORE-END', repeat('a', 64), 'pos-server-fiscal-report-request:sha256:v1', '2026-08-03', '2026-08-03T23:59:59Z', 'Z-006B1-PROOF', 'Z-006B1-PROOF-SERVICE'),
+    ('46000000-0000-4000-8000-000000000688', 'f6766f48-62f0-513f-b9eb-e61c2f3e8c66', '46000000-0000-4000-8000-000000000523', '46000000-0000-4000-8000-000000000301', '1c628bc2-49c3-53e8-ae83-2082bcf28467', '84ef4d12-b3a1-5385-88b1-3a3eadeb8a04', 'Z-006B1-Z-AT-END', repeat('b', 64), 'pos-server-fiscal-report-request:sha256:v1', '2026-08-04', '2026-08-05T00:00:00Z', 'Z-006B1-PROOF', 'Z-006B1-PROOF-SERVICE'),
+    ('46000000-0000-4000-8000-000000000689', 'f6766f48-62f0-513f-b9eb-e61c2f3e8c66', '46000000-0000-4000-8000-000000000524', '46000000-0000-4000-8000-000000000301', '1c628bc2-49c3-53e8-ae83-2082bcf28467', '84ef4d12-b3a1-5385-88b1-3a3eadeb8a04', 'Z-006B1-Z-AFTER-END', repeat('c', 64), 'pos-server-fiscal-report-request:sha256:v1', '2026-08-05', '2026-08-06T00:00:01Z', 'Z-006B1-PROOF', 'Z-006B1-PROOF-SERVICE'),
+    ('46000000-0000-4000-8000-000000000690', 'f6766f48-62f0-513f-b9eb-e61c2f3e8c66', '46000000-0000-4000-8000-000000000523', '46000000-0000-4000-8000-000000000301', '1c628bc2-49c3-53e8-ae83-2082bcf28467', '84ef4d12-b3a1-5385-88b1-3a3eadeb8a04', 'Z-006B1-Z-DUPLICATE', repeat('d', 64), 'pos-server-fiscal-report-request:sha256:v1', '2026-08-04', '2026-08-05T00:00:01Z', 'Z-006B1-PROOF', 'Z-006B1-PROOF-SERVICE');
+
+CREATE TEMP TABLE x_z_timestamp_no_mutation_manifest ON COMMIT DROP AS
+SELECT
+    (SELECT count(*) FROM pos.fiscal_documents) AS fiscal_document_count,
+    (SELECT count(*) FROM pos.fiscal_document_status_history) AS fiscal_status_history_count,
+    (SELECT count(*) FROM pos.fiscal_sequence_states) AS fiscal_sequence_state_count,
+    (SELECT count(*) FROM pos.fiscal_counter_states) AS fiscal_counter_state_count,
+    (SELECT count(*) FROM pos.fiscal_state_snapshots) AS fiscal_state_snapshot_count,
+    (SELECT count(*) FROM pos.fiscal_z_counter_snapshots) AS fiscal_z_counter_snapshot_count,
+    (SELECT count(*) FROM pos.reprint_requests) AS reprint_request_count,
+    (SELECT count(*) FROM pos.reprint_output_refs) AS reprint_output_ref_count;
+
+WITH cases(
+    x_z_report_id, fiscal_report_request_id, fiscal_reporting_period_id,
+    report_kind_code_id, report_number, generated_at, committed_at
+) AS (VALUES
+    ('46000000-0000-4000-8000-000000000781'::uuid, '46000000-0000-4000-8000-000000000681'::uuid, '46000000-0000-4000-8000-000000000521'::uuid, '5dc3cc94-b3ab-5582-a598-e779871fc3e2'::uuid, 'Z-006B1-X-AT-START', '2026-08-02T00:00:00Z'::timestamptz, '2026-08-02T00:00:01Z'::timestamptz),
+    ('46000000-0000-4000-8000-000000000782'::uuid, '46000000-0000-4000-8000-000000000682'::uuid, '46000000-0000-4000-8000-000000000521'::uuid, '5dc3cc94-b3ab-5582-a598-e779871fc3e2'::uuid, 'Z-006B1-X-DURING-OPEN', '2026-08-02T12:00:00Z'::timestamptz, '2026-08-02T12:00:01Z'::timestamptz),
+    ('46000000-0000-4000-8000-000000000783'::uuid, '46000000-0000-4000-8000-000000000683'::uuid, '46000000-0000-4000-8000-000000000521'::uuid, '5dc3cc94-b3ab-5582-a598-e779871fc3e2'::uuid, 'Z-006B1-X-BEFORE-END', '2026-08-02T23:59:59.999999Z'::timestamptz, '2026-08-03T00:00:00Z'::timestamptz),
+    ('46000000-0000-4000-8000-000000000784'::uuid, '46000000-0000-4000-8000-000000000684'::uuid, '46000000-0000-4000-8000-000000000521'::uuid, '5dc3cc94-b3ab-5582-a598-e779871fc3e2'::uuid, 'Z-006B1-X-AT-END', '2026-08-03T00:00:00Z'::timestamptz, '2026-08-03T00:00:01Z'::timestamptz),
+    ('46000000-0000-4000-8000-000000000785'::uuid, '46000000-0000-4000-8000-000000000685'::uuid, '46000000-0000-4000-8000-000000000521'::uuid, '5dc3cc94-b3ab-5582-a598-e779871fc3e2'::uuid, 'Z-006B1-X-AFTER-END', '2026-08-03T00:00:01Z'::timestamptz, '2026-08-03T00:00:02Z'::timestamptz),
+    ('46000000-0000-4000-8000-000000000788'::uuid, '46000000-0000-4000-8000-000000000688'::uuid, '46000000-0000-4000-8000-000000000523'::uuid, '1c628bc2-49c3-53e8-ae83-2082bcf28467'::uuid, 'Z-006B1-Z-AT-END', '2026-08-05T00:00:00Z'::timestamptz, '2026-08-05T00:00:01Z'::timestamptz),
+    ('46000000-0000-4000-8000-000000000789'::uuid, '46000000-0000-4000-8000-000000000689'::uuid, '46000000-0000-4000-8000-000000000524'::uuid, '1c628bc2-49c3-53e8-ae83-2082bcf28467'::uuid, 'Z-006B1-Z-AFTER-END', '2026-08-06T00:00:01Z'::timestamptz, '2026-08-06T00:00:02Z'::timestamptz)
+)
+INSERT INTO pos.x_z_reports (
+    x_z_report_id, fiscal_report_request_id, fiscal_reporting_contract_version_id,
+    fiscal_reporting_period_id, report_kind_code_id, site_pos_server_id, fiscal_identity_id,
+    report_number, business_day_date, period_start_at, period_end_at, reporting_timezone_name,
+    business_day_cutoff_local_time, transaction_count, fiscal_sequence_gap_count,
+    previous_grand_total_amount_minor_units, current_grand_total_amount_minor_units,
+    present_grand_total_amount_minor_units, gross_sales_amount_minor_units,
+    net_sales_amount_minor_units, vatable_sales_amount_minor_units, vat_amount_minor_units,
+    vat_exempt_sales_amount_minor_units, zero_rated_sales_amount_minor_units,
+    discount_amount_minor_units, senior_citizen_discount_amount_minor_units,
+    pwd_discount_amount_minor_units, other_statutory_discount_amount_minor_units,
+    vat_exemption_amount_minor_units, coupon_discount_amount_minor_units,
+    promotional_discount_amount_minor_units, void_amount_minor_units, refund_amount_minor_units,
+    return_amount_minor_units, adjustment_amount_minor_units, service_charge_amount_minor_units,
+    currency_code, generated_at, committed_at
+)
+SELECT
+    cases.x_z_report_id, cases.fiscal_report_request_id,
+    period.fiscal_reporting_contract_version_id, period.fiscal_reporting_period_id,
+    cases.report_kind_code_id, period.site_pos_server_id, period.fiscal_identity_id,
+    cases.report_number, period.business_day_date, period.period_start_at, period.period_end_at,
+    period.reporting_timezone_name, period.business_day_cutoff_local_time,
+    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+    period.currency_code, cases.generated_at, cases.committed_at
+FROM cases
+JOIN pos.fiscal_reporting_periods period
+  ON period.fiscal_reporting_period_id = cases.fiscal_reporting_period_id;
+
+CREATE OR REPLACE FUNCTION pg_temp.insert_z006b1_timestamp_report(
+    report_id uuid,
+    request_id uuid,
+    period_id uuid,
+    report_kind_id uuid,
+    report_ref text,
+    observation_at timestamptz,
+    commit_at timestamptz
+)
+RETURNS void
+LANGUAGE sql
+AS $$
+    INSERT INTO pos.x_z_reports (
+        x_z_report_id, fiscal_report_request_id, fiscal_reporting_contract_version_id,
+        fiscal_reporting_period_id, report_kind_code_id, site_pos_server_id, fiscal_identity_id,
+        report_number, business_day_date, period_start_at, period_end_at, reporting_timezone_name,
+        business_day_cutoff_local_time, transaction_count, fiscal_sequence_gap_count,
+        previous_grand_total_amount_minor_units, current_grand_total_amount_minor_units,
+        present_grand_total_amount_minor_units, gross_sales_amount_minor_units,
+        net_sales_amount_minor_units, vatable_sales_amount_minor_units, vat_amount_minor_units,
+        vat_exempt_sales_amount_minor_units, zero_rated_sales_amount_minor_units,
+        discount_amount_minor_units, senior_citizen_discount_amount_minor_units,
+        pwd_discount_amount_minor_units, other_statutory_discount_amount_minor_units,
+        vat_exemption_amount_minor_units, coupon_discount_amount_minor_units,
+        promotional_discount_amount_minor_units, void_amount_minor_units, refund_amount_minor_units,
+        return_amount_minor_units, adjustment_amount_minor_units, service_charge_amount_minor_units,
+        currency_code, generated_at, committed_at
+    )
+    SELECT
+        report_id, request_id, period.fiscal_reporting_contract_version_id,
+        period.fiscal_reporting_period_id, report_kind_id, period.site_pos_server_id,
+        period.fiscal_identity_id, report_ref, period.business_day_date,
+        period.period_start_at, period.period_end_at, period.reporting_timezone_name,
+        period.business_day_cutoff_local_time,
+        0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+        period.currency_code, observation_at, commit_at
+    FROM pos.fiscal_reporting_periods period
+    WHERE period.fiscal_reporting_period_id = period_id;
+$$;
+
+DO $$
+BEGIN
+    BEGIN
+        PERFORM pg_temp.insert_z006b1_timestamp_report(
+            '46000000-0000-4000-8000-000000000786',
+            '46000000-0000-4000-8000-000000000686',
+            '46000000-0000-4000-8000-000000000521',
+            '5dc3cc94-b3ab-5582-a598-e779871fc3e2',
+            'Z-006B1-X-BEFORE-START',
+            '2026-08-01T23:59:59.999999Z',
+            '2026-08-02T00:00:00Z'
+        );
+        RAISE EXCEPTION 'X generated before period start was not rejected';
+    EXCEPTION WHEN check_violation THEN NULL;
+    END;
+
+    BEGIN
+        PERFORM pg_temp.insert_z006b1_timestamp_report(
+            '46000000-0000-4000-8000-000000000787',
+            '46000000-0000-4000-8000-000000000687',
+            '46000000-0000-4000-8000-000000000522',
+            '1c628bc2-49c3-53e8-ae83-2082bcf28467',
+            'Z-006B1-Z-BEFORE-END',
+            '2026-08-03T23:59:59.999999Z',
+            '2026-08-04T00:00:00Z'
+        );
+        RAISE EXCEPTION 'Z generated before period end was not rejected';
+    EXCEPTION WHEN check_violation THEN NULL;
+    END;
+
+    BEGIN
+        PERFORM pg_temp.insert_z006b1_timestamp_report(
+            '46000000-0000-4000-8000-000000000790',
+            '46000000-0000-4000-8000-000000000690',
+            '46000000-0000-4000-8000-000000000523',
+            '1c628bc2-49c3-53e8-ae83-2082bcf28467',
+            'Z-006B1-Z-DUPLICATE',
+            '2026-08-05T00:00:01Z',
+            '2026-08-05T00:00:02Z'
+        );
+        RAISE EXCEPTION 'one-Z-per-period uniqueness was not enforced';
+    EXCEPTION WHEN unique_violation THEN NULL;
+    END;
+
+    BEGIN
+        PERFORM pg_temp.insert_z006b1_timestamp_report(
+            '46000000-0000-4000-8000-000000000791',
+            '46000000-0000-4000-8000-000000000603',
+            '46000000-0000-4000-8000-000000000501',
+            '2326447f-74c2-5ed7-83bb-e079fcee7f3d',
+            'Z-006B1-WRONG-FAMILY',
+            '2026-08-02T00:00:00Z',
+            '2026-08-02T00:00:01Z'
+        );
+        RAISE EXCEPTION 'wrong-family X/Z report kind was not rejected';
+    EXCEPTION WHEN check_violation THEN NULL;
+    END;
+
+    BEGIN
+        UPDATE pos.x_z_reports SET generated_at = generated_at
+        WHERE x_z_report_id = '46000000-0000-4000-8000-000000000781';
+        RAISE EXCEPTION 'interim X snapshot update was not rejected';
+    EXCEPTION WHEN check_violation THEN NULL;
+    END;
+
+    BEGIN
+        DELETE FROM pos.x_z_reports
+        WHERE x_z_report_id = '46000000-0000-4000-8000-000000000788';
+        RAISE EXCEPTION 'period-final Z snapshot delete was not rejected';
+    EXCEPTION WHEN check_violation THEN NULL;
+    END;
+
+    IF NOT EXISTS (
+        SELECT 1 FROM pos.fiscal_reporting_periods
+        WHERE fiscal_reporting_period_id = '46000000-0000-4000-8000-000000000521'
+          AND period_status_code_id = '1a6f7021-bc84-5c01-afaa-c5d6685633c8'
+          AND closed_at IS NULL
+    ) THEN
+        RAISE EXCEPTION 'interim X snapshot changed its OPEN reporting period';
+    END IF;
+
+    IF EXISTS (
+        SELECT 1
+        FROM x_z_timestamp_no_mutation_manifest manifest
+        WHERE manifest.fiscal_document_count <> (SELECT count(*) FROM pos.fiscal_documents)
+           OR manifest.fiscal_status_history_count <> (SELECT count(*) FROM pos.fiscal_document_status_history)
+           OR manifest.fiscal_sequence_state_count <> (SELECT count(*) FROM pos.fiscal_sequence_states)
+           OR manifest.fiscal_counter_state_count <> (SELECT count(*) FROM pos.fiscal_counter_states)
+           OR manifest.fiscal_state_snapshot_count <> (SELECT count(*) FROM pos.fiscal_state_snapshots)
+           OR manifest.fiscal_z_counter_snapshot_count <> (SELECT count(*) FROM pos.fiscal_z_counter_snapshots)
+           OR manifest.reprint_request_count <> (SELECT count(*) FROM pos.reprint_requests)
+           OR manifest.reprint_output_ref_count <> (SELECT count(*) FROM pos.reprint_output_refs)
+    ) THEN
+        RAISE EXCEPTION 'X/Z timestamp proof changed protected fiscal or counter state';
+    END IF;
+END;
+$$;
+
+SELECT 'reporting-proof-x-at-period-start' AS proof, 'passed' AS value;
+SELECT 'reporting-proof-x-during-open-period' AS proof, 'passed' AS value;
+SELECT 'reporting-proof-x-immediately-before-period-end' AS proof, 'passed' AS value;
+SELECT 'reporting-proof-x-at-period-end' AS proof, 'passed' AS value;
+SELECT 'reporting-proof-x-after-period-end' AS proof, 'passed' AS value;
+SELECT 'reporting-proof-x-before-period-start-rejected' AS proof, 'passed' AS value;
+SELECT 'reporting-proof-z-before-period-end-rejected' AS proof, 'passed' AS value;
+SELECT 'reporting-proof-z-at-period-end' AS proof, 'passed' AS value;
+SELECT 'reporting-proof-z-after-period-end' AS proof, 'passed' AS value;
+SELECT 'reporting-proof-wrong-family-x-z-kind-rejected' AS proof, 'passed' AS value;
+SELECT 'reporting-proof-one-z-per-period-preserved' AS proof, 'passed' AS value;
+SELECT 'reporting-proof-x-immutability-preserved' AS proof, 'passed' AS value;
+SELECT 'reporting-proof-z-immutability-preserved' AS proof, 'passed' AS value;
+SELECT 'reporting-proof-no-protected-state-mutation' AS proof, 'passed' AS value;
+
+ROLLBACK TO SAVEPOINT x_z_timestamp_constraint_probe;
+
+DO $$
+BEGIN
+    IF EXISTS (
+        SELECT 1 FROM pos.x_z_reports
+        WHERE x_z_report_id BETWEEN '46000000-0000-4000-8000-000000000781'
+            AND '46000000-0000-4000-8000-000000000791'
+    ) OR EXISTS (
+        SELECT 1 FROM pos.fiscal_report_requests
+        WHERE fiscal_report_request_id BETWEEN '46000000-0000-4000-8000-000000000681'
+            AND '46000000-0000-4000-8000-000000000690'
+    ) OR EXISTS (
+        SELECT 1 FROM pos.fiscal_reporting_periods
+        WHERE fiscal_reporting_period_id BETWEEN '46000000-0000-4000-8000-000000000521'
+            AND '46000000-0000-4000-8000-000000000524'
+    ) THEN
+        RAISE EXCEPTION 'timestamp constraint proof rollback left partial evidence';
+    END IF;
+END;
+$$;
+
+SELECT 'reporting-proof-timestamp-transaction-rollback' AS proof, 'passed' AS value;
+
 SAVEPOINT reporting_rollback_probe;
 
 INSERT INTO pos.fiscal_report_output_refs (

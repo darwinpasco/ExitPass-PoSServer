@@ -104,6 +104,8 @@
   ],
   "xReading": {
     "mutation": "PROHIBITED",
+    "generatedAt": "MUST_BE_GREATER_THAN_OR_EQUAL_TO_PERIOD_START; MAY_PRECEDE_PERIOD_END",
+    "periodStatus": "MAY_REMAIN_OPEN",
     "identity": "one immutable snapshot per Site POS Server operation key",
     "exactReplay": "same operation key and semantic hash returns the original snapshot",
     "conflict": "same operation key and different semantic hash conflicts",
@@ -112,6 +114,7 @@
   },
   "zReading": {
     "runtime": "NOT_IMPLEMENTED",
+    "generatedAt": "MUST_BE_GREATER_THAN_OR_EQUAL_TO_PERIOD_END",
     "closeIdentity": "one Z snapshot per fiscal reporting period",
     "exactReplay": "same operation key and semantic hash returns the original committed Z snapshot",
     "conflict": "same operation key with changed semantics or a second close identity conflicts",

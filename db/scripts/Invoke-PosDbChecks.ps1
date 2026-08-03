@@ -1240,7 +1240,22 @@ function Invoke-ReportingSchemaProofChecks {
         'reporting-proof-x-count|1',
         'reporting-proof-z-count|1',
         'reporting-proof-bir-bound-to-z|1',
-        'reporting-proof-normalized-triggers|11'
+        'reporting-proof-normalized-triggers|11',
+        'reporting-proof-x-at-period-start|passed',
+        'reporting-proof-x-during-open-period|passed',
+        'reporting-proof-x-immediately-before-period-end|passed',
+        'reporting-proof-x-at-period-end|passed',
+        'reporting-proof-x-after-period-end|passed',
+        'reporting-proof-x-before-period-start-rejected|passed',
+        'reporting-proof-z-before-period-end-rejected|passed',
+        'reporting-proof-z-at-period-end|passed',
+        'reporting-proof-z-after-period-end|passed',
+        'reporting-proof-wrong-family-x-z-kind-rejected|passed',
+        'reporting-proof-one-z-per-period-preserved|passed',
+        'reporting-proof-x-immutability-preserved|passed',
+        'reporting-proof-z-immutability-preserved|passed',
+        'reporting-proof-no-protected-state-mutation|passed',
+        'reporting-proof-timestamp-transaction-rollback|passed'
     )
 
     foreach ($proof in $expectedProofs) {
