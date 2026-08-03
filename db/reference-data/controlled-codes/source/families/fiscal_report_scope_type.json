@@ -1,0 +1,22 @@
+{
+  "schema_version":"1.0",
+  "source_key":"controlled_codes.fiscal_report_scope_type.v1",
+  "source_name":"Fiscal Report Scope Type Controlled Codes",
+  "source_description":"Internal reporting scope identity.",
+  "governance_owner":"Engineering",
+  "source_ref":"ExitPass_POS_Server_Internal_Fiscal_Reporting_Contract_v1.0; Z-006A",
+  "code_sets":[{
+    "code_set_key":"fiscal_report_scope_type",
+    "display_name":"Fiscal Report Scope Type",
+    "description":"Approved first-class report scope types.",
+    "governance_owner":"Engineering",
+    "source_ref":"Z-006A",
+    "is_active":true,
+    "effective_start_at":"2026-08-03T00:00:00Z",
+    "effective_end_at":null,
+    "codes":[
+      {"code_key":"site_pos_server_period","display_name":"Site POS Server Period","description":"One Site POS Server, fiscal identity, currency, and exact half-open reporting period.","source_ref":"Z-006A","sort_order":10,"is_active":true,"is_deprecated":false,"effective_start_at":"2026-08-03T00:00:00Z","effective_end_at":null,"replaced_by_code_key":null}
+    ]
+  }],
+  "notes":["Channel or terminal scope is not a fiscal close identity."]
+}

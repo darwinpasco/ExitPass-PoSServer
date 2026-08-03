@@ -1,0 +1,24 @@
+{
+  "schema_version":"1.0",
+  "source_key":"controlled_codes.fiscal_report_output_type.v1",
+  "source_name":"Fiscal Report Output Type Controlled Codes",
+  "source_description":"Internal output reference types without external file-format claims.",
+  "governance_owner":"Engineering",
+  "source_ref":"ExitPass_POS_Server_Internal_Fiscal_Reporting_Contract_v1.0; Z-006A",
+  "code_sets":[{
+    "code_set_key":"fiscal_report_output_type",
+    "display_name":"Fiscal Report Output Type",
+    "description":"References to future JSON, print, or separately governed external export output.",
+    "governance_owner":"Engineering",
+    "source_ref":"Z-006A",
+    "is_active":true,
+    "effective_start_at":"2026-08-03T00:00:00Z",
+    "effective_end_at":null,
+    "codes":[
+      {"code_key":"json_presentation","display_name":"JSON Presentation","description":"Future authoritative internal JSON report presentation reference.","source_ref":"Z-006A","sort_order":10,"is_active":true,"is_deprecated":false,"effective_start_at":"2026-08-03T00:00:00Z","effective_end_at":null,"replaced_by_code_key":null},
+      {"code_key":"print_presentation","display_name":"Print Presentation","description":"Future print presentation reference; no printer behavior is implemented.","source_ref":"Z-006A","sort_order":20,"is_active":true,"is_deprecated":false,"effective_start_at":"2026-08-03T00:00:00Z","effective_end_at":null,"replaced_by_code_key":null},
+      {"code_key":"external_export_reference","display_name":"External Export Reference","description":"Reference to a separately approved export profile; no format is inferred.","source_ref":"Z-006A","sort_order":30,"is_active":true,"is_deprecated":false,"effective_start_at":"2026-08-03T00:00:00Z","effective_end_at":null,"replaced_by_code_key":null}
+    ]
+  }],
+  "notes":["PDF, CSV, Annex E, and POSLog formats remain separate compliance contracts."]
+}

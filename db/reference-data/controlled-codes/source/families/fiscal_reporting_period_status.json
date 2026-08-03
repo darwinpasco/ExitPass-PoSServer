@@ -1,0 +1,24 @@
+{
+  "schema_version":"1.0",
+  "source_key":"controlled_codes.fiscal_reporting_period_status.v1",
+  "source_name":"Fiscal Reporting Period Status Controlled Codes",
+  "source_description":"Internal fiscal reporting period lifecycle posture.",
+  "governance_owner":"Engineering",
+  "source_ref":"ExitPass_POS_Server_Internal_Fiscal_Reporting_Contract_v1.0; Z-006A",
+  "code_sets":[{
+    "code_set_key":"fiscal_reporting_period_status",
+    "display_name":"Fiscal Reporting Period Status",
+    "description":"OPEN, future CLOSING, and immutable CLOSED posture.",
+    "governance_owner":"Engineering",
+    "source_ref":"Z-006A",
+    "is_active":true,
+    "effective_start_at":"2026-08-03T00:00:00Z",
+    "effective_end_at":null,
+    "codes":[
+      {"code_key":"open","display_name":"Open","description":"Period accepts future governed reporting observations and is not closed.","source_ref":"Z-006A","sort_order":10,"is_active":true,"is_deprecated":false,"effective_start_at":"2026-08-03T00:00:00Z","effective_end_at":null,"replaced_by_code_key":null},
+      {"code_key":"closing","display_name":"Closing","description":"Future transient atomic-close posture; Z-006A does not execute it.","source_ref":"Z-006A","sort_order":20,"is_active":true,"is_deprecated":false,"effective_start_at":"2026-08-03T00:00:00Z","effective_end_at":null,"replaced_by_code_key":null},
+      {"code_key":"closed","display_name":"Closed","description":"Committed fiscal period whose identity cannot be updated or deleted.","source_ref":"Z-006A","sort_order":30,"is_active":true,"is_deprecated":false,"effective_start_at":"2026-08-03T00:00:00Z","effective_end_at":null,"replaced_by_code_key":null}
+    ]
+  }],
+  "notes":["Only disposable proof fixtures create CLOSED rows in Z-006A."]
+}

@@ -12,14 +12,14 @@
     {
       "id": "P001",
       "severity": "P0",
-      "description": "Database functions are not approved except the applied statutory fiscal facts immutability function.",
-      "regex": "\\bCREATE\\s+(OR\\s+REPLACE\\s+)?FUNCTION\\s+(?!pos\\.reject_applied_stat_facts_mutation\\b)"
+      "description": "Database functions are limited to approved fiscal snapshot immutability guards.",
+      "regex": "\\bCREATE\\s+(OR\\s+REPLACE\\s+)?FUNCTION\\s+(?!pos\\.(reject_applied_stat_facts_mutation|reject_fiscal_reporting_snapshot_mutation|protect_closed_fiscal_reporting_period)\\b)"
     },
     {
       "id": "P002",
       "severity": "P0",
-      "description": "Database triggers are not approved except the applied statutory fiscal facts immutability trigger.",
-      "regex": "\\bCREATE\\s+(OR\\s+REPLACE\\s+)?TRIGGER\\s+(?!trg_fiscal_doc_applied_stat_facts_immutable\\b)"
+      "description": "Database triggers are limited to approved immutable fiscal snapshot and closed-period guards.",
+      "regex": "\\bCREATE\\s+(OR\\s+REPLACE\\s+)?TRIGGER\\s+(?!(trg_fiscal_doc_applied_stat_facts_immutable|trg_fiscal_reporting_contract_versions_immutable|trg_fiscal_reporting_periods_closed_immutable|trg_x_z_reports_immutable|trg_fiscal_report_tender_breakdowns_immutable|trg_fiscal_report_discount_breakdowns_immutable|trg_fiscal_report_fiscal_number_ranges_immutable|trg_fiscal_report_sequence_gaps_immutable|trg_fiscal_z_counter_snapshots_immutable|trg_bir_sales_summary_reports_immutable|trg_annex_e_reports_immutable)\\b)"
     },
     {
       "id": "P003",

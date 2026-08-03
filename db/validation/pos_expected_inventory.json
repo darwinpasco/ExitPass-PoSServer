@@ -3,7 +3,7 @@
   "expected_schemas": [
     "pos"
   ],
-  "expected_table_count": 54,
+  "expected_table_count": 61,
   "expected_tables": [
     "pos.access_audit",
     "pos.annex_e_reports",
@@ -40,8 +40,14 @@
     "pos.fiscal_operation_exceptions",
     "pos.fiscal_operation_retries",
     "pos.fiscal_report_output_refs",
+    "pos.fiscal_report_discount_breakdowns",
+    "pos.fiscal_report_fiscal_number_ranges",
     "pos.fiscal_report_requests",
     "pos.fiscal_report_scopes",
+    "pos.fiscal_report_sequence_gaps",
+    "pos.fiscal_report_tender_breakdowns",
+    "pos.fiscal_reporting_contract_versions",
+    "pos.fiscal_reporting_periods",
     "pos.fiscal_sequence_gap_audit",
     "pos.fiscal_sequence_policies",
     "pos.fiscal_sequence_states",
@@ -49,6 +55,7 @@
     "pos.fiscal_tax_details",
     "pos.fiscal_tenders",
     "pos.fiscal_totals",
+    "pos.fiscal_z_counter_snapshots",
     "pos.idempotency_records",
     "pos.privileged_action_audit",
     "pos.recovery_requests",
@@ -109,6 +116,13 @@
       "pos.fiscal_report_requests",
       "pos.fiscal_report_scopes",
       "pos.x_z_reports",
+      "pos.fiscal_report_tender_breakdowns",
+      "pos.fiscal_report_discount_breakdowns",
+      "pos.fiscal_report_fiscal_number_ranges",
+      "pos.fiscal_report_sequence_gaps",
+      "pos.fiscal_z_counter_snapshots",
+      "pos.fiscal_reporting_contract_versions",
+      "pos.fiscal_reporting_periods",
       "pos.bir_sales_summary_reports",
       "pos.annex_e_reports",
       "pos.fiscal_report_output_refs"
@@ -133,10 +147,62 @@
     ]
   },
   "expected_functions": [
-    "pos.reject_applied_stat_facts_mutation"
+    "pos.protect_closed_fiscal_reporting_period",
+    "pos.reject_applied_stat_facts_mutation",
+    "pos.reject_fiscal_reporting_snapshot_mutation"
   ],
   "expected_triggers": [
-    "pos.fiscal_document_applied_statutory_facts.trg_fiscal_doc_applied_stat_facts_immutable"
+    "pos.annex_e_reports.trg_annex_e_reports_immutable",
+    "pos.bir_sales_summary_reports.trg_bir_sales_summary_reports_immutable",
+    "pos.fiscal_document_applied_statutory_facts.trg_fiscal_doc_applied_stat_facts_immutable",
+    "pos.fiscal_report_discount_breakdowns.trg_fiscal_report_discount_breakdowns_immutable",
+    "pos.fiscal_report_fiscal_number_ranges.trg_fiscal_report_fiscal_number_ranges_immutable",
+    "pos.fiscal_report_sequence_gaps.trg_fiscal_report_sequence_gaps_immutable",
+    "pos.fiscal_report_tender_breakdowns.trg_fiscal_report_tender_breakdowns_immutable",
+    "pos.fiscal_reporting_contract_versions.trg_fiscal_reporting_contract_versions_immutable",
+    "pos.fiscal_reporting_periods.trg_fiscal_reporting_periods_closed_immutable",
+    "pos.fiscal_z_counter_snapshots.trg_fiscal_z_counter_snapshots_immutable",
+    "pos.x_z_reports.trg_x_z_reports_immutable"
+  ],
+  "expected_reporting_indexes": [
+    "pos.annex_e_reports.ix_annex_e_reports__site_business_date",
+    "pos.bir_sales_summary_reports.ix_bir_sales_summary__fiscal_identity_period",
+    "pos.bir_sales_summary_reports.ix_bir_sales_summary__site_business_date",
+    "pos.fiscal_report_discount_breakdowns.ix_fiscal_report_discount_breakdowns__classification",
+    "pos.fiscal_report_fiscal_number_ranges.ix_fiscal_report_fiscal_number_ranges__identity_series",
+    "pos.fiscal_report_output_refs.ix_fiscal_report_output_refs__status",
+    "pos.fiscal_report_requests.ix_fiscal_report_requests__period_kind_status",
+    "pos.fiscal_report_requests.ix_fiscal_report_requests__site_business_date",
+    "pos.fiscal_report_sequence_gaps.ix_fiscal_report_sequence_gaps__classification",
+    "pos.fiscal_report_tender_breakdowns.ix_fiscal_report_tender_breakdowns__classification",
+    "pos.fiscal_reporting_periods.ix_fiscal_reporting_periods__identity_business_date",
+    "pos.fiscal_reporting_periods.ix_fiscal_reporting_periods__site_business_date",
+    "pos.fiscal_reporting_periods.ix_fiscal_reporting_periods__status",
+    "pos.fiscal_z_counter_snapshots.ix_fiscal_z_counter_snapshots__prior_period",
+    "pos.x_z_reports.ix_x_z_reports__period_kind",
+    "pos.x_z_reports.ix_x_z_reports__site_business_date",
+    "pos.x_z_reports.ux_x_z_reports__z_period"
+  ],
+  "expected_reporting_constraints": [
+    "pos.annex_e_reports.fk_annex_e_reports__governing_z",
+    "pos.bir_sales_summary_reports.fk_bir_sales_summary__governing_z",
+    "pos.fiscal_report_discount_breakdowns.uq_fiscal_report_discount_breakdowns__report_class",
+    "pos.fiscal_report_fiscal_number_ranges.uq_fiscal_report_fiscal_number_ranges__report_policy_series",
+    "pos.fiscal_report_requests.uq_fiscal_report_requests__site_operation",
+    "pos.fiscal_report_sequence_gaps.uq_fiscal_report_sequence_gaps__range_value",
+    "pos.fiscal_report_tender_breakdowns.uq_fiscal_report_tender_breakdowns__report_class",
+    "pos.fiscal_reporting_periods.uq_fiscal_reporting_periods__site_sequence",
+    "pos.fiscal_z_counter_snapshots.uq_fiscal_z_counter_snapshots__report",
+    "pos.x_z_reports.uq_x_z_reports__request"
+  ],
+  "known_legacy_overlength_identifiers": [
+    "db/state/tables/pos.fiscal_document_header_snapshots.sql|ck_fiscal_document_header_snapshots__registered_business_name_not_blank",
+    "db/state/tables/pos.fiscal_document_header_snapshots.sql|ck_fiscal_document_header_snapshots__registered_business_address_not_blank",
+    "db/state/tables/pos.fiscal_document_header_snapshots.sql|ck_fiscal_document_header_snapshots__pos_serial_number_not_blank",
+    "db/state/tables/pos.fiscal_document_header_snapshots.sql|ck_fiscal_document_header_snapshots__bir_accreditation_number_not_blank",
+    "db/state/tables/pos.fiscal_document_header_snapshots.sql|ck_fiscal_document_header_snapshots__supported_presentation_version",
+    "db/state/tables/pos.sales_invoice_header_profiles.sql|ck_sales_invoice_header_profiles__supported_presentation_version",
+    "db/state/tables/pos.sales_invoice_header_profiles.sql|ck_sales_invoice_header_profiles__bir_accreditation_number_not_blank"
   ],
   "not_expected_yet": {
     "views": [],

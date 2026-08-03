@@ -1,0 +1,25 @@
+{
+  "schema_version": "1.0",
+  "source_key": "controlled_codes.fiscal_report_kind.v1",
+  "source_name": "Fiscal Report Kind Controlled Codes",
+  "source_description": "Internal POS Server fiscal report kinds; external compliance variants are excluded.",
+  "governance_owner": "Engineering",
+  "source_ref": "ExitPass_POS_Server_Internal_Fiscal_Reporting_Contract_v1.0; Z-006A",
+  "code_sets": [{
+    "code_set_key": "fiscal_report_kind",
+    "display_name": "Fiscal Report Kind",
+    "description": "Internal identity for X Reading, Z Reading, BIR Sales Summary, and Annex E metadata.",
+    "governance_owner": "Engineering",
+    "source_ref": "Z-006A",
+    "is_active": true,
+    "effective_start_at": "2026-08-03T00:00:00Z",
+    "effective_end_at": null,
+    "codes": [
+      {"code_key":"x_reading","display_name":"X Reading","description":"Read-only interim fiscal reading; does not close a period or advance counters.","source_ref":"Z-006A","sort_order":10,"is_active":true,"is_deprecated":false,"effective_start_at":"2026-08-03T00:00:00Z","effective_end_at":null,"replaced_by_code_key":null},
+      {"code_key":"z_reading","display_name":"Z Reading","description":"Future atomic fiscal-period close snapshot; runtime is not implemented by Z-006A.","source_ref":"Z-006A","sort_order":20,"is_active":true,"is_deprecated":false,"effective_start_at":"2026-08-03T00:00:00Z","effective_end_at":null,"replaced_by_code_key":null},
+      {"code_key":"bir_sales_summary","display_name":"BIR Sales Summary","description":"Internal immutable summary metadata governed by one Z Reading.","source_ref":"Z-006A","sort_order":30,"is_active":true,"is_deprecated":false,"effective_start_at":"2026-08-03T00:00:00Z","effective_end_at":null,"replaced_by_code_key":null},
+      {"code_key":"annex_e","display_name":"Annex E","description":"Internal Annex E metadata identity; no external form variant or payload is defined.","source_ref":"Z-006A","sort_order":40,"is_active":true,"is_deprecated":false,"effective_start_at":"2026-08-03T00:00:00Z","effective_end_at":null,"replaced_by_code_key":null}
+    ]
+  }],
+  "notes": ["No report generation or fiscal-period close is authorized by these values."]
+}

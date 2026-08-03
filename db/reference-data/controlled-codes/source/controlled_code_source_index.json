@@ -57,8 +57,48 @@
       "governance_owner": "Engineering"
     },
     {
+      "code_set_key": "fiscal_report_kind",
+      "path": "families/fiscal_report_kind.json",
+      "governance_owner": "Engineering"
+    },
+    {
+      "code_set_key": "fiscal_report_output_status",
+      "path": "families/fiscal_report_output_status.json",
+      "governance_owner": "Engineering"
+    },
+    {
+      "code_set_key": "fiscal_report_output_type",
+      "path": "families/fiscal_report_output_type.json",
+      "governance_owner": "Engineering"
+    },
+    {
+      "code_set_key": "fiscal_report_scope_type",
+      "path": "families/fiscal_report_scope_type.json",
+      "governance_owner": "Engineering"
+    },
+    {
       "code_set_key": "fiscal_report_status",
       "path": "families/fiscal_report_status.json",
+      "governance_owner": "Engineering"
+    },
+    {
+      "code_set_key": "fiscal_reporting_discount_classification",
+      "path": "families/fiscal_reporting_discount_classification.json",
+      "governance_owner": "Engineering"
+    },
+    {
+      "code_set_key": "fiscal_reporting_period_status",
+      "path": "families/fiscal_reporting_period_status.json",
+      "governance_owner": "Engineering"
+    },
+    {
+      "code_set_key": "fiscal_reporting_tender_classification",
+      "path": "families/fiscal_reporting_tender_classification.json",
+      "governance_owner": "Engineering"
+    },
+    {
+      "code_set_key": "fiscal_sequence_gap_classification",
+      "path": "families/fiscal_sequence_gap_classification.json",
       "governance_owner": "Engineering"
     },
     {
