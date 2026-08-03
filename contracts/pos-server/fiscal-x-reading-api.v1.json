@@ -1,0 +1,78 @@
+{
+  "contractId": "pos-server-fiscal-x-reading-api:v1",
+  "reportingContractVersion": "pos-server-fiscal-reporting:v1",
+  "semanticRequestHashVersion": "pos-server-fiscal-report-request:sha256:v1",
+  "authentication": {
+    "scheme": "PosServerAdminApiKey",
+    "authoritySource": "server-configured service identity",
+    "callerSuppliedPermissionGrantsAuthority": false,
+    "requiredHeaders": ["X-PosServer-Admin-Key", "X-Correlation-Id"]
+  },
+  "authorization": {
+    "generatePolicy": "FiscalXReadingGeneration",
+    "generatePermission": "fiscal_x_reading.generate",
+    "readPolicy": "FiscalXReadingRead",
+    "readPermission": "fiscal_x_reading.read",
+    "requiredScopes": ["sitePosServerId", "fiscalIdentityId"],
+    "scopeSource": "server-side API-key registration"
+  },
+  "routes": [
+    {
+      "method": "POST",
+      "route": "/v1/fiscal-reports/x-readings/",
+      "request": {
+        "operationKey": "required string, maximum 200 characters",
+        "sitePosServerId": "required UUID",
+        "fiscalIdentityId": "required UUID",
+        "observedAt": "required RFC 3339 timestamp with offset"
+      },
+      "success": [201, 200],
+      "semantics": "201 creates one immutable observation; 200 is an exact replay"
+    },
+    {
+      "method": "GET",
+      "route": "/v1/fiscal-reports/x-readings/{fiscalReportReference}",
+      "success": [200],
+      "semantics": "Returns the stored immutable snapshot without recomputation"
+    }
+  ],
+  "periodResolution": {
+    "status": "OPEN",
+    "scope": ["sitePosServerId", "fiscalIdentityId"],
+    "interval": "[periodStartAt, min(observedAt, periodEndAt))",
+    "missingOrAmbiguous": "fail closed",
+    "mutatesPeriod": false
+  },
+  "idempotency": {
+    "identity": "operationKey",
+    "sameIdentitySameSemantics": "return the original committed X Reading",
+    "sameIdentityChangedSemantics": "409 fiscal_x_reading_semantic_conflict",
+    "correlationIdIsSemantic": false
+  },
+  "readback": {
+    "authoritativeSource": "committed first-class report snapshot and child rows",
+    "includes": [
+      "report reference", "operation identity", "scope", "period identity",
+      "business time snapshots", "currency", "aggregate amounts",
+      "tender breakdowns", "discount breakdowns", "fiscal-number ranges", "classified gaps"
+    ],
+    "excludes": [
+      "semantic hash", "SQL details", "credentials", "customer identity",
+      "statutory identity", "evidence", "reviewer identity", "generic report JSON"
+    ]
+  },
+  "safeErrors": [
+    "fiscal_x_reading_invalid_request", "fiscal_x_reading_scope_forbidden",
+    "site_pos_server_not_found", "fiscal_identity_not_found",
+    "fiscal_reporting_configuration_unavailable", "fiscal_reporting_open_period_unavailable",
+    "fiscal_reporting_open_period_ambiguous", "fiscal_x_reading_semantic_conflict",
+    "fiscal_x_reading_source_classification_unsupported", "fiscal_x_reading_mixed_currency",
+    "fiscal_x_reading_reconciliation_failed", "fiscal_x_reading_arithmetic_overflow",
+    "fiscal_x_reading_unknown_commit_outcome", "fiscal_x_reading_persistence_failed",
+    "fiscal_x_reading_not_found"
+  ],
+  "explicitExclusions": [
+    "period close", "Z Reading", "counter or GTA mutation", "sequence-state mutation",
+    "fiscal-document mutation", "rendering", "printing", "export", "BIR", "Annex E", "EJ", "POSLog"
+  ]
+}

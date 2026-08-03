@@ -1,4 +1,5 @@
 using ExitPass.PosServer.Api.FiscalDocuments;
+using ExitPass.PosServer.Api.FiscalReports;
 
 var builder = WebApplication.CreateBuilder(args);
 builder.Services.AddPosServerFiscalDocumentApi(builder.Configuration);
@@ -8,4 +9,5 @@ app.UseAuthentication();
 app.UseAuthorization();
 app.MapFiscalDocumentEndpoints();
 app.MapSalesInvoiceHeaderProfileAdminEndpoints();
+app.MapFiscalXReadingEndpoints();
 app.Run();
