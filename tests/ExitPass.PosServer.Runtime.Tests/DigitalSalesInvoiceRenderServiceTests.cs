@@ -113,7 +113,7 @@ public sealed class DigitalSalesInvoiceRenderServiceTests
     }
 
     [Fact]
-    public void RuntimeAssemblyDoesNotExposePaymentGateExitRefundOrReportBehavior()
+    public void RuntimeAssemblyDoesNotExposePaymentGateExitRefundOrUnauthorizedReportBehavior()
     {
         var forbiddenNames = new[]
         {
@@ -122,9 +122,10 @@ public sealed class DigitalSalesInvoiceRenderServiceTests
             "ExitAuthorization",
             "GateExecution",
             "OpenGate",
-            "Refund",
+            "RefundCommand",
+            "RefundService",
+            "ProcessRefund",
             "Reversal",
-            "XRead",
             "ZRead",
             "Annex"
         };

@@ -2,6 +2,9 @@ using ExitPass.PosServer.Runtime.FiscalDocuments;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Npgsql;
 using ExitPass.PosServer.Persistence.Postgres.FiscalDocuments;
+using ExitPass.PosServer.Api.FiscalReports;
+using ExitPass.PosServer.Persistence.Postgres.FiscalReports;
+using ExitPass.PosServer.Runtime.FiscalReports;
 
 namespace ExitPass.PosServer.Api.FiscalDocuments;
 
@@ -21,12 +24,14 @@ public static class FiscalDocumentServiceCollectionExtensions
             services.TryAddScoped<IFiscalDocumentRepository, PersistenceNotConfiguredFiscalDocumentRepository>();
             services.TryAddScoped<IFiscalDocumentReader, PersistenceNotConfiguredFiscalDocumentReader>();
             services.TryAddScoped<ISalesInvoiceHeaderProfileRepository, PersistenceNotConfiguredSalesInvoiceHeaderProfileRepository>();
+            services.TryAddScoped<IFiscalXReadingRepository, UnavailableFiscalXReadingRepository>();
         }
         else if (!IsValidNpgsqlConnectionString(connectionString))
         {
             services.TryAddScoped<IFiscalDocumentRepository, InvalidPersistenceConfigurationFiscalDocumentRepository>();
             services.TryAddScoped<IFiscalDocumentReader, InvalidPersistenceConfigurationFiscalDocumentReader>();
             services.TryAddScoped<ISalesInvoiceHeaderProfileRepository, PersistenceNotConfiguredSalesInvoiceHeaderProfileRepository>();
+            services.TryAddScoped<IFiscalXReadingRepository, UnavailableFiscalXReadingRepository>();
         }
         else
         {
@@ -37,6 +42,7 @@ public static class FiscalDocumentServiceCollectionExtensions
                     IsSalesInvoiceHeaderProfileRequired(configuration)));
             services.TryAddScoped<IFiscalDocumentReader, PostgresFiscalDocumentReader>();
             services.TryAddScoped<ISalesInvoiceHeaderProfileRepository, PostgresSalesInvoiceHeaderProfileRepository>();
+            services.TryAddScoped<IFiscalXReadingRepository, PostgresFiscalXReadingRepository>();
         }
 
         services.AddScoped<FiscalDocumentCreationService>();
@@ -44,6 +50,8 @@ public static class FiscalDocumentServiceCollectionExtensions
         services.AddScoped<FiscalDocumentReadService>();
         services.AddScoped<DigitalSalesInvoiceRenderService>();
         services.AddScoped<DigitalSalesInvoicePresentationAdapter>();
+        services.AddScoped<FiscalXReadingAggregationService>();
+        services.AddScoped<FiscalXReadingService>();
         services.AddScoped(provider => new SalesInvoiceHeaderProfileAdminService(
             provider.GetRequiredService<ISalesInvoiceHeaderProfileRepository>(),
             IsSalesInvoiceHeaderProfileRequired(configuration)));
@@ -62,6 +70,16 @@ public static class FiscalDocumentServiceCollectionExtensions
                     .RequireClaim(
                         SalesInvoiceHeaderProfileAdminAuthorization.PermissionClaimType,
                         SalesInvoiceHeaderProfileAdminAuthorization.RequiredPermission));
+            options.AddPolicy(
+                FiscalXReadingAuthorization.GeneratePolicyName,
+                policy => policy
+                    .AddAuthenticationSchemes(SalesInvoiceHeaderProfileAdminAuthorization.AuthenticationScheme)
+                    .RequireClaim(SalesInvoiceHeaderProfileAdminAuthorization.PermissionClaimType, FiscalXReadingAuthorization.GeneratePermission));
+            options.AddPolicy(
+                FiscalXReadingAuthorization.ReadPolicyName,
+                policy => policy
+                    .AddAuthenticationSchemes(SalesInvoiceHeaderProfileAdminAuthorization.AuthenticationScheme)
+                    .RequireClaim(SalesInvoiceHeaderProfileAdminAuthorization.PermissionClaimType, FiscalXReadingAuthorization.ReadPermission));
         });
 
         return services;
