@@ -166,7 +166,16 @@ CREATE TABLE IF NOT EXISTS pos.x_z_reports (
     ),
     CONSTRAINT ck_x_z_reports__currency CHECK (currency_code ~ '^[A-Z]{3}$'),
     CONSTRAINT ck_x_z_reports__timestamps CHECK (
-        generated_at >= period_end_at
+        (
+            (
+                report_kind_code_id = '5dc3cc94-b3ab-5582-a598-e779871fc3e2'
+                AND generated_at >= period_start_at
+            )
+            OR (
+                report_kind_code_id = '1c628bc2-49c3-53e8-ae83-2082bcf28467'
+                AND generated_at >= period_end_at
+            )
+        )
         AND committed_at >= generated_at
         AND updated_at = created_at
     )
@@ -302,7 +311,7 @@ ALTER TABLE pos.x_z_reports
     ADD CONSTRAINT ck_x_z_reports__discount_breakdown CHECK (senior_citizen_discount_amount_minor_units + pwd_discount_amount_minor_units + other_statutory_discount_amount_minor_units + coupon_discount_amount_minor_units + promotional_discount_amount_minor_units <= discount_amount_minor_units),
     ADD CONSTRAINT ck_x_z_reports__gta_relationship CHECK (present_grand_total_amount_minor_units = previous_grand_total_amount_minor_units + current_grand_total_amount_minor_units),
     ADD CONSTRAINT ck_x_z_reports__currency CHECK (currency_code ~ '^[A-Z]{3}$'),
-    ADD CONSTRAINT ck_x_z_reports__timestamps CHECK (generated_at >= period_end_at AND committed_at >= generated_at AND updated_at = created_at);
+    ADD CONSTRAINT ck_x_z_reports__timestamps CHECK ((((report_kind_code_id = '5dc3cc94-b3ab-5582-a598-e779871fc3e2') AND generated_at >= period_start_at) OR ((report_kind_code_id = '1c628bc2-49c3-53e8-ae83-2082bcf28467') AND generated_at >= period_end_at)) AND committed_at >= generated_at AND updated_at = created_at);
 
 DO $$
 DECLARE
@@ -342,6 +351,7 @@ FOR EACH ROW EXECUTE FUNCTION pos.reject_fiscal_reporting_snapshot_mutation();
 
 COMMENT ON TABLE pos.x_z_reports IS 'Immutable first-class X Reading and Z Reading aggregate snapshots. The table neither aggregates fiscal documents nor closes periods.';
 COMMENT ON COLUMN pos.x_z_reports.report_number IS 'Stable internal report reference unique within fiscal identity. External BIR numbering remains a compliance dependency.';
+COMMENT ON COLUMN pos.x_z_reports.generated_at IS 'Immutable observation time. X Reading requires period start or later; Z Reading requires period end or later.';
 COMMENT ON COLUMN pos.x_z_reports.current_grand_total_amount_minor_units IS 'Current period contribution to GTA; future Z runtime must persist the supplied aggregate without policy recalculation.';
 COMMENT ON COLUMN pos.x_z_reports.present_grand_total_amount_minor_units IS 'Resulting GTA, constrained as previous plus current. Preserved column name for additive compatibility.';
 COMMENT ON COLUMN pos.x_z_reports.refund_amount_minor_units IS 'Reserved first-class non-negative category total. Future runtime fails closed until refund period/sign rules are governed.';
