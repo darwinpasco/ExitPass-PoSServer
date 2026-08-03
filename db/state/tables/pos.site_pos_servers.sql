@@ -8,6 +8,8 @@ CREATE TABLE IF NOT EXISTS pos.site_pos_servers (
     display_name text NOT NULL,
     central_pms_site_ref text NULL,
     central_pms_site_resolution_ref text NULL,
+    reporting_timezone_name text NULL,
+    business_day_cutoff_local_time time without time zone NULL,
     operational_status_code_id uuid NULL,
     is_active boolean NOT NULL DEFAULT true,
     created_at timestamptz NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -23,10 +25,26 @@ CREATE TABLE IF NOT EXISTS pos.site_pos_servers (
     ),
     CONSTRAINT ck_site_pos_servers__central_pms_site_resolution_ref_not_blank CHECK (
         central_pms_site_resolution_ref IS NULL OR char_length(btrim(central_pms_site_resolution_ref)) > 0
+    ),
+    CONSTRAINT ck_site_pos_servers__reporting_timezone_not_blank CHECK (
+        reporting_timezone_name IS NULL OR char_length(btrim(reporting_timezone_name)) > 0
     )
 );
+
+ALTER TABLE pos.site_pos_servers
+    ADD COLUMN IF NOT EXISTS reporting_timezone_name text NULL,
+    ADD COLUMN IF NOT EXISTS business_day_cutoff_local_time time without time zone NULL;
+
+ALTER TABLE pos.site_pos_servers
+    DROP CONSTRAINT IF EXISTS ck_site_pos_servers__reporting_timezone_not_blank;
+
+ALTER TABLE pos.site_pos_servers
+    ADD CONSTRAINT ck_site_pos_servers__reporting_timezone_not_blank CHECK (
+        reporting_timezone_name IS NULL OR char_length(btrim(reporting_timezone_name)) > 0
+    );
 
 COMMENT ON TABLE pos.site_pos_servers IS 'Site POS Server fiscal boundary records. Central PMS site values are reference-only and do not model Central PMS lifecycle ownership.';
 COMMENT ON COLUMN pos.site_pos_servers.central_pms_site_ref IS 'Reference to the Central PMS site context; POS Server does not own Central PMS site authority.';
 COMMENT ON COLUMN pos.site_pos_servers.central_pms_site_resolution_ref IS 'Reference to Central PMS site-resolution context; reference only.';
-
+COMMENT ON COLUMN pos.site_pos_servers.reporting_timezone_name IS 'Optional approved IANA timezone configuration for future reporting-period derivation. Each reporting period snapshots the actual value used.';
+COMMENT ON COLUMN pos.site_pos_servers.business_day_cutoff_local_time IS 'Optional approved local business-day cutoff for future reporting. No production value is assumed by schema.';

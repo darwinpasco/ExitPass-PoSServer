@@ -1,0 +1,179 @@
+{
+  "contractKey": "pos-server-fiscal-reporting",
+  "contractVersion": "v1",
+  "contractVersionId": "f6766f48-62f0-513f-b9eb-e61c2f3e8c66",
+  "semanticHashVersion": "pos-server-fiscal-report-request:sha256:v1",
+  "status": "INTERNAL_SCHEMA_FROZEN",
+  "runtimeStatus": "NOT_IMPLEMENTED",
+  "reportKinds": [
+    "X_READING",
+    "Z_READING",
+    "BIR_SALES_SUMMARY",
+    "ANNEX_E"
+  ],
+  "reportStatuses": [
+    "REQUESTED",
+    "PROCESSING",
+    "COMMITTED",
+    "FAILED",
+    "REJECTED",
+    "CONFLICT",
+    "CANCELLED",
+    "UNKNOWN_COMMIT_OUTCOME"
+  ],
+  "legacyCompatibilityStatuses": [
+    "COMPLETED"
+  ],
+  "controlledFamilies": {
+    "fiscal_report_kind": ["x_reading", "z_reading", "bir_sales_summary", "annex_e"],
+    "fiscal_report_scope_type": ["site_pos_server_period"],
+    "fiscal_reporting_period_status": ["open", "closing", "closed"],
+    "fiscal_report_output_type": ["json_presentation", "print_presentation", "external_export_reference"],
+    "fiscal_report_output_status": ["requested", "processing", "committed", "failed"],
+    "fiscal_sequence_gap_classification": ["voided_document", "failed_issuance", "reserved_not_issued", "unexplained"],
+    "fiscal_reporting_tender_classification": ["cash", "card", "digital_wallet", "bank_transfer", "other_non_cash"],
+    "fiscal_reporting_discount_classification": ["senior_citizen_statutory", "pwd_statutory", "other_statutory", "vat_exemption_adjustment", "coupon", "promotional"]
+  },
+  "businessTime": {
+    "timezoneSource": "approved Site POS Server configuration",
+    "cutoffSource": "approved Site POS Server configuration",
+    "periodInterval": "[periodStartAt, periodEndAt)",
+    "periodIdentitySnapshotsTimezoneAndCutoff": true,
+    "mixedTimezoneInterpretation": "PROHIBITED",
+    "lateCommittedDocument": "FAIL_CLOSED_PENDING_GOVERNED_SUBSEQUENT_PERIOD_ADJUSTMENT",
+    "productionTimezoneOrCutoffDefault": null
+  },
+  "scope": {
+    "scopeType": "SITE_POS_SERVER_PERIOD",
+    "required": [
+      "sitePosServerId",
+      "fiscalIdentityId",
+      "businessDate",
+      "periodStartAt",
+      "periodEndAt",
+      "timezoneName",
+      "businessDayCutoffLocalTime",
+      "currencyCode",
+      "periodSequence"
+    ],
+    "optionalPartition": "fiscalSeries through immutable fiscal-number ranges"
+  },
+  "aggregation": {
+    "currency": "one uppercase three-letter code per period and snapshot",
+    "minorUnits": true,
+    "qualifyingDocumentTypeCodeKey": "sales_invoice",
+    "recordedStatusCodeKey": "recorded",
+    "voidedStatusCodeKey": "voided",
+    "documentCount": "count qualifying pos.fiscal_documents once",
+    "grossSales": "sum active pos.fiscal_document_lines.gross_amount_minor_units for recorded documents",
+    "netSales": "sum active pos.fiscal_document_lines.net_amount_minor_units for recorded documents",
+    "totalDiscounts": "sum active pos.fiscal_document_lines.discount_amount_minor_units for recorded documents",
+    "tax": "sum pos.fiscal_tax_details exactly once by governed tax classification; mixed document-level and line-level representation for one classification is prohibited",
+    "statutory": "project Senior Citizen and PWD from pos.fiscal_document_applied_statutory_facts; do not add duplicate privilege-detail amounts",
+    "vatExemptionRemoval": "sum pos.fiscal_discount_privilege_details.vat_privilege_amount_minor_units exactly once",
+    "commercialDiscount": "sum governed coupon and promotional privilege-detail classifications separately",
+    "tenders": "sum pos.fiscal_tenders once by governed reporting tender classification",
+    "voids": "exclude voided documents from recorded sales and report their original final fiscal amount as a non-negative void total in the period containing the committed void",
+    "refundsReturnsAdjustments": "FAIL_CLOSED_UNTIL_GOVERNED_DOCUMENT_TYPES_AND_PERIOD_RULES_EXIST",
+    "serviceCharges": "FAIL_CLOSED_UNTIL_GOVERNED_LINE_CLASSIFICATION_EXISTS",
+    "reprints": "presentation events only; never documents or sales",
+    "antiDoubleCount": "detail, total, statutory, and presentation representations are reconciliation peers and must never be added twice"
+  },
+  "snapshotAmounts": [
+    "previousGrandTotalAmountMinorUnits",
+    "currentGrandTotalAmountMinorUnits",
+    "presentGrandTotalAmountMinorUnits",
+    "grossSalesAmountMinorUnits",
+    "netSalesAmountMinorUnits",
+    "vatableSalesAmountMinorUnits",
+    "vatAmountMinorUnits",
+    "vatExemptSalesAmountMinorUnits",
+    "zeroRatedSalesAmountMinorUnits",
+    "discountAmountMinorUnits",
+    "seniorCitizenDiscountAmountMinorUnits",
+    "pwdDiscountAmountMinorUnits",
+    "otherStatutoryDiscountAmountMinorUnits",
+    "vatExemptionAmountMinorUnits",
+    "couponDiscountAmountMinorUnits",
+    "promotionalDiscountAmountMinorUnits",
+    "voidAmountMinorUnits",
+    "refundAmountMinorUnits",
+    "returnAmountMinorUnits",
+    "adjustmentAmountMinorUnits",
+    "serviceChargeAmountMinorUnits"
+  ],
+  "xReading": {
+    "mutation": "PROHIBITED",
+    "identity": "one immutable snapshot per Site POS Server operation key",
+    "exactReplay": "same operation key and semantic hash returns the original snapshot",
+    "conflict": "same operation key and different semantic hash conflicts",
+    "newObservation": "a new operation key may create another snapshot for the same open period",
+    "counterOrCloseMutation": "PROHIBITED"
+  },
+  "zReading": {
+    "runtime": "NOT_IMPLEMENTED",
+    "closeIdentity": "one Z snapshot per fiscal reporting period",
+    "exactReplay": "same operation key and semantic hash returns the original committed Z snapshot",
+    "conflict": "same operation key with changed semantics or a second close identity conflicts",
+    "atomicFutureBoundary": [
+      "period close",
+      "report snapshot",
+      "fiscal ranges and gaps",
+      "counter and GTA snapshot",
+      "audit evidence"
+    ]
+  },
+  "schemaObjects": {
+    "contractVersions": "pos.fiscal_reporting_contract_versions",
+    "periods": "pos.fiscal_reporting_periods",
+    "requests": "pos.fiscal_report_requests",
+    "scopes": "pos.fiscal_report_scopes",
+    "snapshots": "pos.x_z_reports",
+    "tenderBreakdowns": "pos.fiscal_report_tender_breakdowns",
+    "discountBreakdowns": "pos.fiscal_report_discount_breakdowns",
+    "fiscalNumberRanges": "pos.fiscal_report_fiscal_number_ranges",
+    "sequenceGaps": "pos.fiscal_report_sequence_gaps",
+    "zCounterSnapshots": "pos.fiscal_z_counter_snapshots",
+    "birSummaries": "pos.bir_sales_summary_reports",
+    "annexMetadata": "pos.annex_e_reports",
+    "outputReferences": "pos.fiscal_report_output_refs"
+  },
+  "databaseInvariants": [
+    "operation key is unique within one Site POS Server",
+    "one report snapshot exists per report request",
+    "one Z snapshot exists per fiscal reporting period",
+    "report number is unique within one fiscal identity",
+    "one BIR profile summary exists per governing Z snapshot",
+    "child classification rows are unique within one report",
+    "all report and child currencies equal the parent report currency",
+    "period end is strictly greater than period start",
+    "resulting GTA equals previous GTA plus current period amount",
+    "resulting Z counter equals previous Z counter plus one",
+    "committed snapshots and children reject UPDATE and DELETE",
+    "closed periods reject UPDATE and DELETE",
+    "parent deletion cannot cascade away fiscal reporting evidence"
+  ],
+  "migration": {
+    "style": "state-based additive hardening",
+    "legacyEmptyPostureTables": "transitioned in place",
+    "legacyNonEmptyPostureTables": "FAIL_CLOSED_REQUIRES_GOVERNED_MIGRATION",
+    "cleanBuildReplay": "IDEMPOTENT"
+  },
+  "externalComplianceDependencies": [
+    "BIR Sales Summary final formula and layout",
+    "Annex E form and profile version",
+    "POSLog versioned mapping",
+    "refund, return, and adjustment reporting treatment",
+    "signature, retention, submission, and external filename rules"
+  ],
+  "privacyExclusions": [
+    "beneficiary identity",
+    "statutory identifier",
+    "evidence content or URL",
+    "reviewer identity",
+    "credentials",
+    "authorization headers",
+    "raw request payload",
+    "generic customer metadata"
+  ]
+}

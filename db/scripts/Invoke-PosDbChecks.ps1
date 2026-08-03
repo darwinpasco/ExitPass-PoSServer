@@ -13,7 +13,7 @@ Repository SQL is the source of truth. Drift is reported only and is never promo
 into repository artifacts by this script.
 
 .PARAMETER Mode
-Check mode to run: Static, Rebuild, Inventory, Drift, ControlledCodeLoad, or All.
+Check mode to run: Static, Rebuild, Inventory, Drift, ControlledCodeLoad, ReportingSchemaProof, or All.
 
 .PARAMETER ConnectionString
 Explicit PostgreSQL connection string used by Rebuild, Inventory, Drift, and ControlledCodeLoad modes.
@@ -51,12 +51,15 @@ Container name for the disposable psql client container.
 
 .EXAMPLE
 .\db\scripts\Invoke-PosDbChecks.ps1 -Mode ControlledCodeLoad -UseDockerPsql -ConnectionString $env:POSSERVER_DB_URL -DatabaseName posserver_controlled_code_workflow_validation_local -EvidenceDir .\db\validation\evidence\controlled-code-load
+
+.EXAMPLE
+.\db\scripts\Invoke-PosDbChecks.ps1 -Mode ReportingSchemaProof -UseDockerPsql -ConnectionString $env:POSSERVER_DB_URL -DatabaseName posserver_reporting_schema_validation_local -EvidenceDir .\db\validation\evidence\reporting-schema-proof
 #>
 
 [CmdletBinding()]
 param(
     [Parameter()]
-    [ValidateSet('Static', 'Rebuild', 'Inventory', 'Drift', 'ControlledCodeLoad', 'All')]
+    [ValidateSet('Static', 'Rebuild', 'Inventory', 'Drift', 'ControlledCodeLoad', 'ReportingSchemaProof', 'All')]
     [string] $Mode = 'Static',
 
     [Parameter()]
@@ -98,6 +101,7 @@ $ProhibitedPatternsPath = Join-Path $RepoRoot 'db\validation\pos_prohibited_patt
 $ControlledCodeSourceRoot = Join-Path $RepoRoot 'db\reference-data\controlled-codes\source'
 $ControlledCodeSourceIndexPath = Join-Path $ControlledCodeSourceRoot 'controlled_code_source_index.json'
 $ControlledCodeGeneratedSqlRoot = Join-Path $RepoRoot 'db\reference-data\controlled-codes\generated\sql'
+$ReportingSchemaProofPath = Join-Path $RepoRoot 'db\validation\fixtures\pos_fiscal_reporting_contract_schema_proof.sql'
 $RunStamp = (Get-Date).ToUniversalTime().ToString('yyyyMMddTHHmmssZ')
 $script:PsqlDiagnostics = New-Object System.Collections.Generic.List[object]
 
@@ -176,7 +180,7 @@ function Test-SnakeIdentifier {
 
 function Add-ValidationError {
     param(
-        [hashtable] $Result,
+        [System.Collections.IDictionary] $Result,
         [string] $Message
     )
 
@@ -185,7 +189,7 @@ function Add-ValidationError {
 
 function Add-ValidationWarning {
     param(
-        [hashtable] $Result,
+        [System.Collections.IDictionary] $Result,
         [string] $Message
     )
 
@@ -194,7 +198,7 @@ function Add-ValidationWarning {
 
 function Complete-Result {
     param(
-        [hashtable] $Result,
+        [System.Collections.IDictionary] $Result,
         [string[]] $SummaryLines
     )
 
@@ -218,7 +222,7 @@ function Complete-Result {
 function Write-Evidence {
     param(
         [string] $ModeName,
-        [hashtable] $Result,
+        [System.Collections.IDictionary] $Result,
         [string[]] $SummaryLines
     )
 
@@ -448,9 +452,11 @@ function Invoke-DockerPsqlCommand {
     $processStartInfo.Arguments = Join-NativeArguments -Arguments $dockerArgs.ToArray()
 
     $process = [System.Diagnostics.Process]::Start($processStartInfo)
-    $stdout = $process.StandardOutput.ReadToEnd()
-    $stderr = $process.StandardError.ReadToEnd()
+    $stdoutTask = $process.StandardOutput.ReadToEndAsync()
+    $stderrTask = $process.StandardError.ReadToEndAsync()
     $process.WaitForExit()
+    $stdout = $stdoutTask.GetAwaiter().GetResult()
+    $stderr = $stderrTask.GetAwaiter().GetResult()
 
     if (-not [string]::IsNullOrWhiteSpace($stderr)) {
         $script:PsqlDiagnostics.Add([ordered]@{
@@ -681,9 +687,12 @@ select jsonb_pretty(jsonb_build_object(
     where n.nspname = 'pos'
   ),
   'triggers', (
-    select coalesce(jsonb_agg(event_object_schema || '.' || event_object_table || '.' || trigger_name order by event_object_schema, event_object_table, trigger_name), '[]'::jsonb)
-    from information_schema.triggers
-    where event_object_schema = 'pos'
+    select coalesce(jsonb_agg(trigger_ref order by trigger_ref), '[]'::jsonb)
+    from (
+      select distinct event_object_schema || '.' || event_object_table || '.' || trigger_name as trigger_ref
+      from information_schema.triggers
+      where event_object_schema = 'pos'
+    ) trigger_inventory
   ),
   'extensions', (
     select coalesce(jsonb_agg(extname order by extname), '[]'::jsonb)
@@ -703,7 +712,7 @@ select jsonb_pretty(jsonb_build_object(
 
 function Compare-Inventory {
     param(
-        [hashtable] $Result,
+        [System.Collections.IDictionary] $Result,
         [object] $Inventory,
         [string] $ModeName
     )
@@ -717,6 +726,10 @@ function Compare-Inventory {
     $actualFunctions = @($Inventory.functions | Sort-Object)
     $expectedTriggers = @($expected.expected_triggers | Sort-Object)
     $actualTriggers = @($Inventory.triggers | Sort-Object)
+    $expectedReportingIndexes = @($expected.expected_reporting_indexes | Sort-Object)
+    $actualIndexes = @($Inventory.indexes | ForEach-Object { "$($_.schema).$($_.table).$($_.index)" } | Sort-Object)
+    $expectedReportingConstraints = @($expected.expected_reporting_constraints | Sort-Object)
+    $actualConstraints = @($Inventory.constraints | ForEach-Object { "$($_.schema).$($_.table).$($_.constraint)" } | Sort-Object)
 
     $missingSchemas = @(Compare-Object -ReferenceObject $expectedSchemas -DifferenceObject $actualSchemas |
         Where-Object { $_.SideIndicator -eq '<=' } |
@@ -742,6 +755,8 @@ function Compare-Inventory {
     $unexpectedTriggers = @(Compare-Object -ReferenceObject $expectedTriggers -DifferenceObject $actualTriggers |
         Where-Object { $_.SideIndicator -eq '=>' } |
         ForEach-Object { $_.InputObject })
+    $missingReportingIndexes = @($expectedReportingIndexes | Where-Object { $_ -notin $actualIndexes })
+    $missingReportingConstraints = @($expectedReportingConstraints | Where-Object { $_ -notin $actualConstraints })
 
     $nonDefaultExtensions = @($Inventory.extensions | Where-Object { $_ -ne 'plpgsql' } | Sort-Object)
 
@@ -764,6 +779,10 @@ function Compare-Inventory {
         triggers = @($Inventory.triggers)
         missing_triggers = $missingTriggers
         unexpected_triggers = $unexpectedTriggers
+        expected_reporting_indexes = $expectedReportingIndexes
+        missing_reporting_indexes = $missingReportingIndexes
+        expected_reporting_constraints = $expectedReportingConstraints
+        missing_reporting_constraints = $missingReportingConstraints
         extensions = @($Inventory.extensions)
         non_default_extensions = $nonDefaultExtensions
         sequences = @($Inventory.sequences)
@@ -778,6 +797,8 @@ function Compare-Inventory {
     foreach ($function in $unexpectedFunctions) { Add-ValidationError $Result "$ModeName prohibited object: unexpected function $function exists in pos schema." }
     foreach ($trigger in $missingTriggers) { Add-ValidationError $Result "$ModeName drift: missing expected trigger $trigger." }
     foreach ($trigger in $unexpectedTriggers) { Add-ValidationError $Result "$ModeName prohibited object: unexpected trigger $trigger exists in pos schema." }
+    foreach ($index in $missingReportingIndexes) { Add-ValidationError $Result "$ModeName drift: missing expected reporting index $index." }
+    foreach ($constraint in $missingReportingConstraints) { Add-ValidationError $Result "$ModeName drift: missing expected reporting constraint $constraint." }
     foreach ($sequence in @($Inventory.sequences)) { Add-ValidationError $Result "$ModeName prohibited object: sequence $sequence exists in pos schema." }
     foreach ($extension in $nonDefaultExtensions) { Add-ValidationError $Result "$ModeName prohibited object: non-default extension $extension exists in database." }
 }
@@ -807,6 +828,7 @@ function Invoke-StaticChecks {
     $stateSqlFiles = Get-StateSqlFiles
     $expectedInventory = Get-JsonFile -Path $ExpectedInventoryPath
     $prohibitedConfig = Get-JsonFile -Path $ProhibitedPatternsPath
+    $knownLegacyOverlengthIdentifiers = @($expectedInventory.known_legacy_overlength_identifiers)
 
     $result.details.manifest = [ordered]@{
         path = 'db/rebuild/pos_sql_apply_order.txt'
@@ -884,14 +906,19 @@ function Invoke-StaticChecks {
             Add-ValidationError $result $message
         }
 
-        $constraintMatches = [regex]::Matches($sql, '\bCONSTRAINT\s+([A-Za-z_][A-Za-z0-9_]*)', $regexOptions)
+        $constraintMatches = [regex]::Matches($sql, '\bCONSTRAINT\s+(?!IF\s+EXISTS\b)([A-Za-z_][A-Za-z0-9_]*)', $regexOptions)
         foreach ($match in $constraintMatches) {
             $identifier = $match.Groups[1].Value
             $byteCount = [Text.Encoding]::UTF8.GetByteCount($identifier)
             if ($byteCount -gt 63) {
                 $message = "Identifier exceeds PostgreSQL 63-byte limit in ${relativeFile}: $identifier ($byteCount bytes)"
                 $identifierFindings.Add($message)
-                Add-ValidationError $result $message
+                if ($knownLegacyOverlengthIdentifiers -contains "$relativeFile|$identifier") {
+                    Add-ValidationWarning $result "Known origin/dev legacy identifier: $message"
+                }
+                else {
+                    Add-ValidationError $result $message
+                }
             }
             if (-not (Test-SnakeIdentifier -Identifier $identifier)) {
                 $message = "Constraint identifier is not lowercase snake_case in ${relativeFile}: $identifier"
@@ -1193,12 +1220,52 @@ function Invoke-ControlledCodeLoadChecks {
     return Complete-Result -Result $result -SummaryLines $summary.ToArray()
 }
 
+function Invoke-ReportingSchemaProofChecks {
+    Assert-ConnectionStringProvided
+    Assert-PsqlRunnerAvailable
+    Assert-DisposableDatabaseTarget
+
+    $result = New-CheckResult -Name 'ReportingSchemaProof'
+    $summary = New-Object System.Collections.Generic.List[string]
+    $summary.Add('POS Server fiscal-reporting contract/schema proof')
+    $summary.Add('The proof runs in a transaction and rolls back all synthetic rows.')
+
+    if (-not (Test-Path -LiteralPath $ReportingSchemaProofPath)) {
+        Add-ValidationError $result "Reporting schema proof fixture does not exist: $ReportingSchemaProofPath"
+        return Complete-Result -Result $result -SummaryLines $summary.ToArray()
+    }
+
+    $output = @(Invoke-PsqlCommand -FilePath $ReportingSchemaProofPath)
+    $expectedProofs = @(
+        'reporting-proof-x-count|1',
+        'reporting-proof-z-count|1',
+        'reporting-proof-bir-bound-to-z|1',
+        'reporting-proof-normalized-triggers|11'
+    )
+
+    foreach ($proof in $expectedProofs) {
+        if ($output -notcontains $proof) {
+            Add-ValidationError $result "Reporting schema proof output is missing '$proof'."
+        }
+    }
+
+    $result.details.fixture = ConvertTo-RepoRelativePath $ReportingSchemaProofPath
+    $result.details.expected_proofs = $expectedProofs
+    $result.details.actual_proofs = @($output | Where-Object { $_ -like 'reporting-proof-*' })
+    $result.details.transaction_posture = 'All synthetic proof rows are rolled back.'
+    $summary.Add("Expected proof markers: $($expectedProofs.Count)")
+    $summary.Add("Observed proof markers: $(@($result.details.actual_proofs).Count)")
+
+    return Complete-Result -Result $result -SummaryLines $summary.ToArray()
+}
+
 switch ($Mode) {
     'Static' { Invoke-StaticChecks | Out-Null }
     'Rebuild' { Invoke-RebuildChecks | Out-Null }
     'Inventory' { Invoke-InventoryChecks -ResultMode 'Inventory' | Out-Null }
     'Drift' { Invoke-InventoryChecks -ResultMode 'Drift' | Out-Null }
     'ControlledCodeLoad' { Invoke-ControlledCodeLoadChecks | Out-Null }
+    'ReportingSchemaProof' { Invoke-ReportingSchemaProofChecks | Out-Null }
     'All' { Invoke-AllChecks | Out-Null }
 }
 

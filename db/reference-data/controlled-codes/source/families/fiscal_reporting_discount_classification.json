@@ -1,0 +1,24 @@
+{
+  "schema_version":"1.0",
+  "source_key":"controlled_codes.fiscal_reporting_discount_classification.v1",
+  "source_name":"Fiscal Reporting Discount Classification Controlled Codes",
+  "source_description":"Separate statutory, VAT, coupon, and promotional report categories.",
+  "governance_owner":"Engineering",
+  "source_ref":"ExitPass_POS_Server_Internal_Fiscal_Reporting_Contract_v1.0; Z-006A",
+  "code_sets":[{
+    "code_set_key":"fiscal_reporting_discount_classification",
+    "display_name":"Fiscal Reporting Discount Classification",
+    "description":"Reporting categories that prevent statutory and commercial discount collapse.",
+    "governance_owner":"Engineering","source_ref":"Z-006A","is_active":true,
+    "effective_start_at":"2026-08-03T00:00:00Z","effective_end_at":null,
+    "codes":[
+      {"code_key":"senior_citizen_statutory","display_name":"Senior Citizen Statutory","description":"Final applied Senior Citizen statutory discount aggregate.","source_ref":"Z-006A","sort_order":10,"is_active":true,"is_deprecated":false,"effective_start_at":"2026-08-03T00:00:00Z","effective_end_at":null,"replaced_by_code_key":null},
+      {"code_key":"pwd_statutory","display_name":"PWD Statutory","description":"Final applied PWD statutory discount aggregate.","source_ref":"Z-006A","sort_order":20,"is_active":true,"is_deprecated":false,"effective_start_at":"2026-08-03T00:00:00Z","effective_end_at":null,"replaced_by_code_key":null},
+      {"code_key":"other_statutory","display_name":"Other Statutory","description":"Future separately governed statutory aggregate; unknown benefits cannot map here automatically.","source_ref":"Z-006A","sort_order":30,"is_active":true,"is_deprecated":false,"effective_start_at":"2026-08-03T00:00:00Z","effective_end_at":null,"replaced_by_code_key":null},
+      {"code_key":"vat_exemption_adjustment","display_name":"VAT Exemption Adjustment","description":"Authoritative VAT privilege/removal aggregate, distinct from discount.","source_ref":"Z-006A","sort_order":40,"is_active":true,"is_deprecated":false,"effective_start_at":"2026-08-03T00:00:00Z","effective_end_at":null,"replaced_by_code_key":null},
+      {"code_key":"coupon","display_name":"Coupon","description":"Governed commercial coupon aggregate.","source_ref":"Z-006A","sort_order":50,"is_active":true,"is_deprecated":false,"effective_start_at":"2026-08-03T00:00:00Z","effective_end_at":null,"replaced_by_code_key":null},
+      {"code_key":"promotional","display_name":"Promotional","description":"Governed commercial promotional discount aggregate.","source_ref":"Z-006A","sort_order":60,"is_active":true,"is_deprecated":false,"effective_start_at":"2026-08-03T00:00:00Z","effective_end_at":null,"replaced_by_code_key":null}
+    ]
+  }],
+  "notes":["No beneficiary identity or evidence belongs in reporting discount rows."]
+}

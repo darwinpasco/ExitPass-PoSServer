@@ -1,0 +1,22 @@
+{
+  "schema_version":"1.0",
+  "source_key":"controlled_codes.fiscal_report_output_status.v1",
+  "source_name":"Fiscal Report Output Status Controlled Codes",
+  "source_description":"Output-reference lifecycle distinct from report and export status.",
+  "governance_owner":"Engineering",
+  "source_ref":"ExitPass_POS_Server_Internal_Fiscal_Reporting_Contract_v1.0; Z-006A",
+  "code_sets":[{
+    "code_set_key":"fiscal_report_output_status",
+    "display_name":"Fiscal Report Output Status",
+    "description":"Lifecycle for a future report presentation/output reference.",
+    "governance_owner":"Engineering","source_ref":"Z-006A","is_active":true,
+    "effective_start_at":"2026-08-03T00:00:00Z","effective_end_at":null,
+    "codes":[
+      {"code_key":"requested","display_name":"Requested","description":"Output reference requested; no content is implied.","source_ref":"Z-006A","sort_order":10,"is_active":true,"is_deprecated":false,"effective_start_at":"2026-08-03T00:00:00Z","effective_end_at":null,"replaced_by_code_key":null},
+      {"code_key":"processing","display_name":"Processing","description":"Future output generation is in progress.","source_ref":"Z-006A","sort_order":20,"is_active":true,"is_deprecated":false,"effective_start_at":"2026-08-03T00:00:00Z","effective_end_at":null,"replaced_by_code_key":null},
+      {"code_key":"committed","display_name":"Committed","description":"Output reference identifies a durably committed governed output.","source_ref":"Z-006A","sort_order":30,"is_active":true,"is_deprecated":false,"effective_start_at":"2026-08-03T00:00:00Z","effective_end_at":null,"replaced_by_code_key":null},
+      {"code_key":"failed","display_name":"Failed","description":"Output generation did not commit.","source_ref":"Z-006A","sort_order":40,"is_active":true,"is_deprecated":false,"effective_start_at":"2026-08-03T00:00:00Z","effective_end_at":null,"replaced_by_code_key":null}
+    ]
+  }],
+  "notes":["This family is not fiscal_report_status or fiscal_export_status."]
+}

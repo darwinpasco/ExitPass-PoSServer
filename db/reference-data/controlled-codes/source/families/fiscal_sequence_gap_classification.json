@@ -1,0 +1,22 @@
+{
+  "schema_version":"1.0",
+  "source_key":"controlled_codes.fiscal_sequence_gap_classification.v1",
+  "source_name":"Fiscal Sequence Gap Classification Controlled Codes",
+  "source_description":"Immutable report-local fiscal sequence gap classifications.",
+  "governance_owner":"Engineering",
+  "source_ref":"ExitPass_POS_Server_Internal_Fiscal_Reporting_Contract_v1.0; Z-006A",
+  "code_sets":[{
+    "code_set_key":"fiscal_sequence_gap_classification",
+    "display_name":"Fiscal Sequence Gap Classification",
+    "description":"Governed reason category for a missing sequence in a report range.",
+    "governance_owner":"Engineering","source_ref":"Z-006A","is_active":true,
+    "effective_start_at":"2026-08-03T00:00:00Z","effective_end_at":null,
+    "codes":[
+      {"code_key":"voided_document","display_name":"Voided Document","description":"Sequence belongs to a durably voided fiscal document.","source_ref":"Z-006A","sort_order":10,"is_active":true,"is_deprecated":false,"effective_start_at":"2026-08-03T00:00:00Z","effective_end_at":null,"replaced_by_code_key":null},
+      {"code_key":"failed_issuance","display_name":"Failed Issuance","description":"Sequence was consumed by a governed failed issuance posture.","source_ref":"Z-006A","sort_order":20,"is_active":true,"is_deprecated":false,"effective_start_at":"2026-08-03T00:00:00Z","effective_end_at":null,"replaced_by_code_key":null},
+      {"code_key":"reserved_not_issued","display_name":"Reserved Not Issued","description":"Sequence was reserved but no fiscal document was issued.","source_ref":"Z-006A","sort_order":30,"is_active":true,"is_deprecated":false,"effective_start_at":"2026-08-03T00:00:00Z","effective_end_at":null,"replaced_by_code_key":null},
+      {"code_key":"unexplained","display_name":"Unexplained","description":"Gap lacks an approved explanation and blocks future close readiness.","source_ref":"Z-006A","sort_order":40,"is_active":true,"is_deprecated":false,"effective_start_at":"2026-08-03T00:00:00Z","effective_end_at":null,"replaced_by_code_key":null}
+    ]
+  }],
+  "notes":["Classification does not authorize sequence reuse."]
+}

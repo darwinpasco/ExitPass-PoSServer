@@ -1,0 +1,23 @@
+{
+  "schema_version":"1.0",
+  "source_key":"controlled_codes.fiscal_reporting_tender_classification.v1",
+  "source_name":"Fiscal Reporting Tender Classification Controlled Codes",
+  "source_description":"Reporting projection categories for persisted fiscal tenders.",
+  "governance_owner":"Engineering",
+  "source_ref":"ExitPass_POS_Server_Internal_Fiscal_Reporting_Contract_v1.0; Z-006A",
+  "code_sets":[{
+    "code_set_key":"fiscal_reporting_tender_classification",
+    "display_name":"Fiscal Reporting Tender Classification",
+    "description":"Tender report categories; mappings from fiscal tender codes must be governed and fail closed when absent.",
+    "governance_owner":"Engineering","source_ref":"Z-006A","is_active":true,
+    "effective_start_at":"2026-08-03T00:00:00Z","effective_end_at":null,
+    "codes":[
+      {"code_key":"cash","display_name":"Cash","description":"Cash tender aggregate.","source_ref":"Z-006A","sort_order":10,"is_active":true,"is_deprecated":false,"effective_start_at":"2026-08-03T00:00:00Z","effective_end_at":null,"replaced_by_code_key":null},
+      {"code_key":"card","display_name":"Card","description":"Governed card tender aggregate.","source_ref":"Z-006A","sort_order":20,"is_active":true,"is_deprecated":false,"effective_start_at":"2026-08-03T00:00:00Z","effective_end_at":null,"replaced_by_code_key":null},
+      {"code_key":"digital_wallet","display_name":"Digital Wallet","description":"Governed digital-wallet tender aggregate.","source_ref":"Z-006A","sort_order":30,"is_active":true,"is_deprecated":false,"effective_start_at":"2026-08-03T00:00:00Z","effective_end_at":null,"replaced_by_code_key":null},
+      {"code_key":"bank_transfer","display_name":"Bank Transfer","description":"Governed bank-transfer tender aggregate.","source_ref":"Z-006A","sort_order":40,"is_active":true,"is_deprecated":false,"effective_start_at":"2026-08-03T00:00:00Z","effective_end_at":null,"replaced_by_code_key":null},
+      {"code_key":"other_non_cash","display_name":"Other Non-Cash","description":"Explicitly governed non-cash tender not represented by another approved category.","source_ref":"Z-006A","sort_order":50,"is_active":true,"is_deprecated":false,"effective_start_at":"2026-08-03T00:00:00Z","effective_end_at":null,"replaced_by_code_key":null}
+    ]
+  }],
+  "notes":["Unknown fiscal tender codes fail closed; labels are not accepted as classifications."]
+}
