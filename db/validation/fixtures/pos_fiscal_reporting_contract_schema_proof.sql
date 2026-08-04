@@ -102,6 +102,51 @@ INSERT INTO pos.fiscal_report_requests (
     ('46000000-0000-4000-8000-000000000609', 'f6766f48-62f0-513f-b9eb-e61c2f3e8c66', '46000000-0000-4000-8000-000000000501', '46000000-0000-4000-8000-000000000301', '2326447f-74c2-5ed7-83bb-e079fcee7f3d', '84ef4d12-b3a1-5385-88b1-3a3eadeb8a04', 'REPORTING-PROOF-BIR-0003', repeat('2', 64), 'pos-server-fiscal-report-request:sha256:v1', '2026-08-01', '2026-08-02T00:00:03Z', 'Z-006A-PROOF', 'Z-006A-PROOF-SERVICE'),
     ('46000000-0000-4000-8000-000000000610', 'f6766f48-62f0-513f-b9eb-e61c2f3e8c66', '46000000-0000-4000-8000-000000000501', '46000000-0000-4000-8000-000000000301', '5dc3cc94-b3ab-5582-a598-e779871fc3e2', '84ef4d12-b3a1-5385-88b1-3a3eadeb8a04', 'REPORTING-PROOF-X-NEGATIVE', repeat('3', 64), 'pos-server-fiscal-report-request:sha256:v1', '2026-08-01', '2026-08-02T00:00:03Z', 'Z-006A-PROOF', 'Z-006A-PROOF-SERVICE');
 
+INSERT INTO pos.fiscal_z_close_states (
+    fiscal_z_close_state_id, site_pos_server_id, fiscal_identity_id, currency_code,
+    fiscal_reporting_contract_version_id, reset_counter_value, z_counter_value,
+    grand_total_amount_minor_units, state_version, initialization_provenance_code_id,
+    initialized_at, initialized_by_ref, initialization_service_ref, initialization_approval_ref,
+    last_transition_operation_ref, last_transition_at
+) VALUES (
+    '46000000-0000-4000-8000-000000000620',
+    '46000000-0000-4000-8000-000000000301',
+    '46000000-0000-4000-8000-000000000302', 'PHP',
+    'f6766f48-62f0-513f-b9eb-e61c2f3e8c66', 0, 0, 100000, 1,
+    '9ce30367-0ff0-5c5e-8d48-b4a3b3b9df71', '2026-08-01T00:00:00Z',
+    'Z-007B-PROOF', 'Z-007B-PROOF-SERVICE', 'Z-007B-APPROVAL',
+    'REPORTING-PROOF-STATE-INIT', '2026-08-01T00:00:00Z'
+);
+
+INSERT INTO pos.fiscal_z_close_state_transitions (
+    fiscal_z_close_state_transition_id, fiscal_z_close_state_id,
+    fiscal_reporting_contract_version_id, site_pos_server_id, fiscal_identity_id, currency_code,
+    transition_type_code_id, initialization_provenance_code_id, operation_ref,
+    semantic_request_hash, semantic_hash_version, expected_state_version, resulting_state_version,
+    approval_ref, actor_ref, service_identity_ref, correlation_ref, committed_at
+) VALUES (
+    '46000000-0000-4000-8000-000000000621', '46000000-0000-4000-8000-000000000620',
+    'f6766f48-62f0-513f-b9eb-e61c2f3e8c66', '46000000-0000-4000-8000-000000000301',
+    '46000000-0000-4000-8000-000000000302', 'PHP',
+    '21880ca5-b803-5abc-959f-def2f232ad73', '9ce30367-0ff0-5c5e-8d48-b4a3b3b9df71',
+    'REPORTING-PROOF-STATE-INIT', repeat('4', 64),
+    'pos-server-fiscal-z-close-state-initialize:sha256:v1', 0, 1,
+    'Z-007B-APPROVAL', 'Z-007B-PROOF', 'Z-007B-PROOF-SERVICE',
+    'Z-007B-PROOF-CORRELATION', '2026-08-01T00:00:00Z'
+);
+
+INSERT INTO pos.fiscal_z_close_state_transition_values (
+    fiscal_z_close_state_transition_value_id, fiscal_z_close_state_transition_id,
+    state_identity_code_id, previous_counter_value, resulting_counter_value,
+    previous_amount_minor_units, resulting_amount_minor_units, currency_code
+) VALUES
+    ('46000000-0000-4000-8000-000000000622', '46000000-0000-4000-8000-000000000621',
+     'baf7bb67-9f11-5b2f-a750-e5689a5f0142', NULL, 0, NULL, NULL, NULL),
+    ('46000000-0000-4000-8000-000000000623', '46000000-0000-4000-8000-000000000621',
+     'a1dddcd8-aab5-51a8-bb64-f610edbdc1eb', NULL, 0, NULL, NULL, NULL),
+    ('46000000-0000-4000-8000-000000000624', '46000000-0000-4000-8000-000000000621',
+     'e01e75a6-6ee9-5bdf-9bf4-0a38476f8805', NULL, NULL, NULL, 100000, 'PHP');
+
 INSERT INTO pos.fiscal_report_scopes (
     fiscal_report_scope_id, fiscal_report_request_id, fiscal_reporting_period_id, scope_type_code_id, fiscal_series
 ) VALUES (
@@ -169,14 +214,16 @@ DO $$
 BEGIN
     BEGIN
         INSERT INTO pos.fiscal_z_counter_snapshots (
-            fiscal_z_counter_snapshot_id, x_z_report_id, report_kind_code_id,
+            fiscal_z_counter_snapshot_id, fiscal_z_close_state_id, x_z_report_id, report_kind_code_id,
+            expected_state_version, resulting_state_version,
             previous_reset_counter_value, resulting_reset_counter_value,
             previous_z_counter_value, resulting_z_counter_value,
             previous_grand_total_amount_minor_units, current_period_amount_minor_units,
             resulting_grand_total_amount_minor_units, currency_code
         ) VALUES (
-            '46000000-0000-4000-8000-000000000719', '46000000-0000-4000-8000-000000000702',
-            '1c628bc2-49c3-53e8-ae83-2082bcf28467', 0, 1, 0, 2, 100000, 20000, 120000, 'PHP'
+            '46000000-0000-4000-8000-000000000719', '46000000-0000-4000-8000-000000000620',
+            '46000000-0000-4000-8000-000000000702',
+            '1c628bc2-49c3-53e8-ae83-2082bcf28467', 1, 2, 0, 0, 0, 2, 100000, 20000, 120000, 'PHP'
         );
         RAISE EXCEPTION 'invalid Z counter relationship was not rejected';
     EXCEPTION WHEN check_violation THEN NULL;
@@ -185,14 +232,16 @@ END;
 $$;
 
 INSERT INTO pos.fiscal_z_counter_snapshots (
-    fiscal_z_counter_snapshot_id, x_z_report_id, report_kind_code_id,
+    fiscal_z_counter_snapshot_id, fiscal_z_close_state_id, x_z_report_id, report_kind_code_id,
+    expected_state_version, resulting_state_version,
     previous_reset_counter_value, resulting_reset_counter_value,
     previous_z_counter_value, resulting_z_counter_value,
     previous_grand_total_amount_minor_units, current_period_amount_minor_units,
     resulting_grand_total_amount_minor_units, currency_code
 ) VALUES (
-    '46000000-0000-4000-8000-000000000715', '46000000-0000-4000-8000-000000000702',
-    '1c628bc2-49c3-53e8-ae83-2082bcf28467', 0, 1, 0, 1, 100000, 20000, 120000, 'PHP'
+    '46000000-0000-4000-8000-000000000715', '46000000-0000-4000-8000-000000000620',
+    '46000000-0000-4000-8000-000000000702',
+    '1c628bc2-49c3-53e8-ae83-2082bcf28467', 1, 2, 0, 0, 0, 1, 100000, 20000, 120000, 'PHP'
 );
 
 INSERT INTO pos.bir_sales_summary_reports (
@@ -981,6 +1030,181 @@ BEGIN
     END IF;
 END;
 $$;
+
+SAVEPOINT z_close_boundary_foundation_probe;
+
+INSERT INTO pos.fiscal_reporting_periods (
+    fiscal_reporting_period_id, fiscal_reporting_contract_version_id, site_pos_server_id,
+    fiscal_identity_id, period_status_code_id, business_day_date, period_start_at,
+    period_end_at, reporting_timezone_name, business_day_cutoff_local_time, currency_code,
+    period_sequence, expected_prior_period_id, opened_at, created_by_ref, updated_by_ref
+) VALUES (
+    '46000000-0000-4000-8000-000000000530',
+    'f6766f48-62f0-513f-b9eb-e61c2f3e8c66',
+    '46000000-0000-4000-8000-000000000301',
+    '46000000-0000-4000-8000-000000000302',
+    '1a6f7021-bc84-5c01-afaa-c5d6685633c8', '2026-08-02',
+    '2026-08-02T00:00:00Z', '2026-08-03T00:00:00Z', 'Etc/UTC', '00:00:00',
+    'PHP', 2, '46000000-0000-4000-8000-000000000501', '2026-08-02T00:00:00Z',
+    'Z-007B-PROOF', 'Z-007B-PROOF'
+);
+
+INSERT INTO pos.fiscal_documents (
+    fiscal_document_id, site_pos_server_id, fiscal_identity_id, currency_code,
+    fiscal_reporting_period_id, fiscal_document_type_code_id, fiscal_document_status_code_id,
+    business_day_date, created_at, updated_at
+) VALUES (
+    '46000000-0000-4000-8000-000000000900',
+    '46000000-0000-4000-8000-000000000301',
+    '46000000-0000-4000-8000-000000000302', 'PHP',
+    '46000000-0000-4000-8000-000000000530',
+    '46000000-0000-4000-8000-000000000201',
+    '46000000-0000-4000-8000-000000000202',
+    '2026-08-02', '2026-08-02T12:00:00Z', '2026-08-02T12:00:00Z'
+);
+
+DO $$
+BEGIN
+    BEGIN
+        INSERT INTO pos.fiscal_z_close_states (
+            fiscal_z_close_state_id, site_pos_server_id, fiscal_identity_id, currency_code,
+            fiscal_reporting_contract_version_id, reset_counter_value, z_counter_value,
+            grand_total_amount_minor_units, state_version, initialization_provenance_code_id,
+            initialized_at, initialized_by_ref, initialization_service_ref,
+            initialization_approval_ref, last_transition_operation_ref, last_transition_at
+        ) VALUES (
+            '46000000-0000-4000-8000-000000000625',
+            '46000000-0000-4000-8000-000000000301',
+            '46000000-0000-4000-8000-000000000302', 'PHP',
+            'f6766f48-62f0-513f-b9eb-e61c2f3e8c66', 0, 0, 0, 1,
+            '8f31c890-2aa2-50ef-a815-0e0c8cf90983', '2026-08-02T00:00:00Z',
+            'Z-007B-PROOF', 'Z-007B-PROOF-SERVICE', 'Z-007B-APPROVAL',
+            'Z-007B-DUPLICATE-SCOPE', '2026-08-02T00:00:00Z'
+        );
+        RAISE EXCEPTION 'duplicate canonical Z state scope was not rejected';
+    EXCEPTION WHEN unique_violation THEN NULL;
+    END;
+
+    BEGIN
+        INSERT INTO pos.fiscal_z_close_state_transitions (
+            fiscal_z_close_state_transition_id, fiscal_z_close_state_id,
+            fiscal_reporting_contract_version_id, site_pos_server_id, fiscal_identity_id,
+            currency_code, transition_type_code_id, initialization_provenance_code_id,
+            operation_ref, semantic_request_hash, semantic_hash_version,
+            expected_state_version, resulting_state_version, approval_ref, actor_ref,
+            service_identity_ref, correlation_ref, committed_at
+        ) VALUES (
+            '46000000-0000-4000-8000-000000000626',
+            '46000000-0000-4000-8000-000000000620',
+            'f6766f48-62f0-513f-b9eb-e61c2f3e8c66',
+            '46000000-0000-4000-8000-000000000301',
+            '46000000-0000-4000-8000-000000000302', 'PHP',
+            '5dc3cc94-b3ab-5582-a598-e779871fc3e2', NULL,
+            'Z-007B-WRONG-FAMILY', repeat('5', 64),
+            'pos-server-fiscal-z-close-state-transition:sha256:v1', 1, 2,
+            'Z-007B-APPROVAL', 'Z-007B-PROOF', 'Z-007B-PROOF-SERVICE',
+            'Z-007B-PROOF-CORRELATION', '2026-08-02T00:00:00Z'
+        );
+        RAISE EXCEPTION 'wrong-family Z state transition type was not rejected';
+    EXCEPTION WHEN check_violation THEN NULL;
+    END;
+
+    BEGIN
+        UPDATE pos.fiscal_z_close_states
+        SET z_counter_value = z_counter_value + 1
+        WHERE fiscal_z_close_state_id = '46000000-0000-4000-8000-000000000620';
+        RAISE EXCEPTION 'direct canonical Z state update was not rejected';
+    EXCEPTION WHEN check_violation THEN NULL;
+    END;
+
+    BEGIN
+        DELETE FROM pos.fiscal_z_close_states
+        WHERE fiscal_z_close_state_id = '46000000-0000-4000-8000-000000000620';
+        RAISE EXCEPTION 'direct canonical Z state delete was not rejected';
+    EXCEPTION WHEN check_violation THEN NULL;
+    END;
+
+    BEGIN
+        PERFORM pos.apply_fiscal_z_close_state_transition(
+            '46000000-0000-4000-8000-000000000621'
+        );
+        RAISE EXCEPTION 'initialization evidence was incorrectly accepted as Z transition';
+    EXCEPTION WHEN check_violation THEN NULL;
+    END;
+
+    BEGIN
+        UPDATE pos.fiscal_documents
+        SET fiscal_reporting_period_id = NULL
+        WHERE fiscal_document_id = '46000000-0000-4000-8000-000000000900';
+        RAISE EXCEPTION 'fiscal reporting-period assignment mutation was not rejected';
+    EXCEPTION WHEN check_violation THEN NULL;
+    END;
+
+    BEGIN
+        INSERT INTO pos.fiscal_documents (
+            fiscal_document_id, site_pos_server_id, fiscal_identity_id, currency_code,
+            fiscal_reporting_period_id, fiscal_document_type_code_id, fiscal_document_status_code_id,
+            created_at, updated_at
+        ) VALUES (
+            '46000000-0000-4000-8000-000000000901',
+            '46000000-0000-4000-8000-000000000301',
+            '46000000-0000-4000-8000-000000000302', 'USD',
+            '46000000-0000-4000-8000-000000000530',
+            '46000000-0000-4000-8000-000000000201',
+            '46000000-0000-4000-8000-000000000202',
+            '2026-08-02T12:00:00Z', '2026-08-02T12:00:00Z'
+        );
+        RAISE EXCEPTION 'mixed-currency reporting-period assignment was not rejected';
+    EXCEPTION WHEN foreign_key_violation OR check_violation THEN NULL;
+    END;
+
+    BEGIN
+        INSERT INTO pos.fiscal_documents (
+            fiscal_document_id, site_pos_server_id, fiscal_identity_id, currency_code,
+            fiscal_reporting_period_id, fiscal_document_type_code_id, fiscal_document_status_code_id,
+            created_at, updated_at
+        ) VALUES (
+            '46000000-0000-4000-8000-000000000902',
+            '46000000-0000-4000-8000-000000000301',
+            '46000000-0000-4000-8000-000000000302', 'PHP',
+            '46000000-0000-4000-8000-000000000530',
+            '46000000-0000-4000-8000-000000000201',
+            '46000000-0000-4000-8000-000000000202',
+            '2026-08-03T00:00:00Z', '2026-08-03T00:00:00Z'
+        );
+        RAISE EXCEPTION 'period-end fiscal document was not rejected from prior period';
+    EXCEPTION WHEN check_violation THEN NULL;
+    END;
+END;
+$$;
+
+SELECT 'reporting-proof-z-state-unique-scope' AS proof, 'passed' AS value;
+SELECT 'reporting-proof-z-state-wrong-family-rejected' AS proof, 'passed' AS value;
+SELECT 'reporting-proof-z-state-direct-mutation-rejected' AS proof, 'passed' AS value;
+SELECT 'reporting-proof-z-state-non-transition-rejected' AS proof, 'passed' AS value;
+SELECT 'reporting-proof-period-assignment-valid' AS proof, 'passed' AS value;
+SELECT 'reporting-proof-period-assignment-immutable' AS proof, 'passed' AS value;
+SELECT 'reporting-proof-period-assignment-scope-currency' AS proof, 'passed' AS value;
+SELECT 'reporting-proof-period-assignment-half-open-window' AS proof, 'passed' AS value;
+
+ROLLBACK TO SAVEPOINT z_close_boundary_foundation_probe;
+
+DO $$
+BEGIN
+    IF EXISTS (
+        SELECT 1 FROM pos.fiscal_documents
+        WHERE fiscal_document_id BETWEEN '46000000-0000-4000-8000-000000000900'
+            AND '46000000-0000-4000-8000-000000000902'
+    ) OR EXISTS (
+        SELECT 1 FROM pos.fiscal_reporting_periods
+        WHERE fiscal_reporting_period_id = '46000000-0000-4000-8000-000000000530'
+    ) THEN
+        RAISE EXCEPTION 'Z close boundary foundation proof rollback left partial evidence';
+    END IF;
+END;
+$$;
+
+SELECT 'reporting-proof-z-boundary-transaction-rollback' AS proof, 'passed' AS value;
 
 SELECT 'reporting-proof-x-count' AS proof, count(*)::text AS value
 FROM pos.x_z_reports WHERE report_kind_code_id = '5dc3cc94-b3ab-5582-a598-e779871fc3e2';

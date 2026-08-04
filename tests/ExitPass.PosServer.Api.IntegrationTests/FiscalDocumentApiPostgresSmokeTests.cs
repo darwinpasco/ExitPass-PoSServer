@@ -1,6 +1,7 @@
 using System.Net;
 using System.Net.Http.Json;
 using ExitPass.PosServer.Api.FiscalDocuments;
+using ExitPass.PosServer.Persistence.Postgres.FiscalReports;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Hosting.Server;
@@ -31,6 +32,7 @@ public sealed class FiscalDocumentApiPostgresSmokeTests
     private static readonly Guid FiscalSequencePolicyStatusCodeId = Guid.Parse("10000000-0000-0000-0000-000000000802");
     private static readonly Guid FiscalSequencePolicyId = Guid.Parse("10000000-0000-0000-0000-000000000803");
     private static readonly Guid FiscalSequenceStateId = Guid.Parse("10000000-0000-0000-0000-000000000804");
+    private static readonly Guid FiscalReportingPeriodId = Guid.Parse("10000000-0000-0000-0000-000000000805");
 
     private readonly ITestOutputHelper output;
 
@@ -259,6 +261,153 @@ public sealed class FiscalDocumentApiPostgresSmokeTests
 
         Assert.Equal(0, await CountTablesLikeAsync(connection, "%exit%"));
         Assert.Equal(0, await CountTablesLikeAsync(connection, "%gate%"));
+    }
+
+    [Fact]
+    public async Task ClosedReportingPeriodRejectsIssuanceAndVoidWithoutAllocatingAnotherFiscalNumber()
+    {
+        if (!TryGetSmokeConnectionString(out var connectionString)) return;
+
+        await RebuildDisposableDatabaseAsync(connectionString);
+        await InsertDisposableSmokeFixtureAsync(connectionString);
+        await using var app = await StartApiAsync(connectionString);
+        using var client = CreateClient(app);
+
+        using var createdResponse = await client.PostAsJsonAsync("/v1/fiscal-documents/", CreateValidRequest("boundary-open"));
+        var created = await createdResponse.Content.ReadFromJsonAsync<CreateFiscalDocumentResponse>();
+        Assert.Equal(HttpStatusCode.Accepted, createdResponse.StatusCode);
+        Assert.NotNull(created?.FiscalDocumentId);
+
+        await using (var connection = new NpgsqlConnection(connectionString))
+        {
+            await connection.OpenAsync();
+            await ExecuteSqlAsync(connection,
+                "UPDATE pos.fiscal_reporting_periods SET period_status_code_id='af7ee931-a023-507e-81a4-17adf047eb94', closing_started_at=clock_timestamp(), closed_at=clock_timestamp(), updated_at=clock_timestamp(), updated_by_ref='Z007B-SMOKE' WHERE fiscal_reporting_period_id=@period",
+                command => command.Parameters.AddWithValue("period", FiscalReportingPeriodId));
+        }
+
+        using var rejectedCreateResponse = await client.PostAsJsonAsync("/v1/fiscal-documents/", CreateValidRequest("boundary-closed"));
+        var rejectedCreate = await rejectedCreateResponse.Content.ReadFromJsonAsync<CreateFiscalDocumentResponse>();
+        Assert.Equal(HttpStatusCode.Conflict, rejectedCreateResponse.StatusCode);
+        Assert.Equal("fiscal_reporting_period_unavailable", rejectedCreate?.Code);
+
+        using var rejectedVoidResponse = await client.PostAsJsonAsync(
+            $"/v1/fiscal-documents/{created!.FiscalDocumentId}/void",
+            new VoidFiscalDocumentRequest("boundary-void", "customer_request", null, "synthetic-operator", DateTimeOffset.UtcNow, "boundary-correlation", null, DateOnly.FromDateTime(DateTime.UtcNow)));
+        var rejectedVoid = await rejectedVoidResponse.Content.ReadFromJsonAsync<VoidFiscalDocumentResponse>();
+        Assert.Equal(HttpStatusCode.Conflict, rejectedVoidResponse.StatusCode);
+        Assert.Equal("unsupported_cross_period_fiscal_mutation", rejectedVoid?.Code);
+
+        await using var verify = new NpgsqlConnection(connectionString);
+        await verify.OpenAsync();
+        Assert.Equal(1, await ScalarLongAsync(verify,
+            "select current_sequence_value from pos.fiscal_sequence_states where fiscal_sequence_policy_id=@id",
+            FiscalSequencePolicyId));
+        Assert.Equal(1, await CountAsync(verify, "pos.fiscal_documents"));
+        Assert.Equal(FiscalReportingPeriodId, await ScalarGuidAsync(verify,
+            "select fiscal_reporting_period_id from pos.fiscal_documents where fiscal_document_id=@id",
+            created.FiscalDocumentId!.Value));
+        Assert.Equal(0, await CountAsync(verify, "pos.fiscal_document_status_history", "new_fiscal_document_status_code_id=@id", "id", FiscalDocumentVoidedStatusCodeId));
+    }
+
+    [Fact]
+    public async Task CloseBoundaryAcquiredFirstMakesIssuanceWaitThenRejectsWithoutFiscalRows()
+    {
+        if (!TryGetSmokeConnectionString(out var connectionString)) return;
+
+        await RebuildDisposableDatabaseAsync(connectionString);
+        await InsertDisposableSmokeFixtureAsync(connectionString);
+        await using var app = await StartApiAsync(connectionString);
+        using var client = CreateClient(app);
+        await using var boundaryConnection = new NpgsqlConnection(connectionString);
+        await boundaryConnection.OpenAsync();
+        await using var boundaryTransaction = await boundaryConnection.BeginTransactionAsync();
+        await PostgresFiscalCloseBoundaryCoordinator.AcquireAsync(
+            boundaryConnection, boundaryTransaction, SitePosServerId, FiscalIdentityId, "PHP", default);
+        await PostgresFiscalCloseBoundaryCoordinator.ResolveAndLockOpenPeriodAsync(
+            boundaryConnection, boundaryTransaction, SitePosServerId, FiscalIdentityId, "PHP", default);
+
+        var pendingIssuance = client.PostAsJsonAsync("/v1/fiscal-documents/", CreateValidRequest("close-first"));
+        Assert.NotSame(pendingIssuance, await Task.WhenAny(pendingIssuance, Task.Delay(200)));
+
+        await ExecuteSqlAsync(boundaryConnection,
+            "UPDATE pos.fiscal_reporting_periods SET period_status_code_id='af7ee931-a023-507e-81a4-17adf047eb94', closing_started_at=clock_timestamp(), closed_at=clock_timestamp(), updated_at=clock_timestamp(), updated_by_ref='Z007B-SMOKE' WHERE fiscal_reporting_period_id=@period",
+            command =>
+            {
+                command.Transaction = boundaryTransaction;
+                command.Parameters.AddWithValue("period", FiscalReportingPeriodId);
+            });
+        await boundaryTransaction.CommitAsync();
+
+        using var rejected = await pendingIssuance;
+        var body = await rejected.Content.ReadFromJsonAsync<CreateFiscalDocumentResponse>();
+        Assert.Equal(HttpStatusCode.Conflict, rejected.StatusCode);
+        Assert.Equal("fiscal_reporting_period_unavailable", body?.Code);
+
+        await using var verify = new NpgsqlConnection(connectionString);
+        await verify.OpenAsync();
+        Assert.Equal(0, await CountAsync(verify, "pos.fiscal_documents"));
+        Assert.Equal(0, await ScalarLongAsync(verify,
+            "select current_sequence_value from pos.fiscal_sequence_states where fiscal_sequence_policy_id=@id",
+            FiscalSequencePolicyId));
+    }
+
+    [Fact]
+    public async Task IssuanceAcquiredFirstMakesBoundaryWaitAndObserveCompleteCommittedDocument()
+    {
+        if (!TryGetSmokeConnectionString(out var connectionString)) return;
+
+        await RebuildDisposableDatabaseAsync(connectionString);
+        await InsertDisposableSmokeFixtureAsync(connectionString);
+        await using (var setup = new NpgsqlConnection(connectionString))
+        {
+            await setup.OpenAsync();
+            await ExecuteSqlAsync(setup, """
+                CREATE OR REPLACE FUNCTION pos.delay_z007b_fiscal_insert() RETURNS trigger LANGUAGE plpgsql AS $$
+                BEGIN PERFORM pg_sleep(0.5); RETURN NEW; END; $$;
+                CREATE TRIGGER trg_z007b_delay_fiscal_insert BEFORE INSERT ON pos.fiscal_documents
+                FOR EACH ROW EXECUTE FUNCTION pos.delay_z007b_fiscal_insert();
+                """);
+        }
+
+        await using var app = await StartApiAsync(connectionString);
+        using var client = CreateClient(app);
+        var issuance = client.PostAsJsonAsync("/v1/fiscal-documents/", CreateValidRequest("issuance-first"));
+        await WaitForAdvisoryLockAsync(connectionString);
+
+        var boundary = ObserveCommittedDocumentAfterBoundaryAsync(connectionString);
+
+        using var response = await issuance;
+        Assert.Equal(HttpStatusCode.Accepted, response.StatusCode);
+        Assert.Equal(1, await boundary);
+    }
+
+    private static async Task<long> ObserveCommittedDocumentAfterBoundaryAsync(string connectionString)
+    {
+        await using var connection = new NpgsqlConnection(connectionString);
+        await connection.OpenAsync();
+        await using var transaction = await connection.BeginTransactionAsync();
+        await PostgresFiscalCloseBoundaryCoordinator.AcquireAsync(
+            connection, transaction, SitePosServerId, FiscalIdentityId, "PHP", default);
+        await PostgresFiscalCloseBoundaryCoordinator.ResolveAndLockOpenPeriodAsync(
+            connection, transaction, SitePosServerId, FiscalIdentityId, "PHP", default);
+        var documentCount = await CountAsync(connection, "pos.fiscal_documents");
+        await transaction.RollbackAsync();
+        return documentCount;
+    }
+
+    private static async Task WaitForAdvisoryLockAsync(string connectionString)
+    {
+        await using var connection = new NpgsqlConnection(connectionString);
+        await connection.OpenAsync();
+        for (var attempt = 0; attempt < 100; attempt++)
+        {
+            await using var command = new NpgsqlCommand(
+                "select count(*) from pg_locks where locktype='advisory' and granted", connection);
+            if (Convert.ToInt64(await command.ExecuteScalarAsync()) > 0) return;
+            await Task.Delay(20);
+        }
+        throw new TimeoutException("Fiscal issuance did not acquire the governed advisory lock.");
     }
 
     [Fact]
@@ -746,6 +895,8 @@ public sealed class FiscalDocumentApiPostgresSmokeTests
                 display_name,
                 central_pms_site_ref,
                 central_pms_site_resolution_ref,
+                reporting_timezone_name,
+                business_day_cutoff_local_time,
                 is_active
             ) values (
                 @site_pos_server_id,
@@ -753,6 +904,8 @@ public sealed class FiscalDocumentApiPostgresSmokeTests
                 'Site POS Server Smoke Fixture',
                 'central-pms-site-smoke',
                 'central-pms-site-resolution-smoke',
+                'Etc/UTC',
+                '00:00:00',
                 true
             ) on conflict (site_pos_server_id) do update set
                 display_name = excluded.display_name,
@@ -802,6 +955,50 @@ public sealed class FiscalDocumentApiPostgresSmokeTests
             command =>
             {
                 command.Parameters.AddWithValue("history_id", Guid.Parse("10000000-0000-0000-0000-000000000702"));
+                command.Parameters.AddWithValue("site_pos_server_id", SitePosServerId);
+                command.Parameters.AddWithValue("fiscal_identity_id", FiscalIdentityId);
+            });
+
+        await ExecuteSqlAsync(
+            connection,
+            """
+            insert into pos.fiscal_reporting_periods (
+                fiscal_reporting_period_id,
+                fiscal_reporting_contract_version_id,
+                site_pos_server_id,
+                fiscal_identity_id,
+                period_status_code_id,
+                business_day_date,
+                period_start_at,
+                period_end_at,
+                reporting_timezone_name,
+                business_day_cutoff_local_time,
+                currency_code,
+                period_sequence,
+                opened_at,
+                created_by_ref,
+                updated_by_ref
+            ) values (
+                @period_id,
+                'f6766f48-62f0-513f-b9eb-e61c2f3e8c66',
+                @site_pos_server_id,
+                @fiscal_identity_id,
+                '1a6f7021-bc84-5c01-afaa-c5d6685633c8',
+                current_date,
+                transaction_timestamp() - interval '1 hour',
+                transaction_timestamp() + interval '1 hour',
+                'Etc/UTC',
+                '00:00:00',
+                'PHP',
+                1,
+                transaction_timestamp() - interval '1 hour',
+                'Z007B-SMOKE',
+                'Z007B-SMOKE'
+            );
+            """,
+            command =>
+            {
+                command.Parameters.AddWithValue("period_id", FiscalReportingPeriodId);
                 command.Parameters.AddWithValue("site_pos_server_id", SitePosServerId);
                 command.Parameters.AddWithValue("fiscal_identity_id", FiscalIdentityId);
             });
@@ -920,7 +1117,7 @@ public sealed class FiscalDocumentApiPostgresSmokeTests
             SitePosServerId: SitePosServerId,
             FiscalDocumentTypeCodeId: FiscalDocumentTypeCodeId,
             FiscalDocumentStatusCodeId: FiscalDocumentStatusCodeId,
-            BusinessDayDate: new DateOnly(2026, 7, 1),
+            BusinessDayDate: DateOnly.FromDateTime(DateTime.UtcNow),
             CentralPmsParkingSessionRef: $"parking-session-{suffix}",
             CentralPmsPaymentAttemptRef: $"payment-attempt-{suffix}",
             CentralPmsPaymentConfirmationRef: $"payment-confirmation-{suffix}",
@@ -1033,7 +1230,7 @@ public sealed class FiscalDocumentApiPostgresSmokeTests
             SiteId: siteId,
             FiscalDocumentTypeCodeId: FiscalDocumentTypeCodeId,
             FiscalDocumentStatusCodeId: FiscalDocumentStatusCodeId,
-            BusinessDayDate: new DateOnly(2026, 7, 1),
+            BusinessDayDate: DateOnly.FromDateTime(DateTime.UtcNow),
             CentralPmsParkingSessionRef: parkingSessionId.ToString("D"),
             CentralPmsPaymentAttemptRef: $"payment-attempt-{suffix}",
             CentralPmsPaymentConfirmationRef: $"payment-confirmation-{suffix}",
@@ -1148,7 +1345,7 @@ public sealed class FiscalDocumentApiPostgresSmokeTests
             SiteId: siteId,
             FiscalDocumentTypeCodeId: FiscalDocumentTypeCodeId,
             FiscalDocumentStatusCodeId: FiscalDocumentStatusCodeId,
-            BusinessDayDate: new DateOnly(2026, 7, 1),
+            BusinessDayDate: DateOnly.FromDateTime(DateTime.UtcNow),
             CentralPmsParkingSessionRef: parkingSessionId.ToString("D"),
             CentralPmsPaymentAttemptRef: $"payment-attempt-{suffix}",
             CentralPmsPaymentConfirmationRef: $"payment-confirmation-{suffix}",
@@ -1361,6 +1558,19 @@ public sealed class FiscalDocumentApiPostgresSmokeTests
         await using var command = new NpgsqlCommand($"select count(*) from {tableName} where {predicate};", connection);
         command.Parameters.AddWithValue(parameterName, value);
         return (long)(await command.ExecuteScalarAsync() ?? 0L);
+    }
+
+    private static async Task<long> CountAsync(NpgsqlConnection connection, string tableName)
+    {
+        await using var command = new NpgsqlCommand($"select count(*) from {tableName};", connection);
+        return (long)(await command.ExecuteScalarAsync() ?? 0L);
+    }
+
+    private static async Task<Guid> ScalarGuidAsync(NpgsqlConnection connection, string sql, Guid id)
+    {
+        await using var command = new NpgsqlCommand(sql, connection);
+        command.Parameters.AddWithValue("id", id);
+        return (Guid)(await command.ExecuteScalarAsync() ?? Guid.Empty);
     }
 
     private static async Task<string?> ScalarStringAsync(NpgsqlConnection connection, string sql, Guid id)

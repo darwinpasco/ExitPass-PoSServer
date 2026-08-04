@@ -2,7 +2,15 @@
 
 ## 1. Purpose and Status
 
-Status: `DECISION_PACKAGE_COMPLETE_APPROVAL_REQUIRED`.
+Status: `APPROVED`.
+
+Approval authority/reference: `ExitPass v1.3 Product and Fiscal Design Authority`.
+
+Approved by: `Darwin Pasco`.
+
+Approved at: `2026-08-04 08:26 PHT`.
+
+The approval covers DR-001 through DR-009 and the complete wording in Section 12. Candidate labels below preserve the pre-approval evaluation history; their recommended options are the selected decisions and are authoritative for Z-007B and resumed Z-007. This approval does not claim external BIR approval.
 
 This record separates merged authority from recommendations that require explicit accounting and product approval. It does not claim BIR approval and does not authorize schema or runtime implementation.
 

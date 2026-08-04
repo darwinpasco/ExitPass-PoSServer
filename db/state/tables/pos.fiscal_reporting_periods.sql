@@ -51,6 +51,12 @@ CREATE TABLE IF NOT EXISTS pos.fiscal_reporting_periods (
         period_end_at,
         currency_code
     ),
+    CONSTRAINT uq_fiscal_reporting_periods__assignment_scope UNIQUE (
+        fiscal_reporting_period_id,
+        site_pos_server_id,
+        fiscal_identity_id,
+        currency_code
+    ),
     CONSTRAINT ck_fiscal_reporting_periods__status_family CHECK (period_status_code_id IN (
         '1a6f7021-bc84-5c01-afaa-c5d6685633c8',
         'f0a44431-611b-5809-b3a9-5b8be8614552',
@@ -111,3 +117,17 @@ COMMENT ON COLUMN pos.fiscal_reporting_periods.period_end_at IS 'Exclusive UTC i
 COMMENT ON COLUMN pos.fiscal_reporting_periods.reporting_timezone_name IS 'Historical timezone-name snapshot used to derive business date; no production timezone is assumed.';
 COMMENT ON COLUMN pos.fiscal_reporting_periods.business_day_cutoff_local_time IS 'Historical local business-day cutoff snapshot.';
 COMMENT ON FUNCTION pos.protect_closed_fiscal_reporting_period() IS 'Allows future OPEN/CLOSING lifecycle changes but rejects UPDATE or DELETE after a period is CLOSED.';
+
+DO $$
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1 FROM pg_constraint
+        WHERE conrelid = 'pos.fiscal_reporting_periods'::regclass
+          AND conname = 'uq_fiscal_reporting_periods__assignment_scope'
+    ) THEN
+        ALTER TABLE pos.fiscal_reporting_periods
+            ADD CONSTRAINT uq_fiscal_reporting_periods__assignment_scope
+            UNIQUE (fiscal_reporting_period_id, site_pos_server_id, fiscal_identity_id, currency_code);
+    END IF;
+END;
+$$;

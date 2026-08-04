@@ -1,3 +1,5 @@
+using ExitPass.PosServer.Runtime.FiscalReports;
+
 namespace ExitPass.PosServer.Runtime.FiscalDocuments;
 
 public sealed class FiscalDocumentVoidService
@@ -79,6 +81,21 @@ public sealed class FiscalDocumentVoidService
         {
             return FiscalDocumentVoidResult.Failure(
                 FiscalDocumentVoidErrorCode.InvalidStateTransition,
+                ex.Message,
+                "rejected");
+        }
+        catch (FiscalCloseBoundaryException ex)
+        {
+            return FiscalDocumentVoidResult.Failure(
+                ex.ErrorCode switch
+                {
+                    FiscalCloseBoundaryErrorCode.ReportingPeriodUnavailable => FiscalDocumentVoidErrorCode.ReportingPeriodUnavailable,
+                    FiscalCloseBoundaryErrorCode.ReportingPeriodAssignmentMismatch => FiscalDocumentVoidErrorCode.ReportingPeriodAssignmentMismatch,
+                    FiscalCloseBoundaryErrorCode.UnsupportedCrossPeriodMutation or FiscalCloseBoundaryErrorCode.ReportingPeriodClosed =>
+                        FiscalDocumentVoidErrorCode.UnsupportedCrossPeriodMutation,
+                    FiscalCloseBoundaryErrorCode.LockTimeout => FiscalDocumentVoidErrorCode.FiscalCloseBoundaryLockTimeout,
+                    _ => FiscalDocumentVoidErrorCode.FiscalCloseBoundaryRetryableConcurrencyFailure
+                },
                 ex.Message,
                 "rejected");
         }

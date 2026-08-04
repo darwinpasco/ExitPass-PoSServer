@@ -21,6 +21,7 @@ db/state/tables/pos.fiscal_tenders.sql
 db/state/tables/pos.fiscal_tax_details.sql
 db/state/tables/pos.fiscal_discount_privilege_details.sql
 db/state/tables/pos.fiscal_totals.sql
+db/state/tables/pos.fiscal_document_reporting_period_assignment.sql
 db/state/tables/pos.fiscal_sequence_states.sql
 db/state/tables/pos.fiscal_sequence_gap_audit.sql
 db/state/tables/pos.fiscal_counter_states.sql
@@ -42,6 +43,9 @@ db/state/tables/pos.fiscal_report_tender_breakdowns.sql
 db/state/tables/pos.fiscal_report_discount_breakdowns.sql
 db/state/tables/pos.fiscal_report_fiscal_number_ranges.sql
 db/state/tables/pos.fiscal_report_sequence_gaps.sql
+db/state/tables/pos.fiscal_z_close_states.sql
+db/state/tables/pos.fiscal_z_close_state_transitions.sql
+db/state/tables/pos.fiscal_z_close_state_transition_values.sql
 db/state/tables/pos.fiscal_z_counter_snapshots.sql
 db/state/tables/pos.bir_sales_summary_reports.sql
 db/state/tables/pos.annex_e_reports.sql

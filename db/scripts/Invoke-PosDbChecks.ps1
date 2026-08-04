@@ -906,7 +906,7 @@ function Invoke-StaticChecks {
             Add-ValidationError $result $message
         }
 
-        $constraintMatches = [regex]::Matches($sql, '\bCONSTRAINT\s+(?!IF\s+EXISTS\b)([A-Za-z_][A-Za-z0-9_]*)', $regexOptions)
+        $constraintMatches = [regex]::Matches($sql, '\bCONSTRAINT\s+(?!IF\s+EXISTS\b)(?!TRIGGER\b)([A-Za-z_][A-Za-z0-9_]*)', $regexOptions)
         foreach ($match in $constraintMatches) {
             $identifier = $match.Groups[1].Value
             $byteCount = [Text.Encoding]::UTF8.GetByteCount($identifier)
@@ -1240,7 +1240,7 @@ function Invoke-ReportingSchemaProofChecks {
         'reporting-proof-x-count|1',
         'reporting-proof-z-count|1',
         'reporting-proof-bir-bound-to-z|1',
-        'reporting-proof-normalized-triggers|11',
+        'reporting-proof-normalized-triggers|17',
         'reporting-proof-x-at-period-start|passed',
         'reporting-proof-x-during-open-period|passed',
         'reporting-proof-x-immediately-before-period-end|passed',
@@ -1256,6 +1256,15 @@ function Invoke-ReportingSchemaProofChecks {
         'reporting-proof-z-immutability-preserved|passed',
         'reporting-proof-no-protected-state-mutation|passed',
         'reporting-proof-timestamp-transaction-rollback|passed'
+        'reporting-proof-z-state-unique-scope|passed'
+        'reporting-proof-z-state-wrong-family-rejected|passed'
+        'reporting-proof-z-state-direct-mutation-rejected|passed'
+        'reporting-proof-z-state-non-transition-rejected|passed'
+        'reporting-proof-period-assignment-valid|passed'
+        'reporting-proof-period-assignment-immutable|passed'
+        'reporting-proof-period-assignment-scope-currency|passed'
+        'reporting-proof-period-assignment-half-open-window|passed'
+        'reporting-proof-z-boundary-transaction-rollback|passed'
     )
 
     foreach ($proof in $expectedProofs) {

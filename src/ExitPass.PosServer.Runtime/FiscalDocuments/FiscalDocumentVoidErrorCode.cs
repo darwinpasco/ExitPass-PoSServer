@@ -11,5 +11,10 @@ public enum FiscalDocumentVoidErrorCode
     IdempotencyConflict,
     FiscalDocumentNotFound,
     InvalidStateTransition,
-    PersistenceRejected
+    PersistenceRejected,
+    ReportingPeriodUnavailable,
+    ReportingPeriodAssignmentMismatch,
+    UnsupportedCrossPeriodMutation,
+    FiscalCloseBoundaryLockTimeout,
+    FiscalCloseBoundaryRetryableConcurrencyFailure
 }

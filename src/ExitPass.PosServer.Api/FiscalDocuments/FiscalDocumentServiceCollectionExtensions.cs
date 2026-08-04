@@ -25,6 +25,7 @@ public static class FiscalDocumentServiceCollectionExtensions
             services.TryAddScoped<IFiscalDocumentReader, PersistenceNotConfiguredFiscalDocumentReader>();
             services.TryAddScoped<ISalesInvoiceHeaderProfileRepository, PersistenceNotConfiguredSalesInvoiceHeaderProfileRepository>();
             services.TryAddScoped<IFiscalXReadingRepository, UnavailableFiscalXReadingRepository>();
+            services.TryAddScoped<IFiscalZCloseStateRepository, UnavailableFiscalZCloseStateRepository>();
         }
         else if (!IsValidNpgsqlConnectionString(connectionString))
         {
@@ -32,6 +33,7 @@ public static class FiscalDocumentServiceCollectionExtensions
             services.TryAddScoped<IFiscalDocumentReader, InvalidPersistenceConfigurationFiscalDocumentReader>();
             services.TryAddScoped<ISalesInvoiceHeaderProfileRepository, PersistenceNotConfiguredSalesInvoiceHeaderProfileRepository>();
             services.TryAddScoped<IFiscalXReadingRepository, UnavailableFiscalXReadingRepository>();
+            services.TryAddScoped<IFiscalZCloseStateRepository, UnavailableFiscalZCloseStateRepository>();
         }
         else
         {
@@ -43,6 +45,7 @@ public static class FiscalDocumentServiceCollectionExtensions
             services.TryAddScoped<IFiscalDocumentReader, PostgresFiscalDocumentReader>();
             services.TryAddScoped<ISalesInvoiceHeaderProfileRepository, PostgresSalesInvoiceHeaderProfileRepository>();
             services.TryAddScoped<IFiscalXReadingRepository, PostgresFiscalXReadingRepository>();
+            services.TryAddScoped<IFiscalZCloseStateRepository, PostgresFiscalZCloseStateRepository>();
         }
 
         services.AddScoped<FiscalDocumentCreationService>();
@@ -52,6 +55,7 @@ public static class FiscalDocumentServiceCollectionExtensions
         services.AddScoped<DigitalSalesInvoicePresentationAdapter>();
         services.AddScoped<FiscalXReadingAggregationService>();
         services.AddScoped<FiscalXReadingService>();
+        services.AddScoped<FiscalZCloseStateInitializationService>();
         services.AddScoped(provider => new SalesInvoiceHeaderProfileAdminService(
             provider.GetRequiredService<ISalesInvoiceHeaderProfileRepository>(),
             IsSalesInvoiceHeaderProfileRequired(configuration)));
@@ -80,6 +84,13 @@ public static class FiscalDocumentServiceCollectionExtensions
                 policy => policy
                     .AddAuthenticationSchemes(SalesInvoiceHeaderProfileAdminAuthorization.AuthenticationScheme)
                     .RequireClaim(SalesInvoiceHeaderProfileAdminAuthorization.PermissionClaimType, FiscalXReadingAuthorization.ReadPermission));
+            options.AddPolicy(
+                FiscalZCloseStateInitializationAuthorization.PolicyName,
+                policy => policy
+                    .AddAuthenticationSchemes(SalesInvoiceHeaderProfileAdminAuthorization.AuthenticationScheme)
+                    .RequireClaim(
+                        SalesInvoiceHeaderProfileAdminAuthorization.PermissionClaimType,
+                        FiscalZCloseStateInitializationAuthorization.Permission));
         });
 
         return services;

@@ -2,7 +2,9 @@
 
 ## 1. Handoff Status
 
-Status: `READY_FOR_Z_007B_AFTER_DECISION_APPROVAL`.
+Status: `Z_007B_IMPLEMENTED_PENDING_MERGE_AND_FINAL_VALIDATION`.
+
+The companion decision package was approved by the ExitPass v1.3 Product and Fiscal Design Authority, Darwin Pasco, at `2026-08-04 08:26 PHT`. Concrete Z-007B artifacts are recorded in `ExitPass_POS_Server_Z_Close_State_Boundary_Foundation_Implementation_Note_v1.0.md`.
 
 This document defines the smallest additive prerequisite for a truthful Z close. It contains no SQL or runtime implementation. All recommendations depend on approval of the companion Z Close Counter/GTA and Late-Write Boundary Contract v1.0.
 

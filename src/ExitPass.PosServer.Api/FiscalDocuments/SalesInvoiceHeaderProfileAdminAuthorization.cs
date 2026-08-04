@@ -51,7 +51,9 @@ public static class SalesInvoiceHeaderProfileAdminAuthorization
                 permissions.Length == 0 ||
                 !ScopesAreValid(sitePosServerScopes) ||
                 !ScopesAreValid(fiscalIdentityScopes) ||
-                (permissions.Any(FiscalXReadingAuthorization.IsXReadingPermission) &&
+                (permissions.Any(permission =>
+                        FiscalXReadingAuthorization.IsXReadingPermission(permission) ||
+                        FiscalZCloseStateInitializationAuthorization.IsScopedPermission(permission)) &&
                     (sitePosServerScopes.Length == 0 || fiscalIdentityScopes.Length == 0)))
             {
                 return PosServerAdminApiKeyConfiguration.Invalid("invalid_admin_api_key_configuration");

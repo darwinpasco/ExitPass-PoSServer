@@ -1,0 +1,23 @@
+{
+  "schema_version":"1.0",
+  "source_key":"controlled_codes.fiscal_z_state_initialization_provenance.v1",
+  "source_name":"Fiscal Z State Initialization Provenance Controlled Codes",
+  "source_description":"Approved provenance for explicit canonical Z state initialization.",
+  "governance_owner":"Engineering",
+  "source_ref":"ExitPass_POS_Server_Z_Close_Counter_GTA_Late_Write_Boundary_Contract_v1.0; Z-007B",
+  "code_sets":[{
+    "code_set_key":"fiscal_z_state_initialization_provenance",
+    "display_name":"Fiscal Z State Initialization Provenance",
+    "description":"Distinguishes approved new-scope zero initialization from verified legacy import.",
+    "governance_owner":"Engineering",
+    "source_ref":"Z-007B",
+    "is_active":true,
+    "effective_start_at":"2026-08-04T00:00:00Z",
+    "effective_end_at":null,
+    "codes":[
+      {"code_key":"approved_new_scope_zero","display_name":"Approved New Scope Zero","description":"Explicit approved initialization of reset, Z, and GTA values to zero.","source_ref":"Z-007B","sort_order":10,"is_active":true,"is_deprecated":false,"effective_start_at":"2026-08-04T00:00:00Z","effective_end_at":null,"replaced_by_code_key":null},
+      {"code_key":"verified_legacy_import","display_name":"Verified Legacy Import","description":"Explicit import of verified pre-existing reset, Z, and GTA values.","source_ref":"Z-007B","sort_order":20,"is_active":true,"is_deprecated":false,"effective_start_at":"2026-08-04T00:00:00Z","effective_end_at":null,"replaced_by_code_key":null}
+    ]
+  }],
+  "notes":["Missing or uncertain legacy state never defaults to zero."]
+}

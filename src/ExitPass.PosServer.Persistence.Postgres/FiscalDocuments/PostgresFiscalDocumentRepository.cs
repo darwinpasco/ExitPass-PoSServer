@@ -1,4 +1,6 @@
 using ExitPass.PosServer.Runtime.FiscalDocuments;
+using ExitPass.PosServer.Runtime.FiscalReports;
+using ExitPass.PosServer.Persistence.Postgres.FiscalReports;
 using Npgsql;
 using NpgsqlTypes;
 using System.Globalization;
@@ -95,6 +97,32 @@ public sealed class PostgresFiscalDocumentRepository : IFiscalDocumentRepository
                 {
                     ResolvedFiscalIdentityId = resolvedContext.FiscalIdentityId,
                     ResolvedFiscalSequencePolicyId = resolvedContext.FiscalSequencePolicyId
+                };
+                await PostgresFiscalCloseBoundaryCoordinator.AcquireAsync(
+                    connection,
+                    transaction,
+                    resolvedDraft.SitePosServerId,
+                    resolvedContext.FiscalIdentityId,
+                    resolvedDraft.CurrencyCode,
+                    cancellationToken).ConfigureAwait(false);
+                var reportingPeriod = await PostgresFiscalCloseBoundaryCoordinator.ResolveAndLockOpenPeriodAsync(
+                    connection,
+                    transaction,
+                    resolvedDraft.SitePosServerId,
+                    resolvedContext.FiscalIdentityId,
+                    resolvedDraft.CurrencyCode,
+                    cancellationToken).ConfigureAwait(false);
+                if (resolvedDraft.BusinessDayDate is not null &&
+                    resolvedDraft.BusinessDayDate.Value != reportingPeriod.BusinessDayDate)
+                {
+                    throw new FiscalCloseBoundaryException(
+                        FiscalCloseBoundaryErrorCode.ReportingPeriodAssignmentMismatch,
+                        "Fiscal document business date does not match the governed reporting period.");
+                }
+                resolvedDraft = resolvedDraft with
+                {
+                    FiscalReportingPeriodId = reportingPeriod.FiscalReportingPeriodId,
+                    BusinessDayDate = reportingPeriod.BusinessDayDate
                 };
                 var assignment = await AllocateFiscalNumberAsync(
                     connection,
@@ -274,6 +302,32 @@ public sealed class PostgresFiscalDocumentRepository : IFiscalDocumentRepository
 
             try
             {
+                var reportingScope = await ReadFiscalDocumentReportingScopeAsync(
+                    connection,
+                    transaction,
+                    command.FiscalDocumentId,
+                    cancellationToken).ConfigureAwait(false);
+                if (reportingScope is null)
+                {
+                    throw new FiscalDocumentVoidNotFoundException();
+                }
+
+                await PostgresFiscalCloseBoundaryCoordinator.AcquireAsync(
+                    connection,
+                    transaction,
+                    reportingScope.SitePosServerId,
+                    reportingScope.FiscalIdentityId,
+                    reportingScope.CurrencyCode,
+                    cancellationToken).ConfigureAwait(false);
+                await PostgresFiscalCloseBoundaryCoordinator.LockAndValidateAssignedPeriodAsync(
+                    connection,
+                    transaction,
+                    reportingScope.FiscalReportingPeriodId,
+                    reportingScope.SitePosServerId,
+                    reportingScope.FiscalIdentityId,
+                    reportingScope.CurrencyCode,
+                    cancellationToken).ConfigureAwait(false);
+
                 var lockedDocument = await ReadFiscalDocumentForVoidUpdateAsync(
                     connection,
                     transaction,
@@ -955,7 +1009,41 @@ public sealed class PostgresFiscalDocumentRepository : IFiscalDocumentRepository
             reader.IsDBNull(11) ? null : ReadDateTimeOffset(reader, 11),
             reader.IsDBNull(12) ? null : reader.GetString(12),
             reader.IsDBNull(13) ? null : reader.GetString(13),
-            reader.IsDBNull(14) ? null : reader.GetString(14));
+            reader.IsDBNull(14) ? null : reader.GetString(14),
+            reader.GetGuid(15),
+            reader.GetGuid(16),
+            reader.GetString(17),
+            reader.GetGuid(18));
+    }
+
+    private static async Task<FiscalDocumentReportingScope?> ReadFiscalDocumentReportingScopeAsync(
+        NpgsqlConnection connection,
+        NpgsqlTransaction transaction,
+        Guid fiscalDocumentId,
+        CancellationToken cancellationToken)
+    {
+        await using var command = new NpgsqlCommand(
+            PostgresFiscalDocumentSql.SelectFiscalDocumentReportingScope,
+            connection,
+            transaction);
+        command.Parameters.AddWithValue("fiscal_document_id", fiscalDocumentId);
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
+        if (!await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
+        {
+            return null;
+        }
+        if (reader.IsDBNull(1) || reader.IsDBNull(2) || reader.IsDBNull(3))
+        {
+            throw new FiscalCloseBoundaryException(
+                FiscalCloseBoundaryErrorCode.ReportingPeriodAssignmentMismatch,
+                "Fiscal document lacks a governed reporting-period assignment.");
+        }
+
+        return new FiscalDocumentReportingScope(
+            reader.GetGuid(0),
+            reader.GetGuid(1),
+            reader.GetString(2),
+            reader.GetGuid(3));
     }
 
     private static async Task<Guid> ResolveVoidedStatusCodeIdAsync(
@@ -1124,6 +1212,8 @@ public sealed class PostgresFiscalDocumentRepository : IFiscalDocumentRepository
         command.Parameters.AddWithValue("payment_finality_ref", (object?)draft.PaymentFinalityRef ?? DBNull.Value);
         command.Parameters.AddWithValue("vendor_ack_ref", (object?)draft.VendorAckRef ?? DBNull.Value);
         command.Parameters.AddWithValue("business_day_date", (object?)draft.BusinessDayDate ?? DBNull.Value);
+        command.Parameters.AddWithValue("currency_code", draft.CurrencyCode);
+        command.Parameters.AddWithValue("fiscal_reporting_period_id", (object?)draft.FiscalReportingPeriodId ?? DBNull.Value);
 
         var contextParameter = command.Parameters.Add("document_context", NpgsqlDbType.Jsonb);
         contextParameter.Value = PostgresFiscalDocumentSql.CreateDocumentContextJson(draft);
@@ -1253,7 +1343,17 @@ public sealed class PostgresFiscalDocumentRepository : IFiscalDocumentRepository
         DateTimeOffset? VoidedAt,
         string? VoidIdempotencyKey,
         string? VoidSemanticRequestHash,
-        string? VoidCorrelationId);
+        string? VoidCorrelationId,
+        Guid SitePosServerId,
+        Guid FiscalIdentityId,
+        string CurrencyCode,
+        Guid FiscalReportingPeriodId);
+
+    private sealed record FiscalDocumentReportingScope(
+        Guid SitePosServerId,
+        Guid FiscalIdentityId,
+        string CurrencyCode,
+        Guid FiscalReportingPeriodId);
 
     private sealed record AppliedStatutoryControlledCodeIds(
         Guid EntitlementTypeCodeId,

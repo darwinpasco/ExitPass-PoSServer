@@ -1,0 +1,23 @@
+{
+  "schema_version":"1.0",
+  "source_key":"controlled_codes.fiscal_z_state_transition_type.v1",
+  "source_name":"Fiscal Z State Transition Type Controlled Codes",
+  "source_description":"Governed append-only canonical Z state transition types.",
+  "governance_owner":"Engineering",
+  "source_ref":"ExitPass_POS_Server_Z_Close_Counter_GTA_Late_Write_Boundary_Contract_v1.0; Z-007B",
+  "code_sets":[{
+    "code_set_key":"fiscal_z_state_transition_type",
+    "display_name":"Fiscal Z State Transition Type",
+    "description":"Initialization foundation and future atomic Z-close transition identity.",
+    "governance_owner":"Engineering",
+    "source_ref":"Z-007B",
+    "is_active":true,
+    "effective_start_at":"2026-08-04T00:00:00Z",
+    "effective_end_at":null,
+    "codes":[
+      {"code_key":"initialization","display_name":"Initialization","description":"Explicit new-scope zero initialization or verified legacy import.","source_ref":"Z-007B","sort_order":10,"is_active":true,"is_deprecated":false,"effective_start_at":"2026-08-04T00:00:00Z","effective_end_at":null,"replaced_by_code_key":null},
+      {"code_key":"z_close","display_name":"Z Close","description":"Future atomic Z-close state transition; Z-007B does not execute it.","source_ref":"Z-007B","sort_order":20,"is_active":true,"is_deprecated":false,"effective_start_at":"2026-08-04T00:00:00Z","effective_end_at":null,"replaced_by_code_key":null}
+    ]
+  }],
+  "notes":["Z-007B persists initialization only. Z close remains blocked until Z-007 resumes."]
+}

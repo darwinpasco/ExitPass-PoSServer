@@ -1,3 +1,5 @@
+using ExitPass.PosServer.Runtime.FiscalReports;
+
 namespace ExitPass.PosServer.Runtime.FiscalDocuments;
 
 public sealed class FiscalDocumentCreationService
@@ -324,6 +326,20 @@ public sealed class FiscalDocumentCreationService
         {
             return FiscalDocumentCreationResult.Failure(
                 ex.ErrorCode,
+                ex.Message);
+        }
+        catch (FiscalCloseBoundaryException ex)
+        {
+            return FiscalDocumentCreationResult.Failure(
+                ex.ErrorCode switch
+                {
+                    FiscalCloseBoundaryErrorCode.ReportingPeriodUnavailable => FiscalDocumentCreationErrorCode.ReportingPeriodUnavailable,
+                    FiscalCloseBoundaryErrorCode.ReportingPeriodAmbiguous => FiscalDocumentCreationErrorCode.ReportingPeriodAmbiguous,
+                    FiscalCloseBoundaryErrorCode.ReportingPeriodClosed => FiscalDocumentCreationErrorCode.ReportingPeriodClosed,
+                    FiscalCloseBoundaryErrorCode.ReportingPeriodAssignmentMismatch => FiscalDocumentCreationErrorCode.ReportingPeriodAssignmentMismatch,
+                    FiscalCloseBoundaryErrorCode.LockTimeout => FiscalDocumentCreationErrorCode.FiscalCloseBoundaryLockTimeout,
+                    _ => FiscalDocumentCreationErrorCode.FiscalCloseBoundaryRetryableConcurrencyFailure
+                },
                 ex.Message);
         }
     }
