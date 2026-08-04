@@ -11,4 +11,5 @@ app.MapFiscalDocumentEndpoints();
 app.MapSalesInvoiceHeaderProfileAdminEndpoints();
 app.MapFiscalXReadingEndpoints();
 app.MapFiscalZCloseStateInitializationEndpoints();
+app.MapFiscalZReadingEndpoints();
 app.Run();

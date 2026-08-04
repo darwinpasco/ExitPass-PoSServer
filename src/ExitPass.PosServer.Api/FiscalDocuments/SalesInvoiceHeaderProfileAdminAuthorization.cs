@@ -44,6 +44,7 @@ public static class SalesInvoiceHeaderProfileAdminAuthorization
                 .ToArray();
             var sitePosServerScopes = ReadScopes(child, "SitePosServerIds");
             var fiscalIdentityScopes = ReadScopes(child, "FiscalIdentityIds");
+            var currencyScopes = ReadScopes(child, "CurrencyCodes");
 
             if (string.IsNullOrWhiteSpace(principalName) ||
                 string.IsNullOrEmpty(secret) ||
@@ -53,8 +54,14 @@ public static class SalesInvoiceHeaderProfileAdminAuthorization
                 !ScopesAreValid(fiscalIdentityScopes) ||
                 (permissions.Any(permission =>
                         FiscalXReadingAuthorization.IsXReadingPermission(permission) ||
-                        FiscalZCloseStateInitializationAuthorization.IsScopedPermission(permission)) &&
+                        FiscalZCloseStateInitializationAuthorization.IsScopedPermission(permission) ||
+                        FiscalZReadingAuthorization.IsZReadingPermission(permission)) &&
                     (sitePosServerScopes.Length == 0 || fiscalIdentityScopes.Length == 0)))
+            {
+                return PosServerAdminApiKeyConfiguration.Invalid("invalid_admin_api_key_configuration");
+            }
+            if (permissions.Any(FiscalZReadingAuthorization.IsZReadingPermission) &&
+                (currencyScopes.Length == 0 || !currencyScopes.All(IsValidCurrencyScope)))
             {
                 return PosServerAdminApiKeyConfiguration.Invalid("invalid_admin_api_key_configuration");
             }
@@ -72,7 +79,8 @@ public static class SalesInvoiceHeaderProfileAdminAuthorization
                 enabled,
                 permissions,
                 sitePosServerScopes,
-                fiscalIdentityScopes));
+                fiscalIdentityScopes,
+                currencyScopes));
         }
 
         if (registrations.Count == 0)
@@ -85,6 +93,7 @@ public static class SalesInvoiceHeaderProfileAdminAuthorization
                     legacyKey,
                     Enabled: true,
                     [RequiredPermission],
+                    [],
                     [],
                     []));
             }
@@ -127,7 +136,8 @@ public static class SalesInvoiceHeaderProfileAdminAuthorization
             matchedRegistration.PrincipalName,
             ResolveServerDerivedPermissions(matchedRegistration, requestedPermissionValues),
             matchedRegistration.SitePosServerScopes,
-            matchedRegistration.FiscalIdentityScopes);
+            matchedRegistration.FiscalIdentityScopes,
+            matchedRegistration.CurrencyScopes);
     }
 
     private static string[] ReadScopes(IConfigurationSection registration, string sectionName) =>
@@ -141,6 +151,9 @@ public static class SalesInvoiceHeaderProfileAdminAuthorization
 
     private static bool ScopesAreValid(IEnumerable<string> scopes) =>
         scopes.All(scope => scope == "*" || Guid.TryParse(scope, out var value) && value != Guid.Empty);
+
+    private static bool IsValidCurrencyScope(string scope) =>
+        scope == "*" || scope.Length == 3 && scope.All(character => character is >= 'A' and <= 'Z');
 
     private static IReadOnlyList<string> ResolveServerDerivedPermissions(
         PosServerAdminApiKeyRegistration registration,
@@ -184,7 +197,8 @@ public sealed record PosServerAdminApiKeyRegistration(
     bool Enabled,
     IReadOnlyList<string> Permissions,
     IReadOnlyList<string> SitePosServerScopes,
-    IReadOnlyList<string> FiscalIdentityScopes);
+    IReadOnlyList<string> FiscalIdentityScopes,
+    IReadOnlyList<string> CurrencyScopes);
 
 public sealed record PosServerAdminApiKeyConfiguration(
     bool IsValid,
@@ -212,7 +226,8 @@ public sealed record PosServerAdminApiKeyAuthenticationResult(
     string? PrincipalName,
     IReadOnlyList<string> Permissions,
     IReadOnlyList<string> SitePosServerScopes,
-    IReadOnlyList<string> FiscalIdentityScopes)
+    IReadOnlyList<string> FiscalIdentityScopes,
+    IReadOnlyList<string> CurrencyScopes)
 {
     public bool Succeeded => Status == PosServerAdminApiKeyAuthenticationStatus.Authenticated;
 
@@ -220,11 +235,12 @@ public sealed record PosServerAdminApiKeyAuthenticationResult(
         string principalName,
         IReadOnlyList<string> permissions,
         IReadOnlyList<string> sitePosServerScopes,
-        IReadOnlyList<string> fiscalIdentityScopes) =>
-        new(PosServerAdminApiKeyAuthenticationStatus.Authenticated, principalName, permissions, sitePosServerScopes, fiscalIdentityScopes);
+        IReadOnlyList<string> fiscalIdentityScopes,
+        IReadOnlyList<string> currencyScopes) =>
+        new(PosServerAdminApiKeyAuthenticationStatus.Authenticated, principalName, permissions, sitePosServerScopes, fiscalIdentityScopes, currencyScopes);
 
     public static PosServerAdminApiKeyAuthenticationResult Failed(PosServerAdminApiKeyAuthenticationStatus status) =>
-        new(status, null, [], [], []);
+        new(status, null, [], [], [], []);
 }
 
 public sealed class PosServerAdminApiKeyAuthenticationOptions : AuthenticationSchemeOptions
@@ -274,6 +290,8 @@ public sealed class PosServerAdminApiKeyAuthenticationHandler : AuthenticationHa
             new Claim(FiscalXReadingAuthorization.SitePosServerScopeClaimType, scope)));
         claims.AddRange(authentication.FiscalIdentityScopes.Select(scope =>
             new Claim(FiscalXReadingAuthorization.FiscalIdentityScopeClaimType, scope)));
+        claims.AddRange(authentication.CurrencyScopes.Select(scope =>
+            new Claim(FiscalZReadingAuthorization.CurrencyScopeClaimType, scope)));
 
         var identity = new ClaimsIdentity(claims, Scheme.Name);
         return Task.FromResult(AuthenticateResult.Success(new AuthenticationTicket(new ClaimsPrincipal(identity), Scheme.Name)));
