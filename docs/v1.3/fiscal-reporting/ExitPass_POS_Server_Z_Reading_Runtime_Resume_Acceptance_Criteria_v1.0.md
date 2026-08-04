@@ -2,21 +2,23 @@
 
 ## 1. Decision
 
-Z-007 status: `BLOCKED_PENDING_DECISION_APPROVAL_AND_Z_007B`.
+Z-007 status: `BLOCKED_PENDING_Z_007B_MERGE`.
+
+The authority gates were approved by the ExitPass v1.3 Product and Fiscal Design Authority, Darwin Pasco, at `2026-08-04 08:26 PHT`. Z-007B implementation evidence is tracked in `ExitPass_POS_Server_Z_Close_State_Boundary_Foundation_Implementation_Note_v1.0.md`; unchecked implementation gates remain mandatory until that branch merges.
 
 This checklist is the mandatory gate for resuming executable Z Reading work. A checked documentation item without merged implementation and proof is insufficient.
 
 ## 2. Authority Gates
 
-- [ ] The GTA contribution basis is approved using the exact companion decision wording.
-- [ ] Distinct Z counter, reset counter, and GTA semantics are approved.
-- [ ] State scope `(Site POS Server, fiscal identity, currency)` is approved.
-- [ ] Initialization and verified legacy-import rules are approved.
-- [ ] Strict prior-period sequencing is approved.
-- [ ] The shared advisory-lock and period-assignment protocol is approved.
-- [ ] Atomic `OPEN -> CLOSED` without durable `CLOSING` is approved.
-- [ ] Competing-close and unknown-outcome behavior is approved.
-- [ ] Cross-period void/refund/return/adjustment cases are explicitly accepted as fail-closed for this slice.
+- [x] The GTA contribution basis is approved using the exact companion decision wording.
+- [x] Distinct Z counter, reset counter, and GTA semantics are approved.
+- [x] State scope `(Site POS Server, fiscal identity, currency)` is approved.
+- [x] Initialization and verified legacy-import rules are approved.
+- [x] Strict prior-period sequencing is approved.
+- [x] The shared advisory-lock and period-assignment protocol is approved.
+- [x] Atomic `OPEN -> CLOSED` without durable `CLOSING` is approved.
+- [x] Competing-close and unknown-outcome behavior is approved.
+- [x] Cross-period void/refund/return/adjustment cases are explicitly accepted as fail-closed for this slice.
 
 Approval must identify authority, approver, timestamp, and approval reference. The documents do not claim BIR approval.
 

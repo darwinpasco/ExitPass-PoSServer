@@ -8,6 +8,8 @@ CREATE TABLE IF NOT EXISTS pos.fiscal_documents (
     site_pos_server_id uuid NOT NULL,
     channel_terminal_id uuid NULL,
     fiscal_identity_id uuid NULL,
+    currency_code char(3) NULL,
+    fiscal_reporting_period_id uuid NULL,
     fiscal_document_type_code_id uuid NOT NULL,
     fiscal_document_status_code_id uuid NOT NULL,
     fiscal_sequence_policy_id uuid NULL,
@@ -46,6 +48,11 @@ CREATE TABLE IF NOT EXISTS pos.fiscal_documents (
         REFERENCES pos.channel_terminals (channel_terminal_id),
     CONSTRAINT fk_fiscal_documents__fiscal_identity FOREIGN KEY (fiscal_identity_id)
         REFERENCES pos.fiscal_identities (fiscal_identity_id),
+    CONSTRAINT fk_fiscal_documents__reporting_period_scope FOREIGN KEY (
+        fiscal_reporting_period_id, site_pos_server_id, fiscal_identity_id, currency_code
+    ) REFERENCES pos.fiscal_reporting_periods (
+        fiscal_reporting_period_id, site_pos_server_id, fiscal_identity_id, currency_code
+    ),
     CONSTRAINT fk_fiscal_documents__doc_type_code FOREIGN KEY (fiscal_document_type_code_id)
         REFERENCES pos.controlled_codes (controlled_code_id),
     CONSTRAINT fk_fiscal_documents__doc_status_code FOREIGN KEY (fiscal_document_status_code_id)
@@ -54,6 +61,9 @@ CREATE TABLE IF NOT EXISTS pos.fiscal_documents (
         REFERENCES pos.fiscal_sequence_policies (fiscal_sequence_policy_id),
     CONSTRAINT ck_fiscal_documents__sequence_value CHECK (
         fiscal_sequence_value IS NULL OR fiscal_sequence_value > 0
+    ),
+    CONSTRAINT ck_fiscal_documents__currency CHECK (
+        currency_code IS NULL OR currency_code ~ '^[A-Z]{3}$'
     ),
     CONSTRAINT ck_fiscal_documents__document_number CHECK (
         fiscal_document_number IS NULL OR char_length(btrim(fiscal_document_number)) > 0
@@ -152,6 +162,12 @@ CREATE TABLE IF NOT EXISTS pos.fiscal_documents (
     )
 );
 
+-- Existing state-based environments need additive columns before this file's
+-- comments run; referential assignment enforcement is applied later in order.
+ALTER TABLE pos.fiscal_documents
+    ADD COLUMN IF NOT EXISTS currency_code char(3) NULL,
+    ADD COLUMN IF NOT EXISTS fiscal_reporting_period_id uuid NULL;
+
 CREATE UNIQUE INDEX IF NOT EXISTS ux_fiscal_documents__seq_policy_value
     ON pos.fiscal_documents (fiscal_sequence_policy_id, fiscal_sequence_value)
     WHERE fiscal_sequence_policy_id IS NOT NULL
@@ -173,6 +189,8 @@ CREATE INDEX IF NOT EXISTS ix_fiscal_documents__document_number
 
 COMMENT ON TABLE pos.fiscal_documents IS 'Fiscal document header/core posture with fiscal numbering fields allocated by runtime when prerequisites are satisfied. Does not own payment finality or ExitAuthorization.';
 COMMENT ON COLUMN pos.fiscal_documents.fiscal_identity_id IS 'Fiscal identity reference selected by runtime fiscal numbering. Nullable only for historical/unassigned shell posture.';
+COMMENT ON COLUMN pos.fiscal_documents.currency_code IS 'First-class fiscal document currency used by reporting-period scope enforcement.';
+COMMENT ON COLUMN pos.fiscal_documents.fiscal_reporting_period_id IS 'Immutable governed reporting-period assignment. Nullable only for explicit legacy upgrade inventory.';
 COMMENT ON COLUMN pos.fiscal_documents.fiscal_sequence_policy_id IS 'Fiscal sequence policy reference selected by runtime fiscal numbering. Nullable only for historical/unassigned shell posture.';
 COMMENT ON COLUMN pos.fiscal_documents.fiscal_sequence_value IS 'Allocated fiscal sequence value. Must be positive when present.';
 COMMENT ON COLUMN pos.fiscal_documents.fiscal_document_number IS 'Optional formatted fiscal document number. Authoritative fiscal number storage must use this column, not document_context.';

@@ -367,13 +367,28 @@ public static class PostgresFiscalDocumentSql
             document.voided_at,
             document.void_idempotency_key,
             document.void_semantic_request_hash,
-            document.void_correlation_id
+            document.void_correlation_id,
+            document.site_pos_server_id,
+            document.fiscal_identity_id,
+            document.currency_code,
+            document.fiscal_reporting_period_id
         from pos.fiscal_documents document
         inner join pos.controlled_codes current_status
             on current_status.controlled_code_id = document.fiscal_document_status_code_id
         where document.fiscal_document_id = @fiscal_document_id
           and document.is_active = true
         for update of document;
+        """;
+
+    public const string SelectFiscalDocumentReportingScope = """
+        select
+            site_pos_server_id,
+            fiscal_identity_id,
+            currency_code,
+            fiscal_reporting_period_id
+        from pos.fiscal_documents
+        where fiscal_document_id = @fiscal_document_id
+          and is_active = true;
         """;
 
     public const string SelectVoidFiscalDocumentStatusCode = """
@@ -542,6 +557,8 @@ public static class PostgresFiscalDocumentSql
             payment_finality_ref,
             vendor_ack_ref,
             business_day_date,
+            currency_code,
+            fiscal_reporting_period_id,
             document_context,
             is_active,
             created_at,
@@ -567,6 +584,8 @@ public static class PostgresFiscalDocumentSql
             @payment_finality_ref,
             @vendor_ack_ref,
             @business_day_date,
+            @currency_code,
+            @fiscal_reporting_period_id,
             @document_context,
             true,
             current_timestamp,

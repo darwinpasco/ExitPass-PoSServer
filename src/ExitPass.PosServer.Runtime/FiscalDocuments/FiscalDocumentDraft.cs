@@ -37,4 +37,5 @@ public sealed record FiscalDocumentDraft(
     DateTimeOffset? FiscalNumberAssignedAt = null,
     string? FiscalNumberAssignedByRef = null,
     SalesInvoiceHeaderSnapshot? SalesInvoiceHeaderSnapshot = null,
-    AppliedStatutoryFiscalFactsSnapshot? AppliedStatutoryFiscalFacts = null);
+    AppliedStatutoryFiscalFactsSnapshot? AppliedStatutoryFiscalFacts = null,
+    Guid? FiscalReportingPeriodId = null);

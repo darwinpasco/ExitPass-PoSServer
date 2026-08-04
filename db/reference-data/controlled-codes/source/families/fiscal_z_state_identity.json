@@ -1,0 +1,24 @@
+{
+  "schema_version":"1.0",
+  "source_key":"controlled_codes.fiscal_z_state_identity.v1",
+  "source_name":"Fiscal Z State Identity Controlled Codes",
+  "source_description":"Stable semantic identities for the governed Z counter, reset counter, and GTA state values.",
+  "governance_owner":"Engineering",
+  "source_ref":"ExitPass_POS_Server_Z_Close_Counter_GTA_Late_Write_Boundary_Contract_v1.0; Z-007B",
+  "code_sets":[{
+    "code_set_key":"fiscal_z_state_identity",
+    "display_name":"Fiscal Z State Identity",
+    "description":"Strong identities for immutable transition-value evidence.",
+    "governance_owner":"Engineering",
+    "source_ref":"Z-007B",
+    "is_active":true,
+    "effective_start_at":"2026-08-04T00:00:00Z",
+    "effective_end_at":null,
+    "codes":[
+      {"code_key":"z_counter","display_name":"Z Counter","description":"Count of committed Z closes in the governed state scope.","source_ref":"Z-007B","sort_order":10,"is_active":true,"is_deprecated":false,"effective_start_at":"2026-08-04T00:00:00Z","effective_end_at":null,"replaced_by_code_key":null},
+      {"code_key":"reset_counter","display_name":"Reset Counter","description":"Count of separately authorized fiscal resets; ordinary Z close preserves it.","source_ref":"Z-007B","sort_order":20,"is_active":true,"is_deprecated":false,"effective_start_at":"2026-08-04T00:00:00Z","effective_end_at":null,"replaced_by_code_key":null},
+      {"code_key":"grand_total_amount","display_name":"Grand Total Amount","description":"Cumulative approved VAT-inclusive final fiscal amount in integer minor units.","source_ref":"Z-007B","sort_order":30,"is_active":true,"is_deprecated":false,"effective_start_at":"2026-08-04T00:00:00Z","effective_end_at":null,"replaced_by_code_key":null}
+    ]
+  }],
+  "notes":["Display labels are not state identity. Runtime and constraints use stable code IDs and code keys."]
+}

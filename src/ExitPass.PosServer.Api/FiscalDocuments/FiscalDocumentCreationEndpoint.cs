@@ -137,6 +137,14 @@ public static class FiscalDocumentCreationEndpoint
             FiscalDocumentCreationErrorCode.IdempotencyConflict => StatusCodes.Status409Conflict,
             FiscalDocumentCreationErrorCode.AppliedStatutoryFiscalFactsPersistenceSchemaNotConfigured =>
                 StatusCodes.Status503ServiceUnavailable,
+            FiscalDocumentCreationErrorCode.FiscalCloseBoundaryLockTimeout or
+            FiscalDocumentCreationErrorCode.FiscalCloseBoundaryRetryableConcurrencyFailure =>
+                StatusCodes.Status503ServiceUnavailable,
+            FiscalDocumentCreationErrorCode.ReportingPeriodUnavailable or
+            FiscalDocumentCreationErrorCode.ReportingPeriodAmbiguous or
+            FiscalDocumentCreationErrorCode.ReportingPeriodClosed or
+            FiscalDocumentCreationErrorCode.ReportingPeriodAssignmentMismatch =>
+                StatusCodes.Status409Conflict,
             _ => StatusCodes.Status400BadRequest
         };
 
@@ -162,6 +170,15 @@ public static class FiscalDocumentCreationEndpoint
                 "retry_after_schema_upgrade",
             FiscalDocumentCreationErrorCode.AppliedStatutoryControlledCodeUnavailable =>
                 "retry_after_configuration_correction",
+            FiscalDocumentCreationErrorCode.ReportingPeriodUnavailable or
+            FiscalDocumentCreationErrorCode.ReportingPeriodAmbiguous or
+            FiscalDocumentCreationErrorCode.ReportingPeriodAssignmentMismatch =>
+                "retry_after_reporting_configuration_correction",
+            FiscalDocumentCreationErrorCode.ReportingPeriodClosed =>
+                "do_not_retry_for_closed_reporting_period",
+            FiscalDocumentCreationErrorCode.FiscalCloseBoundaryLockTimeout or
+            FiscalDocumentCreationErrorCode.FiscalCloseBoundaryRetryableConcurrencyFailure =>
+                "retry_after_transient_close_boundary_contention",
             _ => "do_not_retry_without_request_change"
         };
 
@@ -367,6 +384,13 @@ public static class FiscalDocumentCreationEndpoint
                 "applied_statutory_prohibited_privacy_field",
             FiscalDocumentCreationErrorCode.AppliedStatutoryControlledCodeUnavailable =>
                 "applied_statutory_controlled_code_unavailable",
+            FiscalDocumentCreationErrorCode.ReportingPeriodUnavailable => "fiscal_reporting_period_unavailable",
+            FiscalDocumentCreationErrorCode.ReportingPeriodAmbiguous => "fiscal_reporting_period_ambiguous",
+            FiscalDocumentCreationErrorCode.ReportingPeriodClosed => "fiscal_reporting_period_closed",
+            FiscalDocumentCreationErrorCode.ReportingPeriodAssignmentMismatch => "fiscal_reporting_period_assignment_mismatch",
+            FiscalDocumentCreationErrorCode.FiscalCloseBoundaryLockTimeout => "fiscal_close_boundary_lock_timeout",
+            FiscalDocumentCreationErrorCode.FiscalCloseBoundaryRetryableConcurrencyFailure =>
+                "fiscal_close_boundary_retryable_concurrency_failure",
             _ => "fiscal_document_creation_failed"
         };
 }

@@ -2,7 +2,15 @@
 
 ## 1. Status and Authority
 
-Contract package status: `DECISION_PACKAGE_COMPLETE_APPROVAL_REQUIRED`.
+Contract package status: `APPROVED`.
+
+Approval authority/reference: `ExitPass v1.3 Product and Fiscal Design Authority`.
+
+Approved by: `Darwin Pasco`.
+
+Approved at: `2026-08-04 08:26 PHT`.
+
+All complete candidate decisions in this contract are selected and authoritative. Historical `RECOMMENDED_PENDING_APPROVAL` labels document the evaluation path and no longer indicate an unresolved implementation decision. This approval does not claim external BIR approval.
 
 This document is authoritative for facts already governed by merged ExitPass material and for the implementation gate itself. Items marked `RECOMMENDED_PENDING_APPROVAL` are precise contract candidates, not approved BIR or accounting policy. Z Reading runtime and period close remain blocked until the approval text in Section 14 is accepted by the named authority and the Z-007B prerequisites merge.
 

@@ -102,7 +102,13 @@ public static class FiscalDocumentVoidEndpoint
         {
             FiscalDocumentVoidErrorCode.FiscalDocumentNotFound => StatusCodes.Status404NotFound,
             FiscalDocumentVoidErrorCode.IdempotencyConflict or
-            FiscalDocumentVoidErrorCode.InvalidStateTransition => StatusCodes.Status409Conflict,
+            FiscalDocumentVoidErrorCode.InvalidStateTransition or
+            FiscalDocumentVoidErrorCode.ReportingPeriodUnavailable or
+            FiscalDocumentVoidErrorCode.ReportingPeriodAssignmentMismatch or
+            FiscalDocumentVoidErrorCode.UnsupportedCrossPeriodMutation => StatusCodes.Status409Conflict,
+            FiscalDocumentVoidErrorCode.FiscalCloseBoundaryLockTimeout or
+            FiscalDocumentVoidErrorCode.FiscalCloseBoundaryRetryableConcurrencyFailure =>
+                StatusCodes.Status503ServiceUnavailable,
             _ => StatusCodes.Status400BadRequest
         };
 
@@ -112,6 +118,14 @@ public static class FiscalDocumentVoidEndpoint
             FiscalDocumentVoidErrorCode.IdempotencyConflict or
             FiscalDocumentVoidErrorCode.InvalidStateTransition => "do_not_retry_without_request_change",
             FiscalDocumentVoidErrorCode.FiscalDocumentNotFound => "verify_fiscal_document_reference_before_retry",
+            FiscalDocumentVoidErrorCode.ReportingPeriodUnavailable or
+            FiscalDocumentVoidErrorCode.ReportingPeriodAssignmentMismatch =>
+                "retry_after_reporting_configuration_correction",
+            FiscalDocumentVoidErrorCode.UnsupportedCrossPeriodMutation =>
+                "do_not_retry_without_approved_cross_period_contract",
+            FiscalDocumentVoidErrorCode.FiscalCloseBoundaryLockTimeout or
+            FiscalDocumentVoidErrorCode.FiscalCloseBoundaryRetryableConcurrencyFailure =>
+                "retry_after_transient_close_boundary_contention",
             _ => "do_not_retry_without_request_change"
         };
 
@@ -126,6 +140,12 @@ public static class FiscalDocumentVoidEndpoint
             FiscalDocumentVoidErrorCode.IdempotencyConflict => "fiscal_document_void_idempotency_conflict",
             FiscalDocumentVoidErrorCode.FiscalDocumentNotFound => "fiscal_document_not_found",
             FiscalDocumentVoidErrorCode.InvalidStateTransition => "invalid_fiscal_document_void_state_transition",
+            FiscalDocumentVoidErrorCode.ReportingPeriodUnavailable => "fiscal_reporting_period_unavailable",
+            FiscalDocumentVoidErrorCode.ReportingPeriodAssignmentMismatch => "fiscal_reporting_period_assignment_mismatch",
+            FiscalDocumentVoidErrorCode.UnsupportedCrossPeriodMutation => "unsupported_cross_period_fiscal_mutation",
+            FiscalDocumentVoidErrorCode.FiscalCloseBoundaryLockTimeout => "fiscal_close_boundary_lock_timeout",
+            FiscalDocumentVoidErrorCode.FiscalCloseBoundaryRetryableConcurrencyFailure =>
+                "fiscal_close_boundary_retryable_concurrency_failure",
             _ => "fiscal_document_void_rejected"
         };
 }

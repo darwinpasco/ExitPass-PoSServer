@@ -43,5 +43,11 @@ public enum FiscalDocumentCreationErrorCode
     AppliedStatutoryCurrencyMismatch = 38,
     AppliedStatutoryTotalMismatch = 39,
     AppliedStatutoryProhibitedPrivacyField = 40,
-    AppliedStatutoryControlledCodeUnavailable = 41
+    AppliedStatutoryControlledCodeUnavailable = 41,
+    ReportingPeriodUnavailable = 42,
+    ReportingPeriodAmbiguous = 43,
+    ReportingPeriodClosed = 44,
+    ReportingPeriodAssignmentMismatch = 45,
+    FiscalCloseBoundaryLockTimeout = 46,
+    FiscalCloseBoundaryRetryableConcurrencyFailure = 47
 }
