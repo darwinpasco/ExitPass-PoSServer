@@ -61,6 +61,7 @@
       "statutory identity", "evidence", "reviewer identity", "generic report JSON"
     ]
   },
+  "outputExtension": "pos-server-fiscal-report-output-api:v1",
   "safeErrors": [
     "fiscal_x_reading_invalid_request", "fiscal_x_reading_scope_forbidden",
     "site_pos_server_not_found", "fiscal_identity_not_found",
@@ -73,6 +74,6 @@
   ],
   "explicitExclusions": [
     "period close", "Z Reading", "counter or GTA mutation", "sequence-state mutation",
-    "fiscal-document mutation", "rendering", "printing", "export", "BIR", "Annex E", "EJ", "POSLog"
+    "fiscal-document mutation", "physical printing", "BIR", "Annex E", "EJ", "POSLog"
   ]
 }

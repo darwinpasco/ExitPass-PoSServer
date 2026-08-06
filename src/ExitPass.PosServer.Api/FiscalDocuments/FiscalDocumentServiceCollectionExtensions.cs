@@ -60,6 +60,9 @@ public static class FiscalDocumentServiceCollectionExtensions
         services.AddScoped<FiscalXReadingService>();
         services.AddScoped<FiscalZCloseStateInitializationService>();
         services.AddScoped<FiscalZReadingService>();
+        services.AddSingleton<FiscalReportPresentationService>();
+        services.AddSingleton<FiscalReportOutputRenderer>();
+        services.TryAddSingleton<Microsoft.AspNetCore.Authorization.IAuthorizationMiddlewareResultHandler, FiscalReportOutputAuthorizationResultHandler>();
         services.AddScoped(provider => new SalesInvoiceHeaderProfileAdminService(
             provider.GetRequiredService<ISalesInvoiceHeaderProfileRepository>(),
             IsSalesInvoiceHeaderProfileRequired(configuration)));
@@ -105,6 +108,16 @@ public static class FiscalDocumentServiceCollectionExtensions
                 policy => policy
                     .AddAuthenticationSchemes(SalesInvoiceHeaderProfileAdminAuthorization.AuthenticationScheme)
                     .RequireClaim(SalesInvoiceHeaderProfileAdminAuthorization.PermissionClaimType, FiscalZReadingAuthorization.ReadPermission));
+            options.AddPolicy(
+                FiscalReportOutputAuthorization.XExportPolicyName,
+                policy => policy
+                    .AddAuthenticationSchemes(SalesInvoiceHeaderProfileAdminAuthorization.AuthenticationScheme)
+                    .RequireClaim(SalesInvoiceHeaderProfileAdminAuthorization.PermissionClaimType, FiscalReportOutputAuthorization.XExportPermission));
+            options.AddPolicy(
+                FiscalReportOutputAuthorization.ZExportPolicyName,
+                policy => policy
+                    .AddAuthenticationSchemes(SalesInvoiceHeaderProfileAdminAuthorization.AuthenticationScheme)
+                    .RequireClaim(SalesInvoiceHeaderProfileAdminAuthorization.PermissionClaimType, FiscalReportOutputAuthorization.ZExportPermission));
         });
 
         return services;

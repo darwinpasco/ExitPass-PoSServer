@@ -76,7 +76,9 @@ public sealed record FiscalZReadingRecord(
     string PeriodStatus,
     string CorrelationId,
     string SupportReference,
-    bool Immutable);
+    bool Immutable,
+    long PeriodSequence = 0,
+    string ReportStatus = "COMMITTED");
 
 public enum FiscalZReadingOutcome
 {
