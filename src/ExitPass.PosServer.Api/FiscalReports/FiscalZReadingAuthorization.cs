@@ -10,7 +10,8 @@ public static class FiscalZReadingAuthorization
     public const string ReadPermission = "fiscal_z_reading.read";
     public const string CurrencyScopeClaimType = "pos_server_currency_scope";
 
-    public static bool IsZReadingPermission(string permission) => permission is ClosePermission or ReadPermission;
+    public static bool IsZReadingPermission(string permission) =>
+        permission is ClosePermission or ReadPermission or FiscalReportOutputAuthorization.ZExportPermission;
 
     public static bool IsInScope(
         ClaimsPrincipal principal,

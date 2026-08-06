@@ -12,7 +12,7 @@ public static class FiscalXReadingAuthorization
     public const string FiscalIdentityScopeClaimType = "pos_server_fiscal_identity_scope";
 
     public static bool IsXReadingPermission(string permission) =>
-        permission is GeneratePermission or ReadPermission;
+        permission is GeneratePermission or ReadPermission or FiscalReportOutputAuthorization.XExportPermission;
 
     public static bool IsInScope(ClaimsPrincipal principal, Guid sitePosServerId, Guid fiscalIdentityId) =>
         HasScope(principal, SitePosServerScopeClaimType, sitePosServerId) &&

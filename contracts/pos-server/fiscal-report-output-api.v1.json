@@ -1,0 +1,111 @@
+{
+  "contractId": "pos-server-fiscal-report-output-api:v1",
+  "sourceReportingContractVersion": "pos-server-fiscal-reporting:v1",
+  "presentationContracts": {
+    "xReading": "fiscal-x-reading-presentation-json-v1",
+    "zReading": "fiscal-z-reading-presentation-json-v1",
+    "printText": "fiscal-x-z-reading-print-text-v1",
+    "canonicalJson": "fiscal-x-z-reading-export-json-v1",
+    "canonicalCsv": "fiscal-x-z-reading-export-csv-v1",
+    "outputIdentity": "fiscal-report-output:sha256:v1"
+  },
+  "sourceOfTruth": {
+    "source": "stored immutable X or Z report snapshot and first-class child rows",
+    "liveFiscalRecomputation": false,
+    "snapshotMutation": false,
+    "counterMutation": false,
+    "periodMutation": false
+  },
+  "authentication": {
+    "scheme": "PosServerAdminApiKey",
+    "authoritySource": "server-configured service identity",
+    "requiredHeaders": ["X-PosServer-Admin-Key", "X-Correlation-Id"]
+  },
+  "authorization": {
+    "xPresentationPolicy": "FiscalXReadingRead",
+    "xPresentationPermission": "fiscal_x_reading.read",
+    "xExportPolicy": "FiscalXReadingExport",
+    "xExportPermission": "fiscal_x_reading.export",
+    "zPresentationPolicy": "FiscalZReadingRead",
+    "zPresentationPermission": "fiscal_z_reading.read",
+    "zExportPolicy": "FiscalZReadingExport",
+    "zExportPermission": "fiscal_z_reading.export",
+    "xScopes": ["sitePosServerId", "fiscalIdentityId"],
+    "zScopes": ["sitePosServerId", "fiscalIdentityId", "currencyCode"],
+    "scopeSource": "server-side API-key registration",
+    "hiddenScopeResult": 404
+  },
+  "routes": [
+    {
+      "method": "GET",
+      "route": "/v1/fiscal-reports/x-readings/{fiscalReportReference}/presentation",
+      "output": "fiscal-x-reading-presentation-json-v1"
+    },
+    {
+      "method": "GET",
+      "route": "/v1/fiscal-reports/x-readings/{fiscalReportReference}/exports/{format}",
+      "formats": ["json", "csv", "text"]
+    },
+    {
+      "method": "GET",
+      "route": "/v1/fiscal-reports/z-readings/{zReadingReference}/presentation",
+      "output": "fiscal-z-reading-presentation-json-v1"
+    },
+    {
+      "method": "GET",
+      "route": "/v1/fiscal-reports/z-readings/{zReadingReference}/exports/{format}",
+      "formats": ["json", "csv", "text"]
+    }
+  ],
+  "printWidthProfiles": {
+    "narrow": 32,
+    "standard": 48,
+    "office": 80,
+    "aliases": {
+      "57mm": "narrow",
+      "58mm": "narrow",
+      "80mm": "standard",
+      "plain": "office"
+    }
+  },
+  "determinism": {
+    "serialization": "canonical ordered UTF-8 projection",
+    "dateTime": "RFC 3339 UTC",
+    "amounts": "integer minor units; invariant two-decimal display",
+    "sameSnapshotAndContractAndFormat": "byte-for-byte identical",
+    "correlationIdAffectsOutput": false
+  },
+  "headers": {
+    "cacheControl": "private, no-store",
+    "pragma": "no-cache",
+    "contentTypeOptions": "nosniff",
+    "etag": "quoted safe output identity",
+    "contentDisposition": "inline for presentation and text; attachment for JSON and CSV"
+  },
+  "integrity": {
+    "supportedSourceVersion": "pos-server-fiscal-reporting:v1",
+    "requiredReportStatus": "COMMITTED",
+    "requiredImmutability": true,
+    "malformedSnapshot": "fail closed without live recomputation or repair",
+    "historicalOptionalFields": "controlled not_recorded or not_applicable posture"
+  },
+  "privacyExclusions": [
+    "customer identity",
+    "statutory identity",
+    "statutory evidence",
+    "reviewer identity",
+    "payment credentials",
+    "semantic request hash",
+    "internal database identifiers",
+    "SQL and stack traces"
+  ],
+  "explicitExclusions": [
+    "physical printer adapter",
+    "ESC/POS commands",
+    "PDF",
+    "Annex E",
+    "Electronic Journal",
+    "POSLog",
+    "BIR external layout generation"
+  ]
+}

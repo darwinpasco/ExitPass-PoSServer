@@ -80,7 +80,9 @@ public sealed record FiscalXReadingRecord(
     IReadOnlyList<FiscalXReadingFiscalNumberRange> FiscalNumberRanges,
     string CorrelationId,
     string SupportReference,
-    bool Immutable);
+    bool Immutable,
+    long PeriodSequence = 0,
+    string ReportStatus = "COMMITTED");
 
 public enum FiscalXReadingOutcome
 {
