@@ -17,17 +17,17 @@ Readiness values are limited to the classifications required by Z-009A.
 | H05 Release no/date | No complete first-class historical source | Future release-profile resolver | Z / committed / report profile | `NOT_AVAILABLE` | Release number/date are not modeled together | Add approved release profile or first-class fields |
 | H06 Serial no. | `pos.sales_invoice_header_profiles.pos_serial_number`; BIR summary posture | Future BIR/Annex header projection | Z / committed / report profile | `READY_EXISTING_DERIVATION` | Must bind the profile historically | Reference immutable approved header profile |
 | H07 MIN | `pos.sales_invoice_header_profiles.machine_identification_number`; BIR summary posture | Future BIR/Annex header projection | Z / committed / report profile | `READY_EXISTING_DERIVATION` | Must bind the profile historically | Reference immutable approved header profile |
-| H08 POS terminal no. | `pos.channel_terminals.channel_terminal_code`; document snapshots have optional `terminal_id` | Future scope resolver | Z / committed / scope | `REQUIRES_EXTERNAL_DECISION` | Multi-channel period has no one terminal | Approve combined Site POS Server or per-terminal profile |
+| H08 POS terminal no. | Governed Site POS Server/fiscal-identity header profile; child `pos.channel_terminals` are not output identities | Future header projection | Z / committed / scope | `REQUIRES_Z_SNAPSHOT_EXTENSION` | Historical terminal identity is not Z-bound; examiner acceptance remains external | Snapshot the governed fiscal terminal identity; confirm under AE-DR-020A |
 | H09 Generated date/time | `pos.annex_e_reports.generated_at` | Future export operation | Annex E / committed / output | `READY_EXISTING_FIELD` | Deterministic regeneration semantics unresolved | Freeze operation identity and regeneration lineage |
-| H10 UserID | Fiscal report request/audit service identity reference | Future Annex E audit adapter | Annex E / committed / output | `REQUIRES_NEW_REPORT_PROJECTION` | Exact public actor field is not frozen | Persist privacy-safe actor/service reference |
+| H10 UserID | Fiscal report request/audit service identity reference | Future Annex E audit adapter | Annex E / committed / output | `REQUIRES_NEW_REPORT_PROJECTION` | No immutable Annex E actor projection | Persist the server-derived privacy-safe actor/service reference approved under AE-DR-005A |
 
 ## 3. Detail mapping
 
 | Field | Schema.table.column or immutable field | Calculation input / service | Kind / lifecycle / grain | Availability | Current gap | Required Z-009 action |
 | --- | --- | --- | --- | --- | --- | --- |
-| D01 Date | `pos.x_z_reports.business_day_date` | Stored Z readback | Z / COMMITTED and period CLOSED / Z row | `READY_EXISTING_FIELD` | File grouping unresolved | Select governing Z only |
-| D02 Beginning SI/OR | `pos.fiscal_report_fiscal_number_ranges.first_fiscal_number` and Z `beginning_si_ref` | Stored Z ranges | Z / committed / range | `READY_EXISTING_FIELD` | Multi-series representation unresolved | Approve one-row/multi-range rule |
-| D03 Ending SI/OR | Range `last_fiscal_number` and Z `ending_si_ref` | Stored Z ranges | Z / committed / range | `READY_EXISTING_FIELD` | Same as D02 | Same as D02 |
+| D01 Date | `pos.x_z_reports.business_day_date` | Stored Z readback | Z / COMMITTED and period CLOSED / Z row | `READY_EXISTING_FIELD` | Official cell display remains external | Select governing Z business date; grouping is AE-DR-003A |
+| D02 Beginning SI/OR | `pos.fiscal_report_fiscal_number_ranges.first_fiscal_number` and Z `beginning_si_ref` | Stored Z ranges | Z / committed / range | `READY_EXISTING_FIELD` | E-1 has one representable range; multi-range/gap output has no approved representation | Apply AE-DR-022 fail-closed recommendation |
+| D03 Ending SI/OR | Range `last_fiscal_number` and Z `ending_si_ref` | Stored Z ranges | Z / committed / range | `READY_EXISTING_FIELD` | Same as D02 | Apply AE-DR-022 fail-closed recommendation |
 | D04 GTA ending | `pos.x_z_reports.present_grand_total_amount_minor_units`; Z counter snapshot resulting GTA | Stored Z readback | Z / committed / scope+currency | `READY_EXISTING_FIELD` | None for one currency | Copy recorded value |
 | D05 GTA beginning | Z previous GTA; counter snapshot previous GTA | Stored Z readback | Z / committed / scope+currency | `READY_EXISTING_FIELD` | None | Copy recorded value |
 | D06 Manual SI/OR sales | None | None | External/manual / period | `NOT_AVAILABLE` | No source or ingestion contract | Separate approved manual-sales source and reconciliation |
@@ -41,7 +41,7 @@ Readiness values are limited to the classifications required by Z-009A.
 | D14 NAAC discount | No separate Z field; possibly folded into other statutory in future | None | Z / committed / classification | `REQUIRES_Z_SNAPSHOT_EXTENSION` | Cannot distinguish NAAC | Add governed classification and immutable child projection |
 | D15 Solo Parent discount | No separate Z field | None | Z / committed / classification | `REQUIRES_Z_SNAPSHOT_EXTENSION` | Cannot distinguish Solo Parent | Add governed classification and immutable child projection |
 | D16 Other discount | Z other statutory, coupon, promotional; exact composition unresolved | Future classification projection | Z / committed / classification | `REQUIRES_EXTERNAL_DECISION` | Official `Others` meaning is undefined | Approve included controlled codes |
-| D17 Returns | Z `return_amount_minor_units` reserved | Z runtime currently fail-closed | Z / committed / period | `REQUIRES_EXTERNAL_DECISION` | Return attribution/sign unsupported | Approve return contract before nonzero output |
+| D17 Returns | Z `return_amount_minor_units` reserved | Z runtime fail-closed | Z / committed / period | `REQUIRES_SCHEMA_CHANGE` | Nonzero return attribution/sign unsupported | Preserve recorded zero only; block nonzero until a separate approved contract |
 | D18 Voids | Z `void_amount_minor_units` | Stored Z readback | Z / committed / period | `READY_EXISTING_FIELD` | Same-period only | Copy governed same-period void total |
 | D19 Total deductions | D12:D18 after approved composition | Future Annex E projection | Annex E / output / period | `READY_EXISTING_DERIVATION` | Formula/field numbering unresolved | Implement checked sum only after AE-DR-006 |
 | D20 SC VAT adjustment | `pos.fiscal_report_discount_breakdowns.vat_exemption_amount_minor_units` for SC | Stored Z child projection | Z / committed / classification | `READY_EXISTING_DERIVATION` | Ensure child is always present or governed zero | Copy immutable child amount |
@@ -56,7 +56,7 @@ Readiness values are limited to the classifications required by Z-009A.
 | D29 Total income | None as named E-1 fact | None | Annex E / output / period | `NOT_AVAILABLE` | No approved equation | Approve equation/source |
 | D30 Reset counter | Z counter snapshot resulting reset; Z report reset | Stored Z readback | Z / committed / scope+currency | `READY_EXISTING_FIELD` | None | Copy recorded value |
 | D31 Z counter | Z counter snapshot resulting Z; Z report Z counter | Stored Z readback | Z / committed / scope+currency | `READY_EXISTING_FIELD` | None | Copy recorded value |
-| D32 Remarks | No governed Annex E remark classification | None | Annex E / output / period | `REQUIRES_CONTROLLED_CODE` | Free text would be unsafe and nondeterministic | Approve controlled remarks and source rules |
+| D32 Remarks | No governed Annex E remark classification | Future controlled projection | Annex E / output / period | `REQUIRES_CONTROLLED_CODE` | Controlled values are internally approved; examiner acceptance remains external | Implement approved AE-DR-010A; never allow free text |
 
 ## 4. Readiness totals
 
@@ -64,11 +64,11 @@ Readiness values are limited to the classifications required by Z-009A.
 | --- | ---: |
 | `READY_EXISTING_FIELD` | 17 |
 | `READY_EXISTING_DERIVATION` | 6 |
-| `REQUIRES_Z_SNAPSHOT_EXTENSION` | 6 |
+| `REQUIRES_Z_SNAPSHOT_EXTENSION` | 7 |
 | `REQUIRES_NEW_REPORT_PROJECTION` | 1 |
-| `REQUIRES_SCHEMA_CHANGE` | 1 |
+| `REQUIRES_SCHEMA_CHANGE` | 2 |
 | `REQUIRES_CONTROLLED_CODE` | 2 |
-| `REQUIRES_EXTERNAL_DECISION` | 5 |
+| `REQUIRES_EXTERNAL_DECISION` | 3 |
 | `NOT_AVAILABLE` | 4 |
 | `NOT_APPLICABLE` | 0 |
 
@@ -77,3 +77,5 @@ These are primary per-field readiness classifications and total 42. A field can 
 ## 5. Source-of-truth boundary
 
 The future runtime must consume the committed Z snapshot, immutable children, immutable counter snapshot, and an approved historical header/profile binding. It must not query live transaction tables to recalculate closed-period totals. A new first-class BIR/Annex E projection may validate and reshape recorded facts, but it must not become a second independently recomputed fiscal truth.
+
+The readiness classifications above describe data availability. AE-DR-005A, AE-DR-011, AE-DR-010A, AE-DR-017, and AE-DR-018 are approved ExitPass decisions under `Z-009B-USER-APPROVAL-001`. AE-DR-006 through AE-DR-009, AE-DR-011A, AE-DR-012, and AE-DR-019 remain external gates where they affect mandatory E-1 values.

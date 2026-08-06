@@ -20,7 +20,7 @@ All arithmetic uses checked integer minor units. Output conversion to decimal ma
 | Window | Governing Z covers `[period_start_at, period_end_at)` and uses durable reporting-period assignments. | `EXISTING_EXITPASS_DECISION`; AE-SRC-017 | Reject inconsistent period or assignment | Supported |
 | Scope | Site POS Server, fiscal identity, and currency must match the Z and approved profile. | `EXISTING_EXITPASS_DECISION`; AE-SRC-016, AE-SRC-017 | Hidden-scope denial / fail closed | Supported for Z; Annex profile pending |
 | Qualifying documents | Recorded Sales Invoices assigned to the period; failed/incomplete operations and reprints do not add sales. | `EXISTING_EXITPASS_DECISION`; Z-006A/Z-007 | Reject unresolved classification | Supported |
-| Period date | D01 is recommended to use Z business-day date, not local calendar conversion during export. | `RECOMMENDED_FOR_APPROVAL` | Block until AE-DR-003 | Source exists |
+| Period date | D01 uses the governing Z business-day date, not local calendar conversion during export. | `EXISTING_EXITPASS_DECISION`; AE-DR-003 | Reject mismatch | Supported |
 | Post-close facts | No live data is added after Z close. | `EXISTING_EXITPASS_DECISION` | A correction requires approved lineage, never silent recomputation | Supported boundary |
 
 ## 3. Recorded amount rules
@@ -33,18 +33,18 @@ All arithmetic uses checked integer minor units. Output conversion to decimal ma
 | VAT D09 | Z VAT amount | Recorded VAT; exporter does not recalculate a tax rate | Exact equality to Z | `EXISTING_EXITPASS_DECISION` | Supported |
 | VAT-exempt sales D10 | Z VAT-exempt sales | Recorded VAT treatment only | Exact equality to Z | `EXISTING_EXITPASS_DECISION` | Supported |
 | Zero-rated sales D11 | Z zero-rated sales | Recorded classification only | Exact equality to Z | `EXISTING_EXITPASS_DECISION` | Supported |
-| Total discounts | Z discount amount | Statutory and commercial categories must not be double counted | Child sum must not exceed and, for E-1, must equal approved D19 composition | `EXISTING_EXITPASS_DECISION` for Z; E-1 composition `UNRESOLVED` | Partial |
+| Total discounts | Z discount amount | Statutory and commercial categories must not be double counted | Child sum must not exceed and, for E-1, must equal approved D19 composition | `EXISTING_EXITPASS_DECISION` for Z; external E-1 equation gate AE-DR-006 | Partial |
 | SC discount D12 | Z SC discount and SC child | Positive deduction display | Top-level equals child | `EXISTING_EXITPASS_DECISION` | Supported |
 | PWD discount D13 | Z PWD discount and PWD child | Positive deduction display | Top-level equals child | `EXISTING_EXITPASS_DECISION` | Supported |
-| Other statutory D16 candidate | Z other statutory child | Must not include NAAC, Solo Parent, Diplomat, coupon, or promotion without an approved mapping | Controlled-code reconciliation | `UNRESOLVED` | Partial |
+| Other statutory D16 candidate | Z other statutory child | Must not include NAAC, Solo Parent, Diplomat, coupon, or promotion without an approved mapping | Controlled-code reconciliation | External mapping required by AE-DR-006/012 | Partial |
 | VAT removal D20-D24 | Z discount-child VAT exemption/removal values | Separate from discount amount | Component sum equals D25 | `EXISTING_EXITPASS_DECISION` for separation; detailed mapping unresolved | Partial |
-| Coupon/promotional discount | Z separate fields/children | Not named separately in E-1 | Mapping to D16 or exclusion `UNRESOLVED` | `UNRESOLVED` | Source exists |
+| Coupon/promotional discount | Z separate fields/children | Not named separately in E-1 | Mapping to D16 or exclusion requires AE-DR-006 | External mapping required | Source exists |
 | Void D18 | Z same-period void amount | Positive deduction display; voided sale excluded from active sale contribution | Exact equality to Z void facts | `EXISTING_EXITPASS_DECISION` | Supported |
-| Return D17 | Z reserved return total | Nonzero generation prohibited until source attribution/sign contract exists | Exact equality once governed | `UNRESOLVED` | Fail closed |
-| Refund | No E-1 labeled field | Must not be silently folded into Returns or Others | None until decision | `UNRESOLVED` | Fail closed |
-| Cancellation | No E-1 labeled field | Must not be silently treated as void | None until decision | `UNRESOLVED` | Fail closed |
-| Adjustment | Z reserved adjustment total; no direct E-1 deduction label except VAT Others/Remarks possibilities | Must not be silently mapped | None until decision | `UNRESOLVED` | Fail closed |
-| Service charge | Z reserved service-charge total; no E-1 label | Must not be silently included/excluded | None until decision | `UNRESOLVED` | Fail closed |
+| Return D17 | Z reserved return total | Nonzero generation prohibited until source attribution/sign contract exists | Exact equality once governed | `EXISTING_EXITPASS_DECISION`; AE-DR-015 | Fail closed |
+| Refund | No E-1 labeled field | Must not be silently folded into Returns or Others | None until separately governed | `EXISTING_EXITPASS_DECISION`; AE-DR-015 | Fail closed |
+| Cancellation | No E-1 labeled field | Must not be silently treated as void | None until separately governed | `EXISTING_EXITPASS_DECISION`; AE-DR-015 | Fail closed |
+| Adjustment | Z reserved adjustment total; no direct E-1 deduction label except VAT Others/Remarks possibilities | Must not be silently mapped | None until separately governed | `EXISTING_EXITPASS_DECISION`; AE-DR-015 | Fail closed |
+| Service charge | Z reserved service-charge total; no E-1 label | Must not be silently included/excluded | None until separately governed | `EXISTING_EXITPASS_DECISION`; AE-DR-015 | Fail closed |
 | Tender totals | Z tender children | E-1 has no tender output field; may be used only as a validation input | Tender sum equals Z net under supported source set | `NOT_APPLICABLE` to output; reconciliation is `EXISTING_EXITPASS_DECISION` | Supported validation |
 
 ## 4. Workbook equations
@@ -82,7 +82,7 @@ These are recommendations, not approved BIR equations:
 | AE-RC-007 | D02/D03 and counts equal immutable fiscal range children | Z range children | 0 | `EXISTING_EXITPASS_DECISION` | Reject |
 | AE-RC-008 | Unexplained sequence gaps are absent | Z gap children | 0 unexplained gaps | `EXISTING_EXITPASS_DECISION` | Reject |
 | AE-RC-009 | Tender child total = Z net sales for supported source set | Z tender children | 0 | `EXISTING_EXITPASS_DECISION` | Reject |
-| AE-RC-010 | Header profile scope equals Z Site POS Server/fiscal identity | Historical profile and Z | Exact | `RECOMMENDED_FOR_APPROVAL` | Reject |
+| AE-RC-010 | Header profile scope equals Z Site POS Server/fiscal identity | Historical profile and Z | Exact | `EXISTING_EXITPASS_DECISION`; `Z-009B-USER-APPROVAL-001` | Reject |
 
 ## 6. GTA, counters, and ranges
 
@@ -91,7 +91,7 @@ These are recommendations, not approved BIR equations:
 - D31 is the resulting Z counter and must equal previous Z counter plus one.
 - D30 is the resulting reset counter and must equal the previous reset counter for an ordinary Z close.
 - D02 and D03 use first-class fiscal sequence-range facts, never lexical minimum/maximum over SI text.
-- A multi-series Z can own multiple ranges, but E-1 has one beginning and one ending column. Flattening or multiple rows is AE-DR-003/AE-DR-022 and remains blocked.
+- A multi-series Z can own multiple ranges, but E-1 has one beginning and one ending column. The AE-DR-022 recommendation fails generation for an ambiguous multi-range or unrepresentable gap; it does not flatten or truncate.
 
 ## 7. Classification-specific posture
 
@@ -113,9 +113,9 @@ These are recommendations, not approved BIR equations:
 | Cross-period void | Fail closed; no approved attribution. | `EXISTING_EXITPASS_DECISION` |
 | Refund/return/adjustment | Fail closed for nonzero values until separate source/sign/period decisions. | `EXISTING_EXITPASS_DECISION` from Z-007A/Z-007 |
 | Reprint | Does not count as a sale and has no E-1 row. | `EXISTING_EXITPASS_DECISION` |
-| Training transaction | No current governed source or E-1 rule. | `UNRESOLVED`; AE-DR-023 |
+| Training transaction | No current governed source or E-1 rule; fail closed if encountered. | `EXISTING_EXITPASS_DECISION`; AE-DR-023 |
 | Late transaction | Cannot enter a closed period because of the Z close boundary. No Annex E post-close insertion. | `EXISTING_EXITPASS_DECISION` |
-| Corrected period/file | No reopen or mutation. Any supplemental/replacement file needs approved lineage. | `UNRESOLVED`; AE-DR-017 |
+| Corrected period/file | No reopen or mutation. Immutable supersession lineage preserves the original. | `EXISTING_EXITPASS_DECISION`; AE-DR-017; `Z-009B-USER-APPROVAL-001` |
 
 ## 9. Zero, negative, rounding, and currency
 
@@ -123,12 +123,12 @@ These are recommendations, not approved BIR equations:
 - Missing is not zero. A missing mandatory field blocks output.
 - Current Z amount fields are nonnegative. The external representation of negative adjustment values remains unresolved and must not be invented.
 - No floating-point arithmetic is allowed. Major-unit formatting divides integer minor units using the currency minor-unit contract.
-- The workbook does not state decimal places, separator, or rounding mode. Two decimal places and `.` decimal separator are `RECOMMENDED_FOR_APPROVAL` for PHP, subject to AE-DR-019.
+- The workbook does not state decimal places, separator, or rounding mode. PHP-only output using two decimal places, `.` as decimal separator, and no thousands separator is approved under AE-DR-019A and `Z-009B-USER-APPROVAL-001`; regulatory acceptance remains AE-DR-019.
 - E-1 has no currency column. One output profile must contain one currency, and non-PHP applicability is AE-DR-019.
 
 ## 10. No-activity period
 
-A configured empty period can close and advances the Z counter under the approved Z contract. E-1 row behavior is unresolved:
+A configured empty period can close and advances the Z counter under the approved Z contract. AE-DR-021 and `Z-009B-USER-APPROVAL-001` require:
 
 - D02/D03 may be blank or use a controlled not-applicable marker;
 - amounts and counts may be zero;
@@ -136,9 +136,8 @@ A configured empty period can close and advances the Z counter under the approve
 - reset stays unchanged and Z counter advances;
 - remarks may carry a controlled `NO_ACTIVITY` code only if AE-DR-010/AE-DR-021 approves it.
 
-Until approved, the exporter fails closed rather than inventing placeholders.
+Unknown source facts still fail closed rather than being converted into placeholders.
 
 ## 11. Replay and regeneration
 
 Exact replay of one approved Annex E operation over one governing Z/profile/version must return identical bytes. A changed profile, grouping, or output contract is a semantic conflict or a new versioned operation, not silent replacement. Prior-period regeneration reads only immutable sources and must not change fiscal state.
-

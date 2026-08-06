@@ -2,9 +2,11 @@
 
 ## 1. Readiness verdict
 
-**`BLOCKED_PENDING_DECISIONS`**
+**Runtime design: `AUTHORIZED_FOR_RUNTIME_DESIGN` by `Z-009B-USER-APPROVAL-001`.**
 
-Z-009 runtime is not authorized. AE-SRC-001 establishes the five profile templates and E-1 physical field order, but 24 decision records remain open. Mandatory E-1 values or semantics remain unavailable for manual SI/OR sales, NAAC/Solo Parent separation, Other discount/VAT mapping, VAT on returns, VAT payable equation, sales overrun/overflow, total income, remarks, and historical header/export details.
+**Bounded E-1 implementation: `BLOCKED_PENDING_EXTERNAL_CONFIRMATION`.**
+
+AE-SRC-001 establishes the five profile templates and E-1 physical field order. The 24 original decisions are preserved and split into 35 authority-specific records: all 13 project decisions are approved, 14 require external confirmation, and 2 E-2 through E-5 decisions are deferred. Mandatory E-1 values or semantics remain externally unresolved for manual SI/OR sales, formula mapping, overrun/overflow, total income, VAT/discount category mapping, and official artifact acceptance.
 
 ## 2. Frozen scope available from sources
 
@@ -18,9 +20,9 @@ The following can be treated as source-grounded input to a future approved task:
 - Senior Citizen, PWD, and VAT removal remain distinct; no entitlement is adjudicated by the exporter.
 - E-1 excludes customer-level parking, plate, ticket, evidence, payment credential, and beneficiary identity facts.
 
-## 3. Proposed bounded runtime after approvals
+## 3. Approved bounded runtime design
 
-Target only `RMO 24-2023 Annex E-1 BIR Sales Summary`. Consume one committed Z per output row. Generate deterministic output from immutable sources and an approved historical report header profile. Do not include E-2 through E-5 in the same implementation.
+Target only `pos-server-bir-annex-e1-rmo24-2023:v1`. Consume one committed Z and fiscal identity per output row. Assemble one deterministic monthly workbook per Site POS Server, fiscal identity, currency, and calendar month after those recommendations are approved. Generate from immutable sources and an approved historical report header profile. Do not include E-2 through E-5.
 
 Suggested future routes, subject to API design approval:
 
@@ -42,11 +44,11 @@ The command should accept an operation key and governing Z reference or approved
 | Official detail field numbers displayed | 29 |
 | Direct existing immutable fields | 17 |
 | Existing derivations | 6 |
-| Fields needing Z/header extension | 6 |
+| Fields needing Z/header extension | 7 |
 | Fields needing new report projection | 1 |
-| Fields needing explicit schema support | 1 |
+| Fields needing explicit schema support | 2 |
 | Fields needing controlled codes | 2 |
-| Fields with external decisions as primary readiness | 5 |
+| Fields with external decisions as primary readiness | 3 |
 | Fields not currently available | 4 |
 
 Primary readiness categories total 42. Broader decision gates may affect fields whose primary readiness is otherwise technical.
@@ -67,7 +69,7 @@ Primary readiness categories total 42. Broader decision gates may affect fields 
 1. Extend the immutable BIR summary/header projection with the approved historical taxpayer name, address, TIN, software name/version, release number/date, POS terminal identity, generated actor reference, and exact E-1 profile version.
 2. Add first-class minor-unit fields for every approved missing physical E-1 amount: manual SI/OR, NAAC, Solo Parent, VAT-adjustment components, VAT payable, sales overrun/overflow, and total income.
 3. Add a governed remarks classification reference, not generic notes.
-4. Add deterministic output identity/version, filename, content type, content hash, generation operation, and regeneration/correction lineage if AE-DR-017/018 approves persistence.
+4. Add deterministic output identity/version, filename, content type, content hash, generation operation, and immutable regeneration/correction lineage after AE-DR-017/018 user approval. Store metadata and references, not workbook bytes, under AE-DR-018.
 5. Add uniqueness for operation identity and governing Z/profile/version; preserve one immutable successful projection per approved semantic identity.
 6. Add foreign keys that prove Site POS Server, fiscal identity, currency, governing Z, period, header profile, and BIR summary scope consistency.
 7. Add immutable update/delete protection and restrictive parent retention.
@@ -79,9 +81,9 @@ Use additive expand-and-validate. Existing `pos.annex_e_reports` rows may contai
 
 ## 6. Controlled-code impact
 
-Expected governed families after approval:
+Expected governed families after user and applicable external approval:
 
-- Annex E external profile (`e1_rmo24_2023_v1` only if approved);
+- Annex E internal profile (`e1_rmo24_2023_v1`), with external artifact acceptance still pending;
 - Annex E operation/status separate from report lifecycle where needed;
 - Annex E remarks/exception classification;
 - correction/regeneration relationship classification;
@@ -106,7 +108,7 @@ Wrong-family references must be database-rejected. Display labels are never iden
 
 ## 8. Generation lifecycle
 
-Recommended state machine after approval:
+Approved internal state-machine design, subject to implementation prerequisites:
 
 ```text
 REQUESTED -> PROCESSING -> COMMITTED
@@ -176,7 +178,7 @@ Public errors do not expose SQL, schema/table/constraint names, internal UUIDs, 
 
 ## 13. Retention and regeneration
 
-Retention length, external storage, correction lineage, signing, encryption, and submission remain AE-DR-016 through 018. The runtime must not implement them by convention. It may proceed only with an explicitly bounded local generation/download scope if those external concerns are formally excluded.
+AE-DR-016A recommends bounded authorized local generation/download with no signing, encryption, or submission. AE-DR-017 recommends immutable correction lineage. AE-DR-018 recommends persisted output metadata and hash without database file bytes. Production retention duration/archive remains external under AE-DR-016B; signing, encryption, and delivery remain external under AE-DR-016.
 
 ## 14. Explicit exclusions
 
@@ -193,11 +195,13 @@ Retention length, external storage, correction lineage, signing, encryption, and
 
 ## 15. Remaining gates
 
-All `BLOCKS_Z009` entries in the decision register must be approved and reflected in a new contract revision. E-2 through E-5 decisions may remain open only if the approved runtime scope explicitly limits itself to E-1.
+Runtime design is authorized by the completed User Approval Record. Before generator implementation, external decisions that define mandatory field sources or equations must have acceptable evidence. Examiner-format, delivery, and production-retention confirmations may be staged according to the Runtime Authorization Checklist, but they still block Controlled UAT or production at their recorded levels.
 
 Until then:
 
 ```text
-Z-009 Annex E runtime implementation: NOT AUTHORIZED
-Readiness verdict: BLOCKED_PENDING_DECISIONS
+Z-009 Annex E runtime design: AUTHORIZED
+Z-009 bounded E-1 implementation: BLOCKED PENDING EXTERNAL CONFIRMATION
+Controlled UAT: NOT AUTHORIZED
+Production: NOT AUTHORIZED
 ```

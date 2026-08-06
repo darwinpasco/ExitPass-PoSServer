@@ -2,7 +2,7 @@
 
 ## 1. Important notice
 
-All values are synthetic. These examples are contract-analysis fixtures, not BIR-approved output. `UNRESOLVED[AE-DR-nnn]` is a deliberate fail-closed marker and must never appear in a production artifact.
+All values are synthetic. These examples are contract-analysis fixtures, not BIR-approved output. `PENDING_EXTERNAL[AE-DR-nnn]` is a deliberate fail-closed marker and must never appear in an artifact.
 
 ## 2. Common synthetic header
 
@@ -12,10 +12,10 @@ All values are synthetic. These examples are contract-analysis fixtures, not BIR
 | H02 | `100 TEST AVENUE, TEST CITY` | Synthetic immutable fiscal identity profile |
 | H03 | `000-000-000-000` | Synthetic taxpayer TIN placeholder, not a real TIN |
 | H04 | `ExitPass POS Server v1.3` | Synthetic release profile |
-| H05 | `R1 / 2026-08-06` | Synthetic release profile; exact format unresolved |
+| H05 | `R1 / 2026-08-06` | Synthetic release profile using the AE-DR-019A internal recommendation; external display confirmation remains pending |
 | H06 | `SYN-SERIAL-001` | Synthetic header profile |
 | H07 | `SYN-MIN-001` | Synthetic header profile |
-| H08 | `SYN-TERM-001` | Synthetic terminal identity; AE-DR-020 unresolved |
+| H08 | `SYN-TERM-001` | Synthetic governed Site POS Server fiscal terminal identity under AE-DR-020; examiner acceptance remains AE-DR-020A |
 | H09 | `2026-08-06 09:00:00 PHT` | Synthetic export operation |
 | H10 | `svc-annex-export` | Synthetic privacy-safe service reference |
 
@@ -50,7 +50,7 @@ Tender validation: cash PHP 100.00 + QRPH PHP 200.00 = net PHP 300.00
 | C | D03 Ending SI/OR | `SI-000102` | Last immutable range number |
 | D | D04 GTA Ending | `10300.00` | `10000.00 + 300.00` |
 | E | D05 GTA Beginning | `10000.00` | Z previous GTA |
-| F | D06 Manual SI/OR | `UNRESOLVED[AE-DR-007]` | No authoritative source |
+| F | D06 Manual SI/OR | `PENDING_EXTERNAL[AE-DR-007]` | No authoritative source |
 | G | D07 Gross Sales | `300.00` | Z gross |
 | H | D08 VATable Sales | `267.86` | Z VATable |
 | I | D09 VAT Amount | `32.14` | Z VAT |
@@ -58,25 +58,25 @@ Tender validation: cash PHP 100.00 + QRPH PHP 200.00 = net PHP 300.00
 | K | D11 Zero-Rated Sales | `0.00` | Recorded zero |
 | L | D12 Discount SC | `0.00` | Recorded zero |
 | M | D13 Discount PWD | `0.00` | Recorded zero |
-| N | D14 Discount NAAC | `UNRESOLVED[AE-DR-011]` | Unsupported classification |
-| O | D15 Discount Solo Parent | `UNRESOLVED[AE-DR-011]` | Unsupported classification |
-| P | D16 Discount Others | `UNRESOLVED[AE-DR-006]` | Composition unresolved |
+| N | D14 Discount NAAC | `0.00` | Separate immutable classification records absence; unknown cannot become zero |
+| O | D15 Discount Solo Parent | `0.00` | Separate immutable classification records absence; unknown cannot become zero |
+| P | D16 Discount Others | `PENDING_EXTERNAL[AE-DR-006]` | Official composition unresolved |
 | Q | D17 Returns | `0.00` | Only after approved controlled-zero posture |
 | R | D18 Voids | `0.00` | Z void |
-| S | D19 Total Deductions | `UNRESOLVED[AE-DR-006]` | Formula mapping gate |
+| S | D19 Total Deductions | `PENDING_EXTERNAL[AE-DR-006]` | Formula mapping gate |
 | T | D20 VAT Adj SC | `0.00` | SC child recorded zero |
 | U | D21 VAT Adj PWD | `0.00` | PWD child recorded zero |
-| V | D22 VAT Adj Others | `UNRESOLVED[AE-DR-012]` | Mapping unresolved |
-| W | D23 VAT on Returns | `UNRESOLVED[AE-DR-015]` | No first-class source |
-| X | D24 VAT Adj Others | `UNRESOLVED[AE-DR-012]` | Classification unresolved |
-| Y | D25 Total VAT Adjustment | `UNRESOLVED` | Components not all approved |
-| Z | D26 VAT Payable | `UNRESOLVED[AE-DR-006]` | Official equation interpretation unresolved |
+| V | D22 VAT Adj Others | `PENDING_EXTERNAL[AE-DR-012]` | Mapping unresolved |
+| W | D23 VAT on Returns | `0.00` | Recorded bounded-source zero; any nonzero source fails closed under AE-DR-015 |
+| X | D24 VAT Adj Others | `PENDING_EXTERNAL[AE-DR-012]` | Classification unresolved |
+| Y | D25 Total VAT Adjustment | `PENDING_EXTERNAL[AE-DR-012]` | Components are not all approved |
+| Z | D26 VAT Payable | `PENDING_EXTERNAL[AE-DR-006]` | Official equation interpretation unresolved |
 | AA | D27 Net Sales | `300.00` | Z net / current GTA contribution |
-| AB | D28 Sales Overrun/Overflow | `UNRESOLVED[AE-DR-008]` | No source |
-| AC | D29 Total Income | `UNRESOLVED[AE-DR-009]` | No approved equation |
+| AB | D28 Sales Overrun/Overflow | `PENDING_EXTERNAL[AE-DR-008]` | No source |
+| AC | D29 Total Income | `PENDING_EXTERNAL[AE-DR-009]` | No approved equation |
 | AD | D30 Reset Counter | `0` | Z resulting reset |
 | AE | D31 Z-Counter | `7` | Z resulting counter |
-| AF | D32 Remarks | `UNRESOLVED[AE-DR-010]` | Controlled content not approved |
+| AF | D32 Remarks | `NONE` | Approved controlled code; external acceptance remains AE-DR-010 |
 
 This row demonstrates why Z-009 is blocked: available recorded totals reconcile, but the mandatory physical output cannot be completed without assumptions.
 
@@ -146,11 +146,11 @@ Z: 9 -> 10
 All supported recorded amount categories: 0.00
 ```
 
-D02/D03 and D32 cannot be finalized. The recommended output is blank range cells plus controlled `NO_ACTIVITY`, but AE-DR-021 and AE-DR-010 must approve that representation.
+D02/D03 are blank and D32 is controlled `NO_ACTIVITY` under approved AE-DR-021 and AE-DR-010A. Examiner acceptance of Remarks remains AE-DR-010.
 
 ## 8. Sample F: sequence-gap exception
 
-Synthetic Z range: sequences `200` through `202`, two qualifying documents, gap `201` classified `VOIDED_WITHIN_PERIOD`. The Z can close only when the gap classification is governed. E-1 has no gap column. AE-DR-022 must approve either a controlled Remarks value, a separate E-1 row/range, or companion evidence. An unexplained gap always blocks generation.
+Synthetic Z range: sequences `200` through `202`, two qualifying documents, gap `201` classified `VOIDED_WITHIN_PERIOD`. The Z can close only when the gap classification is governed. E-1 has no gap column. AE-DR-022 recommends failing E-1 generation when a range or gap cannot be represented unambiguously; it does not flatten, truncate, or invent a Remarks value. An unexplained gap always blocks generation.
 
 ## 9. Sample G: Z counter/GTA transition
 
@@ -165,6 +165,6 @@ E-1 maps GTA resulting to D04, GTA previous to D05, reset resulting to D30, and 
 ## 10. Traceability checks
 
 1. Every populated value above comes from an immutable Z/header fact or an explicitly shown checked sum.
-2. Every unavailable mandatory value carries a decision ID.
+2. Every unavailable mandatory value carries a user or external decision ID.
 3. No sample uses live recomputation, customer data, statutory identity, ticket number, plate number, credential, or production identifier.
-4. No unresolved value may be serialized into a production artifact.
+4. No pending marker may be serialized into an artifact.

@@ -1,66 +1,108 @@
-# ExitPass POS Server BIR Annex E Open Decisions and Assumptions Register v1.0
+# ExitPass POS Server BIR Annex E Decision Register v1.0
 
-## 1. Status rules
+## 1. Purpose
 
-- `OPEN_BLOCKING`: must be approved before the affected runtime scope.
-- `OPEN_NONBLOCKING`: may remain open only when the affected feature is excluded.
-- `APPROVED`: requires an explicit approval source and date; none is created by this document.
-- `REJECTED`: requires an explicit authority.
+This register preserves AE-DR-001 through AE-DR-024 and adds only the sub-decisions needed to separate regulatory confirmation from project-owned choices. No recommendation is user-approved by this document. No status asserts BIR approval unless the cited existing source is explicit.
 
-Every entry below is a recommendation, not an approval. The required approver roles name the needed authority; they do not assert that BIR has approved the recommendation.
+Authority classes and resolution statuses are limited to the vocabularies defined by Z-009B. Blocking level identifies the implementation stage affected; resolution status separately identifies whether approval remains outstanding.
 
-## 2. Decision register
+## 2. Decision inventory
 
-| ID | Question and ambiguity source | Options | Impacts | Recommendation and rationale | Required approver | Status / blocking scope | Acceptance consequence |
-| --- | --- | --- | --- | --- | --- | --- | --- |
-| AE-DR-001 | Which Annex E profile is the first Z-009 runtime target? AE-SRC-001 has E-1:E-5; BRD has immediate and future scopes. | E-1 only; E-1:E-3; all five | Compliance, privacy, runtime, DB | E-1 only. It is summary-level and Z-backed; E-2:E-5 require distinct personal-data contracts. | Product and Fiscal Design Authority; BIR/accreditation advisor | `OPEN_BLOCKING`, `BLOCKS_Z009` | Freeze `pos-server-bir-annex-e1-rmo24-2023:v1` or stop. |
-| AE-DR-002 | What external file format is authoritative? Official source is `.xlsx`; API docs mention Print/PDF/JSON; no submission spec. | XLSX; PDF; JSON; CSV; multiple | Compliance, dependency, determinism | XLSX faithful to E-1 as primary artifact; other formats explicitly noncompliant companions unless approved. | BIR/accreditation advisor; Product | `OPEN_BLOCKING` | No Annex E bytes may be generated before approval. |
-| AE-DR-003 | What is output grain and grouping? E-1 has multiple rows but no period instruction. | One file per Z; daily rows grouped monthly; caller-selected closed range | Compliance, API, filename, size | One row per Z; recommend one file per Z for v1 to preserve exact close identity. | BIR/accounting; Product | `OPEN_BLOCKING` | Freeze file/report identity and multi-series rule. |
-| AE-DR-004 | What filename is prescribed? No source found. | BIR-prescribed; recommended deterministic; operator-supplied | Compliance, operations | Approve deterministic `ANNEX-E1_<FISCAL>_<MIN>_<DATE>_<VERSION>.xlsx`; never operator text. | BIR/accreditation; Operations | `OPEN_BLOCKING` | Freeze sanitization and collision behavior. |
-| AE-DR-005 | Are all 10 header facts mandatory and how are software release/UserID values sourced? Template labels lack nullability. | All required; selected optional; controlled N/A | Compliance, schema, privacy | Require all for E-1; use immutable report profile and privacy-safe service actor. | BIR/accreditation; Product; Security | `OPEN_BLOCKING` | Approve historical header/profile extension. |
-| AE-DR-006 | How do 29 official field numbers map to 32 physical columns and equations `23=8-19`, `24=6-16-8`? | Physical-column formulas; official-number formulas; corrected interpretation | Financial correctness | Obtain written BIR/accounting mapping. Do not infer conventional equations. | BIR/accreditation; Accounting | `OPEN_BLOCKING` | D19/D26/D27 integrity equations cannot ship. |
-| AE-DR-007 | What is `Sales Issued w/ Manual SI/OR` and its authoritative source? | External ledger import; POS manual issuance mode; always zero when prohibited | Compliance, schema, operations | Define a governed first-class manual-sales source; do not default zero. | BIR/accounting; Product | `OPEN_BLOCKING` | Add source or approve controlled zero/non-applicability. |
-| AE-DR-008 | What is Sales Overrun/Overflow? No repository source definition. | Cash/tender variance; sequence overrun; revenue overflow; N/A | Accounting, schema | Require BIR/accounting definition and source. | BIR/accounting | `OPEN_BLOCKING` | D28 blocks E-1. |
-| AE-DR-009 | What is Total Income and its equation? Workbook has label only. | Net sales; net plus overrun; other | Financial correctness | Require explicit equation and sign rules. | BIR/accounting | `OPEN_BLOCKING` | D29 blocks E-1. |
-| AE-DR-010 | What may Remarks contain? Free text risks privacy and nondeterminism. | Blank; controlled codes; free text | Privacy, audit, schema | Controlled codes only (`NONE`, `NO_ACTIVITY`, approved exception codes). | BIR/accreditation; Security | `OPEN_BLOCKING` | Add controlled code family if nonblank values required. |
-| AE-DR-011 | How are NAAC and Solo Parent E-1 columns represented before workflows exist? | Explicit zero; N/A; block; implement classifications | Compliance, schema | Approve controlled zero only for a scope where those privileges are formally unavailable; otherwise extend Z classification. | Product; BIR/accounting | `OPEN_BLOCKING` | D14/D15 cannot be guessed from `other_statutory`. |
-| AE-DR-012 | How do Diplomat and other VAT privileges map to E-1 deductions/VAT adjustments? BRD keeps treatment open. | VAT Others; Discount Others; separate future extension | Tax/accounting | Keep Diplomat as VAT treatment and require explicit D22/D24 mapping. | BIR/accounting; Product | `OPEN_BLOCKING` | Nonzero unsupported privilege blocks generation. |
-| AE-DR-013 | Are E-2/E-3 applicable to ExitPass and what lawful source retains names/IDs/TIN? | POS stores; external privacy-governed projection; not applicable | Legal/privacy, architecture, DB | Separate task and data-protection decision; do not expand POS statutory snapshot in E-1 task. | Legal/Privacy; BIR; Product | `OPEN_BLOCKING` for E-2/E-3, not E-1 | E-2/E-3 remain unauthorized. |
-| AE-DR-014 | Are E-4/E-5 applicable and how are highly sensitive athlete/parent/child fields governed? | Future support; external system; N/A | Privacy, product, DB | Separate future compliance tasks after entitlement support and privacy approval. | Legal/Privacy; BIR; Product | `OPEN_BLOCKING` for E-4/E-5, not E-1 | E-4/E-5 remain unauthorized. |
-| AE-DR-015 | How do return, refund, cancellation, adjustment, and cross-period events map? | Separate columns; fold into Returns/Voids/Others; supplemental report | Accounting, close immutability | Preserve Z fail-closed posture until each sign and period rule is approved. | BIR/accounting; Product | `OPEN_BLOCKING` | Any nonzero unsupported category blocks E-1. |
-| AE-DR-016 | Are signing, encryption, compression, submission, archive, and retention mandated? No local source defines them. | None; signed; encrypted; portal; audit-only | Security, compliance, operations | Keep generator local/read-only; decide delivery and retention separately from field contract. | BIR/accreditation; Security; Operations | `OPEN_BLOCKING` if external delivery is in Z-009 | Freeze API/download versus submission scope. |
-| AE-DR-017 | May prior files be regenerated or corrected, and how is lineage represented? | Deterministic replay; replacement; supplemental correction | Audit, schema, operations | Exact replay for same operation; new immutable lineage for approved correction; never overwrite. | BIR/accreditation; Product; Audit | `OPEN_BLOCKING` | Freeze operation semantics and correction status. |
-| AE-DR-018 | Must export history and bytes/hash metadata be persisted? | Derive every time; metadata only; immutable package record | Audit, schema, retention | Persist privacy-safe immutable metadata/hash and lineage, not duplicate fiscal totals; bytes may remain controlled storage. | Audit; Security; Product | `OPEN_BLOCKING` | Determines schema slice before runtime. |
-| AE-DR-019 | What decimal places, rounding, date format, separators, and non-PHP behavior apply? Workbook cells use General. | BIR display style; invariant machine style; currency-aware | Financial, layout | Approve two decimals, integer-minor-unit conversion, `.` decimal, no thousands separator, PHP-only v1 unless separately approved. | BIR/accounting | `OPEN_BLOCKING` | Freeze serializer and test vectors. |
-| AE-DR-020 | Is E-1 per Site POS Server or terminal, and are APM/WebPay/APT/Cashier combined? Header has one POS Terminal No. | Combined Site server; one per terminal; grouped rows | Architecture, reconciliation | Recommend Site POS Server/fiscal identity/currency/Z scope, with an approved server fiscal terminal identity rather than channel list. | BIR/accreditation; Product | `OPEN_BLOCKING` | Freeze H08 and channel aggregation. |
-| AE-DR-021 | How is a configured no-activity Z represented? | Zero row; no file; blank ranges/N/A | Compliance, counters | Recommend zero row with equal GTA, advanced Z, unchanged reset, and controlled no-activity remarks. | BIR/accounting | `OPEN_BLOCKING` | Freeze D02/D03/D32 zero/null behavior. |
-| AE-DR-022 | How are multiple fiscal series and sequence gaps shown? E-1 has one range and Remarks only. | Separate rows; separate sheets; controlled remarks; reject | Compliance, layout | One approved fiscal series per E-1 row; unexplained gaps block; classified gaps need approved controlled remarks or companion evidence. | BIR/accreditation; Product | `OPEN_BLOCKING` | Freeze range flattening and gap disclosure. |
-| AE-DR-023 | Are reprints and training transactions represented? E-1 has no fields. | Exclude; remarks; separate report | Compliance, totals | Reprints excluded from sales; prohibit training mode in E-1 until a governed source/rule exists. | BIR/accreditation; Product | `OPEN_BLOCKING` for training support | Freeze explicit exclusion. |
-| AE-DR-024 | Are E-1 fields required at physical cell widths or only semantic order? Source widths exist but no max lengths. | Exact template geometry; semantic workbook; adaptive widths | Accreditation, rendering | Use approved template geometry and fail on overflow rather than truncate; approve safe wrap behavior. | BIR/accreditation | `OPEN_BLOCKING` | Freeze visual regression baseline. |
+| ID | Exact question / affected fields | Options and selected or recommended option | Authority class | Sources / rationale / rejected alternatives | Schema, runtime, and tests | Resolution status | Remaining approver | Blocking level |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| AE-DR-001 | Initial profile; all E-1 fields and E-2:E-5 scope | **E-1 only** as `pos-server-bir-annex-e1-rmo24-2023:v1`; reject bundling E-2:E-5 | `PRODUCT_OWNER_DECISION` | AE-SRC-001, 013, 014; approved by `Z-009B-USER-APPROVAL-001`. E-1 is Z-backed summary; other profiles are identity-bearing transaction books. | Bounds contract, projection, API, fixtures | `RESOLVED_BY_EXISTING_EXITPASS_DECISION` | None | `DOES_NOT_BLOCK_INITIAL_E1` |
+| AE-DR-002 | Is XLSX accepted as the official electronic Annex E artifact? | XLSX, PDF, JSON, CSV, or prescribed alternative; **no internal selection can establish BIR acceptance** | `EXAMINER_CONFIRMATION_REQUIRED` | AE-SRC-001 supplies XLSX; AE-SRC-015 leaves mandatory formats open. Reject calling Z-008 JSON/CSV official. | Accreditation tests and output labeling | `REQUIRES_EXTERNAL_CONFIRMATION` | BIR/accreditation examiner | `BLOCKS_CONTROLLED_UAT` |
+| AE-DR-002A | Internal official-profile renderer for E-1 | **Deterministic XLSX faithful to AE-SRC-001**; canonical JSON is validation-only; reject CSV as official | `TECHNICAL_ARCHITECTURE_DECISION` | Strongest available physical source is XLSX; preserves exact worksheet structure; approved by `Z-009B-USER-APPROVAL-001`. | XLSX renderer/profile tests; no schema by itself | `RESOLVED_BY_EXISTING_EXITPASS_DECISION` | None | `DOES_NOT_BLOCK_INITIAL_E1` |
+| AE-DR-003 | Detail-row aggregation grain; D01:D32 | **One physical row per committed governing Z and fiscal identity** | `TECHNICAL_ARCHITECTURE_DECISION` | AE-SRC-016/017 bind Annex metadata and closed facts to one Z. Reject live daily recomputation. | Z FK, row projection, one-row traceability tests | `RESOLVED_BY_EXISTING_EXITPASS_DECISION` | None | `DOES_NOT_BLOCK_INITIAL_E1` |
+| AE-DR-003A | Workbook grouping period | **One workbook per Site POS Server, fiscal identity, currency, and calendar month; rows ordered by Z period sequence** | `PRODUCT_OWNER_DECISION` | AE-SRC-001 supports multiple rows but gives no grouping period. Monthly grouping is an ExitPass decision approved by `Z-009B-USER-APPROVAL-001`, not a regulatory claim. | Group identity, monthly query/read model, ordering tests | `RESOLVED_BY_EXISTING_EXITPASS_DECISION` | None | `DOES_NOT_BLOCK_INITIAL_E1` |
+| AE-DR-004 | Is there a prescribed BIR filename? | Prescribed pattern or none; **request confirmation** | `EXAMINER_CONFIRMATION_REQUIRED` | No local source specifies a filename. Reject claiming an internal pattern is required. | UAT evidence only unless prescribed pattern changes design | `REQUIRES_EXTERNAL_CONFIRMATION` | BIR/accreditation examiner | `BLOCKS_CONTROLLED_UAT` |
+| AE-DR-004A | Safe internal filename pending confirmation | **`ANNEX-E1_<FISCAL-ID-CODE>_<MIN>_<YYYYMM>_<PROFILE-VERSION>.xlsx`** | `OPERATIONAL_DECISION` | Avoid TIN and taxpayer name in filenames; sanitize ASCII `[A-Z0-9_-]`; approved by `Z-009B-USER-APPROVAL-001` without claiming BIR prescription. | Filename helper, collision, traversal, replay tests | `RESOLVED_BY_EXISTING_EXITPASS_DECISION` | None | `DOES_NOT_BLOCK_INITIAL_E1` |
+| AE-DR-005 | Are the 10 E-1 header positions part of the profile? H01:H10 | **All 10 labeled positions are present and retained**; value nullability is separate | `REGULATORY_EXPLICIT` | AE-SRC-001 E-1 header. Reject omitting labels because a current table lacks a source. | Field/profile completeness tests | `APPROVED_BY_EXISTING_SOURCE` | None | `DOES_NOT_BLOCK_INITIAL_E1` |
+| AE-DR-005A | How are header values and UserID sourced? H01:H10 | **Immutable historical profile snapshot; H10 server-derived privacy-safe actor; unknown mandatory value blocks** | `TECHNICAL_ARCHITECTURE_DECISION` | AE-SRC-016/017 immutability and privacy boundary. Reject mutable current config and credential text. | Header projection schema, actor mapping, replay tests | `RESOLVED_BY_EXISTING_EXITPASS_DECISION` | None | `BLOCKS_SCHEMA_IMPLEMENTATION` |
+| AE-DR-006 | Official mapping/formulas for D19, D26, D27 | Written interpretation of 29 numbers/32 columns and `23=8-19`, `24=6-16-8`; **no internal guess** | `ACCOUNTING_APPROVAL_REQUIRED` | AE-SRC-001 formula row is ambiguous after expanded columns. Reject conventional-equation substitution. | Formula contract, snapshot fields, accounting fixtures | `REQUIRES_EXTERNAL_CONFIRMATION` | BIR/accounting authority | `BLOCKS_GENERATOR_IMPLEMENTATION` |
+| AE-DR-007 | Manual SI/OR meaning/source; D06 | External manual ledger, governed POS manual mode, or approved non-applicability; **require first-class traceable source** | `ACCOUNTING_APPROVAL_REQUIRED` | AE-SRC-001 labels field but ExitPass has no source. Reject silent zero or merging into electronic ranges. | Source/projection schema, reconciliation, zero/nonzero tests | `REQUIRES_EXTERNAL_CONFIRMATION` | BIR/accounting authority | `BLOCKS_SCHEMA_IMPLEMENTATION` |
+| AE-DR-008 | Sales Overrun/Overflow meaning/source; D28 | Variance, sequence overflow, other, or N/A; **require exact definition** | `ACCOUNTING_APPROVAL_REQUIRED` | AE-SRC-001 label only. Reject truncation, inferred tender variance, or zero default. | First-class field/source and exception tests | `REQUIRES_EXTERNAL_CONFIRMATION` | BIR/accounting authority | `BLOCKS_SCHEMA_IMPLEMENTATION` |
+| AE-DR-009 | Total Income equation; D29 | Net, gross, net plus overrun, or another basis; **require exact equation/sign** | `ACCOUNTING_APPROVAL_REQUIRED` | AE-SRC-001 label only. Reject equating to net, gross, or GTA by convenience. | Calculation contract and fixtures | `REQUIRES_EXTERNAL_CONFIRMATION` | BIR/accounting authority | `BLOCKS_GENERATOR_IMPLEMENTATION` |
+| AE-DR-010 | What Remarks content is accepted? D32 | Blank, controlled codes, or text; **seek confirmation; reject arbitrary free text** | `EXAMINER_CONFIRMATION_REQUIRED` | Source has Remarks column without value contract. | UAT profile acceptance | `REQUIRES_EXTERNAL_CONFIRMATION` | BIR/accreditation examiner | `BLOCKS_CONTROLLED_UAT` |
+| AE-DR-010A | Internal Remarks storage/rendering | **Controlled codes only: `NONE`, `NO_ACTIVITY`, and separately approved exception codes; blank only when profile permits** | `TECHNICAL_ARCHITECTURE_DECISION` | Deterministic, privacy-safe, and reconcilable; approved by `Z-009B-USER-APPROVAL-001`. Reject notes/metadata payloads. | Controlled codes, FK, renderer tests | `RESOLVED_BY_EXISTING_EXITPASS_DECISION` | None | `DOES_NOT_BLOCK_INITIAL_E1` |
+| AE-DR-011 | NAAC/Solo Parent E-1 posture; D14/D15 | **Separate immutable classifications; explicit zero only from recorded absence; unknown blocks** | `PRODUCT_OWNER_DECISION` | BRD requires extensibility but workflows are future; approved by `Z-009B-USER-APPROVAL-001`. Reject deriving from `other_statutory`. | Z/projection extension, code mapping, zero tests | `RESOLVED_BY_EXISTING_EXITPASS_DECISION` | None | `DOES_NOT_BLOCK_INITIAL_E1` |
+| AE-DR-011A | Does examiner accept explicit zero for unavailable NAAC/Solo Parent scope? D14/D15 | Zero, blank/N/A, or mandatory active support; **request confirmation** | `EXAMINER_CONFIRMATION_REQUIRED` | Workbook has physical columns but no null rule. | Controlled UAT fixture/profile evidence | `REQUIRES_EXTERNAL_CONFIRMATION` | BIR/accreditation examiner | `BLOCKS_CONTROLLED_UAT` |
+| AE-DR-012 | Diplomat/other VAT mapping; D16, D22, D24 | VAT Others, Discount Others, extension, or separate profile; **retain VAT treatment and fail closed when nonzero until confirmed** | `ACCOUNTING_APPROVAL_REQUIRED` | BRD REP-011/012 explicitly leaves exact treatment open. Reject ordinary-discount coercion. | Mapping codes and nonzero fail-closed tests | `REQUIRES_EXTERNAL_CONFIRMATION` | BIR/accounting authority | `DOES_NOT_BLOCK_INITIAL_E1` |
+| AE-DR-013 | E-2/E-3 applicability and identity authority | Separate privacy/legal task; **defer from E-1** | `DEFERRED_OUT_OF_SCOPE` | E-2/E-3 require names, IDs, TIN. Approved POS statutory snapshot excludes them. | No E-1 schema/runtime impact | `DEFERRED` | Legal, Privacy, BIR, Product before future task | `DOES_NOT_BLOCK_INITIAL_E1` |
+| AE-DR-014 | E-4/E-5 applicability and identity authority | Separate future entitlement/privacy tasks; **defer from E-1** | `DEFERRED_OUT_OF_SCOPE` | Future workflows and highly sensitive athlete/parent/child data. | No E-1 schema/runtime impact | `DEFERRED` | Legal, Privacy, BIR, Product before future task | `DOES_NOT_BLOCK_INITIAL_E1` |
+| AE-DR-015 | Void/cancel/refund/return/adjustment treatment | **Use governed same-period void; all unsupported/cross-period categories fail closed; never equate categories** | `TECHNICAL_ARCHITECTURE_DECISION` | Z-007A/Z-007 already freeze this boundary. Reject folding all exceptions into Returns/Voids. | Existing Z facts; fail-closed generator tests | `RESOLVED_BY_EXISTING_EXITPASS_DECISION` | None for bounded E-1 | `DOES_NOT_BLOCK_INITIAL_E1` |
+| AE-DR-016 | Official signing, encryption, compression, and delivery requirements | **Request official/examiner confirmation; no silence-as-approval** | `EXAMINER_CONFIRMATION_REQUIRED` | Local package defines none. Reject production submission assumptions. | Extension interfaces; Controlled UAT evidence | `REQUIRES_EXTERNAL_CONFIRMATION` | BIR/accreditation examiner | `BLOCKS_CONTROLLED_UAT` |
+| AE-DR-016A | Bounded initial delivery scope | **Local authorized generation/download only; no portal, signing, encryption, email, removable-media, or assumed compression workflow** | `TECHNICAL_ARCHITECTURE_DECISION` | Separates safe design from unresolved production delivery; approved by `Z-009B-USER-APPROVAL-001`. | API boundary and exclusion tests | `RESOLVED_BY_EXISTING_EXITPASS_DECISION` | None | `DOES_NOT_BLOCK_INITIAL_E1` |
+| AE-DR-016B | Production retention duration and archive controls | Configurable metadata now; **formal retention before production** | `LEGAL_APPROVAL_REQUIRED` | BRD requires confirmed long-term retention but gives no exact Annex E duration. | Retention metadata/schema; worker remains separate | `REQUIRES_EXTERNAL_CONFIRMATION` | Legal/Compliance/Records owner | `BLOCKS_PRODUCTION_ONLY` |
+| AE-DR-017 | Replay, regeneration, correction lineage | **Byte-identical replay; immutable superseding output with original/corrected IDs, reason, approval ref, timestamps; no overwrite** | `TECHNICAL_ARCHITECTURE_DECISION` | Approved immutability/audit principles and `Z-009B-USER-APPROVAL-001`. Reject mutable replacement. | Lineage schema, semantic identity, replay/conflict tests | `RESOLVED_BY_EXISTING_EXITPASS_DECISION` | None | `DOES_NOT_BLOCK_INITIAL_E1` |
+| AE-DR-018 | Durable export history/hash | **Persist immutable privacy-safe metadata, profile/renderer version, filename, final-byte hash, source Z membership, lineage; keep workbook bytes outside the relational DB** | `TECHNICAL_ARCHITECTURE_DECISION` | Existing generic export posture is insufficient and JSON context is not authority; approved by `Z-009B-USER-APPROVAL-001`. | Hardened first-class schema, uniqueness, restart tests | `RESOLVED_BY_EXISTING_EXITPASS_DECISION` | None | `DOES_NOT_BLOCK_INITIAL_E1` |
+| AE-DR-019 | Official number/date format acceptance | Decimal/date/separator/currency profile; **seek accounting/examiner confirmation** | `ACCOUNTING_APPROVAL_REQUIRED` | Workbook cells use General; no normative serialization. | Controlled UAT golden workbook | `REQUIRES_EXTERNAL_CONFIRMATION` | BIR/accounting authority | `BLOCKS_CONTROLLED_UAT` |
+| AE-DR-019A | Internal deterministic formatting | **PHP-only v1; integer minor units; 2 decimals; `.` decimal; no thousands separator; ISO `YYYY-MM-DD`; explicit zero; no floating point** | `TECHNICAL_ARCHITECTURE_DECISION` | Matches recorded arithmetic and deterministic output; approved by `Z-009B-USER-APPROVAL-001`. Reject locale-dependent formatting. | Serializer and edge-case tests | `RESOLVED_BY_EXISTING_EXITPASS_DECISION` | None | `DOES_NOT_BLOCK_INITIAL_E1` |
+| AE-DR-020 | E-1 fiscal scope and channel aggregation; H08 | **Site POS Server + fiscal identity + currency; all child channels combined; H08 uses governed Site POS Server fiscal terminal identity** | `TECHNICAL_ARCHITECTURE_DECISION` | Approved architecture makes channels children, not fiscal authorities. Reject per-channel recomputation. | Scope FK/profile, cross-scope tests | `RESOLVED_BY_EXISTING_EXITPASS_DECISION` | None internally | `DOES_NOT_BLOCK_INITIAL_E1` |
+| AE-DR-020A | Examiner acceptance of Site POS Server fiscal terminal identity in H08 | One fiscal terminal ID versus channel IDs; **request confirmation** | `EXAMINER_CONFIRMATION_REQUIRED` | Workbook asks for one POS Terminal No.; architecture has many channels. | Controlled UAT header evidence | `REQUIRES_EXTERNAL_CONFIRMATION` | BIR/accreditation examiner | `BLOCKS_CONTROLLED_UAT` |
+| AE-DR-021 | No-activity Z row; D02/D03/D32 | **Emit row: all recorded amounts zero, GTA unchanged, reset unchanged, Z advanced, SI range blank, Remarks `NO_ACTIVITY`** | `PRODUCT_OWNER_DECISION` | Preserves every Z close and counter continuity; approved by `Z-009B-USER-APPROVAL-001`. Reject dropping empty periods or inventing SI values. | Zero-row renderer and reconciliation tests | `RESOLVED_BY_EXISTING_EXITPASS_DECISION` | None | `DOES_NOT_BLOCK_INITIAL_E1` |
+| AE-DR-022 | Multi-series and gap representation; D02/D03/D32 | **One representable fiscal range per row; unexplained gap blocks; multi-range or unrepresentable classified gap blocks rather than flattening** | `TECHNICAL_ARCHITECTURE_DECISION` | E-1 has one range and no gap column; approved by `Z-009B-USER-APPROVAL-001`. Reject lexical range or lossy Remarks. | Range/gap guards and failure tests | `RESOLVED_BY_EXISTING_EXITPASS_DECISION` | None | `DOES_NOT_BLOCK_INITIAL_E1` |
+| AE-DR-023 | Reprints/training in E-1 | **Reprints excluded from sales; training unsupported and fails closed; neither gets an E-1 row** | `TECHNICAL_ARCHITECTURE_DECISION` | Existing report aggregation excludes reprints; no training source/profile exists. | Regression and unsupported classification tests | `RESOLVED_BY_EXISTING_EXITPASS_DECISION` | None | `DOES_NOT_BLOCK_INITIAL_E1` |
+| AE-DR-024 | Examiner acceptance of exact geometry/wrapping | Exact template, semantic structure, or adaptive layout; **request confirmation** | `EXAMINER_CONFIRMATION_REQUIRED` | Source supplies geometry but no overflow rule. | Controlled UAT visual/golden evidence | `REQUIRES_EXTERNAL_CONFIRMATION` | BIR/accreditation examiner | `BLOCKS_CONTROLLED_UAT` |
+| AE-DR-024A | Internal layout/overflow policy | **Preserve official template geometry/order; no truncation; fail on unrepresentable mandatory value; wrapping only in designated header cells** | `TECHNICAL_ARCHITECTURE_DECISION` | Deterministic and audit-safe; approved by `Z-009B-USER-APPROVAL-001`. Reject adaptive column changes or hidden overflow. | Golden workbook, long-value, visual regression tests | `RESOLVED_BY_EXISTING_EXITPASS_DECISION` | None | `DOES_NOT_BLOCK_INITIAL_E1` |
 
-## 3. Exact approval wording
+## 3. Affected-document inventory
 
-Approvers may use the following bounded wording only after reviewing the affected source and consequence:
+Abbreviations: `SA` source/applicability, `FD` field dictionary, `MM` mapping matrix, `CR` calculation/reconciliation, `FL` file layout, `SO` samples, `VA` validation scenarios, `RH` runtime handoff, `UA` user approval, and `EC` external confirmation.
 
-```text
-ExitPass approves AE-DR-<ID>, option <OPTION>, for the
-pos-server-bir-annex-e1-rmo24-2023:v1 scope. This approval is an
-ExitPass product/fiscal decision and does not represent BIR acceptance unless
-the approval reference explicitly includes BIR authority. Approved by <NAME>,
-role <ROLE>, at <TIMESTAMP>, reference <REFERENCE>.
-```
+| Decision | Affected documents |
+| --- | --- |
+| AE-DR-001 | SA, FD, FL, SO, VA, RH, UA |
+| AE-DR-002 | SA, FL, VA, RH, EC |
+| AE-DR-002A | FL, SO, VA, RH, UA |
+| AE-DR-003 | SA, FD, MM, CR, SO, VA, RH |
+| AE-DR-003A | SA, MM, FL, SO, VA, RH, UA |
+| AE-DR-004 | FL, VA, RH, EC |
+| AE-DR-004A | FL, VA, RH, UA |
+| AE-DR-005 | SA, FD, MM, VA, RH |
+| AE-DR-005A | FD, MM, CR, VA, RH |
+| AE-DR-006 | FD, MM, CR, SO, VA, RH, EC |
+| AE-DR-007 | FD, MM, CR, SO, VA, RH, EC |
+| AE-DR-008 | FD, MM, CR, SO, VA, RH, EC |
+| AE-DR-009 | FD, MM, CR, SO, VA, RH, EC |
+| AE-DR-010 | FD, FL, SO, VA, RH, EC |
+| AE-DR-010A | FD, MM, FL, SO, VA, RH, UA |
+| AE-DR-011 | FD, MM, CR, SO, VA, RH, UA |
+| AE-DR-011A | FD, SO, VA, RH, EC |
+| AE-DR-012 | FD, MM, CR, SO, VA, RH, EC |
+| AE-DR-013 | SA, FD, MM, VA, RH, EC |
+| AE-DR-014 | SA, FD, MM, VA, RH, EC |
+| AE-DR-015 | SA, FD, MM, CR, SO, VA, RH |
+| AE-DR-016 | SA, FL, VA, RH, EC |
+| AE-DR-016A | FL, VA, RH, UA |
+| AE-DR-016B | FL, VA, RH, EC |
+| AE-DR-017 | SA, MM, CR, FL, SO, VA, RH, UA |
+| AE-DR-018 | SA, MM, FL, VA, RH, UA |
+| AE-DR-019 | FD, CR, FL, SO, VA, RH, EC |
+| AE-DR-019A | FD, CR, FL, SO, VA, RH, UA |
+| AE-DR-020 | SA, FD, MM, CR, VA, RH |
+| AE-DR-020A | SA, FD, MM, VA, RH, EC |
+| AE-DR-021 | FD, CR, FL, SO, VA, RH, UA |
+| AE-DR-022 | SA, FD, MM, CR, FL, SO, VA, RH, UA |
+| AE-DR-023 | SA, CR, SO, VA, RH |
+| AE-DR-024 | FD, FL, VA, RH, EC |
+| AE-DR-024A | FD, FL, VA, RH, UA |
 
-For accounting formulas, the approval must include the exact equation, input field IDs, sign convention, and zero/null behavior. For format decisions, it must include file extension, grouping, encoding/package rules, and filename.
+## 4. Inventory totals
 
-## 4. Cross-reference requirements
+| Category | Count |
+| --- | ---: |
+| Original AE-DR decisions preserved | 24 |
+| Added bounded sub-decisions | 11 |
+| Total decision records | 35 |
+| `APPROVED_BY_EXISTING_SOURCE` | 1 |
+| `RESOLVED_BY_EXISTING_EXITPASS_DECISION` | 18 |
+| `RECOMMENDED_FOR_USER_APPROVAL` | 0 |
+| `REQUIRES_EXTERNAL_CONFIRMATION` | 14 |
+| `DEFERRED` | 2 |
+| `REJECTED` | 0 |
+| `SUPERSEDED` | 0 |
 
-- AE-DR-001 through 006 affect the source assessment, dictionary, mapping, file layout, and handoff.
-- AE-DR-007 through 012 affect D06, D14-D16, D19, D22-D29, and D32.
-- AE-DR-013/014 govern E-2 through E-5 and must never be satisfied by adding prohibited identity to E-1.
-- AE-DR-015 affects all exceptional-transaction scenarios.
-- AE-DR-016 through 018 govern lifecycle, retention, and durable export state.
-- AE-DR-019 through 024 govern serialization, scope, empty periods, ranges, exclusions, and layout.
+## 5. Approval rule
 
-## 5. Runtime gate
-
-All entries marked `BLOCKS_Z009` must become approved, or the approved Z-009 scope must explicitly exclude the affected field/profile while remaining faithful to every mandatory E-1 column. Recommendations alone do not authorize implementation.
+The [User Approval Record](ExitPass_POS_Server_BIR_Annex_E_User_Approval_Record_v1.0.md) records approval `Z-009B-USER-APPROVAL-001` for all 13 project-owned recommendations. External evidence remains tracked separately in the [External Confirmation Register](ExitPass_POS_Server_BIR_Annex_E_External_Confirmation_Register_v1.0.md); this project approval does not satisfy any external decision.

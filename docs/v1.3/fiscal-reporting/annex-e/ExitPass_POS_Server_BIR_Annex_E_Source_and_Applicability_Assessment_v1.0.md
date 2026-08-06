@@ -4,7 +4,7 @@
 
 This assessment identifies the available Annex E source set and separates source requirements from recommendations. It is documentation only.
 
-**Applicability verdict: `BLOCKED_PENDING_DECISIONS`.** Annex E-1 is the recommended first runtime profile because it is the BIR Sales Summary required by the approved ExitPass BRD. Annex E-2 through E-5 are separate statutory sales books with transaction-level identity fields and cannot be folded into an E-1 implementation.
+**Applicability verdict: `AUTHORIZED_FOR_RUNTIME_DESIGN` by `Z-009B-USER-APPROVAL-001`.** Annex E-1 is the approved bounded runtime-design profile because it is the BIR Sales Summary required by the approved ExitPass BRD. Annex E-2 through E-5 are deferred to separate statutory sales-book tasks because their transaction-level identity fields require distinct privacy and compliance authority.
 
 ## 2. Source identifiers
 
@@ -59,30 +59,30 @@ AE-SRC-001 is an `.xlsx` workbook with worksheets, page print areas, merged head
 
 | Question | Assessment | Classification | Decision reference |
 | --- | --- | --- | --- |
-| Per Site | One Site owns one Site POS Server in the approved architecture, but the workbook does not label Site. | `EXISTING_EXITPASS_DECISION` for architecture; output treatment `UNRESOLVED` | AE-DR-020 |
+| Per Site | One Site owns one Site POS Server; E-1 is scoped by Site POS Server, fiscal identity, and currency rather than adding an independent Site column. | `EXISTING_EXITPASS_DECISION` | AE-DR-020 |
 | Per Site POS Server | Current report scope and Z source are Site POS Server scoped. | `EXISTING_EXITPASS_DECISION` | AE-SRC-016, AE-SRC-017 |
-| Per terminal/channel | Workbook requires `POS Terminal No.`; channels are child terminals, not independent fiscal authorities. Combined versus separate output is unresolved. | `UNRESOLVED` | AE-DR-020 |
+| Per terminal/channel | Channels are child terminals of one fiscal Site POS Server and are combined in the fiscal-identity projection. Examiner acceptance of the selected header identity remains external. | `EXISTING_EXITPASS_DECISION`; external confirmation required | AE-DR-020, AE-DR-020A |
 | Per fiscal identity | Required to select taxpayer/TIN/MIN/PTU facts and isolate Z state. | `EXISTING_EXITPASS_DECISION` | AE-SRC-016, AE-SRC-017 |
 | Per machine identification number | Header explicitly contains MIN. | `EXPLICITLY_REQUIRED` | AE-SRC-001 E-1 header |
 | Per permit | PTU is not an E-1 header label in the workbook, although ExitPass retains it. | `NOT_APPLICABLE` to exact E-1 physical columns; retention remains internal | AE-SRC-001, AE-SRC-020 |
 | Per fiscal period / Z close | E-1 rows are dated and need Z/reset/GTA facts. ExitPass requires a governing committed Z. | `EXISTING_EXITPASS_DECISION` | AE-SRC-016 |
-| Calendar day | Workbook labels the row `Date`; business-day versus calendar-day interpretation is unresolved. | `UNRESOLVED` | AE-DR-003 |
-| Monthly or periodic file | Workbook offers multiple detail rows but states no file grouping interval. | `UNRESOLVED` | AE-DR-003 |
+| Calendar day | One row represents the business date of one committed governing Z Reading. | `EXISTING_EXITPASS_DECISION` | AE-DR-003 |
+| Monthly or periodic file | One workbook per Site POS Server, fiscal identity, currency, and calendar month. | `EXISTING_EXITPASS_DECISION` | AE-DR-003A; `Z-009B-USER-APPROVAL-001` |
 | Transaction versus summary | E-1 is summary-level; E-2 through E-5 are transaction-level. | `EXPLICITLY_REQUIRED` | AE-SRC-001 |
-| Channels combined/separate | Not stated by workbook. | `UNRESOLVED` | AE-DR-020 |
+| Channels combined/separate | Channels are combined under the governing fiscal identity; tender/channel detail is not an E-1 output dimension. | `EXISTING_EXITPASS_DECISION` | AE-DR-020 |
 | Tender columns/rows | E-1 has no tender field. | `NOT_APPLICABLE` | AE-SRC-001 E-1 `A:AF` |
 | Statutory discount separation | E-1 separates SC, PWD, NAAC, Solo Parent, and Others. | `EXPLICITLY_REQUIRED` | AE-SRC-001 E-1 `L:P` |
 | VAT removal separate | E-1 has a separate `Adjustment on VAT` group. | `EXPLICITLY_REQUIRED` | AE-SRC-001 E-1 `T:Y` |
-| Voids and returns separate | E-1 has separate Returns and Voids. No Cancellation or Refund column is labeled. | `EXPLICITLY_REQUIRED` for returns/voids; others `UNRESOLVED` | AE-DR-015 |
-| Reprints | No E-1 field. | `NOT_APPLICABLE` to totals; confirm no separate disclosure | AE-DR-023 |
-| Training mode | No E-1 field and no governed runtime source. | `UNRESOLVED` | AE-DR-023 |
+| Voids and returns separate | E-1 has separate Returns and Voids. Same-period governed void is supported; nonzero return, cancellation, refund, adjustment, and cross-period cases fail closed until separately governed. | `EXPLICITLY_REQUIRED` for columns; fail-closed boundary is `EXISTING_EXITPASS_DECISION` | AE-DR-015 |
+| Reprints | Reprints do not create fiscal sales and are excluded from E-1 totals. | `EXISTING_EXITPASS_DECISION` | AE-DR-023 |
+| Training mode | No governed training transaction source exists; any such classification fails closed rather than entering E-1. | `EXISTING_EXITPASS_DECISION` | AE-DR-023 |
 | Beginning/ending SI | Explicit columns. | `EXPLICITLY_REQUIRED` | AE-SRC-001 E-1 `B:C` |
-| Sequence gaps | No dedicated column; `Remarks` may not be assumed to carry them. | `UNRESOLVED` | AE-DR-022 |
+| Sequence gaps | No dedicated column; unrepresentable ranges/gaps block generation rather than being flattened or placed in lossy Remarks. | `EXISTING_EXITPASS_DECISION` | AE-DR-022; `Z-009B-USER-APPROVAL-001` |
 | Z and reset counters | Explicit columns. | `EXPLICITLY_REQUIRED` | AE-SRC-001 E-1 `AE:AF` |
 | GTA | Beginning and ending balances are explicit. | `EXPLICITLY_REQUIRED` | AE-SRC-001 E-1 `D:E` |
 | Generate only after Z | Existing POS contract requires governing Z metadata. | `EXISTING_EXITPASS_DECISION` | AE-SRC-016 |
-| Regeneration/correction | Not stated by source. | `UNRESOLVED` | AE-DR-017 |
-| Export history persistence | Existing metadata can identify one profile per Z but no file history exists. | `UNRESOLVED` | AE-DR-018 |
+| Regeneration/correction | Immutable supersession lineage and byte-identical replay are approved ExitPass decisions. | `EXISTING_EXITPASS_DECISION` | AE-DR-017; `Z-009B-USER-APPROVAL-001` |
+| Export history persistence | Persist output identity, profile/renderer versions, hash, lineage, and file metadata without relational database workbook bytes. | `EXISTING_EXITPASS_DECISION` | AE-DR-018; `Z-009B-USER-APPROVAL-001` |
 
 ## 7. Existing POS Server support and gaps
 
@@ -101,7 +101,7 @@ Current authoritative gaps for E-1 are:
 - total income;
 - controlled remarks;
 - exact official formula interpretation and output formatting;
-- durable external output identity, history, and regeneration lineage if approved.
+- durable external output identity, history, and regeneration lineage under approved AE-DR-017/018.
 
 E-2 through E-5 additionally require personal facts that the applied statutory fiscal facts contract deliberately prohibits POS persistence: beneficiary names, statutory IDs, TINs, and evidence. No runtime may query live external identity data after close merely to fill those sales books.
 
@@ -122,6 +122,6 @@ E-2 through E-5 additionally require personal facts that the applied statutory f
 
 ## 10. Recommended profile and gate
 
-`RMO 24-2023 Annex E-1 BIR Sales Summary` is `RECOMMENDED_FOR_APPROVAL` as the bounded Z-009 profile. Its aggregation grain should be one immutable detail row per governing committed Z snapshot, while file grouping remains AE-DR-003.
+`RMO 24-2023 Annex E-1 BIR Sales Summary` is the approved bounded Z-009 design profile under `Z-009B-USER-APPROVAL-001`. Its aggregation grain is one immutable detail row per governing committed Z snapshot and fiscal identity, grouped in monthly scoped workbooks under AE-DR-003A.
 
-Z-009 remains blocked until the decisions marked `BLOCKS_Z009` are approved. E-2 through E-5 should be separate future tasks because their grain, source facts, privacy basis, and retention differ materially from E-1.
+Runtime design is authorized. Bounded E-1 implementation remains blocked by external formula/source decisions AE-DR-006 through AE-DR-009 and related mandatory-field confirmations. E-2 through E-5 remain deferred because their grain, source facts, privacy basis, and retention differ materially from E-1.
