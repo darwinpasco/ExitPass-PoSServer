@@ -8,24 +8,24 @@ The source-grounded physical profile is the E-1 worksheet in AE-SRC-001. The man
 
 | Format | Evidence | Classification | Z-009 posture |
 | --- | --- | --- | --- |
-| Spreadsheet/printed worksheet | AE-SRC-001 is `.xlsx` with E-1 through E-5 sheets, print areas, widths, headings, and cells | `EXPLICITLY_ALLOWED` as supplied template; mandatory electronic status unresolved | Recommended external profile after approval |
+| Spreadsheet/printed worksheet | AE-SRC-001 is `.xlsx` with E-1 through E-5 sheets, print areas, widths, headings, and cells | `EXPLICITLY_ALLOWED` as supplied template; mandatory electronic status unresolved | Approved internal E-1 profile pending external acceptance |
 | Print/PDF/JSON | AE-SRC-015 line 569 describes BIR Sales Summary supported output semantics | `EXISTING_EXITPASS_DECISION`, but exact final layout remains open at line 571 | Optional companion outputs, not substitutes for E-1 |
 | Canonical JSON/CSV/text | Z-008 internal output contracts | `NOT_APPLICABLE` as Annex E authority | May support diagnostics only; cannot be labeled Annex E submission |
 | Fixed-width/XML | No source found | `UNRESOLVED` | Not implemented |
 
-## 3. Recommended profile
+## 3. Approved internal profile
 
 | Property | Recommendation | Status / gate |
 | --- | --- | --- |
-| Contract ID | `pos-server-bir-annex-e1-rmo24-2023:v1` | `RECOMMENDED_FOR_APPROVAL`; AE-DR-001 |
-| Container | Deterministic `.xlsx` workbook preserving the E-1 sheet | `RECOMMENDED_FOR_APPROVAL`; AE-DR-002 |
+| Contract ID | `pos-server-bir-annex-e1-rmo24-2023:v1` | `EXISTING_EXITPASS_DECISION`; AE-DR-001; `Z-009B-USER-APPROVAL-001` |
+| Container | Deterministic `.xlsx` workbook preserving the E-1 sheet; canonical JSON is validation-only | `EXISTING_EXITPASS_DECISION`; AE-DR-002A; external acceptance AE-DR-002 |
 | Worksheet name | `E-1` | `EXPLICITLY_REQUIRED` by source artifact |
 | Title | `BIR SALES SUMMARY REPORT` | `EXPLICITLY_REQUIRED` |
 | Physical columns | `A:AF`, 32 detail columns | `EXPLICITLY_REQUIRED` |
 | Header facts | H01:H10 before detail headings | `EXPLICITLY_REQUIRED` labels; placement based on source |
 | Detail order | D01:D32 exactly | `EXPLICITLY_REQUIRED` |
-| Detail grain | One row per governing committed Z | `RECOMMENDED_FOR_APPROVAL`; AE-DR-003 |
-| File grouping | One Z per file versus multiple Z rows | `UNRESOLVED`; AE-DR-003 |
+| Detail grain | One row per governing committed Z and fiscal identity | `RESOLVED_BY_EXISTING_EXITPASS_DECISION`; AE-DR-003 |
+| File grouping | One workbook per Site POS Server, fiscal identity, currency, and calendar month; rows ordered by period sequence | `EXISTING_EXITPASS_DECISION`; AE-DR-003A; `Z-009B-USER-APPROVAL-001` |
 | Output mutation | None | `EXISTING_EXITPASS_DECISION` |
 
 ## 4. Spreadsheet layout
@@ -53,9 +53,9 @@ The renderer must not reorder columns to match internal DTO order. Merged headin
 | BOM | Not applicable to OOXML package; companion CSV BOM posture unresolved |
 | Delimiter/quote/escape | Not applicable to selected workbook recommendation; CSV rules are not Annex E rules |
 | Line endings | OOXML package implementation detail; do not use line endings as business identity |
-| Decimal separator | Recommended `.`; approval required under AE-DR-019 |
-| Thousands separator | Recommended none for machine stability; workbook display decision required |
-| Date/time | Exact source format unresolved; recommended ISO-like dates for deterministic data cells, display style approved separately |
+| Decimal separator | Recommended `.` under AE-DR-019A; official acceptance remains AE-DR-019 |
+| Thousands separator | Recommended none under AE-DR-019A; official acceptance remains AE-DR-019 |
+| Date/time | Recommended ISO dates and stable timestamp formatting under AE-DR-019A; official display remains AE-DR-019 |
 | Timezone | H09 should include or be governed by the Site POS Server reporting timezone snapshot; no default invented |
 | Currency | One currency per profile instance; no physical E-1 currency column |
 | Empty cells | Only approved optional fields; unresolved mandatory fields block generation |
@@ -67,7 +67,7 @@ The renderer must not reorder columns to match internal DTO order. Merged headin
 - Header order H01:H10 is fixed.
 - Detail rows, if multiple, order by governing Z period sequence, then stable Z report reference.
 - Detail columns are D01:D32.
-- Multi-series fiscal ranges cannot be flattened until AE-DR-003/AE-DR-022 is approved.
+- Multi-series fiscal ranges are not flattened. Under AE-DR-022, an unrepresentable range or gap fails generation.
 - Worksheet and package member ordering must be deterministic if byte identity is required.
 
 ## 7. Filename
@@ -75,7 +75,7 @@ The renderer must not reorder columns to match internal DTO order. Merged headin
 No prescribed BIR filename was found. The following is a recommendation only:
 
 ```text
-ANNEX-E1_<sanitized-fiscal-identity-code>_<sanitized-min>_<period-or-range>_<contract-version>.xlsx
+ANNEX-E1_<FISCAL-ID-CODE>_<MIN>_<YYYYMM>_<PROFILE-VERSION>.xlsx
 ```
 
 Rules proposed for approval:
@@ -84,10 +84,10 @@ Rules proposed for approval:
 - replace characters outside `[A-Z0-9_-]` with `_`;
 - collapse repeated `_`;
 - no taxpayer name, TIN, ticket, plate, credential, or internal UUID;
-- use business date `YYYYMMDD` for one-Z files, or `YYYYMMDD-YYYYMMDD` for a multi-row period;
+- use the calendar-month grouping value `YYYYMM`;
 - deterministic same inputs produce the same filename.
 
-AE-DR-004 blocks implementation because neither the filename nor the grouping component is authoritative.
+The safe filename is a project recommendation under AE-DR-004A. AE-DR-004 separately asks whether BIR prescribes another name; absence of external confirmation must not be described as regulatory approval of the recommendation.
 
 ## 8. Output identity, hash, and replay
 
@@ -110,19 +110,19 @@ Exact replay returns identical bytes, filename, content type, and hash. Restart 
 
 | Case | Proposed behavior | Status |
 | --- | --- | --- |
-| First generation | Requires committed Z, approved E-1 profile, complete sources, and export authority | `RECOMMENDED_FOR_APPROVAL` |
-| Same operation replay | Return original authoritative bytes or deterministically identical regenerated bytes | `RECOMMENDED_FOR_APPROVAL` |
-| Same Z/profile, different operation | Existing metadata uniqueness permits one profile per Z; public behavior unresolved | AE-DR-017/018 |
-| Prior-period regeneration | Allowed only from immutable sources and must be auditable | AE-DR-017 |
-| Correction | Never mutate Z or prior file; replacement versus supplemental lineage unresolved | AE-DR-017 |
-| Duplicate filename | Must not overwrite silently | `RECOMMENDED_FOR_APPROVAL` |
-| No-activity period | Produce zero row or no file is unresolved | AE-DR-021 |
+| First generation | Requires committed Z, approved E-1 profile, complete sources, and export authority | `EXISTING_EXITPASS_DECISION` |
+| Same operation replay | Return original authoritative bytes or deterministically identical regenerated bytes | `EXISTING_EXITPASS_DECISION` |
+| Same Z/profile, different operation | Return the existing byte-identical output unless an approved correction operation creates a superseding identity | AE-DR-017/018 recommendation |
+| Prior-period regeneration | Allowed only from immutable sources and returns byte-identical output for the same identity | AE-DR-017 recommendation |
+| Correction | Never mutate Z or prior file; create immutable supersession lineage with reason and approval reference | AE-DR-017 recommendation |
+| Duplicate filename | Must not overwrite silently | `EXISTING_EXITPASS_DECISION` |
+| No-activity period | Produce one zero-valued row, blank SI range, equal GTA, advanced Z, and controlled `NO_ACTIVITY` remark | AE-DR-021 recommendation |
 
 ## 10. Delivery, retention, and controls
 
-No official source in the local package defines electronic submission, portal upload, digital signing, encryption, compression, or delivery channel. These are AE-DR-016.
+No official source in the local package defines electronic submission, portal upload, digital signing, encryption, compression, or delivery channel. AE-DR-016 retains that external gate. AE-DR-016A recommends bounded authorized local generation/download without submission, signing, or encryption.
 
-Recommended internal posture pending approval:
+Approved internal posture pending external confirmation:
 
 - no compression for a single workbook;
 - private/no-store API caching;
@@ -130,12 +130,12 @@ Recommended internal posture pending approval:
 - `Content-Disposition: attachment` with deterministic filename;
 - `X-Content-Type-Options: nosniff`;
 - immutable export audit record with safe content hash;
-- retention no shorter than the approved fiscal-report retention policy, exact Annex E period unresolved;
+- retention metadata is configurable; production duration and archive authority remain AE-DR-016B;
 - no email or removable-media delivery built into the generator.
 
 ## 11. Size and streaming
 
-The source workbook has bounded rows in its print area, but no maximum reporting-period size. One-Z-per-file would be small and can be buffered for deterministic hashing. Multi-Z workbooks may be streamed only if the OOXML library can preserve deterministic package bytes. Maximum size and row count remain AE-DR-003/016.
+The source workbook has bounded rows in its print area, but no maximum reporting-period size. A monthly workbook may be buffered only within an implementation-defined safe limit while preserving deterministic package bytes. Exceeding a representable row/geometry limit fails closed under AE-DR-024A; it is never truncated.
 
 ## 12. Fail-closed cases
 
