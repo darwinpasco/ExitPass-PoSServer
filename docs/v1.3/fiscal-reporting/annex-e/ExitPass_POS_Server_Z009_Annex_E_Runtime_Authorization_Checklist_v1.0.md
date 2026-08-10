@@ -80,3 +80,16 @@
 - Bounded generator authorized by/date/reference: `________________`
 - Controlled UAT authorized by/date/reference: `NOT AUTHORIZED`
 - Production authorized by/date/reference: `NOT AUTHORIZED`
+
+## 9. Z-012A1 exact Accounting profile gate
+
+- [x] Accounting authority and approval in principle confirmed on 2026-08-10.
+- [x] One exact profile covers AE-DR-006 through AE-DR-009 with named operands and zero-tolerance reconciliations.
+- [x] Manual SI/OR and Sales Overrun/Overflow minimum first-class source contracts are specified.
+- [x] Known zero is separated from missing or unsupported source data.
+- [x] Approval instrument references the profile filename, version, and SHA-256 hash.
+- [ ] Accounting selected `APPROVED_EXACTLY_AS_SPECIFIED` for that exact hash.
+- [ ] AE-DR-006 through AE-DR-009 were subsequently recorded as resolved.
+- [ ] Required schema, controlled codes, runtime, and tests were authorized and merged.
+
+**Gate:** `PENDING_EXACT_PROFILE_APPROVAL`. Z-012B remains unauthorized.

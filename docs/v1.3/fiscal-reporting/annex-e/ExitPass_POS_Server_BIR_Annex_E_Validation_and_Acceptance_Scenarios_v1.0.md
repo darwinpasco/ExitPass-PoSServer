@@ -77,3 +77,20 @@ All project-owned decisions are approved under `Z-009B-USER-APPROVAL-001`. `PEND
 ## 4. Mutation manifest
 
 Future proof must compare fiscal documents and children, statutory facts, tenders/tax/discount/totals, numbering and sequences, reporting periods, X/Z snapshots and children, Z counters/GTA/state transitions, reprints, and payment-adjacent rows. Annex E generation may add only approved Annex metadata, export identity/history, output reference, and privacy-safe audit evidence.
+
+## 5. Z-012A1 profile-approval scenarios
+
+| ID | Precondition | Action | Expected result |
+|---|---|---|---|
+| AE-AC-046 | Profile version/hash not approved | Attempt runtime authorization | Block; AE-DR-006 through AE-DR-009 remain unresolved |
+| AE-AC-047 | Exact profile approved by Accounting | Validate D07, D16, D19, D25, D26, D27, and D29 | Named-operand equations reconcile with zero tolerance |
+| AE-AC-048 | Manual SI/OR fact missing | Evaluate D06 | Block; missing is not zero |
+| AE-AC-049 | Manual SI/OR fact is `ATTESTED_ZERO` for exact scope/period | Evaluate D06 | Emit recorded zero and retain attestation lineage |
+| AE-AC-050 | Overrun/overflow fact missing | Evaluate D28 | Block; runtime capacity checks do not prove zero |
+| AE-AC-051 | Overrun/overflow fact is `ATTESTED_ZERO` for exact scope/period | Evaluate D28 | Emit recorded zero and retain attestation lineage |
+| AE-AC-052 | No-activity Z but any required zero attestation is absent | Evaluate row | Block; no unknown becomes zero |
+| AE-AC-053 | D26 implementation substitutes D25 for official field 19 | Validate formula profile | Reject as a changed, unapproved formula |
+| AE-AC-054 | D27 is populated from VAT-inclusive Z net | Validate formula profile | Reject; use the approved D07-D19-D09 equation only |
+| AE-AC-055 | D29 uses gross, tender, or GTA basis | Validate formula profile | Reject; only the exact approved profile may execute |
+
+These scenarios become runtime acceptance criteria only after Accounting approves the exact profile version and SHA-256.

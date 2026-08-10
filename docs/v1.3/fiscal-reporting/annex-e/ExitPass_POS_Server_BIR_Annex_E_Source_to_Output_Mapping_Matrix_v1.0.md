@@ -81,3 +81,27 @@ The future runtime must consume the committed Z snapshot, immutable children, im
 The readiness classifications above describe data availability. AE-DR-005A, AE-DR-011, AE-DR-010A, AE-DR-017, and AE-DR-018 are approved ExitPass decisions under `Z-009B-USER-APPROVAL-001`. AE-DR-006 through AE-DR-009, AE-DR-011A, AE-DR-012, and AE-DR-019 remain external gates where they affect mandatory E-1 values.
 
 The exact per-position Z-012A reconciliation, including null, zero, no-activity, unsupported behavior, and staged gate classification, is in [Z-012A Runtime Authorization Revalidation](ExitPass_POS_Server_Z012A_Annex_E1_Runtime_Authorization_Revalidation_v1.0.md).
+
+## 6. Z-012A1 candidate source map
+
+The following candidate map is pending exact Accounting approval and does not replace the primary readiness classifications above.
+
+| Position | Candidate source or derivation | Candidate source class | Required capability before runtime |
+|---|---|---|---|
+| D06 | Immutable period fact `manual_si_or_net_income_minor_units` | `REQUIRES_NEW_FIRST_CLASS_FACT` | Governed Manual SI/OR fact and explicit zero attestation |
+| D07 | BIR Summary gross plus governed return and void magnitudes | `AVAILABLE_CANONICAL_DERIVATION` | Exact-profile approval |
+| D09 | BIR Summary VAT amount | `AVAILABLE_CANONICAL_SOURCE` | Exact-profile approval for equation use |
+| D12-D13 | BIR Summary SC and PWD discount amounts | `AVAILABLE_CANONICAL_SOURCE` | Exact-profile approval |
+| D14-D15 | Separate immutable NAAC and Solo Parent facts | `REQUIRES_NEW_FIRST_CLASS_FACT` | Classification facts or explicit zero attestations |
+| D16 | Other statutory plus coupon plus promotional discount | `AVAILABLE_CANONICAL_DERIVATION` | Reject nonzero unresolved privilege facts |
+| D17-D18 | BIR Summary return and same-period void amounts | `AVAILABLE_CANONICAL_SOURCE` | Return remains zero-only under bounded contract |
+| D19 | Sum D12 through D18 | `AVAILABLE_CANONICAL_DERIVATION` | Exact-profile approval and authoritative operands |
+| D20-D21 | Governing Z statutory discount-child VAT exemptions | `AVAILABLE_CANONICAL_DERIVATION` | Child-to-summary binding validation |
+| D22-D24 | Explicitly attested zero under bounded unsupported paths | `KNOWN_ZERO_ONLY_WITH_ENFORCED_PRECONDITION` | First-class absence/zero evidence; nonzero blocks |
+| D25 | Sum D20 through D24 | `AVAILABLE_CANONICAL_DERIVATION` | Authoritative component facts |
+| D26 | D09 minus D22, preserving literal fields 8 and 19 | `AVAILABLE_CANONICAL_DERIVATION` | Exact-profile approval |
+| D27 | D07 minus D19 minus D09 | `AVAILABLE_CANONICAL_DERIVATION` | Exact-profile approval; remains distinct from VAT-inclusive Z net |
+| D28 | Immutable period fact `sales_overrun_overflow_net_income_minor_units` | `REQUIRES_NEW_FIRST_CLASS_FACT` | Governed overflow fact/event and explicit zero attestation |
+| D29 | D27 plus D06 plus D28 | `AVAILABLE_CANONICAL_DERIVATION` | Exact-profile approval and authoritative D06/D28 |
+
+The complete definitions and source statuses are in the [Accounting Calculation Profile Proposal](ExitPass_POS_Server_Annex_E1_Accounting_Calculation_Profile_Proposal_v1.0.md). Missing first-class facts remain unknown, not zero.

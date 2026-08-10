@@ -61,3 +61,12 @@ E-1 contains taxpayer/machine registration data but no beneficiary identity. Saf
 - Production: not authorized.
 
 The complete Z-012A evidence and exact 42-position reconciliation are in [Z-012A Runtime Authorization Revalidation](ExitPass_POS_Server_Z012A_Annex_E1_Runtime_Authorization_Revalidation_v1.0.md).
+
+## Z-012A1 Accounting calculation proposal
+
+Accounting authority and approval in principle were confirmed on 2026-08-10, but the merged recommendations did not contain executable definitions. Z-012A1 therefore adds one exact proposal and an unselected approval instrument:
+
+* [Accounting Calculation Profile Proposal](ExitPass_POS_Server_Annex_E1_Accounting_Calculation_Profile_Proposal_v1.0.md)
+* [Accounting Calculation Profile Approval Form](ExitPass_POS_Server_Annex_E1_Accounting_Calculation_Profile_Approval_Form_v1.0.md)
+
+The proposal names every operand, source classification, formula, period rule, sign, zero/null behavior, no-activity rule, and zero-tolerance reconciliation for AE-DR-006 through AE-DR-009. Its status is `EXECUTABLE_CALCULATION_PROFILE_NOT_YET_APPROVED`. No external decision count or runtime verdict changes until Accounting selects `APPROVED_EXACTLY_AS_SPECIFIED` for the identified profile hash or approves a revised hashed version.

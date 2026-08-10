@@ -208,3 +208,9 @@ Production: NOT AUTHORIZED
 ```
 
 The controlling revalidation and gated future boundary are in [Z-012A Runtime Authorization Revalidation](ExitPass_POS_Server_Z012A_Annex_E1_Runtime_Authorization_Revalidation_v1.0.md). No Z-012B runtime authorization is issued until AE-DR-006 through AE-DR-009 are approved.
+
+## 16. Z-012A1 executable-profile gate
+
+Z-012A1 provides one exact candidate calculation profile for AE-DR-006 through AE-DR-009 and a hash-bound Accounting approval instrument. The proposal defines named operands, formulas, authoritative source classes, period/sign/currency/null/zero/no-activity rules, first-class Manual SI/OR and overrun fact requirements, and zero-tolerance reconciliations.
+
+This handoff remains blocked. Accounting has confirmed authority and approval in principle, but `EXECUTABLE_CALCULATION_PROFILE_NOT_YET_APPROVED` remains controlling until the [Accounting Approval Form](ExitPass_POS_Server_Annex_E1_Accounting_Calculation_Profile_Approval_Form_v1.0.md) approves the exact [proposal](ExitPass_POS_Server_Annex_E1_Accounting_Calculation_Profile_Proposal_v1.0.md) version and hash.

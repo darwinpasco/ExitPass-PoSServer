@@ -72,3 +72,9 @@ Workbook widths below are Excel column-width units and are not maximum character
 - Official field numbers and physical columns remain separately recorded until AE-DR-006 resolves the workbook numbering ambiguity.
 - Internal PHP formatting, date, filename, and blank/zero recommendations are not regulatory approvals; AE-DR-019A and AE-DR-011A keep those layers separate.
 - Unknown mandatory values always block generation. Zero is permitted only when an authoritative source records zero under the approved AE-DR-011/021 posture.
+
+## 5. Z-012A1 candidate calculation semantics
+
+The [Accounting Calculation Profile Proposal](ExitPass_POS_Server_Annex_E1_Accounting_Calculation_Profile_Proposal_v1.0.md) supplies a single pending recommendation for every affected position. It proposes D06 as VAT-exclusive qualifying continuity Manual SI/OR income; D28 as VAT-exclusive income omitted from regular electronic sales solely because of an approved accumulated-sales capacity overflow; D29 as D27 plus D06 plus D28; and the literal workbook equations for D25-D27 over named physical operands.
+
+These candidate meanings do not change this dictionary's governed readiness values or decision statuses. AE-DR-006 through AE-DR-009 remain unresolved until Accounting approves the exact profile hash. Null remains distinct from zero, and D06, D14, D15, D22-D24, and D28 require a canonical amount or explicit first-class zero attestation before a bounded generator may emit them.
