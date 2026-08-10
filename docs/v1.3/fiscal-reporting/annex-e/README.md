@@ -49,6 +49,6 @@ Every material rule uses one of: `EXPLICITLY_REQUIRED`, `EXPLICITLY_ALLOWED`, `E
 
 **Local bounded runtime status: merged and independently accepted by Z-012C.**
 
-**Controlled UAT preparation: authorized as a documentation, synthetic-scenario, evidence-manifest, and environment-planning activity only. Controlled UAT data assignment and execution remain blocked pending the external confirmations identified by Z-012C.**
+**Controlled UAT preparation decision: `AUTHORIZED_FOR_Z012D_CONTROLLED_UAT_PREPARATION`. Authorization covers documentation, synthetic-scenario, evidence-manifest, and environment-planning work only. Controlled UAT data assignment and execution remain blocked pending the external confirmations identified by Z-012C.**
 
 Accounting approved the exact immutable calculation proposal under `Z-012B-ACCOUNTING-APPROVAL-001`, resolving AE-DR-006 through AE-DR-009. Ten external confirmations remain active, but none blocks local bounded implementation: AE-DR-012 remains fail closed for nonzero unresolved privileges, while the others gate Controlled UAT, external delivery, or Production. E-2 through E-5 and ARTS POSLog remain deferred. Controlled UAT, external delivery, and Production remain unauthorized.
