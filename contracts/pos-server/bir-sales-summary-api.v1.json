@@ -1,0 +1,54 @@
+{
+  "contractKey": "pos-server-bir-sales-summary-api",
+  "contractVersion": "v1",
+  "authority": "POS_SERVER",
+  "reportingProfile": "pos-server-bir-sales-summary:v1",
+  "semanticHashVersion": "pos-server-fiscal-report-request:sha256:v1",
+  "routes": {
+    "generate": "POST /v1/fiscal-reports/bir-sales-summaries/",
+    "read": "GET /v1/fiscal-reports/bir-sales-summaries/{summaryId}",
+    "export": "GET /v1/fiscal-reports/bir-sales-summaries/{summaryId}/exports/{format}"
+  },
+  "permissions": {
+    "generate": "bir_sales_summary.generate",
+    "read": "bir_sales_summary.read",
+    "export": "bir_sales_summary.export"
+  },
+  "requiredScope": [
+    "sitePosServerId",
+    "fiscalIdentityId",
+    "currencyCode"
+  ],
+  "generationInput": [
+    "operationKey",
+    "sitePosServerId",
+    "fiscalIdentityId",
+    "currencyCode",
+    "fiscalReportingPeriodId",
+    "governingZReadingReference"
+  ],
+  "authoritativePreconditions": [
+    "governing Z Reading exists and is COMMITTED",
+    "fiscal reporting period is CLOSED",
+    "approved historical Sales Invoice header profile resolves uniquely",
+    "canonical fiscal documents reaggregate exactly to the governing Z",
+    "Z counter and grand-total snapshot reconcile exactly"
+  ],
+  "exports": ["json", "csv"],
+  "immutability": {
+    "onePerGoverningZAndProfile": true,
+    "update": "PROHIBITED",
+    "delete": "PROHIBITED",
+    "exactReplay": "RETURNS_EXISTING",
+    "semanticConflict": "FAIL_CLOSED"
+  },
+  "privacyExclusions": [
+    "beneficiary identity",
+    "statutory identifier",
+    "evidence content or location",
+    "credentials",
+    "authorization headers",
+    "raw request payload"
+  ],
+  "annexE": "NOT_AUTHORIZED_BY_THIS_CONTRACT"
+}
