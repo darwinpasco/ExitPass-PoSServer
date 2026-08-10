@@ -7,7 +7,7 @@ This record independently reviews the merged Z-012B local bounded Annex E-1 runt
 | Gate | Decision |
 |---|---|
 | Z-012B post-merge runtime acceptance | `PASSED` |
-| Controlled UAT preparation | `AUTHORIZED_FOR_BOUNDED_PREPARATION` |
+| Controlled UAT preparation | `AUTHORIZED_FOR_Z012D_CONTROLLED_UAT_PREPARATION` |
 | Controlled UAT data assignment | `BLOCKED_PENDING_APPROVED_UAT_PLAN_AND_EXTERNAL_CONFIRMATIONS` |
 | Controlled UAT execution | `BLOCKED_PENDING_EXTERNAL_CONFIRMATIONS` |
 | External workbook delivery | `BLOCKED_PENDING_EXTERNAL_CONFIRMATIONS` |
@@ -160,4 +160,4 @@ Residual implementation follow-ups that do not block this review:
 
 ## 10. Next authorized activity
 
-The next bounded activity is preparation of a Controlled UAT plan and synthetic-data/evidence specification that references the ten closure requests. It may not assign actual UAT data or execute requests until a separate authorization record closes the execution gates. External delivery, BIR submission, Production rollout, Annex E-2 through E-5, and ARTS POSLog remain unauthorized.
+The final Z-012C decision is `AUTHORIZED_FOR_Z012D_CONTROLLED_UAT_PREPARATION`. The next bounded activity is preparation of a Controlled UAT plan and synthetic-data/evidence specification that references the ten closure requests. It may not assign actual UAT data or execute requests until a separate authorization record closes the execution gates. External delivery, BIR submission, Production rollout, Annex E-2 through E-5, and ARTS POSLog remain unauthorized.
