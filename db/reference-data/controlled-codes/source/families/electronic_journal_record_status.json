@@ -1,0 +1,6 @@
+{
+  "schema_version":"1.0","source_key":"controlled_codes.electronic_journal_record_status.v1","source_name":"Electronic Journal Record Status Controlled Codes","source_description":"Committed-only canonical EJ posture.","governance_owner":"Engineering","source_ref":"Z-011A",
+  "code_sets":[{"code_set_key":"electronic_journal_record_status","display_name":"Electronic Journal Record Status","description":"Canonical EJ records are visible only after durable source transaction commit.","governance_owner":"Engineering","source_ref":"Z-011A","is_active":true,"effective_start_at":"2026-08-10T00:00:00Z","effective_end_at":null,"codes":[
+    {"code_key":"committed","display_name":"Committed","description":"The source transition and event are durably committed in one transaction.","source_ref":"Z-011A","sort_order":10,"is_active":true,"is_deprecated":false,"effective_start_at":"2026-08-10T00:00:00Z","effective_end_at":null,"replaced_by_code_key":null}
+  ]}],"notes":["Failed and diagnostic attempts are not canonical fiscal events."]
+}

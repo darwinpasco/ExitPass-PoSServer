@@ -1,0 +1,25 @@
+{
+  "schema_version":"1.0",
+  "source_key":"controlled_codes.fiscal_reprint_reason.v1",
+  "source_name":"Fiscal Reprint Reason Controlled Codes",
+  "source_description":"Privacy-safe governed reasons for recording a fiscal-document copy.",
+  "governance_owner":"Engineering",
+  "source_ref":"Z-011A",
+  "code_sets":[{
+    "code_set_key":"fiscal_reprint_reason",
+    "display_name":"Fiscal Reprint Reason",
+    "description":"Bounded reasons that do not contain customer identity, evidence, or arbitrary diagnostic text.",
+    "governance_owner":"Engineering",
+    "source_ref":"Z-011A",
+    "is_active":true,
+    "effective_start_at":"2026-08-10T00:00:00Z",
+    "effective_end_at":null,
+    "codes":[
+      {"code_key":"operator_request","display_name":"Operator Request","description":"An authorized operator requested a labeled fiscal-document copy.","source_ref":"Z-011A","sort_order":10,"is_active":true,"is_deprecated":false,"effective_start_at":"2026-08-10T00:00:00Z","effective_end_at":null,"replaced_by_code_key":null},
+      {"code_key":"customer_request","display_name":"Customer Request","description":"A customer requested a labeled fiscal-document copy; no customer identity is retained.","source_ref":"Z-011A","sort_order":20,"is_active":true,"is_deprecated":false,"effective_start_at":"2026-08-10T00:00:00Z","effective_end_at":null,"replaced_by_code_key":null},
+      {"code_key":"audit_request","display_name":"Audit Request","description":"An authorized audit function requested a labeled fiscal-document copy.","source_ref":"Z-011A","sort_order":30,"is_active":true,"is_deprecated":false,"effective_start_at":"2026-08-10T00:00:00Z","effective_end_at":null,"replaced_by_code_key":null},
+      {"code_key":"damaged_original","display_name":"Damaged Original","description":"A replacement copy was requested because the prior presentation was damaged or unreadable.","source_ref":"Z-011A","sort_order":40,"is_active":true,"is_deprecated":false,"effective_start_at":"2026-08-10T00:00:00Z","effective_end_at":null,"replaced_by_code_key":null}
+    ]
+  }],
+  "notes":["Canonical reprint records prohibit arbitrary reason text and personal evidence."]
+}

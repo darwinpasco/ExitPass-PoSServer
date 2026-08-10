@@ -1,6 +1,8 @@
 using ExitPass.PosServer.Runtime.FiscalDocuments;
 using ExitPass.PosServer.Runtime.FiscalReports;
 using ExitPass.PosServer.Persistence.Postgres.FiscalReports;
+using ExitPass.PosServer.Persistence.Postgres.ElectronicJournal;
+using ExitPass.PosServer.Runtime.ElectronicJournal;
 using Npgsql;
 using NpgsqlTypes;
 using System.Globalization;
@@ -273,6 +275,28 @@ public sealed class PostgresFiscalDocumentRepository : IFiscalDocumentRepository
                 AddIdempotencyCompletionParameters(completeIdempotencyCommand, resolvedDraft, idempotency);
                 await completeIdempotencyCommand.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
 
+                await PostgresElectronicJournalWriter.AppendAsync(
+                    connection,
+                    transaction,
+                    new ElectronicJournalAppendRequest(
+                        resolvedDraft.SitePosServerId,
+                        resolvedDraft.ResolvedFiscalIdentityId!.Value,
+                        resolvedDraft.CurrencyCode,
+                        resolvedDraft.FiscalReportingPeriodId!.Value,
+                        "fiscal_document_committed",
+                        $"fiscal-document:{resolvedDraft.FiscalDocumentId:D}",
+                        FiscalDocumentSemanticRequestHasher.GetVersion(resolvedDraft),
+                        resolvedDraft.FiscalNumberAssignedAt!.Value,
+                        "pos-server-fiscal-document-runtime",
+                        "pos-server-fiscal-document-runtime",
+                        idempotency.Key,
+                        CreateFiscalDocumentJournalFacts(resolvedDraft),
+                        FiscalDocumentId: resolvedDraft.FiscalDocumentId,
+                        FiscalSequencePolicyId: resolvedDraft.ResolvedFiscalSequencePolicyId,
+                        BusinessDayDate: resolvedDraft.BusinessDayDate,
+                        IdempotencyReference: idempotency.Key),
+                    cancellationToken).ConfigureAwait(false);
+
                 await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
                 return FiscalDocumentPersistenceResult.Created(resolvedDraft);
             }
@@ -428,6 +452,35 @@ public sealed class PostgresFiscalDocumentRepository : IFiscalDocumentRepository
                     transaction);
                 AddVoidIdempotencyCompletionParameters(completeIdempotencyCommand, command, idempotency);
                 await completeIdempotencyCommand.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
+
+                await PostgresElectronicJournalWriter.AppendAsync(
+                    connection,
+                    transaction,
+                    new ElectronicJournalAppendRequest(
+                        reportingScope.SitePosServerId,
+                        reportingScope.FiscalIdentityId,
+                        reportingScope.CurrencyCode,
+                        reportingScope.FiscalReportingPeriodId,
+                        "fiscal_document_voided",
+                        $"fiscal-document-void:{command.FiscalDocumentId:D}:{idempotency.Key}",
+                        FiscalDocumentVoidSemanticRequestHasher.Version,
+                        voidedAt,
+                        command.RequestedByRef,
+                        command.SourceSystemRef ?? "pos-server-fiscal-document-runtime",
+                        command.CorrelationId,
+                        new SortedDictionary<string, string?>(StringComparer.Ordinal)
+                        {
+                            ["fiscal_document_number"] = lockedDocument.FiscalDocumentNumber,
+                            ["fiscal_sequence_value"] = lockedDocument.FiscalSequenceValue?.ToString(CultureInfo.InvariantCulture),
+                            ["previous_status"] = lockedDocument.CurrentStatusCodeKey,
+                            ["resulting_status"] = "voided",
+                            ["void_reason_code"] = command.ReasonCode,
+                            ["void_status"] = "recorded"
+                        },
+                        FiscalDocumentId: command.FiscalDocumentId,
+                        BusinessDayDate: command.BusinessDayDate,
+                        IdempotencyReference: idempotency.Key),
+                    cancellationToken).ConfigureAwait(false);
 
                 await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
 
@@ -1361,6 +1414,47 @@ public sealed class PostgresFiscalDocumentRepository : IFiscalDocumentRepository
         Guid PolicyResolutionBasisCodeId,
         Guid VatTreatmentCodeId,
         Guid SourcePaymentChannelCodeId);
+
+    private static IReadOnlyDictionary<string, string?> CreateFiscalDocumentJournalFacts(FiscalDocumentDraft draft)
+    {
+        var facts = new SortedDictionary<string, string?>(StringComparer.Ordinal)
+        {
+            ["fiscal_document_type"] = draft.FiscalDocumentTypeCodeKey,
+            ["fiscal_document_number"] = draft.FiscalDocumentNumber,
+            ["fiscal_series"] = draft.FiscalSeries,
+            ["fiscal_sequence_value"] = draft.FiscalSequenceValue?.ToString(CultureInfo.InvariantCulture),
+            ["payable_amount_minor_units"] = draft.PayableAmountMinorUnits.ToString(CultureInfo.InvariantCulture),
+            ["line_count"] = draft.DocumentLines.Count.ToString(CultureInfo.InvariantCulture),
+            ["tender_count"] = draft.Tenders.Count.ToString(CultureInfo.InvariantCulture),
+            ["tax_detail_count"] = draft.TaxDetails.Count.ToString(CultureInfo.InvariantCulture),
+            ["discount_detail_count"] = draft.DiscountPrivilegeDetails.Count.ToString(CultureInfo.InvariantCulture),
+            ["total_count"] = draft.Totals.Count.ToString(CultureInfo.InvariantCulture),
+            ["tender_facts"] = string.Join(';', draft.Tenders
+                .OrderBy(item => item.TenderTypeCodeId)
+                .ThenBy(item => item.AmountMinorUnits)
+                .Select(item => $"{item.TenderTypeCodeId:D}:{item.AmountMinorUnits.ToString(CultureInfo.InvariantCulture)}")),
+            ["tax_facts"] = string.Join(';', draft.TaxDetails
+                .OrderBy(item => item.TaxClassificationCodeId)
+                .ThenBy(item => item.TaxAmountMinorUnits)
+                .Select(item => $"{item.TaxClassificationCodeId:D}:{item.TaxableAmountMinorUnits.ToString(CultureInfo.InvariantCulture)}:{item.TaxAmountMinorUnits.ToString(CultureInfo.InvariantCulture)}")),
+            ["discount_facts"] = string.Join(';', draft.DiscountPrivilegeDetails
+                .OrderBy(item => item.DiscountPrivilegeTypeCodeId)
+                .ThenBy(item => item.DiscountAmountMinorUnits)
+                .Select(item => $"{item.DiscountPrivilegeTypeCodeId:D}:{item.DiscountAmountMinorUnits.ToString(CultureInfo.InvariantCulture)}:{item.VatPrivilegeAmountMinorUnits.ToString(CultureInfo.InvariantCulture)}")),
+            ["total_facts"] = string.Join(';', draft.Totals
+                .OrderBy(item => item.TotalTypeCodeId)
+                .ThenBy(item => item.AmountMinorUnits)
+                .Select(item => $"{item.TotalTypeCodeId:D}:{item.AmountMinorUnits.ToString(CultureInfo.InvariantCulture)}"))
+        };
+        if (draft.AppliedStatutoryFiscalFacts is not null)
+        {
+            facts["statutory_entitlement"] = draft.AppliedStatutoryFiscalFacts.EntitlementType;
+            facts["statutory_benefit"] = draft.AppliedStatutoryFiscalFacts.BenefitClassification;
+            facts["statutory_discount_minor_units"] = draft.AppliedStatutoryFiscalFacts.StatutoryDiscountAmountMinorUnits.ToString(CultureInfo.InvariantCulture);
+            facts["statutory_vat_minor_units"] = draft.AppliedStatutoryFiscalFacts.VatAmountMinorUnits.ToString(CultureInfo.InvariantCulture);
+        }
+        return facts;
+    }
 
     private static void AddStatusHistoryParameters(NpgsqlCommand command, FiscalDocumentDraft draft)
     {

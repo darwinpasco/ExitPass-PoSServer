@@ -16,10 +16,10 @@ public sealed class FiscalReportOutputAuthorizationResultHandler(
         AuthorizationPolicy policy,
         PolicyAuthorizationResult authorizeResult)
     {
-        if (!authorizeResult.Succeeded && IsFiscalReportOutputPath(context.Request.Path))
+        if (!authorizeResult.Succeeded && IsGovernedOutputPath(context.Request.Path))
         {
             logger.LogWarning(
-                "Fiscal report output authorization denied. Path={Path} Principal={Principal} Correlation={Correlation}",
+                "Governed fiscal output authorization denied. Path={Path} Principal={Principal} Correlation={Correlation}",
                 Safe(context.Request.Path.Value),
                 Safe(context.User.FindFirstValue(ClaimTypes.NameIdentifier)),
                 Safe(context.Request.Headers[SalesInvoiceHeaderProfileAdminAuthorization.CorrelationHeaderName].FirstOrDefault()));
@@ -28,9 +28,10 @@ public sealed class FiscalReportOutputAuthorizationResultHandler(
         await defaultHandler.HandleAsync(next, context, policy, authorizeResult).ConfigureAwait(false);
     }
 
-    private static bool IsFiscalReportOutputPath(PathString path) =>
+    private static bool IsGovernedOutputPath(PathString path) =>
         path.StartsWithSegments("/v1/fiscal-reports/x-readings") ||
-        path.StartsWithSegments("/v1/fiscal-reports/z-readings");
+        path.StartsWithSegments("/v1/fiscal-reports/z-readings") ||
+        path.StartsWithSegments("/v1/electronic-journal");
 
     private static string Safe(string? value) =>
         string.IsNullOrWhiteSpace(value) || value.Length > 200 || value.Contains('\r') || value.Contains('\n')

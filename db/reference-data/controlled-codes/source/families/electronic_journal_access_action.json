@@ -1,0 +1,8 @@
+{
+  "schema_version":"1.0","source_key":"controlled_codes.electronic_journal_access_action.v1","source_name":"Electronic Journal Access Action Controlled Codes","source_description":"Governed privacy-safe EJ access audit actions.","governance_owner":"Engineering","source_ref":"Z-011A",
+  "code_sets":[{"code_set_key":"electronic_journal_access_action","display_name":"Electronic Journal Access Action","description":"Read-only governed access actions.","governance_owner":"Engineering","source_ref":"Z-011A","is_active":true,"effective_start_at":"2026-08-10T00:00:00Z","effective_end_at":null,"codes":[
+    {"code_key":"read","display_name":"Read","description":"Bounded Electronic Journal readback.","source_ref":"Z-011A","sort_order":10,"is_active":true,"is_deprecated":false,"effective_start_at":"2026-08-10T00:00:00Z","effective_end_at":null,"replaced_by_code_key":null},
+    {"code_key":"export","display_name":"Export","description":"Deterministic Electronic Journal export.","source_ref":"Z-011A","sort_order":20,"is_active":true,"is_deprecated":false,"effective_start_at":"2026-08-10T00:00:00Z","effective_end_at":null,"replaced_by_code_key":null},
+    {"code_key":"integrity_verify","display_name":"Integrity Verify","description":"Administrative integrity-chain verification.","source_ref":"Z-011A","sort_order":30,"is_active":true,"is_deprecated":false,"effective_start_at":"2026-08-10T00:00:00Z","effective_end_at":null,"replaced_by_code_key":null}
+  ]}],"notes":[]
+}

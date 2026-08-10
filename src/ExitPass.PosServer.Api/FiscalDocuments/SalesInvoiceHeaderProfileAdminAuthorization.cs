@@ -3,6 +3,7 @@ using System.Security.Cryptography;
 using System.Text;
 using System.Text.Encodings.Web;
 using ExitPass.PosServer.Api.FiscalReports;
+using ExitPass.PosServer.Api.ElectronicJournal;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.Extensions.Options;
 using Microsoft.Extensions.Primitives;
@@ -45,6 +46,7 @@ public static class SalesInvoiceHeaderProfileAdminAuthorization
             var sitePosServerScopes = ReadScopes(child, "SitePosServerIds");
             var fiscalIdentityScopes = ReadScopes(child, "FiscalIdentityIds");
             var currencyScopes = ReadScopes(child, "CurrencyCodes");
+            var authorityClass = (child["AuthorityClass"] ?? BirSalesSummaryAuthorization.DevelopmentAuthorityClass).Trim().ToUpperInvariant();
 
             if (string.IsNullOrWhiteSpace(principalName) ||
                 string.IsNullOrEmpty(secret) ||
@@ -55,13 +57,29 @@ public static class SalesInvoiceHeaderProfileAdminAuthorization
                 (permissions.Any(permission =>
                         FiscalXReadingAuthorization.IsXReadingPermission(permission) ||
                         FiscalZCloseStateInitializationAuthorization.IsScopedPermission(permission) ||
-                        FiscalZReadingAuthorization.IsZReadingPermission(permission)) &&
+                         FiscalZReadingAuthorization.IsZReadingPermission(permission) ||
+                         ElectronicJournalAuthorization.IsElectronicJournalPermission(permission) ||
+                         FiscalDocumentReprintAuthorization.IsReprintPermission(permission)) &&
                     (sitePosServerScopes.Length == 0 || fiscalIdentityScopes.Length == 0)))
             {
                 return PosServerAdminApiKeyConfiguration.Invalid("invalid_admin_api_key_configuration");
             }
             if (permissions.Any(FiscalZReadingAuthorization.IsZReadingPermission) &&
                 (currencyScopes.Length == 0 || !currencyScopes.All(IsValidCurrencyScope)))
+            {
+                return PosServerAdminApiKeyConfiguration.Invalid("invalid_admin_api_key_configuration");
+            }
+            if (permissions.Any(ElectronicJournalAuthorization.IsElectronicJournalPermission) &&
+                (currencyScopes.Length == 0 || sitePosServerScopes.Any(scope => scope == "*") ||
+                 fiscalIdentityScopes.Any(scope => scope == "*") || currencyScopes.Any(scope => scope == "*") ||
+                 !currencyScopes.All(IsValidCurrencyScope)))
+            {
+                return PosServerAdminApiKeyConfiguration.Invalid("invalid_admin_api_key_configuration");
+            }
+            if (permissions.Any(FiscalDocumentReprintAuthorization.IsReprintPermission) &&
+                (currencyScopes.Length == 0 || sitePosServerScopes.Any(scope => scope == "*") ||
+                 fiscalIdentityScopes.Any(scope => scope == "*") || currencyScopes.Any(scope => scope == "*") ||
+                 !currencyScopes.All(IsValidCurrencyScope)))
             {
                 return PosServerAdminApiKeyConfiguration.Invalid("invalid_admin_api_key_configuration");
             }
@@ -80,7 +98,8 @@ public static class SalesInvoiceHeaderProfileAdminAuthorization
                 permissions,
                 sitePosServerScopes,
                 fiscalIdentityScopes,
-                currencyScopes));
+                currencyScopes,
+                authorityClass));
         }
 
         if (registrations.Count == 0)
@@ -95,7 +114,8 @@ public static class SalesInvoiceHeaderProfileAdminAuthorization
                     [RequiredPermission],
                     [],
                     [],
-                    []));
+                    [],
+                    BirSalesSummaryAuthorization.DevelopmentAuthorityClass));
             }
         }
 
@@ -137,7 +157,8 @@ public static class SalesInvoiceHeaderProfileAdminAuthorization
             ResolveServerDerivedPermissions(matchedRegistration, requestedPermissionValues),
             matchedRegistration.SitePosServerScopes,
             matchedRegistration.FiscalIdentityScopes,
-            matchedRegistration.CurrencyScopes);
+            matchedRegistration.CurrencyScopes,
+            matchedRegistration.AuthorityClass);
     }
 
     private static string[] ReadScopes(IConfigurationSection registration, string sectionName) =>
@@ -198,7 +219,8 @@ public sealed record PosServerAdminApiKeyRegistration(
     IReadOnlyList<string> Permissions,
     IReadOnlyList<string> SitePosServerScopes,
     IReadOnlyList<string> FiscalIdentityScopes,
-    IReadOnlyList<string> CurrencyScopes);
+    IReadOnlyList<string> CurrencyScopes,
+    string AuthorityClass = BirSalesSummaryAuthorization.DevelopmentAuthorityClass);
 
 public sealed record PosServerAdminApiKeyConfiguration(
     bool IsValid,
@@ -227,7 +249,8 @@ public sealed record PosServerAdminApiKeyAuthenticationResult(
     IReadOnlyList<string> Permissions,
     IReadOnlyList<string> SitePosServerScopes,
     IReadOnlyList<string> FiscalIdentityScopes,
-    IReadOnlyList<string> CurrencyScopes)
+    IReadOnlyList<string> CurrencyScopes,
+    string? AuthorityClass)
 {
     public bool Succeeded => Status == PosServerAdminApiKeyAuthenticationStatus.Authenticated;
 
@@ -236,11 +259,12 @@ public sealed record PosServerAdminApiKeyAuthenticationResult(
         IReadOnlyList<string> permissions,
         IReadOnlyList<string> sitePosServerScopes,
         IReadOnlyList<string> fiscalIdentityScopes,
-        IReadOnlyList<string> currencyScopes) =>
-        new(PosServerAdminApiKeyAuthenticationStatus.Authenticated, principalName, permissions, sitePosServerScopes, fiscalIdentityScopes, currencyScopes);
+        IReadOnlyList<string> currencyScopes,
+        string? authorityClass = null) =>
+        new(PosServerAdminApiKeyAuthenticationStatus.Authenticated, principalName, permissions, sitePosServerScopes, fiscalIdentityScopes, currencyScopes, authorityClass);
 
     public static PosServerAdminApiKeyAuthenticationResult Failed(PosServerAdminApiKeyAuthenticationStatus status) =>
-        new(status, null, [], [], [], []);
+        new(status, null, [], [], [], [], null);
 }
 
 public sealed class PosServerAdminApiKeyAuthenticationOptions : AuthenticationSchemeOptions
@@ -292,6 +316,8 @@ public sealed class PosServerAdminApiKeyAuthenticationHandler : AuthenticationHa
             new Claim(FiscalXReadingAuthorization.FiscalIdentityScopeClaimType, scope)));
         claims.AddRange(authentication.CurrencyScopes.Select(scope =>
             new Claim(FiscalZReadingAuthorization.CurrencyScopeClaimType, scope)));
+        if (!string.IsNullOrWhiteSpace(authentication.AuthorityClass))
+            claims.Add(new Claim(BirSalesSummaryAuthorization.AuthorityClassClaimType, authentication.AuthorityClass));
 
         var identity = new ClaimsIdentity(claims, Scheme.Name);
         return Task.FromResult(AuthenticateResult.Success(new AuthenticationTicket(new ClaimsPrincipal(identity), Scheme.Name)));

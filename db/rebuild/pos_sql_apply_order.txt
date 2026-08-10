@@ -51,7 +51,9 @@ db/state/tables/pos.bir_sales_summary_reports.sql
 db/state/tables/pos.annex_e_reports.sql
 db/state/tables/pos.fiscal_report_output_refs.sql
 db/state/tables/pos.export_schema_profile_refs.sql
+db/state/tables/pos.electronic_journal_streams.sql
 db/state/tables/pos.electronic_journal_records.sql
+db/state/tables/pos.electronic_journal_access_audit.sql
 db/state/tables/pos.fiscal_export_requests.sql
 db/state/tables/pos.fiscal_export_packages.sql
 db/state/tables/pos.fiscal_export_package_items.sql

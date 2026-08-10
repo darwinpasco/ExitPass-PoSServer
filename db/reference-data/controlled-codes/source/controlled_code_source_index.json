@@ -22,6 +22,31 @@
       "governance_owner": "Engineering"
     },
     {
+      "code_set_key": "electronic_journal_access_action",
+      "path": "families/electronic_journal_access_action.json",
+      "governance_owner": "Engineering"
+    },
+    {
+      "code_set_key": "electronic_journal_access_result",
+      "path": "families/electronic_journal_access_result.json",
+      "governance_owner": "Engineering"
+    },
+    {
+      "code_set_key": "electronic_journal_event_type",
+      "path": "families/electronic_journal_event_type.json",
+      "governance_owner": "Engineering"
+    },
+    {
+      "code_set_key": "electronic_journal_record_status",
+      "path": "families/electronic_journal_record_status.json",
+      "governance_owner": "Engineering"
+    },
+    {
+      "code_set_key": "electronic_journal_retention_policy",
+      "path": "families/electronic_journal_retention_policy.json",
+      "governance_owner": "Engineering"
+    },
+    {
       "code_set_key": "fiscal_action_audit_result",
       "path": "families/fiscal_action_audit_result.json",
       "governance_owner": "Engineering"
@@ -94,6 +119,21 @@
     {
       "code_set_key": "fiscal_reporting_tender_classification",
       "path": "families/fiscal_reporting_tender_classification.json",
+      "governance_owner": "Engineering"
+    },
+    {
+      "code_set_key": "fiscal_reprint_reason",
+      "path": "families/fiscal_reprint_reason.json",
+      "governance_owner": "Engineering"
+    },
+    {
+      "code_set_key": "fiscal_reprint_status",
+      "path": "families/fiscal_reprint_status.json",
+      "governance_owner": "Engineering"
+    },
+    {
+      "code_set_key": "fiscal_reprint_type",
+      "path": "families/fiscal_reprint_type.json",
       "governance_owner": "Engineering"
     },
     {

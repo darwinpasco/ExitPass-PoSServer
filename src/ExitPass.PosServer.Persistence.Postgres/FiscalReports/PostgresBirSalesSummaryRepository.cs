@@ -1,6 +1,8 @@
 using System.Data;
 using System.Text.Json;
 using ExitPass.PosServer.Runtime.FiscalReports;
+using ExitPass.PosServer.Runtime.ElectronicJournal;
+using ExitPass.PosServer.Persistence.Postgres.ElectronicJournal;
 using Npgsql;
 using NpgsqlTypes;
 
@@ -93,6 +95,27 @@ public sealed class PostgresBirSalesSummaryRepository(
 
             var record = await ReadRecordAsync(connection, transaction, summaryId, cancellationToken).ConfigureAwait(false)
                 ?? throw new BirSalesSummarySafeException(BirSalesSummaryOutcome.PersistenceFailure, "The summary was not readable inside its transaction.");
+            await PostgresElectronicJournalWriter.AppendAsync(
+                connection,
+                transaction,
+                new ElectronicJournalAppendRequest(
+                    record.SitePosServerId,
+                    record.FiscalIdentityId,
+                    record.CurrencyCode,
+                    record.FiscalReportingPeriodId,
+                    "bir_sales_summary_committed",
+                    $"fiscal-report-request:{requestId:D}",
+                    BirSalesSummaryContract.ContractVersion,
+                    committedAt,
+                    command.RequestedByRef,
+                    command.ServiceIdentityRef,
+                    command.CorrelationId,
+                    ElectronicJournalReportFacts.FromBir(record),
+                    FiscalReportRequestId: requestId,
+                    BirSalesSummaryReportId: summaryId,
+                    BusinessDayDate: record.BusinessDayDate,
+                    IdempotencyReference: command.OperationKey),
+                cancellationToken).ConfigureAwait(false);
             commitAttempted = true;
             await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
             return new(BirSalesSummaryOutcome.Created, record);

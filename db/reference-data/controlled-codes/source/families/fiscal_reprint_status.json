@@ -1,0 +1,22 @@
+{
+  "schema_version":"1.0",
+  "source_key":"controlled_codes.fiscal_reprint_status.v1",
+  "source_name":"Fiscal Reprint Status Controlled Codes",
+  "source_description":"Governed canonical fiscal-document reprint lifecycle status.",
+  "governance_owner":"Engineering",
+  "source_ref":"Z-011A",
+  "code_sets":[{
+    "code_set_key":"fiscal_reprint_status",
+    "display_name":"Fiscal Reprint Status",
+    "description":"Stable committed posture for immutable reprint evidence.",
+    "governance_owner":"Engineering",
+    "source_ref":"Z-011A",
+    "is_active":true,
+    "effective_start_at":"2026-08-10T00:00:00Z",
+    "effective_end_at":null,
+    "codes":[
+      {"code_key":"committed","display_name":"Committed","description":"The reprint evidence and required Electronic Journal event committed atomically.","source_ref":"Z-011A","sort_order":10,"is_active":true,"is_deprecated":false,"effective_start_at":"2026-08-10T00:00:00Z","effective_end_at":null,"replaced_by_code_key":null}
+    ]
+  }],
+  "notes":["No mutable draft reprint lifecycle is authorized by Z-011A."]
+}

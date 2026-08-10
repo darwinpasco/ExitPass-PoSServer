@@ -205,7 +205,43 @@ public sealed class BirSalesSummaryPostgresIntegrationTests
 
     private static async Task RebuildAsync(string cs){await ExecuteAsync(cs,"DROP SCHEMA IF EXISTS pos CASCADE");var root=FindRepositoryRoot();foreach(var entry in File.ReadLines(Path.Combine(root,"db","rebuild","pos_sql_apply_order.txt")).Select(x=>x.Trim()).Where(x=>x.Length>0&&!x.StartsWith('#')))await ExecuteFileAsync(cs,Path.Combine(root,entry.Replace('/',Path.DirectorySeparatorChar)));foreach(var file in Directory.GetFiles(Path.Combine(root,"db","reference-data","controlled-codes","generated","sql"),"*.sql").OrderBy(x=>x,StringComparer.Ordinal))await ExecuteFileAsync(cs,file);}
     private static async Task<WebApplication> StartApiAsync(string cs){var builder=WebApplication.CreateBuilder(new WebApplicationOptions{EnvironmentName=Environments.Production});builder.WebHost.UseKestrel().UseUrls("http://127.0.0.1:0");builder.Configuration.AddInMemoryCollection(Configuration(cs));builder.Services.AddPosServerFiscalDocumentApi(builder.Configuration);var app=builder.Build();app.UseAuthentication();app.UseAuthorization();app.MapFiscalZCloseStateInitializationEndpoints();app.MapFiscalZReadingEndpoints();app.MapBirSalesSummaryEndpoints();await app.StartAsync();return app;}
-    private static Dictionary<string,string?> Configuration(string cs)=>new(){{"ConnectionStrings:PosServer",cs},{"PosServer:Admin:ApiKeys:0:Principal","summary-production"},{"PosServer:Admin:ApiKeys:0:Key","summary-production-key"},{"PosServer:Admin:ApiKeys:0:Permissions:0",FiscalZCloseStateInitializationAuthorization.Permission},{"PosServer:Admin:ApiKeys:0:Permissions:1",FiscalZReadingAuthorization.ClosePermission},{"PosServer:Admin:ApiKeys:0:Permissions:2",FiscalZReadingAuthorization.ReadPermission},{"PosServer:Admin:ApiKeys:0:Permissions:3",BirSalesSummaryAuthorization.GeneratePermission},{"PosServer:Admin:ApiKeys:0:Permissions:4",BirSalesSummaryAuthorization.ReadPermission},{"PosServer:Admin:ApiKeys:0:Permissions:5",BirSalesSummaryAuthorization.ExportPermission},{"PosServer:Admin:ApiKeys:0:SitePosServerIds:0",SiteId.ToString("D")},{"PosServer:Admin:ApiKeys:0:FiscalIdentityIds:0",IdentityId.ToString("D")},{"PosServer:Admin:ApiKeys:0:CurrencyCodes:0","PHP"},{"PosServer:Admin:ApiKeys:1:Principal","summary-readonly"},{"PosServer:Admin:ApiKeys:1:Key","summary-readonly-key"},{"PosServer:Admin:ApiKeys:1:Permissions:0",BirSalesSummaryAuthorization.ReadPermission},{"PosServer:Admin:ApiKeys:1:SitePosServerIds:0",SiteId.ToString("D")},{"PosServer:Admin:ApiKeys:1:FiscalIdentityIds:0",IdentityId.ToString("D")},{"PosServer:Admin:ApiKeys:1:CurrencyCodes:0","PHP"},{"PosServer:Admin:ApiKeys:2:Principal","summary-wrong-scope"},{"PosServer:Admin:ApiKeys:2:Key","summary-wrong-scope-key"},{"PosServer:Admin:ApiKeys:2:Permissions:0",BirSalesSummaryAuthorization.ReadPermission},{"PosServer:Admin:ApiKeys:2:SitePosServerIds:0",Guid.NewGuid().ToString("D")},{"PosServer:Admin:ApiKeys:2:FiscalIdentityIds:0",IdentityId.ToString("D")},{"PosServer:Admin:ApiKeys:2:CurrencyCodes:0","PHP"},{"PosServer:Admin:ApiKeys:3:Principal","summary-fixture"},{"PosServer:Admin:ApiKeys:3:Key","summary-fixture-key"},{"PosServer:Admin:ApiKeys:3:AuthorityClass","FIXTURE"},{"PosServer:Admin:ApiKeys:3:Permissions:0",BirSalesSummaryAuthorization.ReadPermission},{"PosServer:Admin:ApiKeys:3:SitePosServerIds:0",SiteId.ToString("D")},{"PosServer:Admin:ApiKeys:3:FiscalIdentityIds:0",IdentityId.ToString("D")},{"PosServer:Admin:ApiKeys:3:CurrencyCodes:0","PHP"}};
+    private static Dictionary<string,string?> Configuration(string cs)=>new()
+    {
+        {"ConnectionStrings:PosServer",cs},
+        {"PosServer:Admin:ApiKeys:0:Principal","summary-production"},
+        {"PosServer:Admin:ApiKeys:0:Key","summary-production-key"},
+        {"PosServer:Admin:ApiKeys:0:AuthorityClass","PRODUCTION"},
+        {"PosServer:Admin:ApiKeys:0:Permissions:0",FiscalZCloseStateInitializationAuthorization.Permission},
+        {"PosServer:Admin:ApiKeys:0:Permissions:1",FiscalZReadingAuthorization.ClosePermission},
+        {"PosServer:Admin:ApiKeys:0:Permissions:2",FiscalZReadingAuthorization.ReadPermission},
+        {"PosServer:Admin:ApiKeys:0:Permissions:3",BirSalesSummaryAuthorization.GeneratePermission},
+        {"PosServer:Admin:ApiKeys:0:Permissions:4",BirSalesSummaryAuthorization.ReadPermission},
+        {"PosServer:Admin:ApiKeys:0:Permissions:5",BirSalesSummaryAuthorization.ExportPermission},
+        {"PosServer:Admin:ApiKeys:0:SitePosServerIds:0",SiteId.ToString("D")},
+        {"PosServer:Admin:ApiKeys:0:FiscalIdentityIds:0",IdentityId.ToString("D")},
+        {"PosServer:Admin:ApiKeys:0:CurrencyCodes:0","PHP"},
+        {"PosServer:Admin:ApiKeys:1:Principal","summary-readonly"},
+        {"PosServer:Admin:ApiKeys:1:Key","summary-readonly-key"},
+        {"PosServer:Admin:ApiKeys:1:AuthorityClass","PRODUCTION"},
+        {"PosServer:Admin:ApiKeys:1:Permissions:0",BirSalesSummaryAuthorization.ReadPermission},
+        {"PosServer:Admin:ApiKeys:1:SitePosServerIds:0",SiteId.ToString("D")},
+        {"PosServer:Admin:ApiKeys:1:FiscalIdentityIds:0",IdentityId.ToString("D")},
+        {"PosServer:Admin:ApiKeys:1:CurrencyCodes:0","PHP"},
+        {"PosServer:Admin:ApiKeys:2:Principal","summary-wrong-scope"},
+        {"PosServer:Admin:ApiKeys:2:Key","summary-wrong-scope-key"},
+        {"PosServer:Admin:ApiKeys:2:AuthorityClass","PRODUCTION"},
+        {"PosServer:Admin:ApiKeys:2:Permissions:0",BirSalesSummaryAuthorization.ReadPermission},
+        {"PosServer:Admin:ApiKeys:2:SitePosServerIds:0",Guid.NewGuid().ToString("D")},
+        {"PosServer:Admin:ApiKeys:2:FiscalIdentityIds:0",IdentityId.ToString("D")},
+        {"PosServer:Admin:ApiKeys:2:CurrencyCodes:0","PHP"},
+        {"PosServer:Admin:ApiKeys:3:Principal","summary-fixture"},
+        {"PosServer:Admin:ApiKeys:3:Key","summary-fixture-key"},
+        {"PosServer:Admin:ApiKeys:3:AuthorityClass","FIXTURE"},
+        {"PosServer:Admin:ApiKeys:3:Permissions:0",BirSalesSummaryAuthorization.ReadPermission},
+        {"PosServer:Admin:ApiKeys:3:SitePosServerIds:0",SiteId.ToString("D")},
+        {"PosServer:Admin:ApiKeys:3:FiscalIdentityIds:0",IdentityId.ToString("D")},
+        {"PosServer:Admin:ApiKeys:3:CurrencyCodes:0","PHP"}
+    };
     private static HttpClient CreateClient(WebApplication app){var address=app.Services.GetRequiredService<IServer>().Features.Get<IServerAddressesFeature>()!.Addresses.Single();return new(){BaseAddress=new(address)};}
     private static void Authorize(HttpClient client,string key){client.DefaultRequestHeaders.Remove(SalesInvoiceHeaderProfileAdminAuthorization.ApiKeyHeaderName);client.DefaultRequestHeaders.Remove(SalesInvoiceHeaderProfileAdminAuthorization.PermissionHeaderName);client.DefaultRequestHeaders.Remove(SalesInvoiceHeaderProfileAdminAuthorization.CorrelationHeaderName);client.DefaultRequestHeaders.Add(SalesInvoiceHeaderProfileAdminAuthorization.ApiKeyHeaderName,key);client.DefaultRequestHeaders.Add(SalesInvoiceHeaderProfileAdminAuthorization.CorrelationHeaderName,"summary-proof-correlation");}
     private static async Task ExecuteFileAsync(string cs,string path)=>await ExecuteAsync(cs,await File.ReadAllTextAsync(path));private static async Task ExecuteAsync(string cs,string sql){await using var c=new NpgsqlConnection(cs);await c.OpenAsync();await using var cmd=new NpgsqlCommand(sql,c){CommandTimeout=120};await cmd.ExecuteNonQueryAsync();}private static async Task<T> ScalarAsync<T>(string cs,string sql){await using var c=new NpgsqlConnection(cs);await c.OpenAsync();await using var cmd=new NpgsqlCommand(sql,c);return(T)(await cmd.ExecuteScalarAsync())!;}private static string FindRepositoryRoot(){var d=new DirectoryInfo(AppContext.BaseDirectory);while(d is not null){if(File.Exists(Path.Combine(d.FullName,"ExitPass.PosServer.sln")))return d.FullName;d=d.Parent;}throw new DirectoryNotFoundException();}
