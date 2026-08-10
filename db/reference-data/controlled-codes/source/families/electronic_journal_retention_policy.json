@@ -1,0 +1,6 @@
+{
+  "schema_version":"1.0","source_key":"controlled_codes.electronic_journal_retention_policy.v1","source_name":"Electronic Journal Retention Policy Controlled Codes","source_description":"Non-destructive retention classifications for canonical EJ evidence.","governance_owner":"Engineering","source_ref":"Z-011A",
+  "code_sets":[{"code_set_key":"electronic_journal_retention_policy","display_name":"Electronic Journal Retention Policy","description":"Classifies fiscal reconstruction evidence without inventing a purge duration.","governance_owner":"Engineering","source_ref":"Z-011A","is_active":true,"effective_start_at":"2026-08-10T00:00:00Z","effective_end_at":null,"codes":[
+    {"code_key":"fiscal_reconstruction_hold","display_name":"Fiscal Reconstruction Hold","description":"Retain and prohibit deletion pending an approved archival, legal-hold, and purge contract.","source_ref":"Z-011A","sort_order":10,"is_active":true,"is_deprecated":false,"effective_start_at":"2026-08-10T00:00:00Z","effective_end_at":null,"replaced_by_code_key":null}
+  ]}],"notes":["No duration, archive transport, or destructive purge is authorized by this classification."]
+}

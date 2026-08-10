@@ -1,5 +1,7 @@
 using System.Data;
 using ExitPass.PosServer.Runtime.FiscalReports;
+using ExitPass.PosServer.Runtime.ElectronicJournal;
+using ExitPass.PosServer.Persistence.Postgres.ElectronicJournal;
 using Npgsql;
 using NpgsqlTypes;
 
@@ -125,6 +127,37 @@ public sealed class PostgresFiscalZReadingRepository(
 
             await ClosePeriodAsync(connection, transaction, period.FiscalReportingPeriodId, committedAt,
                 command.ServiceIdentityRef, cancellationToken).ConfigureAwait(false);
+            await PostgresElectronicJournalWriter.AppendAsync(
+                connection,
+                transaction,
+                new ElectronicJournalAppendRequest(
+                    period.SitePosServerId,
+                    period.FiscalIdentityId,
+                    period.CurrencyCode,
+                    period.FiscalReportingPeriodId,
+                    "z_reading_committed",
+                    $"fiscal-report-request:{requestId:D}",
+                    FiscalZReadingContract.ContractVersion,
+                    committedAt,
+                    command.RequestedByRef,
+                    command.ServiceIdentityRef,
+                    command.CorrelationId,
+                    ElectronicJournalReportFacts.FromZ(
+                        aggregate,
+                        reportReference,
+                        state.ResetCounterValue,
+                        state.ResetCounterValue,
+                        state.ZCounterValue,
+                        resultingZ,
+                        state.GrandTotalAmountMinorUnits,
+                        currentGta,
+                        resultingGta,
+                        resultingVersion),
+                    FiscalReportRequestId: requestId,
+                    XZReportId: reportId,
+                    BusinessDayDate: period.BusinessDayDate,
+                    IdempotencyReference: command.OperationKey),
+                cancellationToken).ConfigureAwait(false);
             await InsertAuditAsync(connection, transaction, command, identifiers, requestId, cancellationToken).ConfigureAwait(false);
 
             commitAttempted = true;

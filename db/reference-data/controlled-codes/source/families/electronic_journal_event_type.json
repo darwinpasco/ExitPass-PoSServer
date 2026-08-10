@@ -1,0 +1,30 @@
+{
+  "schema_version":"1.0",
+  "source_key":"controlled_codes.electronic_journal_event_type.v1",
+  "source_name":"Electronic Journal Event Type Controlled Codes",
+  "source_description":"Governed canonical fiscal event classifications.",
+  "governance_owner":"Engineering",
+  "source_ref":"Z-011A",
+  "code_sets":[{
+    "code_set_key":"electronic_journal_event_type",
+    "display_name":"Electronic Journal Event Type",
+    "description":"Versioned authoritative transition types represented in the canonical fiscal event stream.",
+    "governance_owner":"Engineering",
+    "source_ref":"Z-011A",
+    "is_active":true,
+    "effective_start_at":"2026-08-10T00:00:00Z",
+    "effective_end_at":null,
+    "codes":[
+      {"code_key":"fiscal_document_committed","display_name":"Fiscal Document Committed","description":"A complete fiscal document, numbering, status, and governed child facts committed atomically.","source_ref":"Z-011A","sort_order":10,"is_active":true,"is_deprecated":false,"effective_start_at":"2026-08-10T00:00:00Z","effective_end_at":null,"replaced_by_code_key":null},
+      {"code_key":"fiscal_document_voided","display_name":"Fiscal Document Voided","description":"A governed same-period fiscal-document void committed atomically.","source_ref":"Z-011A","sort_order":20,"is_active":true,"is_deprecated":false,"effective_start_at":"2026-08-10T00:00:00Z","effective_end_at":null,"replaced_by_code_key":null},
+      {"code_key":"fiscal_document_reprint_recorded","display_name":"Fiscal Document Reprint Recorded","description":"A governed reprint record, output reference, and copy sequence committed atomically with its canonical event.","source_ref":"Z-011A","sort_order":30,"is_active":true,"is_deprecated":false,"effective_start_at":"2026-08-10T00:00:00Z","effective_end_at":null,"replaced_by_code_key":null},
+      {"code_key":"fiscal_adjustment_recorded","display_name":"Fiscal Adjustment Recorded","description":"A governed adjustment committed by a future supported runtime.","source_ref":"Z-011A","sort_order":40,"is_active":true,"is_deprecated":false,"effective_start_at":"2026-08-10T00:00:00Z","effective_end_at":null,"replaced_by_code_key":null},
+      {"code_key":"digital_si_published","display_name":"Digital SI Published","description":"A governed Digital Sales Invoice publication transition committed by a future supported runtime.","source_ref":"Z-011A","sort_order":50,"is_active":true,"is_deprecated":false,"effective_start_at":"2026-08-10T00:00:00Z","effective_end_at":null,"replaced_by_code_key":null},
+      {"code_key":"x_reading_committed","display_name":"X Reading Committed","description":"An immutable X Reading observation committed atomically.","source_ref":"Z-011A","sort_order":60,"is_active":true,"is_deprecated":false,"effective_start_at":"2026-08-10T00:00:00Z","effective_end_at":null,"replaced_by_code_key":null},
+      {"code_key":"z_reading_committed","display_name":"Z Reading Committed","description":"An immutable Z Reading, period close, counter, and GTA transition committed atomically.","source_ref":"Z-011A","sort_order":70,"is_active":true,"is_deprecated":false,"effective_start_at":"2026-08-10T00:00:00Z","effective_end_at":null,"replaced_by_code_key":null},
+      {"code_key":"bir_sales_summary_committed","display_name":"BIR Sales Summary Committed","description":"An immutable BIR sales summary bound to its governing Z Reading committed atomically.","source_ref":"Z-011A","sort_order":80,"is_active":true,"is_deprecated":false,"effective_start_at":"2026-08-10T00:00:00Z","effective_end_at":null,"replaced_by_code_key":null},
+      {"code_key":"fiscal_report_exported","display_name":"Fiscal Report Exported","description":"A controlled fiscal-report export when a merged profile explicitly classifies export as a fiscal event.","source_ref":"Z-011A","sort_order":90,"is_active":true,"is_deprecated":false,"effective_start_at":"2026-08-10T00:00:00Z","effective_end_at":null,"replaced_by_code_key":null}
+    ]
+  }],
+  "notes":["Adjustment and Digital SI publication writers remain unavailable; POSLog and Annex E runtime are outside Z-011A authorization."]
+}

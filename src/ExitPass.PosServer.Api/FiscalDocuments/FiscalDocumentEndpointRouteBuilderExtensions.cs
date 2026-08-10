@@ -43,6 +43,19 @@ public static class FiscalDocumentEndpointRouteBuilderExtensions
             return Results.Json(response, statusCode: response.HttpStatusCode);
         });
 
+        group.MapPost("/{fiscalDocumentId:guid}/reprints", async (
+            Guid fiscalDocumentId,
+            RecordFiscalDocumentReprintRequest request,
+            FiscalDocumentReprintService service,
+            HttpContext context,
+            IHostEnvironment environment,
+            CancellationToken cancellationToken) =>
+        {
+            var response = await FiscalDocumentReprintEndpoint.RecordAsync(
+                fiscalDocumentId, request, service, context, environment, cancellationToken).ConfigureAwait(false);
+            return Results.Json(response, statusCode: response.HttpStatusCode);
+        }).RequireAuthorization(FiscalDocumentReprintAuthorization.RecordPolicyName);
+
         group.MapGet("/{fiscalDocumentId:guid}/digital-sales-invoice", async (
             Guid fiscalDocumentId,
             DigitalSalesInvoiceRenderService service,

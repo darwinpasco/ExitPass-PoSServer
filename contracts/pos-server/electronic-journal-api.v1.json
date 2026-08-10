@@ -1,0 +1,95 @@
+{
+  "contract_version": "pos-server-electronic-journal-api:v1",
+  "event_schema_version": "pos-server-electronic-journal-event:v1",
+  "semantic_hash_version": "pos-server-electronic-journal-event-semantic:sha256:v1",
+  "integrity_hash_version": "pos-server-electronic-journal-integrity:sha256:v1",
+  "chronology_version": "pos-server-electronic-journal-chronology:v1",
+  "export_version": "pos-server-electronic-journal-export:v1",
+  "canonical_stream_scope": [
+    "site_pos_server_id",
+    "fiscal_identity_id",
+    "currency_code"
+  ],
+  "routes": [
+    {
+      "method": "GET",
+      "path": "/v1/electronic-journal/events",
+      "permission": "electronic_journal.read",
+      "output": "application/json"
+    },
+    {
+      "method": "GET",
+      "path": "/v1/electronic-journal/exports/{format}",
+      "permission": "electronic_journal.export",
+      "formats": ["json", "csv"]
+    },
+    {
+      "method": "POST",
+      "path": "/v1/electronic-journal/integrity-verifications",
+      "permission": "electronic_journal.integrity.verify",
+      "output": "application/json"
+    },
+    {
+      "method": "POST",
+      "path": "/v1/fiscal-documents/{fiscalDocumentId}/reprints",
+      "permission": "fiscal_document.reprint.record",
+      "output": "application/json",
+      "source_transition": "canonical_reprint_and_electronic_journal_event"
+    }
+  ],
+  "required_scope": [
+    "site_pos_server_id",
+    "fiscal_identity_id",
+    "currency_code"
+  ],
+  "read_filters": [
+    "fiscal_reporting_period_id",
+    "fiscal_document_reference",
+    "fiscal_document_number",
+    "z_reading_reference",
+    "event_type",
+    "effective_from",
+    "effective_to",
+    "recorded_from",
+    "recorded_to",
+    "correlation_reference"
+  ],
+  "pagination": {
+    "kind": "stream_sequence_keyset_with_high_water",
+    "default_page_size": 100,
+    "maximum_page_size": 200,
+    "maximum_export_events": 10000,
+    "maximum_time_range_days": 31
+  },
+  "implemented_event_types": [
+    "fiscal_document_committed",
+    "fiscal_document_voided",
+    "fiscal_document_reprint_recorded",
+    "x_reading_committed",
+    "z_reading_committed",
+    "bir_sales_summary_committed"
+  ],
+  "reserved_event_types_without_runtime_writer": [
+    "fiscal_adjustment_recorded",
+    "digital_si_published",
+    "fiscal_report_exported"
+  ],
+  "retention": {
+    "classification": "fiscal_reconstruction_hold",
+    "delete_api": false,
+    "purge_runtime": false,
+    "duration": "UNRESOLVED_BY_FROZEN_CONTRACT"
+  },
+  "production_authority": {
+    "required_authority_class": "PRODUCTION",
+    "fixture_rejected": true,
+    "development_rejected": true,
+    "wildcard_scope_rejected": true
+  },
+  "out_of_scope": [
+    "poslog_v6_mapping",
+    "annex_e",
+    "historical_event_synthesis",
+    "destructive_retention_purge"
+  ]
+}

@@ -5,6 +5,9 @@ using ExitPass.PosServer.Persistence.Postgres.FiscalDocuments;
 using ExitPass.PosServer.Api.FiscalReports;
 using ExitPass.PosServer.Persistence.Postgres.FiscalReports;
 using ExitPass.PosServer.Runtime.FiscalReports;
+using ExitPass.PosServer.Api.ElectronicJournal;
+using ExitPass.PosServer.Runtime.ElectronicJournal;
+using ExitPass.PosServer.Persistence.Postgres.ElectronicJournal;
 
 namespace ExitPass.PosServer.Api.FiscalDocuments;
 
@@ -27,6 +30,9 @@ public static class FiscalDocumentServiceCollectionExtensions
             services.TryAddScoped<IFiscalXReadingRepository, UnavailableFiscalXReadingRepository>();
             services.TryAddScoped<IFiscalZCloseStateRepository, UnavailableFiscalZCloseStateRepository>();
             services.TryAddScoped<IFiscalZReadingRepository, UnavailableFiscalZReadingRepository>();
+            services.TryAddScoped<IBirSalesSummaryRepository, UnavailableBirSalesSummaryRepository>();
+            services.TryAddScoped<IElectronicJournalRepository, UnavailableElectronicJournalRepository>();
+            services.TryAddScoped<IFiscalDocumentReprintRepository, UnavailableFiscalDocumentReprintRepository>();
         }
         else if (!IsValidNpgsqlConnectionString(connectionString))
         {
@@ -36,6 +42,9 @@ public static class FiscalDocumentServiceCollectionExtensions
             services.TryAddScoped<IFiscalXReadingRepository, UnavailableFiscalXReadingRepository>();
             services.TryAddScoped<IFiscalZCloseStateRepository, UnavailableFiscalZCloseStateRepository>();
             services.TryAddScoped<IFiscalZReadingRepository, UnavailableFiscalZReadingRepository>();
+            services.TryAddScoped<IBirSalesSummaryRepository, UnavailableBirSalesSummaryRepository>();
+            services.TryAddScoped<IElectronicJournalRepository, UnavailableElectronicJournalRepository>();
+            services.TryAddScoped<IFiscalDocumentReprintRepository, UnavailableFiscalDocumentReprintRepository>();
         }
         else
         {
@@ -49,10 +58,14 @@ public static class FiscalDocumentServiceCollectionExtensions
             services.TryAddScoped<IFiscalXReadingRepository, PostgresFiscalXReadingRepository>();
             services.TryAddScoped<IFiscalZCloseStateRepository, PostgresFiscalZCloseStateRepository>();
             services.TryAddScoped<IFiscalZReadingRepository, PostgresFiscalZReadingRepository>();
+            services.TryAddScoped<IBirSalesSummaryRepository, PostgresBirSalesSummaryRepository>();
+            services.TryAddScoped<IElectronicJournalRepository, PostgresElectronicJournalRepository>();
+            services.TryAddScoped<IFiscalDocumentReprintRepository, PostgresFiscalDocumentReprintRepository>();
         }
 
         services.AddScoped<FiscalDocumentCreationService>();
         services.AddScoped<FiscalDocumentVoidService>();
+        services.AddScoped<FiscalDocumentReprintService>();
         services.AddScoped<FiscalDocumentReadService>();
         services.AddScoped<DigitalSalesInvoiceRenderService>();
         services.AddScoped<DigitalSalesInvoicePresentationAdapter>();
@@ -60,6 +73,10 @@ public static class FiscalDocumentServiceCollectionExtensions
         services.AddScoped<FiscalXReadingService>();
         services.AddScoped<FiscalZCloseStateInitializationService>();
         services.AddScoped<FiscalZReadingService>();
+        services.AddScoped<BirSalesSummaryService>();
+        services.AddSingleton<BirSalesSummaryOutputRenderer>();
+        services.AddScoped<ElectronicJournalService>();
+        services.AddSingleton<ElectronicJournalExportRenderer>();
         services.AddSingleton<FiscalReportPresentationService>();
         services.AddSingleton<FiscalReportOutputRenderer>();
         services.TryAddSingleton<Microsoft.AspNetCore.Authorization.IAuthorizationMiddlewareResultHandler, FiscalReportOutputAuthorizationResultHandler>();
@@ -118,6 +135,35 @@ public static class FiscalDocumentServiceCollectionExtensions
                 policy => policy
                     .AddAuthenticationSchemes(SalesInvoiceHeaderProfileAdminAuthorization.AuthenticationScheme)
                     .RequireClaim(SalesInvoiceHeaderProfileAdminAuthorization.PermissionClaimType, FiscalReportOutputAuthorization.ZExportPermission));
+            options.AddPolicy(
+                BirSalesSummaryAuthorization.GeneratePolicyName,
+                policy => policy.AddAuthenticationSchemes(SalesInvoiceHeaderProfileAdminAuthorization.AuthenticationScheme)
+                    .RequireClaim(SalesInvoiceHeaderProfileAdminAuthorization.PermissionClaimType, BirSalesSummaryAuthorization.GeneratePermission));
+            options.AddPolicy(
+                BirSalesSummaryAuthorization.ReadPolicyName,
+                policy => policy.AddAuthenticationSchemes(SalesInvoiceHeaderProfileAdminAuthorization.AuthenticationScheme)
+                    .RequireClaim(SalesInvoiceHeaderProfileAdminAuthorization.PermissionClaimType, BirSalesSummaryAuthorization.ReadPermission));
+            options.AddPolicy(
+                BirSalesSummaryAuthorization.ExportPolicyName,
+                policy => policy.AddAuthenticationSchemes(SalesInvoiceHeaderProfileAdminAuthorization.AuthenticationScheme)
+                    .RequireClaim(SalesInvoiceHeaderProfileAdminAuthorization.PermissionClaimType, BirSalesSummaryAuthorization.ExportPermission));
+            options.AddPolicy(
+                ElectronicJournalAuthorization.ReadPolicyName,
+                policy => policy.AddAuthenticationSchemes(SalesInvoiceHeaderProfileAdminAuthorization.AuthenticationScheme)
+                    .RequireClaim(SalesInvoiceHeaderProfileAdminAuthorization.PermissionClaimType, ElectronicJournalAuthorization.ReadPermission));
+            options.AddPolicy(
+                ElectronicJournalAuthorization.ExportPolicyName,
+                policy => policy.AddAuthenticationSchemes(SalesInvoiceHeaderProfileAdminAuthorization.AuthenticationScheme)
+                    .RequireClaim(SalesInvoiceHeaderProfileAdminAuthorization.PermissionClaimType, ElectronicJournalAuthorization.ExportPermission));
+            options.AddPolicy(
+                ElectronicJournalAuthorization.IntegrityPolicyName,
+                policy => policy.AddAuthenticationSchemes(SalesInvoiceHeaderProfileAdminAuthorization.AuthenticationScheme)
+                    .RequireClaim(SalesInvoiceHeaderProfileAdminAuthorization.PermissionClaimType, ElectronicJournalAuthorization.IntegrityPermission));
+            options.AddPolicy(
+                FiscalDocumentReprintAuthorization.RecordPolicyName,
+                policy => policy
+                    .AddAuthenticationSchemes(SalesInvoiceHeaderProfileAdminAuthorization.AuthenticationScheme)
+                    .RequireClaim(SalesInvoiceHeaderProfileAdminAuthorization.PermissionClaimType, FiscalDocumentReprintAuthorization.RecordPermission));
         });
 
         return services;

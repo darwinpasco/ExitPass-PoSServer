@@ -1,0 +1,22 @@
+{
+  "schema_version":"1.0",
+  "source_key":"controlled_codes.fiscal_reprint_type.v1",
+  "source_name":"Fiscal Reprint Type Controlled Codes",
+  "source_description":"Governed canonical fiscal-document reprint types.",
+  "governance_owner":"Engineering",
+  "source_ref":"Z-011A",
+  "code_sets":[{
+    "code_set_key":"fiscal_reprint_type",
+    "display_name":"Fiscal Reprint Type",
+    "description":"Stable classification of a recorded fiscal presentation copy.",
+    "governance_owner":"Engineering",
+    "source_ref":"Z-011A",
+    "is_active":true,
+    "effective_start_at":"2026-08-10T00:00:00Z",
+    "effective_end_at":null,
+    "codes":[
+      {"code_key":"fiscal_document_copy","display_name":"Fiscal Document Copy","description":"A labeled copy of an already committed fiscal document; no new fiscal issuance or number is created.","source_ref":"Z-011A","sort_order":10,"is_active":true,"is_deprecated":false,"effective_start_at":"2026-08-10T00:00:00Z","effective_end_at":null,"replaced_by_code_key":null}
+    ]
+  }],
+  "notes":["This family records presentation-copy evidence only and does not authorize printing or fiscal mutation."]
+}

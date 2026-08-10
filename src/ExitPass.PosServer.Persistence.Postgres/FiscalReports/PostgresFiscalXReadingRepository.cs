@@ -1,5 +1,7 @@
 using System.Data;
 using ExitPass.PosServer.Runtime.FiscalReports;
+using ExitPass.PosServer.Runtime.ElectronicJournal;
+using ExitPass.PosServer.Persistence.Postgres.ElectronicJournal;
 using Npgsql;
 using NpgsqlTypes;
 
@@ -59,6 +61,27 @@ public sealed class PostgresFiscalXReadingRepository(
                 await InsertScopeAsync(connection, transaction, period, identifiers, requestId, cancellationToken).ConfigureAwait(false);
                 await InsertSnapshotAsync(connection, transaction, command, period, aggregate, identifiers, requestId, reportId, reportReference, committedAt, cancellationToken).ConfigureAwait(false);
                 await InsertChildrenAsync(connection, transaction, period.FiscalIdentityId, aggregate, identifiers, reportId, cancellationToken).ConfigureAwait(false);
+                await PostgresElectronicJournalWriter.AppendAsync(
+                    connection,
+                    transaction,
+                    new ElectronicJournalAppendRequest(
+                        period.SitePosServerId,
+                        period.FiscalIdentityId,
+                        period.CurrencyCode,
+                        period.FiscalReportingPeriodId,
+                        "x_reading_committed",
+                        $"fiscal-report-request:{requestId:D}",
+                        FiscalXReadingContract.ContractVersion,
+                        command.ObservedAt,
+                        command.RequestedByRef,
+                        command.ServiceIdentityRef,
+                        command.CorrelationId,
+                        ElectronicJournalReportFacts.FromX(aggregate, reportReference),
+                        FiscalReportRequestId: requestId,
+                        XZReportId: reportId,
+                        BusinessDayDate: period.BusinessDayDate,
+                        IdempotencyReference: command.OperationKey),
+                    cancellationToken).ConfigureAwait(false);
                 await InsertAuditAsync(connection, transaction, command, identifiers, requestId, reportReference, cancellationToken).ConfigureAwait(false);
 
                 await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);

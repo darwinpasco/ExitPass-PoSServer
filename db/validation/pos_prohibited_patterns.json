@@ -12,14 +12,14 @@
     {
       "id": "P001",
       "severity": "P0",
-      "description": "Database functions are limited to approved fiscal snapshot and governed Z close-boundary functions.",
-      "regex": "\\bCREATE\\s+(OR\\s+REPLACE\\s+)?FUNCTION\\s+(?!pos\\.(reject_applied_stat_facts_mutation|reject_fiscal_reporting_snapshot_mutation|protect_closed_fiscal_reporting_period|validate_fiscal_document_reporting_period_assignment|protect_fiscal_z_close_state_mutation|validate_fiscal_z_close_state_evidence|validate_fiscal_z_close_transition_values|apply_fiscal_z_close_state_transition)\\b)"
+      "description": "Database functions are limited to approved fiscal snapshot, Z close-boundary, canonical reprint, and Electronic Journal immutability functions.",
+      "regex": "\\bCREATE\\s+(OR\\s+REPLACE\\s+)?FUNCTION\\s+(?!pos\\.(reject_applied_stat_facts_mutation|reject_fiscal_reporting_snapshot_mutation|reject_electronic_journal_mutation|reject_canonical_reprint_mutation|require_canonical_reprint_journal_event|protect_closed_fiscal_reporting_period|validate_fiscal_document_reporting_period_assignment|protect_fiscal_z_close_state_mutation|validate_fiscal_z_close_state_evidence|validate_fiscal_z_close_transition_values|apply_fiscal_z_close_state_transition)\\b)"
     },
     {
       "id": "P002",
       "severity": "P0",
-      "description": "Database triggers are limited to approved immutable fiscal snapshot and governed Z close-boundary guards.",
-      "regex": "\\bCREATE\\s+(OR\\s+REPLACE\\s+)?TRIGGER\\s+(?!(trg_fiscal_doc_applied_stat_facts_immutable|trg_fiscal_reporting_contract_versions_immutable|trg_fiscal_reporting_periods_closed_immutable|trg_x_z_reports_immutable|trg_fiscal_report_tender_breakdowns_immutable|trg_fiscal_report_discount_breakdowns_immutable|trg_fiscal_report_fiscal_number_ranges_immutable|trg_fiscal_report_sequence_gaps_immutable|trg_fiscal_z_counter_snapshots_immutable|trg_bir_sales_summary_reports_immutable|trg_annex_e_reports_immutable|trg_fiscal_documents_reporting_period_assignment|trg_fiscal_z_close_state_transitions_immutable|trg_fiscal_z_close_state_transition_values_immutable|trg_fiscal_z_close_states_governed_mutation)\\b)"
+      "description": "Database triggers are limited to approved immutable fiscal snapshot, Z close-boundary, canonical reprint, and Electronic Journal guards.",
+      "regex": "\\bCREATE\\s+(OR\\s+REPLACE\\s+)?TRIGGER\\s+(?!(trg_fiscal_doc_applied_stat_facts_immutable|trg_fiscal_reporting_contract_versions_immutable|trg_fiscal_reporting_periods_closed_immutable|trg_x_z_reports_immutable|trg_fiscal_report_tender_breakdowns_immutable|trg_fiscal_report_discount_breakdowns_immutable|trg_fiscal_report_fiscal_number_ranges_immutable|trg_fiscal_report_sequence_gaps_immutable|trg_fiscal_z_counter_snapshots_immutable|trg_bir_sales_summary_reports_immutable|trg_annex_e_reports_immutable|trg_fiscal_documents_reporting_period_assignment|trg_fiscal_z_close_state_transitions_immutable|trg_fiscal_z_close_state_transition_values_immutable|trg_fiscal_z_close_states_governed_mutation|trg_electronic_journal_records_immutable|trg_electronic_journal_access_audit_immutable|trg_reprint_requests_immutable|trg_reprint_requests_require_journal|trg_reprint_output_refs_immutable)\\b)"
     },
     {
       "id": "P003",

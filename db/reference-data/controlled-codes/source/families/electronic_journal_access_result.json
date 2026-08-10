@@ -1,0 +1,8 @@
+{
+  "schema_version":"1.0","source_key":"controlled_codes.electronic_journal_access_result.v1","source_name":"Electronic Journal Access Result Controlled Codes","source_description":"Governed privacy-safe EJ access outcomes.","governance_owner":"Engineering","source_ref":"Z-011A",
+  "code_sets":[{"code_set_key":"electronic_journal_access_result","display_name":"Electronic Journal Access Result","description":"Safe outcomes for append-only EJ access evidence.","governance_owner":"Engineering","source_ref":"Z-011A","is_active":true,"effective_start_at":"2026-08-10T00:00:00Z","effective_end_at":null,"codes":[
+    {"code_key":"allowed","display_name":"Allowed","description":"The governed access completed successfully.","source_ref":"Z-011A","sort_order":10,"is_active":true,"is_deprecated":false,"effective_start_at":"2026-08-10T00:00:00Z","effective_end_at":null,"replaced_by_code_key":null},
+    {"code_key":"denied","display_name":"Denied","description":"The governed access was denied without disclosing hidden scope facts.","source_ref":"Z-011A","sort_order":20,"is_active":true,"is_deprecated":false,"effective_start_at":"2026-08-10T00:00:00Z","effective_end_at":null,"replaced_by_code_key":null},
+    {"code_key":"failed","display_name":"Failed","description":"The governed access failed safely.","source_ref":"Z-011A","sort_order":30,"is_active":true,"is_deprecated":false,"effective_start_at":"2026-08-10T00:00:00Z","effective_end_at":null,"replaced_by_code_key":null}
+  ]}],"notes":[]
+}
