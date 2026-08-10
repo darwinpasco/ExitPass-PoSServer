@@ -15,6 +15,8 @@
 
 This review revalidates the frozen Annex E-1 contract against merged Z-010 BIR Sales Summary and Z-011A Electronic Journal behavior. It does not authorize or implement an Annex E runtime.
 
+> **Historical-status notice:** the original `BLOCKED_PENDING_ACCOUNTING_CONFIRMATION` conclusion below records Z-012A at the time it was issued. It was superseded on 2026-08-10 by `Z-012B-ACCOUNTING-APPROVAL-001` and the [Z-012A2 revalidation](ExitPass_POS_Server_Z012A2_Annex_E1_Accounting_Approval_and_Runtime_Authorization_Revalidation_v1.0.md). The approved proposal itself remains unchanged.
+
 ## 2. Source evidence
 
 The sources were inspected in the approved authority order. The local source package was sufficient for this revalidation; no web research was used.
@@ -248,4 +250,10 @@ Accounting must answer AE-DR-006 through AE-DR-009 before a generator task start
 
 Z-012A1 records the 2026-08-10 Accounting statement as `ACCOUNTING_AUTHORITY_AND_APPROVAL_IN_PRINCIPLE_CONFIRMED` and prepares one exact, hash-bound [Accounting Calculation Profile Proposal](ExitPass_POS_Server_Annex_E1_Accounting_Calculation_Profile_Proposal_v1.0.md) plus [Approval Form](ExitPass_POS_Server_Annex_E1_Accounting_Calculation_Profile_Approval_Form_v1.0.md).
 
-This does not revise Z-012A's generator decision. AE-DR-006 through AE-DR-009 remain `REQUIRES_ACCOUNTING_APPROVAL`, the proposal remains `PENDING_EXACT_PROFILE_APPROVAL`, and `EXECUTABLE_CALCULATION_PROFILE_NOT_YET_APPROVED` remains controlling. No Z-012B runtime authorization is issued by Z-012A1.
+This paragraph preserves the Z-012A1 pre-approval posture. It was superseded by exact Accounting approval record `Z-012B-ACCOUNTING-APPROVAL-001`; current authorization is governed by Z-012A2.
+
+## 13. Z-012A2 superseding decision
+
+The approved proposal filename, version, Annex E profile, decision scope, executable content, and SHA-256 `36bbba7f014f5713955d50fe2fdab63f0cb6e80aab77713fe5fef45fbe7c1a4f` were verified exactly. AE-DR-006 through AE-DR-009 are resolved without modifying the proposal. The current decision is `AUTHORIZED_FOR_Z012B_LOCAL_BOUNDED_RUNTIME`.
+
+The missing Manual SI/OR, Sales Overrun/Overflow, known-zero attestation, header snapshot, correction-lineage, artifact, API, authorization, and test capabilities are authorized Z-012B implementation work. Nonzero unresolved privilege facts remain fail closed. Controlled UAT, external delivery, Production, E-2 through E-5, and ARTS POSLog remain unauthorized.

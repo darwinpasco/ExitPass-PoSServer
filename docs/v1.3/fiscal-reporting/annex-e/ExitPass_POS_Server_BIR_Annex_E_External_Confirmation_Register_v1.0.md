@@ -4,18 +4,14 @@
 
 This register isolates questions that internal architecture cannot answer. Silence, an internal recommendation, or successful software tests do not satisfy these items.
 
-It contains 14 currently active `REQUIRES_EXTERNAL_CONFIRMATION` records plus two deferred future-profile questions (AE-DR-013 and AE-DR-014). The deferred questions do not block bounded E-1.
+It contains 10 currently active `REQUIRES_EXTERNAL_CONFIRMATION` records plus two deferred future-profile questions (AE-DR-013 and AE-DR-014). The deferred questions do not block bounded E-1.
 
-Z-012A revalidated this exact count on 2026-08-10 PHT. Merged Z-010 and Z-011A did not satisfy any external confirmation. They improve authoritative source availability and traceability but do not supply Accounting, BIR/examiner, or Legal/Compliance approval.
+Z-012A originally revalidated 14 active confirmations on 2026-08-10 PHT. Accounting subsequently resolved AE-DR-006 through AE-DR-009 through `Z-012B-ACCOUNTING-APPROVAL-001`; the remaining 10 are unchanged.
 
 | ID | External question | Why internal resolution is insufficient / source ambiguity | Proposed question and acceptable evidence | Blocking impact | Interim safe posture |
 | --- | --- | --- | --- | --- | --- |
 | AE-DR-002 | Is deterministic XLSX using RMO 24-2023 E-1 accepted as the official electronic artifact, and are PDF/JSON required companions? | Official workbook is XLSX; API contract says formats remain open. | Written BIR/examiner response identifying accepted artifact and companions; signed accreditation minutes also acceptable. | Controlled UAT | Build only the approved internally labeled E-1 profile; no BIR-accepted claim. |
 | AE-DR-004 | Is a filename prescribed? | No filename in local sources. | Written exact pattern, allowed characters, and duplicate/correction naming. | Controlled UAT | Use approved internal safe filename, clearly non-prescriptive. |
-| AE-DR-006 | How do official numbers map to 32 physical columns, especially `23=8-19` and `24=6-16-8`? | Workbook numbering/formulas are ambiguous. | Accounting/BIR mapping table naming every operand and sign; approved worked example. | Generator implementation | Model fields but do not calculate D26/D29 or certify D27 equation. |
-| AE-DR-007 | What is Manual SI/OR sales, its period rule, and authoritative source? | Label cites RR 16-2018 but project has no governed source. | Accounting/BIR definition, inclusion/sign rule, zero/N/A rule, and source evidence requirements. | Schema implementation | No silent zero; generation blocked when authoritative value is unavailable. |
-| AE-DR-008 | What is Sales Overrun/Overflow? | Label only. | Accounting/BIR definition, source, sign, zero/N/A rule, and worked example. | Schema implementation | No truncation or inferred tender variance. |
-| AE-DR-009 | What is Total Income? | No equation in workbook. | Accounting/BIR equation naming exact inputs, sign, and zero rule. | Generator implementation | Never equate to gross/net/GTA by convenience. |
 | AE-DR-010 | Which Remarks values/blanks are accepted? | Free-form column has no value contract. | Examiner-approved allowed values and blank rule. | Controlled UAT | Use approved internal controlled codes only; retain external acceptance gate. |
 | AE-DR-011A | Are explicit zero values acceptable for inactive NAAC/Solo Parent categories? | Physical columns exist but applicability/null rules are absent. | Examiner response for zero versus blank/N/A and required active support. | Controlled UAT | Record explicit classification absence; unknown blocks. |
 | AE-DR-012 | Where do Diplomat and other VAT privileges map? | BRD REP-012 is explicitly open. | Accounting/BIR field mapping, tax/discount distinction, and worked example. | Nonzero privilege path | Fail closed for a period containing unsupported treatment. |
@@ -33,10 +29,6 @@ Z-012A revalidated this exact count on 2026-08-10 PHT. Merged Z-010 and Z-011A d
 |---|---|---|
 | AE-DR-002 | `REQUIRES_BIR_OR_EXAMINER_CONFIRMATION` | `BLOCKING_CONTROLLED_UAT`, `BLOCKING_EXTERNAL_DELIVERY`, `BLOCKING_PRODUCTION` |
 | AE-DR-004 | `REQUIRES_BIR_OR_EXAMINER_CONFIRMATION` | `BLOCKING_CONTROLLED_UAT`, `BLOCKING_EXTERNAL_DELIVERY`, `BLOCKING_PRODUCTION` |
-| AE-DR-006 | `REQUIRES_ACCOUNTING_APPROVAL` | `BLOCKING_INITIAL_GENERATOR`, `BLOCKING_CONTROLLED_UAT`, `BLOCKING_PRODUCTION` |
-| AE-DR-007 | `REQUIRES_ACCOUNTING_APPROVAL` | `BLOCKING_INITIAL_GENERATOR`, `BLOCKING_SCHEMA_IMPLEMENTATION`, `BLOCKING_CONTROLLED_UAT`, `BLOCKING_PRODUCTION` |
-| AE-DR-008 | `REQUIRES_ACCOUNTING_APPROVAL` | `BLOCKING_INITIAL_GENERATOR`, `BLOCKING_SCHEMA_IMPLEMENTATION`, `BLOCKING_CONTROLLED_UAT`, `BLOCKING_PRODUCTION` |
-| AE-DR-009 | `REQUIRES_ACCOUNTING_APPROVAL` | `BLOCKING_INITIAL_GENERATOR`, `BLOCKING_CONTROLLED_UAT`, `BLOCKING_PRODUCTION` |
 | AE-DR-010 | `REQUIRES_BIR_OR_EXAMINER_CONFIRMATION` | `BLOCKING_CONTROLLED_UAT`, `BLOCKING_EXTERNAL_DELIVERY`, `BLOCKING_PRODUCTION` |
 | AE-DR-011A | `REQUIRES_BIR_OR_EXAMINER_CONFIRMATION` | `BLOCKING_NONZERO_PRIVILEGE_PATH`, `BLOCKING_CONTROLLED_UAT`, `BLOCKING_PRODUCTION` |
 | AE-DR-012 | `REQUIRES_ACCOUNTING_APPROVAL` | `BLOCKING_NONZERO_PRIVILEGE_PATH`, `BLOCKING_CONTROLLED_UAT`, `BLOCKING_PRODUCTION` |
@@ -46,7 +38,7 @@ Z-012A revalidated this exact count on 2026-08-10 PHT. Merged Z-010 and Z-011A d
 | AE-DR-020A | `REQUIRES_BIR_OR_EXAMINER_CONFIRMATION` | `BLOCKING_SCHEMA_IMPLEMENTATION`, `BLOCKING_CONTROLLED_UAT`, `BLOCKING_PRODUCTION` |
 | AE-DR-024 | `REQUIRES_BIR_OR_EXAMINER_CONFIRMATION` | `BLOCKING_CONTROLLED_UAT`, `BLOCKING_EXTERNAL_DELIVERY`, `BLOCKING_PRODUCTION` |
 
-Exactly 14 rows appear in this table. The questions, acceptable evidence, and fail-closed posture in the primary table remain controlling. AE-DR-013 and AE-DR-014 remain separate deferred E-2 through E-5 matters.
+Exactly 10 rows appear in this table. The questions, acceptable evidence, and fail-closed posture in the primary table remain controlling. AE-DR-013 and AE-DR-014 remain separate deferred E-2 through E-5 matters.
 
 ## Evidence handling
 
@@ -59,4 +51,15 @@ The 2026-08-10 Accounting statement establishes `ACCOUNTING_AUTHORITY_AND_APPROV
 * [Accounting Calculation Profile Proposal](ExitPass_POS_Server_Annex_E1_Accounting_Calculation_Profile_Proposal_v1.0.md)
 * [Accounting Calculation Profile Approval Form](ExitPass_POS_Server_Annex_E1_Accounting_Calculation_Profile_Approval_Form_v1.0.md)
 
-All four rows remain active external confirmations and continue to block initial generation until the exact profile version and SHA-256 are approved. The register therefore still contains exactly 14 unresolved external confirmations.
+This section records the pre-approval Z-012A1 posture. It was superseded on 2026-08-10 by `Z-012B-ACCOUNTING-APPROVAL-001` after exact filename, version, profile, scope, content, and SHA-256 verification.
+
+## Z-012A2 resolved Accounting confirmations
+
+| ID | Resolution | Approval evidence | Current implementation posture |
+|---|---|---|---|
+| AE-DR-006 | Exact numbered-field mapping, named operands, formulas, source classes, and zero-tolerance reconciliations approved | `Z-012B-ACCOUNTING-APPROVAL-001`; immutable profile SHA-256 `36bbba7f014f5713955d50fe2fdab63f0cb6e80aab77713fe5fef45fbe7c1a4f` | Implement exact approved profile in Z-012B |
+| AE-DR-007 | Exact Manual SI/OR definition, period rule, inclusion/exclusion, first-class source contract, and known-zero rule approved | Same approval record and profile | Z-012B implements the first-class fact and attestation; missing remains fail closed |
+| AE-DR-008 | Exact accumulated-sales-capacity overrun definition, exclusions, first-class source/event contract, and known-zero rule approved | Same approval record and profile | Z-012B implements the first-class fact/event and attestation; missing remains fail closed |
+| AE-DR-009 | Exact Total Income definition `D29=D27+D06+D28` and rejected alternatives approved | Same approval record and profile | Implement exact checked minor-unit derivation in Z-012B |
+
+These four items are no longer active external confirmations. No unrelated Accounting, BIR/examiner, Legal/Compliance, or deferred decision is resolved by this record.

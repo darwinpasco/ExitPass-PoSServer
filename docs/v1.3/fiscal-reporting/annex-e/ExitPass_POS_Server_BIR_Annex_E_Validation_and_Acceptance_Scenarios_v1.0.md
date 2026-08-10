@@ -4,18 +4,18 @@
 
 Every scenario uses synthetic data. A successful action is read-only with respect to fiscal documents, Z, counters, GTA, periods, and sequences. Audit records contain references and outcomes, not output payloads or customer data.
 
-All project-owned decisions are approved under `Z-009B-USER-APPROVAL-001`. `PENDING_EXTERNAL` means authoritative external evidence is still required. Z-012A confirms that AE-DR-006 through AE-DR-009 block the initial generator; a fail-closed nonzero privilege scenario can be design-ready only after those common row blockers are resolved.
+All project-owned decisions are approved under `Z-009B-USER-APPROVAL-001`. AE-DR-006 through AE-DR-009 are approved under `Z-012B-ACCOUNTING-APPROVAL-001`. `PENDING_EXTERNAL` means unrelated authoritative external evidence is still required; nonzero unresolved privilege scenarios remain fail closed.
 
 ## 2. Scenarios
 
 | ID | Precondition / authoritative input | Action | Expected output and validation | Safe error | Audit / mutation | Readiness |
 | --- | --- | --- | --- | --- | --- | --- |
 | AE-AC-001 | Closed period, committed Z, complete approved profile, normal VATable facts | Generate E-1 | Exact H01:H10 and D01:D32; all reconciliations exact | None | `annex_e_generated`; no fiscal mutation | User gates AE-DR-001/002A/003A/004A/005A/010A/011/016A/017/018/019A/021/022/024A; external mandatory-field gates remain |
-| AE-AC-002 | Committed empty-period Z | Generate | One zero row only after Manual SI/OR, overrun/overflow, Total Income, and formula rules supply authoritative known-zero behavior; blank SI range; equal GTA; advanced Z; controlled `NO_ACTIVITY` | `annex_e_contract_unresolved` until AE-DR-006/007/008/009 are approved | Failure/none before approval; success/none after complete sources | Approved design AE-DR-010A/021; initial generator still blocked |
+| AE-AC-002 | Committed empty-period Z plus exact-scope/period zero attestations | Generate | One zero row; blank SI range; equal GTA; advanced Z; controlled `NO_ACTIVITY`; approved equations reconcile | `annex_e_source_unavailable` if any required attestation is absent | Success only with complete sources; no fiscal mutation | Authorized Z-012B implementation scenario |
 | AE-AC-003 | Z has VATable, VAT-exempt, zero-rated values | Generate | Copy recorded categories without tax recalculation | None if profile complete | Success/none | Ready after common gates |
 | AE-AC-004 | Z has separate SC/PWD discount and VAT-removal children | Generate | D12/D13/D20/D21 exact; no identity | None | Success/none | Ready after common gates |
 | AE-AC-005 | Z tenders contain cash, QRPH, card; sum equals net | Generate | No tender columns; tender validation passes | None | Success/none | Ready after common gates |
-| AE-AC-006 | Same-period governed void | Generate | D18 copied; active sale facts remain Z-authoritative | None | Success/none | Formula gate AE-DR-006 |
+| AE-AC-006 | Same-period governed void | Generate | D07 adds the void magnitude, D18 records it, D19 deducts it once, and approved D27 reconciles | None | Success/none | Approved AE-DR-006 |
 | AE-AC-007 | Cancellation classification exists but no approved E-1 mapping | Generate | No file | `annex_e_unsupported_classification` | Denial/none | Ready fail-closed behavior under AE-DR-015 |
 | AE-AC-008 | Nonzero refund source | Generate | No file; do not fold into Returns | `annex_e_unsupported_classification` | Denial/none | Ready fail-closed behavior under AE-DR-015 |
 | AE-AC-009 | Nonzero return source | Generate | No file until sign/period/VAT mapping is separately governed | `annex_e_unsupported_classification` | Denial/none | Ready fail-closed behavior under AE-DR-015 |
@@ -48,8 +48,8 @@ All project-owned decisions are approved under `Z-009B-USER-APPROVAL-001`. `PEND
 | AE-AC-036 | Source snapshot malformed | Generate | No file and no live recomputation | `annex_e_malformed_source` | Safe support ref/none | Runtime task |
 | AE-AC-037 | One profile contains mixed currencies | Generate | No file | `annex_e_mixed_currency` | Failure/none | Runtime task |
 | AE-AC-038 | Multiple fiscal ranges/series in one Z | Generate | Fail; do not flatten or create extra detail rows | `annex_e_range_ambiguous` | Failure/none | Approved AE-DR-022; row grain resolved AE-DR-003 |
-| AE-AC-039 | Nonzero manual SI/OR amount without approved source | Generate | No file | `annex_e_source_unavailable` | Failure/none | `BLOCKED` AE-DR-007 |
-| AE-AC-040 | Nonzero overrun/overflow or total income has no equation | Generate | No file | `annex_e_contract_unresolved` | Failure/none | `BLOCKED` AE-DR-008/009 |
+| AE-AC-039 | Manual SI/OR fact absent, duplicated, wrong-period, or not `RECORDED`/`ATTESTED_ZERO` | Generate | No file | `annex_e_source_unavailable` | Failure/none | Required approved AE-DR-007 source validation |
+| AE-AC-040 | Overrun fact absent/unclassified or D29 does not use exact approved operands | Generate | No file | `annex_e_source_unavailable` or `annex_e_reconciliation_failed` | Failure/none | Required approved AE-DR-008/009 validation |
 | AE-AC-041 | E-2 request under E-1-only runtime | Generate | Reject wrong profile | `annex_e_profile_unsupported` | Denial/none | Expected if AE-DR-001 approves E-1 only |
 | AE-AC-042 | Export read by unauthorized caller | Read/download | 403 or hidden 404 by scope posture | `forbidden`/`not_found` | Denial without payload/none | Runtime task |
 | AE-AC-043 | Generation succeeds | Compare DB manifests | Only governed Annex metadata/export evidence changes | None | Audit allowed; fiscal state unchanged | Runtime task |
@@ -82,8 +82,8 @@ Future proof must compare fiscal documents and children, statutory facts, tender
 
 | ID | Precondition | Action | Expected result |
 |---|---|---|---|
-| AE-AC-046 | Profile version/hash not approved | Attempt runtime authorization | Block; AE-DR-006 through AE-DR-009 remain unresolved |
-| AE-AC-047 | Exact profile approved by Accounting | Validate D07, D16, D19, D25, D26, D27, and D29 | Named-operand equations reconcile with zero tolerance |
+| AE-AC-046 | Profile version/hash differs from the approved identity | Attempt runtime authorization | Block; require new version, hash, and Accounting approval |
+| AE-AC-047 | Exact profile approved by Accounting under `Z-012B-ACCOUNTING-APPROVAL-001` | Validate D07, D16, D19, D25, D26, D27, and D29 | Named-operand equations reconcile with zero tolerance |
 | AE-AC-048 | Manual SI/OR fact missing | Evaluate D06 | Block; missing is not zero |
 | AE-AC-049 | Manual SI/OR fact is `ATTESTED_ZERO` for exact scope/period | Evaluate D06 | Emit recorded zero and retain attestation lineage |
 | AE-AC-050 | Overrun/overflow fact missing | Evaluate D28 | Block; runtime capacity checks do not prove zero |
@@ -93,4 +93,4 @@ Future proof must compare fiscal documents and children, statutory facts, tender
 | AE-AC-054 | D27 is populated from VAT-inclusive Z net | Validate formula profile | Reject; use the approved D07-D19-D09 equation only |
 | AE-AC-055 | D29 uses gross, tender, or GTA basis | Validate formula profile | Reject; only the exact approved profile may execute |
 
-These scenarios become runtime acceptance criteria only after Accounting approves the exact profile version and SHA-256.
+These are authorized Z-012B runtime acceptance criteria. They do not authorize Controlled UAT, external delivery, or Production.

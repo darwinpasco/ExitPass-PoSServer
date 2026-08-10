@@ -6,22 +6,23 @@ This package records the source-grounded contract analysis required before an An
 
 ## Reading order
 
-1. [Z-012A1 Accounting Calculation Profile Proposal](ExitPass_POS_Server_Annex_E1_Accounting_Calculation_Profile_Proposal_v1.0.md)
-2. [Z-012A1 Accounting Approval Form](ExitPass_POS_Server_Annex_E1_Accounting_Calculation_Profile_Approval_Form_v1.0.md)
-3. [Z-012A Runtime Authorization Revalidation](ExitPass_POS_Server_Z012A_Annex_E1_Runtime_Authorization_Revalidation_v1.0.md)
-4. [Source and Applicability Assessment](ExitPass_POS_Server_BIR_Annex_E_Source_and_Applicability_Assessment_v1.0.md)
-5. [Decision Resolution Summary](ExitPass_POS_Server_BIR_Annex_E_Decision_Resolution_Summary_v1.0.md)
-6. [Open Decisions and Assumptions Register](ExitPass_POS_Server_BIR_Annex_E_Open_Decisions_and_Assumptions_Register_v1.0.md)
-7. [User Approval Record](ExitPass_POS_Server_BIR_Annex_E_User_Approval_Record_v1.0.md)
-8. [External Confirmation Register](ExitPass_POS_Server_BIR_Annex_E_External_Confirmation_Register_v1.0.md)
-9. [Field Dictionary](ExitPass_POS_Server_BIR_Annex_E_Field_Dictionary_v1.0.md)
-10. [Source-to-Output Mapping Matrix](ExitPass_POS_Server_BIR_Annex_E_Source_to_Output_Mapping_Matrix_v1.0.md)
-11. [Calculation and Reconciliation Rules](ExitPass_POS_Server_BIR_Annex_E_Calculation_and_Reconciliation_Rules_v1.0.md)
-12. [File Layout and Export Specification](ExitPass_POS_Server_BIR_Annex_E_File_Layout_and_Export_Specification_v1.0.md)
-13. [Sample Output and Traceability](ExitPass_POS_Server_BIR_Annex_E_Sample_Output_and_Traceability_v1.0.md)
-14. [Validation and Acceptance Scenarios](ExitPass_POS_Server_BIR_Annex_E_Validation_and_Acceptance_Scenarios_v1.0.md)
-15. [Z-009 Runtime Implementation Handoff](ExitPass_POS_Server_Z009_Annex_E_Runtime_Implementation_Handoff_v1.0.md)
-16. [Runtime Authorization Checklist](ExitPass_POS_Server_Z009_Annex_E_Runtime_Authorization_Checklist_v1.0.md)
+1. [Z-012A2 Accounting Approval and Runtime Authorization Revalidation](ExitPass_POS_Server_Z012A2_Annex_E1_Accounting_Approval_and_Runtime_Authorization_Revalidation_v1.0.md)
+2. [Approved Accounting Calculation Profile](ExitPass_POS_Server_Annex_E1_Accounting_Calculation_Profile_Proposal_v1.0.md)
+3. [Accounting Approval Form and Record](ExitPass_POS_Server_Annex_E1_Accounting_Calculation_Profile_Approval_Form_v1.0.md)
+4. [Z-012A Runtime Authorization Revalidation](ExitPass_POS_Server_Z012A_Annex_E1_Runtime_Authorization_Revalidation_v1.0.md)
+5. [Source and Applicability Assessment](ExitPass_POS_Server_BIR_Annex_E_Source_and_Applicability_Assessment_v1.0.md)
+6. [Decision Resolution Summary](ExitPass_POS_Server_BIR_Annex_E_Decision_Resolution_Summary_v1.0.md)
+7. [Open Decisions and Assumptions Register](ExitPass_POS_Server_BIR_Annex_E_Open_Decisions_and_Assumptions_Register_v1.0.md)
+8. [User Approval Record](ExitPass_POS_Server_BIR_Annex_E_User_Approval_Record_v1.0.md)
+9. [External Confirmation Register](ExitPass_POS_Server_BIR_Annex_E_External_Confirmation_Register_v1.0.md)
+10. [Field Dictionary](ExitPass_POS_Server_BIR_Annex_E_Field_Dictionary_v1.0.md)
+11. [Source-to-Output Mapping Matrix](ExitPass_POS_Server_BIR_Annex_E_Source_to_Output_Mapping_Matrix_v1.0.md)
+12. [Calculation and Reconciliation Rules](ExitPass_POS_Server_BIR_Annex_E_Calculation_and_Reconciliation_Rules_v1.0.md)
+13. [File Layout and Export Specification](ExitPass_POS_Server_BIR_Annex_E_File_Layout_and_Export_Specification_v1.0.md)
+14. [Sample Output and Traceability](ExitPass_POS_Server_BIR_Annex_E_Sample_Output_and_Traceability_v1.0.md)
+15. [Validation and Acceptance Scenarios](ExitPass_POS_Server_BIR_Annex_E_Validation_and_Acceptance_Scenarios_v1.0.md)
+16. [Z-009 Runtime Implementation Handoff](ExitPass_POS_Server_Z009_Annex_E_Runtime_Implementation_Handoff_v1.0.md)
+17. [Runtime Authorization Checklist](ExitPass_POS_Server_Z009_Annex_E_Runtime_Authorization_Checklist_v1.0.md)
 
 ## Source hierarchy
 
@@ -41,6 +42,6 @@ Every material rule uses one of: `EXPLICITLY_REQUIRED`, `EXPLICITLY_ALLOWED`, `E
 
 **Runtime design: `AUTHORIZED_FOR_RUNTIME_DESIGN` by `Z-009B-USER-APPROVAL-001`.**
 
-**Bounded E-1 implementation: `BLOCKED_PENDING_ACCOUNTING_CONFIRMATION` after Z-012A revalidation.**
+**Bounded E-1 implementation: `AUTHORIZED_FOR_Z012B_LOCAL_BOUNDED_RUNTIME`.**
 
-Z-012A1 records `ACCOUNTING_AUTHORITY_AND_APPROVAL_IN_PRINCIPLE_CONFIRMED` for AE-DR-006 through AE-DR-009 and provides one exact, hashed calculation proposal. Its approval form remains `PENDING_EXACT_PROFILE_APPROVAL`; therefore the four decisions are not resolved and Z-012B is not authorized. The resolution model otherwise remains unchanged: 13 project-owned recommendations are approved, 14 external confirmations remain active, AE-DR-012 blocks nonzero unresolved privilege paths, and E-2 through E-5 remain deferred. Controlled UAT, external delivery, and Production remain unauthorized.
+Accounting approved the exact immutable calculation proposal under `Z-012B-ACCOUNTING-APPROVAL-001`, resolving AE-DR-006 through AE-DR-009. Ten external confirmations remain active, but none blocks local bounded implementation: AE-DR-012 remains fail closed for nonzero unresolved privileges, while the others gate Controlled UAT, external delivery, or Production. E-2 through E-5 and ARTS POSLog remain deferred. Controlled UAT, external delivery, and Production remain unauthorized.

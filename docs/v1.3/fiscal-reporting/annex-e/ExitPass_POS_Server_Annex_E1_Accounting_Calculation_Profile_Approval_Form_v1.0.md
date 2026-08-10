@@ -14,27 +14,30 @@
 | Approving authority | Accounting |
 | Authority statement date | 2026-08-10 |
 | Authority statement status | `ACCOUNTING_AUTHORITY_AND_APPROVAL_IN_PRINCIPLE_CONFIRMED` |
-| Exact profile status | `PENDING_EXACT_PROFILE_APPROVAL` |
-| Executable status | `EXECUTABLE_CALCULATION_PROFILE_NOT_YET_APPROVED` |
+| Approval record | `Z-012B-ACCOUNTING-APPROVAL-001` |
+| Source posture | Accounting approval supplied through the Product Owner |
+| Exact profile status | `APPROVED_EXACTLY_AS_SPECIFIED` |
+| Prior executable status | `EXECUTABLE_CALCULATION_PROFILE_NOT_YET_APPROVED`, superseded on 2026-08-10 |
+| Executable status | `APPROVED_EXACTLY_AS_SPECIFIED` |
 
 The 2026-08-10 statement confirms Accounting authority and approval in principle for resolving AE-DR-006 through AE-DR-009. It does not select formulas or sources that were not yet stated. This form is the instrument for approving or rejecting the exact executable proposal identified above.
 
 ## 2. Decision choices
 
-Select exactly one:
+Accounting selected exactly one:
 
-- [ ] `APPROVED_EXACTLY_AS_SPECIFIED`
+- [x] `APPROVED_EXACTLY_AS_SPECIFIED`
 - [ ] `APPROVED_WITH_LISTED_CHANGES`
 - [ ] `REJECTED`
 - [ ] `REQUIRES_CLARIFICATION`
 
-Approval status: `PENDING_EXACT_PROFILE_APPROVAL`
+Approval status: `APPROVED_EXACTLY_AS_SPECIFIED`
 
-Confirmation date: `________________`
+Confirmation date: `2026-08-10`
 
 Approving authority: `Accounting`
 
-Approval reference: `________________`
+Approval reference: `Z-012B-ACCOUNTING-APPROVAL-001`
 
 ## 3. Listed changes or clarification
 
@@ -83,4 +86,23 @@ This approval does not constitute:
 Accounting approves the exact Annex E-1 Accounting Calculation Profile identified as ExitPass_POS_Server_Annex_E1_Accounting_Calculation_Profile_Proposal_v1.0.md, version v1.0, SHA-256 36bbba7f014f5713955d50fe2fdab63f0cb6e80aab77713fe5fef45fbe7c1a4f, for Annex E profile pos-server-bir-annex-e1-rmo24-2023:v1, covering AE-DR-006 through AE-DR-009, with the status APPROVED_EXACTLY_AS_SPECIFIED.
 ```
 
-No selection is pre-marked by Z-012A1.
+## 8. Governed approval record
+
+| Item | Recorded value |
+|---|---|
+| Approval record ID | `Z-012B-ACCOUNTING-APPROVAL-001` |
+| Approval authority | Accounting |
+| Confirmation date | 2026-08-10 |
+| Status | `APPROVED_EXACTLY_AS_SPECIFIED` |
+| Source posture | Accounting approval supplied through the Product Owner |
+| Approved filename | `ExitPass_POS_Server_Annex_E1_Accounting_Calculation_Profile_Proposal_v1.0.md` |
+| Approved version | `v1.0` |
+| Approved SHA-256 | `36bbba7f014f5713955d50fe2fdab63f0cb6e80aab77713fe5fef45fbe7c1a4f` |
+| Annex E profile | `pos-server-bir-annex-e1-rmo24-2023:v1` |
+| Affected decisions | AE-DR-006, AE-DR-007, AE-DR-008, AE-DR-009 |
+| Approval scope | Exact executable calculation profile only |
+| Approval effect | Engineering may implement the approved calculations subject to all other runtime gates |
+| Exclusions | Controlled UAT, external delivery, Production, E-2 through E-5, ARTS POSLog 6.0.0, BIR submission, signing, encryption, and destructive purge |
+| Change rule | Any profile change requires a new version, new hash, and renewed Accounting approval |
+
+No individual Accounting approver identity is recorded or inferred.
