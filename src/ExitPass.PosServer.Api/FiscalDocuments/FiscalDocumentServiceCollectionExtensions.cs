@@ -33,6 +33,7 @@ public static class FiscalDocumentServiceCollectionExtensions
             services.TryAddScoped<IBirSalesSummaryRepository, UnavailableBirSalesSummaryRepository>();
             services.TryAddScoped<IElectronicJournalRepository, UnavailableElectronicJournalRepository>();
             services.TryAddScoped<IFiscalDocumentReprintRepository, UnavailableFiscalDocumentReprintRepository>();
+            services.TryAddScoped<IAnnexE1Repository, UnavailableAnnexE1Repository>();
         }
         else if (!IsValidNpgsqlConnectionString(connectionString))
         {
@@ -45,6 +46,7 @@ public static class FiscalDocumentServiceCollectionExtensions
             services.TryAddScoped<IBirSalesSummaryRepository, UnavailableBirSalesSummaryRepository>();
             services.TryAddScoped<IElectronicJournalRepository, UnavailableElectronicJournalRepository>();
             services.TryAddScoped<IFiscalDocumentReprintRepository, UnavailableFiscalDocumentReprintRepository>();
+            services.TryAddScoped<IAnnexE1Repository, UnavailableAnnexE1Repository>();
         }
         else
         {
@@ -61,6 +63,16 @@ public static class FiscalDocumentServiceCollectionExtensions
             services.TryAddScoped<IBirSalesSummaryRepository, PostgresBirSalesSummaryRepository>();
             services.TryAddScoped<IElectronicJournalRepository, PostgresElectronicJournalRepository>();
             services.TryAddScoped<IFiscalDocumentReprintRepository, PostgresFiscalDocumentReprintRepository>();
+            var annexE1ArtifactRoot = configuration["PosServer:AnnexE1:ArtifactRoot"];
+            if (!string.IsNullOrWhiteSpace(annexE1ArtifactRoot) && Path.IsPathFullyQualified(annexE1ArtifactRoot))
+            {
+                services.TryAddSingleton<IAnnexE1ArtifactStore>(_ => new FileSystemAnnexE1ArtifactStore(annexE1ArtifactRoot));
+                services.TryAddScoped<IAnnexE1Repository, PostgresAnnexE1Repository>();
+            }
+            else
+            {
+                services.TryAddScoped<IAnnexE1Repository, UnavailableAnnexE1Repository>();
+            }
         }
 
         services.AddScoped<FiscalDocumentCreationService>();
@@ -77,6 +89,9 @@ public static class FiscalDocumentServiceCollectionExtensions
         services.AddSingleton<BirSalesSummaryOutputRenderer>();
         services.AddScoped<ElectronicJournalService>();
         services.AddSingleton<ElectronicJournalExportRenderer>();
+        services.AddScoped<AnnexE1Service>();
+        services.AddSingleton<AnnexE1CalculationEngine>();
+        services.AddSingleton<AnnexE1DeterministicXlsxRenderer>();
         services.AddSingleton<FiscalReportPresentationService>();
         services.AddSingleton<FiscalReportOutputRenderer>();
         services.TryAddSingleton<Microsoft.AspNetCore.Authorization.IAuthorizationMiddlewareResultHandler, FiscalReportOutputAuthorizationResultHandler>();
@@ -164,10 +179,21 @@ public static class FiscalDocumentServiceCollectionExtensions
                 policy => policy
                     .AddAuthenticationSchemes(SalesInvoiceHeaderProfileAdminAuthorization.AuthenticationScheme)
                     .RequireClaim(SalesInvoiceHeaderProfileAdminAuthorization.PermissionClaimType, FiscalDocumentReprintAuthorization.RecordPermission));
+            AddAnnexE1Policy(options, AnnexE1Authorization.RecordFactPolicy, AnnexE1Authorization.RecordFactPermission);
+            AddAnnexE1Policy(options, AnnexE1Authorization.AttestZeroPolicy, AnnexE1Authorization.AttestZeroPermission);
+            AddAnnexE1Policy(options, AnnexE1Authorization.GeneratePolicy, AnnexE1Authorization.GeneratePermission);
+            AddAnnexE1Policy(options, AnnexE1Authorization.ReadPolicy, AnnexE1Authorization.ReadPermission);
+            AddAnnexE1Policy(options, AnnexE1Authorization.DownloadPolicy, AnnexE1Authorization.DownloadPermission);
+            AddAnnexE1Policy(options, AnnexE1Authorization.CorrectPolicy, AnnexE1Authorization.CorrectPermission);
         });
 
         return services;
     }
+
+    private static void AddAnnexE1Policy(Microsoft.AspNetCore.Authorization.AuthorizationOptions options, string name, string permission) =>
+        options.AddPolicy(name, policy => policy
+            .AddAuthenticationSchemes(SalesInvoiceHeaderProfileAdminAuthorization.AuthenticationScheme)
+            .RequireClaim(SalesInvoiceHeaderProfileAdminAuthorization.PermissionClaimType, permission));
 
     private static bool IsSalesInvoiceHeaderProfileRequired(IConfiguration configuration) =>
         string.Equals(

@@ -16,4 +16,5 @@ app.MapFiscalZReadingEndpoints();
 app.MapFiscalReportOutputEndpoints();
 app.MapBirSalesSummaryEndpoints();
 app.MapElectronicJournalEndpoints();
+app.MapAnnexE1Endpoints();
 app.Run();

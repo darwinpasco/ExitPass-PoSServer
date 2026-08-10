@@ -113,7 +113,7 @@ public sealed class DigitalSalesInvoiceRenderServiceTests
     }
 
     [Fact]
-    public void RuntimeAssemblyDoesNotExposePaymentGateExitRefundOrUnauthorizedReportBehavior()
+    public void RuntimeAssemblyDoesNotExposePaymentGateExitRefundOrReversalBehavior()
     {
         var forbiddenNames = new[]
         {
@@ -125,8 +125,7 @@ public sealed class DigitalSalesInvoiceRenderServiceTests
             "RefundCommand",
             "RefundService",
             "ProcessRefund",
-            "Reversal",
-            "Annex"
+            "Reversal"
         };
 
         foreach (var type in typeof(DigitalSalesInvoiceRenderService).Assembly.GetTypes())

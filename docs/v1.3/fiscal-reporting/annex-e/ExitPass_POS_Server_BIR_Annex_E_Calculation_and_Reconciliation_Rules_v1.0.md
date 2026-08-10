@@ -29,13 +29,13 @@ Z-012A originally found AE-DR-006 through AE-DR-009 unresolved. Accounting subse
 
 | Annex E fact | Authoritative input | Inclusion/exclusion and sign | Required reconciliation | Classification | Support |
 | --- | --- | --- | --- | --- | --- |
-| Gross sales D07 | `ACTIVE_GROSS`, `RETURN_AMOUNT`, `VOID_AMOUNT` | Approved `ACTIVE_GROSS+RETURN_AMOUNT+VOID_AMOUNT`; nonnegative | `D07-D17-D18=ACTIVE_GROSS` | `Z-012B-ACCOUNTING-APPROVAL-001` | Derivation to implement |
-| Net sales D27 | D07, D19, D09 | Approved Annex VAT-exclusive regular electronic value `D07-D19-D09`; not VAT-inclusive Z net | `D27+D19+D09=D07` | `Z-012B-ACCOUNTING-APPROVAL-001` | Derivation to implement |
+| Gross sales D07 | `ACTIVE_GROSS`, `RETURN_AMOUNT`, `VOID_AMOUNT` | Approved `ACTIVE_GROSS+RETURN_AMOUNT+VOID_AMOUNT`; nonnegative | `D07-D17-D18=ACTIVE_GROSS` | `Z-012B-ACCOUNTING-APPROVAL-001` | Implemented by Z-012B |
+| Net sales D27 | D07, D19, D09 | Approved Annex VAT-exclusive regular electronic value `D07-D19-D09`; not VAT-inclusive Z net | `D27+D19+D09=D07` | `Z-012B-ACCOUNTING-APPROVAL-001` | Implemented by Z-012B |
 | VATable sales D08 | Z VATable sales | Recorded tax classification only | Exact equality to Z | `EXISTING_EXITPASS_DECISION` | Supported |
 | VAT D09 | Z VAT amount | Recorded VAT; exporter does not recalculate a tax rate | Exact equality to Z | `EXISTING_EXITPASS_DECISION` | Supported |
 | VAT-exempt sales D10 | Z VAT-exempt sales | Recorded VAT treatment only | Exact equality to Z | `EXISTING_EXITPASS_DECISION` | Supported |
 | Zero-rated sales D11 | Z zero-rated sales | Recorded classification only | Exact equality to Z | `EXISTING_EXITPASS_DECISION` | Supported |
-| Total discounts | Approved D12-D18 operands | Statutory and commercial categories must not be double counted | `D19=D12+D13+D14+D15+D16+D17+D18` | `Z-012B-ACCOUNTING-APPROVAL-001` | Derivation to implement |
+| Total discounts | Approved D12-D18 operands | Statutory and commercial categories must not be double counted | `D19=D12+D13+D14+D15+D16+D17+D18` | `Z-012B-ACCOUNTING-APPROVAL-001` | Implemented by Z-012B |
 | SC discount D12 | Z SC discount and SC child | Positive deduction display | Top-level equals child | `EXISTING_EXITPASS_DECISION` | Supported |
 | PWD discount D13 | Z PWD discount and PWD child | Positive deduction display | Top-level equals child | `EXISTING_EXITPASS_DECISION` | Supported |
 | Other discount D16 | Z/BIR other statutory, coupon, and promotional named operands | Include exactly those three; exclude NAAC, Solo Parent, Diplomat/unresolved privilege, and VAT adjustment | Exact named-operand sum | Approved AE-DR-006; AE-DR-012 nonzero path remains fail closed | Derivation to implement |

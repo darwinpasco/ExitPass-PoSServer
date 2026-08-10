@@ -1,139 +1,79 @@
--- Immutable privacy-safe Annex E metadata bound to a governing Z Reading.
--- The external form dataset and generated output are not implemented.
-
-CREATE TABLE IF NOT EXISTS pos.annex_e_reports (
-    annex_e_report_id uuid NOT NULL,
-    fiscal_report_request_id uuid NOT NULL,
-    report_kind_code_id uuid NOT NULL,
-    report_status_code_id uuid NOT NULL,
-    fiscal_reporting_contract_version_id uuid NOT NULL,
-    fiscal_reporting_period_id uuid NOT NULL,
-    governing_z_report_id uuid NOT NULL,
-    governing_report_kind_code_id uuid NOT NULL,
-    site_pos_server_id uuid NOT NULL,
-    fiscal_identity_id uuid NOT NULL,
-    annex_e_contract_profile_ref text NOT NULL,
-    business_day_date date NOT NULL,
-    reporting_period_start_date date NOT NULL,
-    reporting_period_end_date date NOT NULL,
-    related_bir_sales_summary_report_id uuid NULL,
-    generated_at timestamptz NOT NULL,
-    committed_at timestamptz NOT NULL,
-    created_at timestamptz NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    updated_at timestamptz NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    CONSTRAINT pk_annex_e_reports PRIMARY KEY (annex_e_report_id),
-    CONSTRAINT fk_annex_e_reports__request_kind FOREIGN KEY (fiscal_report_request_id, report_kind_code_id)
-        REFERENCES pos.fiscal_report_requests (fiscal_report_request_id, report_type_code_id),
-    CONSTRAINT fk_annex_e_reports__status FOREIGN KEY (report_status_code_id)
-        REFERENCES pos.controlled_codes (controlled_code_id),
-    CONSTRAINT fk_annex_e_reports__contract FOREIGN KEY (fiscal_reporting_contract_version_id)
-        REFERENCES pos.fiscal_reporting_contract_versions (fiscal_reporting_contract_version_id),
-    CONSTRAINT fk_annex_e_reports__governing_z FOREIGN KEY (
-        governing_z_report_id,
-        governing_report_kind_code_id,
-        fiscal_reporting_period_id,
-        site_pos_server_id,
-        fiscal_identity_id
-    ) REFERENCES pos.x_z_reports (
-        x_z_report_id,
-        report_kind_code_id,
-        fiscal_reporting_period_id,
-        site_pos_server_id,
-        fiscal_identity_id
-    ),
-    CONSTRAINT fk_annex_e_reports__sales_summary FOREIGN KEY (related_bir_sales_summary_report_id)
-        REFERENCES pos.bir_sales_summary_reports (bir_sales_summary_report_id),
-    CONSTRAINT uq_annex_e_reports__request UNIQUE (fiscal_report_request_id),
-    CONSTRAINT uq_annex_e_reports__z_profile UNIQUE (governing_z_report_id, annex_e_contract_profile_ref),
-    CONSTRAINT ck_annex_e_reports__request_kind CHECK (report_kind_code_id = 'd4c4615e-2cf2-59b7-a6d2-97d22210114c'),
-    CONSTRAINT ck_annex_e_reports__committed_status CHECK (report_status_code_id = '84ef4d12-b3a1-5385-88b1-3a3eadeb8a04'),
-    CONSTRAINT ck_annex_e_reports__z_kind CHECK (governing_report_kind_code_id = '1c628bc2-49c3-53e8-ae83-2082bcf28467'),
-    CONSTRAINT ck_annex_e_reports__profile_ref CHECK (char_length(btrim(annex_e_contract_profile_ref)) > 0),
-    CONSTRAINT ck_annex_e_reports__period_range CHECK (reporting_period_end_date >= reporting_period_start_date),
-    CONSTRAINT ck_annex_e_reports__timestamps CHECK (committed_at >= generated_at AND updated_at = created_at)
-);
+-- Immutable Annex E-1 per-Z row snapshots with exact 32-position evidence.
 
 DO $$
 BEGIN
     IF EXISTS (
         SELECT 1 FROM information_schema.columns
-        WHERE table_schema = 'pos' AND table_name = 'annex_e_reports' AND column_name = 'annex_e_context'
-    ) AND EXISTS (SELECT 1 FROM pos.annex_e_reports) THEN
-        RAISE EXCEPTION 'cannot harden non-empty legacy pos.annex_e_reports; migrate approved privacy-safe metadata first';
+        WHERE table_schema='pos' AND table_name='annex_e_reports' AND column_name='fiscal_report_request_id'
+    ) THEN
+        IF EXISTS (SELECT 1 FROM pos.annex_e_reports) THEN
+            RAISE EXCEPTION 'cannot replace non-empty legacy pos.annex_e_reports without an approved historical conversion';
+        END IF;
+        DROP TABLE pos.annex_e_reports;
     END IF;
 END;
 $$;
 
-ALTER TABLE pos.annex_e_reports
-    ADD COLUMN IF NOT EXISTS report_kind_code_id uuid NULL,
-    ADD COLUMN IF NOT EXISTS report_status_code_id uuid NULL,
-    ADD COLUMN IF NOT EXISTS fiscal_reporting_contract_version_id uuid NULL,
-    ADD COLUMN IF NOT EXISTS fiscal_reporting_period_id uuid NULL,
-    ADD COLUMN IF NOT EXISTS governing_z_report_id uuid NULL,
-    ADD COLUMN IF NOT EXISTS governing_report_kind_code_id uuid NULL,
-    ADD COLUMN IF NOT EXISTS fiscal_identity_id uuid NULL,
-    ADD COLUMN IF NOT EXISTS annex_e_contract_profile_ref text NULL,
-    ADD COLUMN IF NOT EXISTS committed_at timestamptz NULL;
+CREATE TABLE IF NOT EXISTS pos.annex_e_reports (
+    annex_e_report_id uuid NOT NULL,
+    annex_e1_workbook_id uuid NOT NULL,
+    row_sequence integer NOT NULL,
+    fiscal_reporting_period_id uuid NOT NULL,
+    governing_z_report_id uuid NOT NULL,
+    governing_report_kind_code_id uuid NOT NULL,
+    related_bir_sales_summary_report_id uuid NOT NULL,
+    site_pos_server_id uuid NOT NULL,
+    fiscal_identity_id uuid NOT NULL,
+    currency_code char(3) NOT NULL,
+    business_day_date date NOT NULL,
+    beginning_fiscal_number text NULL,
+    ending_fiscal_number text NULL,
+    d04_gta_ending bigint NOT NULL,
+    d05_gta_beginning bigint NOT NULL,
+    d06_manual_net_income bigint NOT NULL,
+    d07_annex_gross_sales bigint NOT NULL,
+    d08_vatable_sales bigint NOT NULL,
+    d09_vat_amount bigint NOT NULL,
+    d10_vat_exempt_sales bigint NOT NULL,
+    d11_zero_rated_sales bigint NOT NULL,
+    d12_sc_discount bigint NOT NULL,
+    d13_pwd_discount bigint NOT NULL,
+    d14_naac_discount bigint NOT NULL,
+    d15_solo_parent_discount bigint NOT NULL,
+    d16_other_discount bigint NOT NULL,
+    d17_returns bigint NOT NULL,
+    d18_voids bigint NOT NULL,
+    d19_total_deductions bigint NOT NULL,
+    d20_sc_vat_adjustment bigint NOT NULL,
+    d21_pwd_vat_adjustment bigint NOT NULL,
+    d22_other_vat_adjustment bigint NOT NULL,
+    d23_vat_on_returns bigint NOT NULL,
+    d24_residual_vat_adjustment bigint NOT NULL,
+    d25_total_vat_adjustment bigint NOT NULL,
+    d26_vat_payable bigint NOT NULL,
+    d27_net_sales_ex_vat bigint NOT NULL,
+    d28_overflow_net_income bigint NOT NULL,
+    d29_total_income bigint NOT NULL,
+    d30_reset_counter bigint NOT NULL,
+    d31_z_counter bigint NOT NULL,
+    remarks_code_id uuid NOT NULL,
+    source_semantic_hash char(64) NOT NULL,
+    created_at timestamptz NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT pk_annex_e_reports PRIMARY KEY (annex_e_report_id),
+    CONSTRAINT fk_annex_e_reports__workbook FOREIGN KEY (annex_e1_workbook_id) REFERENCES pos.annex_e1_workbooks (annex_e1_workbook_id),
+    CONSTRAINT fk_annex_e_reports__period_scope FOREIGN KEY (fiscal_reporting_period_id, site_pos_server_id, fiscal_identity_id, currency_code) REFERENCES pos.fiscal_reporting_periods (fiscal_reporting_period_id, site_pos_server_id, fiscal_identity_id, currency_code),
+    CONSTRAINT fk_annex_e_reports__z FOREIGN KEY (governing_z_report_id, governing_report_kind_code_id, fiscal_reporting_period_id, site_pos_server_id, fiscal_identity_id, currency_code) REFERENCES pos.x_z_reports (x_z_report_id, report_kind_code_id, fiscal_reporting_period_id, site_pos_server_id, fiscal_identity_id, currency_code),
+    CONSTRAINT fk_annex_e_reports__summary FOREIGN KEY (related_bir_sales_summary_report_id) REFERENCES pos.bir_sales_summary_reports (bir_sales_summary_report_id),
+    CONSTRAINT fk_annex_e_reports__remarks FOREIGN KEY (remarks_code_id) REFERENCES pos.controlled_codes (controlled_code_id),
+    CONSTRAINT uq_annex_e_reports__workbook_row UNIQUE (annex_e1_workbook_id, row_sequence),
+    CONSTRAINT uq_annex_e_reports__workbook_z UNIQUE (annex_e1_workbook_id, governing_z_report_id),
+    CONSTRAINT ck_annex_e_reports__row CHECK (row_sequence > 0),
+    CONSTRAINT ck_annex_e_reports__z_kind CHECK (governing_report_kind_code_id='1c628bc2-49c3-53e8-ae83-2082bcf28467'),
+    CONSTRAINT ck_annex_e_reports__remarks CHECK (remarks_code_id IN ('0dafc990-56aa-559f-9424-5569488a8126','d74f22db-9c1f-5429-a376-ee1dd2cd5a28')),
+    CONSTRAINT ck_annex_e_reports__amounts CHECK (d04_gta_ending>=0 AND d05_gta_beginning>=0 AND d06_manual_net_income>=0 AND d07_annex_gross_sales>=0 AND d08_vatable_sales>=0 AND d09_vat_amount>=0 AND d10_vat_exempt_sales>=0 AND d11_zero_rated_sales>=0 AND d12_sc_discount>=0 AND d13_pwd_discount>=0 AND d14_naac_discount>=0 AND d15_solo_parent_discount>=0 AND d16_other_discount>=0 AND d17_returns>=0 AND d18_voids>=0 AND d19_total_deductions>=0 AND d20_sc_vat_adjustment>=0 AND d21_pwd_vat_adjustment>=0 AND d22_other_vat_adjustment>=0 AND d23_vat_on_returns>=0 AND d24_residual_vat_adjustment>=0 AND d25_total_vat_adjustment>=0 AND d26_vat_payable>=0 AND d27_net_sales_ex_vat>=0 AND d28_overflow_net_income>=0 AND d29_total_income>=0 AND d30_reset_counter>=0 AND d31_z_counter>=0),
+    CONSTRAINT ck_annex_e_reports__reconcile CHECK (d19_total_deductions=d12_sc_discount+d13_pwd_discount+d14_naac_discount+d15_solo_parent_discount+d16_other_discount+d17_returns+d18_voids AND d25_total_vat_adjustment=d20_sc_vat_adjustment+d21_pwd_vat_adjustment+d22_other_vat_adjustment+d23_vat_on_returns+d24_residual_vat_adjustment AND d26_vat_payable+d22_other_vat_adjustment=d09_vat_amount AND d27_net_sales_ex_vat+d19_total_deductions+d09_vat_amount=d07_annex_gross_sales AND d29_total_income-d06_manual_net_income-d28_overflow_net_income=d27_net_sales_ex_vat),
+    CONSTRAINT ck_annex_e_reports__hash CHECK (source_semantic_hash ~ '^[0-9a-f]{64}$')
+);
 
-ALTER TABLE pos.annex_e_reports
-    DROP COLUMN IF EXISTS annex_e_type_code_id,
-    DROP COLUMN IF EXISTS annex_e_context;
-
-ALTER TABLE pos.annex_e_reports
-    ALTER COLUMN report_kind_code_id SET NOT NULL,
-    ALTER COLUMN report_status_code_id SET NOT NULL,
-    ALTER COLUMN fiscal_reporting_contract_version_id SET NOT NULL,
-    ALTER COLUMN fiscal_reporting_period_id SET NOT NULL,
-    ALTER COLUMN governing_z_report_id SET NOT NULL,
-    ALTER COLUMN governing_report_kind_code_id SET NOT NULL,
-    ALTER COLUMN fiscal_identity_id SET NOT NULL,
-    ALTER COLUMN annex_e_contract_profile_ref SET NOT NULL,
-    ALTER COLUMN business_day_date SET NOT NULL,
-    ALTER COLUMN reporting_period_start_date SET NOT NULL,
-    ALTER COLUMN reporting_period_end_date SET NOT NULL,
-    ALTER COLUMN generated_at SET NOT NULL,
-    ALTER COLUMN committed_at SET NOT NULL;
-
-ALTER TABLE pos.annex_e_reports
-    DROP CONSTRAINT IF EXISTS fk_annex_e_reports__request,
-    DROP CONSTRAINT IF EXISTS fk_annex_e_reports__site_pos_server,
-    DROP CONSTRAINT IF EXISTS fk_annex_e_reports__annex_e_type,
-    DROP CONSTRAINT IF EXISTS fk_annex_e_reports__request_kind,
-    DROP CONSTRAINT IF EXISTS fk_annex_e_reports__status,
-    DROP CONSTRAINT IF EXISTS fk_annex_e_reports__contract,
-    DROP CONSTRAINT IF EXISTS fk_annex_e_reports__governing_z,
-    DROP CONSTRAINT IF EXISTS fk_annex_e_reports__sales_summary,
-    DROP CONSTRAINT IF EXISTS uq_annex_e_reports__request,
-    DROP CONSTRAINT IF EXISTS uq_annex_e_reports__z_profile,
-    DROP CONSTRAINT IF EXISTS ck_annex_e_reports__request_kind,
-    DROP CONSTRAINT IF EXISTS ck_annex_e_reports__committed_status,
-    DROP CONSTRAINT IF EXISTS ck_annex_e_reports__z_kind,
-    DROP CONSTRAINT IF EXISTS ck_annex_e_reports__profile_ref,
-    DROP CONSTRAINT IF EXISTS ck_annex_e_reports__period_range,
-    DROP CONSTRAINT IF EXISTS ck_annex_e_reports__timestamps,
-    DROP CONSTRAINT IF EXISTS ck_annex_e_reports__context_object;
-
-ALTER TABLE pos.annex_e_reports
-    ADD CONSTRAINT fk_annex_e_reports__request_kind FOREIGN KEY (fiscal_report_request_id, report_kind_code_id) REFERENCES pos.fiscal_report_requests (fiscal_report_request_id, report_type_code_id),
-    ADD CONSTRAINT fk_annex_e_reports__status FOREIGN KEY (report_status_code_id) REFERENCES pos.controlled_codes (controlled_code_id),
-    ADD CONSTRAINT fk_annex_e_reports__contract FOREIGN KEY (fiscal_reporting_contract_version_id) REFERENCES pos.fiscal_reporting_contract_versions (fiscal_reporting_contract_version_id),
-    ADD CONSTRAINT fk_annex_e_reports__governing_z FOREIGN KEY (governing_z_report_id, governing_report_kind_code_id, fiscal_reporting_period_id, site_pos_server_id, fiscal_identity_id) REFERENCES pos.x_z_reports (x_z_report_id, report_kind_code_id, fiscal_reporting_period_id, site_pos_server_id, fiscal_identity_id),
-    ADD CONSTRAINT fk_annex_e_reports__sales_summary FOREIGN KEY (related_bir_sales_summary_report_id) REFERENCES pos.bir_sales_summary_reports (bir_sales_summary_report_id),
-    ADD CONSTRAINT uq_annex_e_reports__request UNIQUE (fiscal_report_request_id),
-    ADD CONSTRAINT uq_annex_e_reports__z_profile UNIQUE (governing_z_report_id, annex_e_contract_profile_ref),
-    ADD CONSTRAINT ck_annex_e_reports__request_kind CHECK (report_kind_code_id = 'd4c4615e-2cf2-59b7-a6d2-97d22210114c'),
-    ADD CONSTRAINT ck_annex_e_reports__committed_status CHECK (report_status_code_id = '84ef4d12-b3a1-5385-88b1-3a3eadeb8a04'),
-    ADD CONSTRAINT ck_annex_e_reports__z_kind CHECK (governing_report_kind_code_id = '1c628bc2-49c3-53e8-ae83-2082bcf28467'),
-    ADD CONSTRAINT ck_annex_e_reports__profile_ref CHECK (char_length(btrim(annex_e_contract_profile_ref)) > 0),
-    ADD CONSTRAINT ck_annex_e_reports__period_range CHECK (reporting_period_end_date >= reporting_period_start_date),
-    ADD CONSTRAINT ck_annex_e_reports__timestamps CHECK (committed_at >= generated_at AND updated_at = created_at);
-
-CREATE INDEX IF NOT EXISTS ix_annex_e_reports__site_business_date
-    ON pos.annex_e_reports (site_pos_server_id, business_day_date DESC);
-
-CREATE OR REPLACE TRIGGER trg_annex_e_reports_immutable
-BEFORE UPDATE OR DELETE ON pos.annex_e_reports
-FOR EACH ROW EXECUTE FUNCTION pos.reject_fiscal_reporting_snapshot_mutation();
-
-COMMENT ON TABLE pos.annex_e_reports IS 'Immutable privacy-safe Annex E metadata bound to a governing Z Reading. No external dataset, customer payload, or file is stored.';
-COMMENT ON COLUMN pos.annex_e_reports.annex_e_contract_profile_ref IS 'Required approved external contract/profile reference. Its absence blocks future generation.';
+CREATE INDEX IF NOT EXISTS ix_annex_e_reports__period ON pos.annex_e_reports (fiscal_reporting_period_id, annex_e1_workbook_id);
+CREATE OR REPLACE TRIGGER trg_annex_e_reports_immutable BEFORE UPDATE OR DELETE ON pos.annex_e_reports FOR EACH ROW EXECUTE FUNCTION pos.reject_fiscal_reporting_snapshot_mutation();
