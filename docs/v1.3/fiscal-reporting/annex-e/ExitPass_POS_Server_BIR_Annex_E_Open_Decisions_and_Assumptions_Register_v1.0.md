@@ -106,3 +106,20 @@ Abbreviations: `SA` source/applicability, `FD` field dictionary, `MM` mapping ma
 ## 5. Approval rule
 
 The [User Approval Record](ExitPass_POS_Server_BIR_Annex_E_User_Approval_Record_v1.0.md) records approval `Z-009B-USER-APPROVAL-001` for all 13 project-owned recommendations. External evidence remains tracked separately in the [External Confirmation Register](ExitPass_POS_Server_BIR_Annex_E_External_Confirmation_Register_v1.0.md); this project approval does not satisfy any external decision.
+
+## 6. Z-012A runtime revalidation
+
+Z-012A reviewed all 35 records on 2026-08-10 PHT against official workbook evidence, merged Z-010 BIR Sales Summary behavior, and merged Z-011A Electronic Journal behavior at baseline `227cdc708d1a685cd56986f084d0cc1aad3e81dd`.
+
+The inventory and original resolution statuses remain unchanged: 13 project-owned recommendations are approved, 14 external confirmations remain unresolved, and AE-DR-013/014 remain deferred. The stage impact is refined as follows:
+
+| Decision set | Authoritative Z-012A classification | Runtime gate |
+|---|---|---|
+| AE-DR-006, AE-DR-007, AE-DR-008, AE-DR-009 | `REQUIRES_ACCOUNTING_APPROVAL` | `BLOCKING_INITIAL_GENERATOR`; no complete ordinary or no-activity row can be emitted without invention |
+| AE-DR-012 | `REQUIRES_ACCOUNTING_APPROVAL` | `BLOCKING_NONZERO_PRIVILEGE_PATH`; an eventual ordinary path must reject nonzero unresolved privileges |
+| AE-DR-002, AE-DR-004, AE-DR-010, AE-DR-011A, AE-DR-016, AE-DR-020A, AE-DR-024 | `REQUIRES_BIR_OR_EXAMINER_CONFIRMATION` | Applied at the schema, nonzero privilege, Controlled UAT, external delivery, and Production gates recorded in the Z-012A review |
+| AE-DR-019 | `REQUIRES_ACCOUNTING_APPROVAL` | `BLOCKING_CONTROLLED_UAT`, `BLOCKING_PRODUCTION` |
+| AE-DR-016B | `REQUIRES_LEGAL_COMPLIANCE_APPROVAL` | `BLOCKING_PRODUCTION` |
+| AE-DR-013, AE-DR-014 | `DEFERRED_NONBLOCKING` | E-2 through E-5 only |
+
+The resulting generator decision is `BLOCKED_PENDING_ACCOUNTING_CONFIRMATION`. See [Z-012A Runtime Authorization Revalidation](ExitPass_POS_Server_Z012A_Annex_E1_Runtime_Authorization_Revalidation_v1.0.md) for the exact 42-position map and each external gate.

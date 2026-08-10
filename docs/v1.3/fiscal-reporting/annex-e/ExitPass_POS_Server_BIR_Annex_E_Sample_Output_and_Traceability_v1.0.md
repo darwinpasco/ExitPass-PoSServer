@@ -146,7 +146,7 @@ Z: 9 -> 10
 All supported recorded amount categories: 0.00
 ```
 
-D02/D03 are blank and D32 is controlled `NO_ACTIVITY` under approved AE-DR-021 and AE-DR-010A. Examiner acceptance of Remarks remains AE-DR-010.
+D02/D03 are blank and D32 is controlled `NO_ACTIVITY` under approved AE-DR-021 and AE-DR-010A. This remains a traceability sample, not currently generatable evidence: AE-DR-007, AE-DR-008, and AE-DR-009 must establish authoritative known-zero behavior for D06, D28, and D29, and AE-DR-006 must settle the row equations. Unknown is not converted to zero. Examiner acceptance of Remarks remains AE-DR-010.
 
 ## 8. Sample F: sequence-gap exception
 

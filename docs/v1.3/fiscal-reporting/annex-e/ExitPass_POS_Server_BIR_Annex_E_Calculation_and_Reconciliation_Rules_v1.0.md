@@ -2,7 +2,7 @@
 
 ## 1. Authority boundary
 
-Annex E is a deterministic projection of an immutable committed Z Reading and approved historical header facts. It does not recalculate fiscal policy or query live mutable transactions after close.
+Annex E is a deterministic projection of an immutable committed Z Reading, its merged Z-010 BIR Sales Summary, and approved historical header facts. It does not recalculate fiscal policy or query live mutable transactions after close. Z-011A Electronic Journal evidence may verify transition traceability but is not a financial calculation input.
 
 Rules below distinguish three levels:
 
@@ -12,11 +12,13 @@ Rules below distinguish three levels:
 
 All arithmetic uses checked integer minor units. Output conversion to decimal major units occurs only during serialization.
 
+Z-012A confirmed that AE-DR-006 through AE-DR-009 remain unresolved after Z-010 and Z-011A. Their values and equations must not be implemented, including as assumed zero for a no-activity period.
+
 ## 2. Inclusion and period rules
 
 | Rule | Definition | Classification / source | Failure posture | Current support |
 | --- | --- | --- | --- | --- |
-| Governing source | One E-1 detail row consumes one committed `Z_READING` and its immutable children. | `EXISTING_EXITPASS_DECISION`; AE-SRC-016, AE-SRC-017 | Reject open, missing, mutable, or wrong-kind source | Supported |
+| Governing source | One E-1 detail row consumes one committed `Z_READING`, its immutable children, and its committed Z-010 BIR Sales Summary. | `EXISTING_EXITPASS_DECISION`; AE-SRC-016, AE-SRC-017; merged Z-010 | Reject open, missing, mutable, wrong-kind, or unreconciled source | Supported |
 | Window | Governing Z covers `[period_start_at, period_end_at)` and uses durable reporting-period assignments. | `EXISTING_EXITPASS_DECISION`; AE-SRC-017 | Reject inconsistent period or assignment | Supported |
 | Scope | Site POS Server, fiscal identity, and currency must match the Z and approved profile. | `EXISTING_EXITPASS_DECISION`; AE-SRC-016, AE-SRC-017 | Hidden-scope denial / fail closed | Supported for Z; Annex profile pending |
 | Qualifying documents | Recorded Sales Invoices assigned to the period; failed/incomplete operations and reprints do not add sales. | `EXISTING_EXITPASS_DECISION`; Z-006A/Z-007 | Reject unresolved classification | Supported |
