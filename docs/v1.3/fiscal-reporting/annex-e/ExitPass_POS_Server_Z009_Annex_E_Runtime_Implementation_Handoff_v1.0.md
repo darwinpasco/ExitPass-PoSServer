@@ -4,9 +4,9 @@
 
 **Runtime design: `AUTHORIZED_FOR_RUNTIME_DESIGN` by `Z-009B-USER-APPROVAL-001`.**
 
-**Bounded E-1 implementation: `BLOCKED_PENDING_ACCOUNTING_CONFIRMATION` after Z-012A revalidation.**
+**Bounded E-1 implementation: `AUTHORIZED_FOR_Z012B_LOCAL_BOUNDED_RUNTIME` after exact Accounting approval and Z-012A2 revalidation.**
 
-AE-SRC-001 establishes the five profile templates and E-1 physical field order. The 24 original decisions are preserved and split into 35 authority-specific records: all 13 project decisions are approved, 14 require external confirmation, and 2 E-2 through E-5 decisions are deferred. Z-012A revalidated all 42 physical positions against merged Z-010 and Z-011A. Mandatory E-1 values or semantics remain unresolved for manual SI/OR sales, formula mapping, overrun/overflow, and total income; Accounting confirmation is required before a complete generator can begin. VAT/discount category mapping and official artifact acceptance retain narrower staged gates.
+AE-SRC-001 establishes the five profile templates and E-1 physical field order. The 24 original decisions are preserved and split into 35 authority-specific records: all 13 project decisions are approved, AE-DR-006 through AE-DR-009 are resolved by exact Accounting approval, 10 require external confirmation, and 2 E-2 through E-5 decisions are deferred. Z-012A revalidated all 42 physical positions against merged Z-010 and Z-011A; Z-012A2 authorizes local bounded implementation against the exact approved calculation profile. VAT/discount category mapping and official artifact acceptance retain narrower staged gates.
 
 ## 2. Frozen scope available from sources
 
@@ -196,21 +196,27 @@ AE-DR-016A recommends bounded authorized local generation/download with no signi
 
 ## 15. Remaining gates
 
-Runtime design is authorized by the completed User Approval Record. Before generator implementation, external decisions that define mandatory field sources or equations must have acceptable evidence. Examiner-format, delivery, and production-retention confirmations may be staged according to the Runtime Authorization Checklist, but they still block Controlled UAT or production at their recorded levels.
+Runtime design and local bounded generator implementation are authorized by the completed project and Accounting approval records. Z-012B must implement the approved first-class facts, exact equations, deterministic output, artifact controls, authorization, and tests. Examiner-format, delivery, and production-retention confirmations remain staged according to the Runtime Authorization Checklist and still block Controlled UAT, external delivery, or Production at their recorded levels.
 
 Until then:
 
 ```text
 Z-009 Annex E runtime design: AUTHORIZED
-Z-009 bounded E-1 implementation: BLOCKED PENDING ACCOUNTING CONFIRMATION
+Z-009 bounded E-1 implementation: AUTHORIZED FOR Z-012B LOCAL BOUNDED RUNTIME
 Controlled UAT: NOT AUTHORIZED
 Production: NOT AUTHORIZED
 ```
 
-The controlling revalidation and gated future boundary are in [Z-012A Runtime Authorization Revalidation](ExitPass_POS_Server_Z012A_Annex_E1_Runtime_Authorization_Revalidation_v1.0.md). No Z-012B runtime authorization is issued until AE-DR-006 through AE-DR-009 are approved.
+The historical gate is documented in [Z-012A Runtime Authorization Revalidation](ExitPass_POS_Server_Z012A_Annex_E1_Runtime_Authorization_Revalidation_v1.0.md). The current decision is controlled by [Z-012A2 Accounting Approval and Runtime Authorization Revalidation](ExitPass_POS_Server_Z012A2_Annex_E1_Accounting_Approval_and_Runtime_Authorization_Revalidation_v1.0.md).
 
 ## 16. Z-012A1 executable-profile gate
 
 Z-012A1 provides one exact candidate calculation profile for AE-DR-006 through AE-DR-009 and a hash-bound Accounting approval instrument. The proposal defines named operands, formulas, authoritative source classes, period/sign/currency/null/zero/no-activity rules, first-class Manual SI/OR and overrun fact requirements, and zero-tolerance reconciliations.
 
-This handoff remains blocked. Accounting has confirmed authority and approval in principle, but `EXECUTABLE_CALCULATION_PROFILE_NOT_YET_APPROVED` remains controlling until the [Accounting Approval Form](ExitPass_POS_Server_Annex_E1_Accounting_Calculation_Profile_Approval_Form_v1.0.md) approves the exact [proposal](ExitPass_POS_Server_Annex_E1_Accounting_Calculation_Profile_Proposal_v1.0.md) version and hash.
+This paragraph preserves the Z-012A1 pre-approval gate. Accounting approved the exact [proposal](ExitPass_POS_Server_Annex_E1_Accounting_Calculation_Profile_Proposal_v1.0.md) through `Z-012B-ACCOUNTING-APPROVAL-001`; the [Accounting Approval Form](ExitPass_POS_Server_Annex_E1_Accounting_Calculation_Profile_Approval_Form_v1.0.md) records that decision.
+
+## 17. Z-012A2 authorized implementation boundary
+
+Z-012B is authorized to implement the exact approved calculation profile, first-class Manual SI/OR and Sales Overrun/Overflow period facts, explicit known-zero attestations, historical header facts, source membership, deterministic XLSX, immutable metadata/artifact lineage, correction/supersession, exact-scope authorization, privacy-safe audit, and required tests. These are implementation deliverables rather than further business decisions.
+
+Z-012B must reject missing facts, ambiguous sources, unexplained gaps, unsupported classifications, nonzero unresolved AE-DR-012 privilege facts, and any source that is not a committed Z in a CLOSED period with a committed BIR Sales Summary. Electronic Journal evidence remains traceability-only. Controlled UAT, external delivery, Production, E-2 through E-5, and ARTS POSLog remain outside this authorization.

@@ -50,7 +50,7 @@ Tender validation: cash PHP 100.00 + QRPH PHP 200.00 = net PHP 300.00
 | C | D03 Ending SI/OR | `SI-000102` | Last immutable range number |
 | D | D04 GTA Ending | `10300.00` | `10000.00 + 300.00` |
 | E | D05 GTA Beginning | `10000.00` | Z previous GTA |
-| F | D06 Manual SI/OR | `PENDING_EXTERNAL[AE-DR-007]` | No authoritative source |
+| F | D06 Manual SI/OR | `0.00` | Exact-scope/period `ATTESTED_ZERO` first-class fact |
 | G | D07 Gross Sales | `300.00` | Z gross |
 | H | D08 VATable Sales | `267.86` | Z VATable |
 | I | D09 VAT Amount | `32.14` | Z VAT |
@@ -60,25 +60,25 @@ Tender validation: cash PHP 100.00 + QRPH PHP 200.00 = net PHP 300.00
 | M | D13 Discount PWD | `0.00` | Recorded zero |
 | N | D14 Discount NAAC | `0.00` | Separate immutable classification records absence; unknown cannot become zero |
 | O | D15 Discount Solo Parent | `0.00` | Separate immutable classification records absence; unknown cannot become zero |
-| P | D16 Discount Others | `PENDING_EXTERNAL[AE-DR-006]` | Official composition unresolved |
+| P | D16 Discount Others | `0.00` | Approved other statutory + coupon + promotional operands |
 | Q | D17 Returns | `0.00` | Only after approved controlled-zero posture |
 | R | D18 Voids | `0.00` | Z void |
-| S | D19 Total Deductions | `PENDING_EXTERNAL[AE-DR-006]` | Formula mapping gate |
+| S | D19 Total Deductions | `0.00` | Approved D12 through D18 sum |
 | T | D20 VAT Adj SC | `0.00` | SC child recorded zero |
 | U | D21 VAT Adj PWD | `0.00` | PWD child recorded zero |
-| V | D22 VAT Adj Others | `PENDING_EXTERNAL[AE-DR-012]` | Mapping unresolved |
+| V | D22 VAT Adj Others | `0.00` | Explicit bounded-path zero attestation; nonzero AE-DR-012 blocks |
 | W | D23 VAT on Returns | `0.00` | Recorded bounded-source zero; any nonzero source fails closed under AE-DR-015 |
-| X | D24 VAT Adj Others | `PENDING_EXTERNAL[AE-DR-012]` | Classification unresolved |
-| Y | D25 Total VAT Adjustment | `PENDING_EXTERNAL[AE-DR-012]` | Components are not all approved |
-| Z | D26 VAT Payable | `PENDING_EXTERNAL[AE-DR-006]` | Official equation interpretation unresolved |
-| AA | D27 Net Sales | `300.00` | Z net / current GTA contribution |
-| AB | D28 Sales Overrun/Overflow | `PENDING_EXTERNAL[AE-DR-008]` | No source |
-| AC | D29 Total Income | `PENDING_EXTERNAL[AE-DR-009]` | No approved equation |
+| X | D24 VAT Adj Others | `0.00` | Explicit bounded-path zero attestation; nonzero unsupported fact blocks |
+| Y | D25 Total VAT Adjustment | `0.00` | Approved D20 through D24 sum |
+| Z | D26 VAT Payable | `32.14` | Approved `D09-D22` |
+| AA | D27 Net Sales | `267.86` | Approved `D07-D19-D09`; distinct from VAT-inclusive Z net |
+| AB | D28 Sales Overrun/Overflow | `0.00` | Exact-scope/period `ATTESTED_ZERO` first-class fact |
+| AC | D29 Total Income | `267.86` | Approved `D27+D06+D28` |
 | AD | D30 Reset Counter | `0` | Z resulting reset |
 | AE | D31 Z-Counter | `7` | Z resulting counter |
 | AF | D32 Remarks | `NONE` | Approved controlled code; external acceptance remains AE-DR-010 |
 
-This row demonstrates why Z-009 is blocked: available recorded totals reconcile, but the mandatory physical output cannot be completed without assumptions.
+This row demonstrates the approved local bounded profile. It is generatable only after Z-012B implements and validates the cited first-class facts and attestations; absence of those facts still blocks output.
 
 ## 4. Sample B: Senior Citizen and PWD statutory discounts
 
@@ -109,7 +109,9 @@ VAT-exempt: 160.00
 | D12/D13 | `20.00` / `20.00` | Separate SC/PWD discount children |
 | D20/D21 | `10.71` / `10.71` | Separate SC/PWD VAT-removal children |
 | D25 candidate | `21.42` | Exact sum of approved components if all other VAT adjustments are approved zero |
-| D27 | `360.00` | Z net and current GTA contribution |
+| D26 | `21.43` | Approved `D09-D22`, with D22 explicitly zero |
+| D27 | `338.57` | Approved `400.00-40.00-21.43`; distinct from VAT-inclusive Z net `360.00` |
+| D29 | `338.57` | Approved D27 plus attested-zero D06/D28 |
 
 No beneficiary name, statutory ID, TIN, evidence, or reviewer data appears.
 
@@ -122,7 +124,7 @@ E-1 has no tender columns. The synthetic Z records cash `150.00`, QRPH `100.00`,
 Synthetic period facts:
 
 ```text
-One active SI net: 100.00
+One active SI gross/net with zero VAT and discounts: 100.00
 One same-period void fact: 100.00
 Z active net/current GTA contribution: 100.00
 Z void amount: 100.00
@@ -130,7 +132,7 @@ Previous GTA: 10660.00
 Resulting GTA: 10760.00
 ```
 
-Expected mapped values: D18 `100.00`, D27 `100.00`, D05 `10660.00`, D04 `10760.00`. Whether D19 includes D18 is explicitly gated by AE-DR-006. A cross-period void blocks output under AE-DR-015.
+Expected mapped values: D07 `200.00` (`ACTIVE_GROSS 100.00 + VOID_AMOUNT 100.00`), D18 `100.00`, D19 `100.00`, D27 `100.00`, D05 `10660.00`, and D04 `10760.00`. AE-DR-006 explicitly includes D18 in D19. A cross-period void blocks output under AE-DR-015.
 
 ## 7. Sample E: zero-activity period
 
@@ -144,9 +146,10 @@ Resulting GTA: 10760.00
 Reset: 0 -> 0
 Z: 9 -> 10
 All supported recorded amount categories: 0.00
+Manual SI/OR, overrun/overflow, NAAC, Solo Parent, and bounded unsupported VAT facts: exact-scope/period ATTESTED_ZERO
 ```
 
-D02/D03 are blank and D32 is controlled `NO_ACTIVITY` under approved AE-DR-021 and AE-DR-010A. This remains a traceability sample, not currently generatable evidence: AE-DR-007, AE-DR-008, and AE-DR-009 must establish authoritative known-zero behavior for D06, D28, and D29, and AE-DR-006 must settle the row equations. Unknown is not converted to zero. Examiner acceptance of Remarks remains AE-DR-010.
+D02/D03 are blank and D32 is controlled `NO_ACTIVITY` under approved AE-DR-021 and AE-DR-010A. D06, D28, and every bounded unsupported classification require explicit zero attestations; D29 is then the approved zero sum. Unknown is never converted to zero. Examiner acceptance of Remarks remains AE-DR-010 and blocks Controlled UAT, not local implementation.
 
 ## 8. Sample F: sequence-gap exception
 

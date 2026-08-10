@@ -3,7 +3,7 @@
 ## 1. Current verdict
 
 - Runtime design: `AUTHORIZED_FOR_RUNTIME_DESIGN` by `Z-009B-USER-APPROVAL-001`
-- Bounded E-1 implementation: `BLOCKED_PENDING_ACCOUNTING_CONFIRMATION` after Z-012A
+- Bounded E-1 implementation: `AUTHORIZED_FOR_Z012B_LOCAL_BOUNDED_RUNTIME` by `Z-012B-ACCOUNTING-APPROVAL-001` and Z-012A2 revalidation
 - Controlled UAT: not authorized
 - Production: not authorized
 
@@ -23,7 +23,7 @@
 ## 3. Merge schema changes
 
 - [x] AE-DR-001, 010A, 011, 017, and 018 user approvals recorded.
-- [ ] AE-DR-007 and 008 source definitions externally confirmed because they affect first-class fields.
+- [x] AE-DR-007 and 008 exact first-class source definitions approved by `Z-012B-ACCOUNTING-APPROVAL-001`.
 - [ ] Historical header/profile fields and H10 actor semantics frozen.
 - [ ] Controlled profile, remarks, statutory mapping, status, and lineage codes approved.
 - [ ] Existing non-empty metadata migration posture audited; no historical values invented.
@@ -35,8 +35,8 @@
 ## 4. Implement bounded generator
 
 - [x] AE-DR-002A, 003A, 004A, 019A, 021, 022, and 024A user approvals recorded.
-- [ ] AE-DR-006 and 009 equations externally confirmed.
-- [ ] AE-DR-007 Manual SI/OR and AE-DR-008 Sales Overrun/Overflow source definitions approved by Accounting.
+- [x] AE-DR-006 and 009 exact named-operand equations approved by `Z-012B-ACCOUNTING-APPROVAL-001`.
+- [x] AE-DR-007 Manual SI/OR and AE-DR-008 Sales Overrun/Overflow source definitions approved by Accounting.
 - [ ] Approved schema and controlled codes merged.
 - [ ] Deterministic XLSX profile and canonical validation JSON contracts versioned.
 - [ ] Replay, conflict, restart, supersession, and unknown-outcome behavior frozen.
@@ -44,7 +44,7 @@
 - [ ] Unsupported Diplomat/cross-period/exception paths fail closed.
 - [ ] No-state-mutation and privacy test manifests specified.
 
-**Gate:** Z-012A verified all 42 positions and found that AE-DR-006 through AE-DR-009 still block every complete ordinary or no-activity row. Current verdict is `BLOCKED_PENDING_ACCOUNTING_CONFIRMATION`.
+**Gate:** local bounded implementation is authorized. Z-012B must implement the unchecked runtime/schema/test items; those are deliverables, not unresolved decision gates.
 
 ## 5. Controlled UAT
 
@@ -66,7 +66,7 @@
 
 ## 7. Z-012A staged gate reconciliation
 
-- Generator implementation: blocked by Accounting decisions AE-DR-006 through AE-DR-009.
+- Generator implementation: authorized against the exact approved profile under `Z-012B-ACCOUNTING-APPROVAL-001`.
 - Nonzero Diplomat or unresolved VAT-privilege scenarios: blocked by AE-DR-012; an eventual ordinary path must fail closed for these scenarios.
 - Controlled UAT: blocked by the applicable BIR/examiner and Accounting confirmations.
 - External delivery: blocked by AE-DR-002, AE-DR-004, AE-DR-016, and AE-DR-024.
@@ -77,7 +77,7 @@
 
 - Technical design authorized by/date/reference: `Darwin Pasco / 2026-08-06 PHT / Z-009B-USER-APPROVAL-001`
 - Schema implementation authorized by/date/reference: `________________`
-- Bounded generator authorized by/date/reference: `________________`
+- Bounded generator authorized by/date/reference: `Accounting and Z-012A2 / 2026-08-10 / Z-012B-ACCOUNTING-APPROVAL-001`
 - Controlled UAT authorized by/date/reference: `NOT AUTHORIZED`
 - Production authorized by/date/reference: `NOT AUTHORIZED`
 
@@ -88,8 +88,21 @@
 - [x] Manual SI/OR and Sales Overrun/Overflow minimum first-class source contracts are specified.
 - [x] Known zero is separated from missing or unsupported source data.
 - [x] Approval instrument references the profile filename, version, and SHA-256 hash.
-- [ ] Accounting selected `APPROVED_EXACTLY_AS_SPECIFIED` for that exact hash.
-- [ ] AE-DR-006 through AE-DR-009 were subsequently recorded as resolved.
+- [x] Accounting selected `APPROVED_EXACTLY_AS_SPECIFIED` for that exact hash.
+- [x] AE-DR-006 through AE-DR-009 were subsequently recorded as resolved.
 - [ ] Required schema, controlled codes, runtime, and tests were authorized and merged.
 
-**Gate:** `PENDING_EXACT_PROFILE_APPROVAL`. Z-012B remains unauthorized.
+**Gate:** superseded by `Z-012B-ACCOUNTING-APPROVAL-001` on 2026-08-10.
+
+## 10. Z-012A2 local runtime gate
+
+- [x] Approved proposal filename, version, profile, scope, and SHA-256 verified exactly.
+- [x] Approved proposal remains byte-for-byte unchanged.
+- [x] AE-DR-006 through AE-DR-009 resolved without changing their executable meaning.
+- [x] Manual SI/OR and Sales Overrun/Overflow first-class facts are approved Z-012B implementation requirements.
+- [x] Missing source remains distinct from `ATTESTED_ZERO`.
+- [x] Committed-Z, CLOSED-period, BIR Summary authority, Electronic Journal traceability, deterministic XLSX, artifact atomicity, correction lineage, exact scope, privacy, and fail-closed privilege boundaries are frozen.
+- [x] Remaining external decisions do not block local bounded implementation.
+- [ ] Z-012B implementation, database objects, controlled codes, APIs, deterministic artifacts, and tests completed.
+
+**Current decision:** `AUTHORIZED_FOR_Z012B_LOCAL_BOUNDED_RUNTIME`. Controlled UAT, external delivery, and Production remain unauthorized.
