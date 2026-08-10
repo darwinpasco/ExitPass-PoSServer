@@ -67,7 +67,7 @@ All project-owned decisions are approved under `Z-009B-USER-APPROVAL-001`. AE-DR
 - Assert all 13 project-owned decisions reference `Z-009B-USER-APPROVAL-001`, and every external gate appears in the External Confirmation Register.
 - Assert no output format is called BIR-approved.
 
-### Future runtime suite
+### Z-012B runtime suite
 
 - Unit: mapping, checked arithmetic, profile/version validation, deterministic workbook construction.
 - API: authority, anti-enumeration, safe headers/errors, replay/conflict.
@@ -76,7 +76,7 @@ All project-owned decisions are approved under `Z-009B-USER-APPROVAL-001`. AE-DR
 
 ## 4. Mutation manifest
 
-Future proof must compare fiscal documents and children, statutory facts, tenders/tax/discount/totals, numbering and sequences, reporting periods, X/Z snapshots and children, Z counters/GTA/state transitions, reprints, and payment-adjacent rows. Annex E generation may add only approved Annex metadata, export identity/history, output reference, and privacy-safe audit evidence.
+Z-012B proof compares fiscal documents and children, statutory facts, tenders/tax/discount/totals, numbering and sequences, reporting periods, X/Z snapshots and children, Z counters/GTA/state transitions, reprints, and payment-adjacent rows. Annex E generation adds only approved Annex facts, immutable workbook metadata and rows, source links, output identity, correction lineage, and privacy-safe audit evidence.
 
 ## 5. Z-012A1 profile-approval scenarios
 

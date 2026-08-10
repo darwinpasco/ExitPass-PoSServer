@@ -12,6 +12,31 @@
   },
   "family_sources": [
     {
+      "code_set_key": "annex_e1_accounting_fact_status",
+      "path": "families/annex_e1_accounting_fact_status.json",
+      "governance_owner": "Accounting"
+    },
+    {
+      "code_set_key": "annex_e1_accounting_fact_type",
+      "path": "families/annex_e1_accounting_fact_type.json",
+      "governance_owner": "Accounting"
+    },
+    {
+      "code_set_key": "annex_e1_correction_reason",
+      "path": "families/annex_e1_correction_reason.json",
+      "governance_owner": "Accounting"
+    },
+    {
+      "code_set_key": "annex_e1_remarks",
+      "path": "families/annex_e1_remarks.json",
+      "governance_owner": "Engineering"
+    },
+    {
+      "code_set_key": "annex_e1_workbook_status",
+      "path": "families/annex_e1_workbook_status.json",
+      "governance_owner": "Engineering"
+    },
+    {
       "code_set_key": "channel_terminal_health_status",
       "path": "families/channel_terminal_health_status.json",
       "governance_owner": "Operations"

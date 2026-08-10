@@ -48,7 +48,10 @@ db/state/tables/pos.fiscal_z_close_state_transitions.sql
 db/state/tables/pos.fiscal_z_close_state_transition_values.sql
 db/state/tables/pos.fiscal_z_counter_snapshots.sql
 db/state/tables/pos.bir_sales_summary_reports.sql
+db/state/tables/pos.annex_e1_period_accounting_facts.sql
+db/state/tables/pos.annex_e1_workbooks.sql
 db/state/tables/pos.annex_e_reports.sql
+db/state/tables/pos.annex_e1_report_fact_sources.sql
 db/state/tables/pos.fiscal_report_output_refs.sql
 db/state/tables/pos.export_schema_profile_refs.sql
 db/state/tables/pos.electronic_journal_streams.sql

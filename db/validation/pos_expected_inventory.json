@@ -3,9 +3,12 @@
   "expected_schemas": [
     "pos"
   ],
-  "expected_table_count": 66,
+  "expected_table_count": 69,
   "expected_tables": [
     "pos.access_audit",
+    "pos.annex_e1_period_accounting_facts",
+    "pos.annex_e1_report_fact_sources",
+    "pos.annex_e1_workbooks",
     "pos.annex_e_reports",
     "pos.bir_sales_summary_reports",
     "pos.channel_terminal_capabilities",
@@ -132,7 +135,10 @@
       "pos.fiscal_reporting_contract_versions",
       "pos.fiscal_reporting_periods",
       "pos.bir_sales_summary_reports",
+      "pos.annex_e1_period_accounting_facts",
+      "pos.annex_e1_workbooks",
       "pos.annex_e_reports",
+      "pos.annex_e1_report_fact_sources",
       "pos.fiscal_report_output_refs"
     ],
     "slice_7_ej_poslog_json_exports": [
@@ -165,11 +171,16 @@
     "pos.reject_applied_stat_facts_mutation",
     "pos.reject_fiscal_reporting_snapshot_mutation",
     "pos.require_canonical_reprint_journal_event",
+    "pos.validate_annex_e1_accounting_fact_append",
     "pos.validate_fiscal_document_reporting_period_assignment",
     "pos.validate_fiscal_z_close_state_evidence",
     "pos.validate_fiscal_z_close_transition_values"
   ],
   "expected_triggers": [
+    "pos.annex_e1_period_accounting_facts.trg_annex_e1_facts_immutable",
+    "pos.annex_e1_period_accounting_facts.trg_annex_e1_facts_validate",
+    "pos.annex_e1_report_fact_sources.trg_annex_e1_report_fact_sources_immutable",
+    "pos.annex_e1_workbooks.trg_annex_e1_workbooks_immutable",
     "pos.annex_e_reports.trg_annex_e_reports_immutable",
     "pos.bir_sales_summary_reports.trg_bir_sales_summary_reports_immutable",
     "pos.electronic_journal_access_audit.trg_electronic_journal_access_audit_immutable",
@@ -194,7 +205,9 @@
     "pos.x_z_reports.trg_x_z_reports_immutable"
   ],
   "expected_reporting_indexes": [
-    "pos.annex_e_reports.ix_annex_e_reports__site_business_date",
+    "pos.annex_e1_period_accounting_facts.ix_annex_e1_facts__period_type",
+    "pos.annex_e1_workbooks.ix_annex_e1_workbooks__scope_month",
+    "pos.annex_e_reports.ix_annex_e_reports__period",
     "pos.bir_sales_summary_reports.ix_bir_sales_summary__fiscal_identity_period",
     "pos.bir_sales_summary_reports.ix_bir_sales_summary__site_business_date",
     "pos.electronic_journal_access_audit.ix_ej_access_audit__scope_time",
@@ -233,7 +246,10 @@
     "pos.x_z_reports.ux_x_z_reports__z_period"
   ],
   "expected_reporting_constraints": [
-    "pos.annex_e_reports.fk_annex_e_reports__governing_z",
+    "pos.annex_e1_period_accounting_facts.uq_annex_e1_facts__scope_operation",
+    "pos.annex_e1_report_fact_sources.uq_annex_e1_report_fact_sources__order",
+    "pos.annex_e1_workbooks.uq_annex_e1_workbooks__scope_revision",
+    "pos.annex_e_reports.fk_annex_e_reports__z",
     "pos.bir_sales_summary_reports.fk_bir_sales_summary__governing_z",
     "pos.electronic_journal_records.fk_ej_records__reprint",
     "pos.electronic_journal_records.fk_ej_records__stream",

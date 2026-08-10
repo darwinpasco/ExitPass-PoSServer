@@ -198,6 +198,8 @@ AE-DR-016A recommends bounded authorized local generation/download with no signi
 
 Runtime design and local bounded generator implementation are authorized by the completed project and Accounting approval records. Z-012B must implement the approved first-class facts, exact equations, deterministic output, artifact controls, authorization, and tests. Examiner-format, delivery, and production-retention confirmations remain staged according to the Runtime Authorization Checklist and still block Controlled UAT, external delivery, or Production at their recorded levels.
 
+Z-012B implements those local bounded deliverables through canonical `pos` schema objects, versioned checked-minor-unit calculations, a deterministic direct Open XML renderer, content-addressed immutable artifacts, exact replay, correction lineage, and separate fact/generate/read/download/correct permissions. The implementation does not change the external confirmation gates.
+
 Until then:
 
 ```text

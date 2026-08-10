@@ -1,0 +1,20 @@
+{
+  "contract_version": "pos-server-annex-e1-api:v1",
+  "profile": "pos-server-bir-annex-e1-rmo24-2023:v1",
+  "calculation_profile": "pos-server-annex-e1-accounting-calculation:v1",
+  "calculation_profile_sha256": "36bbba7f014f5713955d50fe2fdab63f0cb6e80aab77713fe5fef45fbe7c1a4f",
+  "renderer_version": "pos-server-annex-e1-openxml-renderer:v1",
+  "scope": ["site_pos_server_id", "fiscal_identity_id", "PHP", "calendar_month"],
+  "routes": [
+    {"method":"POST","path":"/v1/fiscal-reports/annex-e/e1/accounting-facts","permission":"fiscal_annex_e.accounting_fact.record"},
+    {"method":"POST","path":"/v1/fiscal-reports/annex-e/e1/known-zero-attestations","permission":"fiscal_annex_e.known_zero.attest"},
+    {"method":"POST","path":"/v1/fiscal-reports/annex-e/e1/workbooks","permission":"fiscal_annex_e.generate"},
+    {"method":"GET","path":"/v1/fiscal-reports/annex-e/e1/workbooks/{id}","permission":"fiscal_annex_e.read"},
+    {"method":"GET","path":"/v1/fiscal-reports/annex-e/e1/workbooks/{id}/content","permission":"fiscal_annex_e.export"}
+  ],
+  "correction_permission": "fiscal_annex_e.correct",
+  "artifact_mime_type": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+  "external_delivery": false,
+  "controlled_uat_authorized": false,
+  "production_authorized": false
+}

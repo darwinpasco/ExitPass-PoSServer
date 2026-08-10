@@ -24,8 +24,8 @@
 
 - [x] AE-DR-001, 010A, 011, 017, and 018 user approvals recorded.
 - [x] AE-DR-007 and 008 exact first-class source definitions approved by `Z-012B-ACCOUNTING-APPROVAL-001`.
-- [ ] Historical header/profile fields and H10 actor semantics frozen.
-- [ ] Controlled profile, remarks, statutory mapping, status, and lineage codes approved.
+- [x] Z-012B snapshots mandatory historical header values, generated timestamp, and privacy-safe H10 actor/service reference in immutable workbook metadata.
+- [x] Z-012B implements controlled profile, remarks, fact status/type, workbook status, and correction-lineage codes for the bounded local profile.
 - [ ] Existing non-empty metadata migration posture audited; no historical values invented.
 - [ ] Rebuild, upgrade, replay, inventory, drift, wrong-family, immutability, and privacy proof designed.
 - [ ] Generic JSON is prohibited as field or correction authority.
@@ -76,7 +76,7 @@
 ## 8. Authorization sign-off
 
 - Technical design authorized by/date/reference: `Darwin Pasco / 2026-08-06 PHT / Z-009B-USER-APPROVAL-001`
-- Schema implementation authorized by/date/reference: `________________`
+- Schema implementation authorized by/date/reference: `Z-012A2 / 2026-08-10 / AUTHORIZED_FOR_Z012B_LOCAL_BOUNDED_RUNTIME`
 - Bounded generator authorized by/date/reference: `Accounting and Z-012A2 / 2026-08-10 / Z-012B-ACCOUNTING-APPROVAL-001`
 - Controlled UAT authorized by/date/reference: `NOT AUTHORIZED`
 - Production authorized by/date/reference: `NOT AUTHORIZED`
@@ -90,7 +90,7 @@
 - [x] Approval instrument references the profile filename, version, and SHA-256 hash.
 - [x] Accounting selected `APPROVED_EXACTLY_AS_SPECIFIED` for that exact hash.
 - [x] AE-DR-006 through AE-DR-009 were subsequently recorded as resolved.
-- [ ] Required schema, controlled codes, runtime, and tests were authorized and merged.
+- [x] Required schema, controlled codes, runtime, and tests are implemented by Z-012B and pending review/merge.
 
 **Gate:** superseded by `Z-012B-ACCOUNTING-APPROVAL-001` on 2026-08-10.
 
@@ -103,6 +103,17 @@
 - [x] Missing source remains distinct from `ATTESTED_ZERO`.
 - [x] Committed-Z, CLOSED-period, BIR Summary authority, Electronic Journal traceability, deterministic XLSX, artifact atomicity, correction lineage, exact scope, privacy, and fail-closed privilege boundaries are frozen.
 - [x] Remaining external decisions do not block local bounded implementation.
-- [ ] Z-012B implementation, database objects, controlled codes, APIs, deterministic artifacts, and tests completed.
+- [x] Z-012B implementation, database objects, controlled codes, APIs, deterministic artifacts, and tests completed for review.
 
 **Current decision:** `AUTHORIZED_FOR_Z012B_LOCAL_BOUNDED_RUNTIME`. Controlled UAT, external delivery, and Production remain unauthorized.
+
+## 11. Z-012B implementation result
+
+- [x] Exact approved calculation profile hash is enforced in runtime and canonical database checks.
+- [x] Manual SI/OR and accumulated-sales-capacity overflow facts distinguish `RECORDED`, `ATTESTED_ZERO`, missing, and corrected evidence.
+- [x] All 10 header and 32 detail positions are deterministically emitted.
+- [x] Metadata, source rows, fact links, correction lineage, and artifact hashes are immutable.
+- [x] Download returns stored bytes after SHA-256 and length verification; it does not regenerate.
+- [x] Exact replay, semantic conflict, concurrent generation, correction, tamper, scope, and Production-fixture proofs pass.
+
+**Implementation gate:** Z-012B is ready for review and merge. Controlled UAT, external delivery, Production, E-2 through E-5, and ARTS POSLog remain unauthorized.
