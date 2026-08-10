@@ -6,11 +6,13 @@ This package records the source-grounded Annex E-1 contract and the local bounde
 
 ## Reading order
 
-1. [Z-012B Deterministic Runtime Implementation](ExitPass_POS_Server_Z012B_Annex_E1_Deterministic_Runtime_Implementation_v1.0.md)
-2. [Z-012A2 Accounting Approval and Runtime Authorization Revalidation](ExitPass_POS_Server_Z012A2_Annex_E1_Accounting_Approval_and_Runtime_Authorization_Revalidation_v1.0.md)
-3. [Approved Accounting Calculation Profile](ExitPass_POS_Server_Annex_E1_Accounting_Calculation_Profile_Proposal_v1.0.md)
-4. [Accounting Approval Form and Record](ExitPass_POS_Server_Annex_E1_Accounting_Calculation_Profile_Approval_Form_v1.0.md)
-5. [Z-012A Runtime Authorization Revalidation](ExitPass_POS_Server_Z012A_Annex_E1_Runtime_Authorization_Revalidation_v1.0.md)
+1. [Z-012C Controlled UAT Gate Revalidation](ExitPass_POS_Server_Z012C_Annex_E1_Controlled_UAT_Gate_Revalidation_v1.0.md)
+2. [External Confirmation Closure Package](ExitPass_POS_Server_Annex_E1_External_Confirmation_Closure_Package_v1.0.md)
+3. [Z-012B Deterministic Runtime Implementation](ExitPass_POS_Server_Z012B_Annex_E1_Deterministic_Runtime_Implementation_v1.0.md)
+4. [Z-012A2 Accounting Approval and Runtime Authorization Revalidation](ExitPass_POS_Server_Z012A2_Annex_E1_Accounting_Approval_and_Runtime_Authorization_Revalidation_v1.0.md)
+5. [Approved Accounting Calculation Profile](ExitPass_POS_Server_Annex_E1_Accounting_Calculation_Profile_Proposal_v1.0.md)
+6. [Accounting Approval Form and Record](ExitPass_POS_Server_Annex_E1_Accounting_Calculation_Profile_Approval_Form_v1.0.md)
+7. [Z-012A Runtime Authorization Revalidation](ExitPass_POS_Server_Z012A_Annex_E1_Runtime_Authorization_Revalidation_v1.0.md)
 6. [Source and Applicability Assessment](ExitPass_POS_Server_BIR_Annex_E_Source_and_Applicability_Assessment_v1.0.md)
 7. [Decision Resolution Summary](ExitPass_POS_Server_BIR_Annex_E_Decision_Resolution_Summary_v1.0.md)
 8. [Open Decisions and Assumptions Register](ExitPass_POS_Server_BIR_Annex_E_Open_Decisions_and_Assumptions_Register_v1.0.md)
@@ -45,6 +47,8 @@ Every material rule uses one of: `EXPLICITLY_REQUIRED`, `EXPLICITLY_ALLOWED`, `E
 
 **Bounded E-1 implementation: `AUTHORIZED_FOR_Z012B_LOCAL_BOUNDED_RUNTIME`.**
 
-**Local bounded runtime status: implemented by Z-012B, pending review and merge.**
+**Local bounded runtime status: merged and independently accepted by Z-012C.**
+
+**Controlled UAT preparation: authorized as a documentation, synthetic-scenario, evidence-manifest, and environment-planning activity only. Controlled UAT data assignment and execution remain blocked pending the external confirmations identified by Z-012C.**
 
 Accounting approved the exact immutable calculation proposal under `Z-012B-ACCOUNTING-APPROVAL-001`, resolving AE-DR-006 through AE-DR-009. Ten external confirmations remain active, but none blocks local bounded implementation: AE-DR-012 remains fail closed for nonzero unresolved privileges, while the others gate Controlled UAT, external delivery, or Production. E-2 through E-5 and ARTS POSLog remain deferred. Controlled UAT, external delivery, and Production remain unauthorized.
