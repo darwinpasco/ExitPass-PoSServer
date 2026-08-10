@@ -62,6 +62,14 @@ The renderer must not reorder columns to match internal DTO order. Merged headin
 | Formula cells | Prefer materialized recorded values plus validation evidence; do not depend on client formula recalculation |
 | Hidden cells/macros | Prohibited unless an approved official template requires them; no macros found in `.xlsx` source |
 
+### 5.1 Z-012A deterministic package requirement
+
+Z-012A inspected the official Open XML package directly. The package contains ordinary workbook XML, worksheet drawings, fixed geometry, and volatile core properties; the E-1 formula expressions are labels rather than executable cell formulas. The repository has no selected XLSX package dependency.
+
+Literal byte identity remains required and technically feasible. A future renderer must use a versioned official-template hash, fixed ZIP entry order, fixed entry timestamps, deterministic XML/relationship ordering, normalized volatile properties, and application-calculated values. Stored ZIP entries are the preferred bounded strategy because runtime-dependent default compression can change bytes across library/runtime versions. If compression is used, the exact compressor and version must be pinned and proved across supported hosts. Microsoft Excel, macros, volatile formulas, current locale, current time, and manual editing are prohibited dependencies.
+
+No semantic-equivalence downgrade is approved. Immutable final bytes must be stored outside the relational database and replayed with the persisted content hash and output evidence.
+
 ## 6. Deterministic ordering
 
 - Header order H01:H10 is fixed.
@@ -105,6 +113,8 @@ output format
 Use a repository-approved SHA-256 versioned scheme. The hash must be over final bytes for content integrity and exposed only as a safe ETag/content identity. It must not use raw semantic source strings in public output.
 
 Exact replay returns identical bytes, filename, content type, and hash. Restart must not alter bytes. A changed approved profile or period set creates a new operation/version, not mutation.
+
+Z-012A status: package-byte determinism is feasible as a future implementation constraint, but no renderer or library has been selected or implemented by the documentation task.
 
 ## 9. Generation, duplicates, and correction
 

@@ -4,9 +4,9 @@
 
 **Runtime design: `AUTHORIZED_FOR_RUNTIME_DESIGN` by `Z-009B-USER-APPROVAL-001`.**
 
-**Bounded E-1 implementation: `BLOCKED_PENDING_EXTERNAL_CONFIRMATION`.**
+**Bounded E-1 implementation: `BLOCKED_PENDING_ACCOUNTING_CONFIRMATION` after Z-012A revalidation.**
 
-AE-SRC-001 establishes the five profile templates and E-1 physical field order. The 24 original decisions are preserved and split into 35 authority-specific records: all 13 project decisions are approved, 14 require external confirmation, and 2 E-2 through E-5 decisions are deferred. Mandatory E-1 values or semantics remain externally unresolved for manual SI/OR sales, formula mapping, overrun/overflow, total income, VAT/discount category mapping, and official artifact acceptance.
+AE-SRC-001 establishes the five profile templates and E-1 physical field order. The 24 original decisions are preserved and split into 35 authority-specific records: all 13 project decisions are approved, 14 require external confirmation, and 2 E-2 through E-5 decisions are deferred. Z-012A revalidated all 42 physical positions against merged Z-010 and Z-011A. Mandatory E-1 values or semantics remain unresolved for manual SI/OR sales, formula mapping, overrun/overflow, and total income; Accounting confirmation is required before a complete generator can begin. VAT/discount category mapping and official artifact acceptance retain narrower staged gates.
 
 ## 2. Frozen scope available from sources
 
@@ -42,8 +42,8 @@ The command should accept an operation key and governing Z reference or approved
 | E-1 physical detail columns | 32 |
 | Total dictionary fields | 42 |
 | Official detail field numbers displayed | 29 |
-| Direct existing immutable fields | 17 |
-| Existing derivations | 6 |
+| Direct existing immutable fields | 19 |
+| Existing derivations | 4 |
 | Fields needing Z/header extension | 7 |
 | Fields needing new report projection | 1 |
 | Fields needing explicit schema support | 2 |
@@ -60,7 +60,8 @@ Primary readiness categories total 42. Broader decision gates may affect fields 
 ### 5.1 Reuse
 
 - Keep `pos.annex_e_reports` as immutable profile metadata bound to a governing Z.
-- Use `pos.bir_sales_summary_reports` as the existing first-class E-1 summary projection rather than creating a second generic JSON payload.
+- Use merged Z-010 `pos.bir_sales_summary_reports` as the existing first-class E-1 financial projection rather than creating a second generic JSON payload.
+- Use merged Z-011A Electronic Journal events for transition traceability and integrity evidence only, never as the Annex financial authority.
 - Reuse `pos.fiscal_report_output_refs` and export package objects only after hardening them for Annex E identity, correct-family codes, immutability, and privacy-safe first-class metadata.
 - Do not use `request_context`, `package_context`, or `item_context` JSON as authority for E-1 fields or decisions.
 
@@ -201,7 +202,9 @@ Until then:
 
 ```text
 Z-009 Annex E runtime design: AUTHORIZED
-Z-009 bounded E-1 implementation: BLOCKED PENDING EXTERNAL CONFIRMATION
+Z-009 bounded E-1 implementation: BLOCKED PENDING ACCOUNTING CONFIRMATION
 Controlled UAT: NOT AUTHORIZED
 Production: NOT AUTHORIZED
 ```
+
+The controlling revalidation and gated future boundary are in [Z-012A Runtime Authorization Revalidation](ExitPass_POS_Server_Z012A_Annex_E1_Runtime_Authorization_Revalidation_v1.0.md). No Z-012B runtime authorization is issued until AE-DR-006 through AE-DR-009 are approved.

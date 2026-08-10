@@ -2,7 +2,7 @@
 
 ## 1. Mapping rules
 
-This matrix maps every E-1 field from the field dictionary. `Projection` means a future immutable Annex E/BIR projection, not live recomputation. No current Annex E runtime service exists.
+This matrix maps every E-1 field from the field dictionary. `Projection` means a future immutable Annex E/BIR projection, not live recomputation. No current Annex E runtime service exists. Z-012A revalidated the matrix on 2026-08-10 PHT against merged Z-010 and Z-011A at baseline `227cdc708d1a685cd56986f084d0cc1aad3e81dd`.
 
 Readiness values are limited to the classifications required by Z-009A.
 
@@ -15,8 +15,8 @@ Readiness values are limited to the classifications required by Z-009A.
 | H03 TIN | `pos.fiscal_document_header_snapshots.tin` | Future immutable header projection | Z / committed / report profile | `REQUIRES_Z_SNAPSHOT_EXTENSION` | Same as H01 | Persist taxpayer TIN only; exclude beneficiary TIN |
 | H04 Software name/version | `pos.fiscal_identities.software_name`, `software_version` | Future release-profile resolver | Z / committed / report profile | `REQUIRES_SCHEMA_CHANGE` | Values are mutable and not Z-bound | Add immutable approved release/profile reference |
 | H05 Release no/date | No complete first-class historical source | Future release-profile resolver | Z / committed / report profile | `NOT_AVAILABLE` | Release number/date are not modeled together | Add approved release profile or first-class fields |
-| H06 Serial no. | `pos.sales_invoice_header_profiles.pos_serial_number`; BIR summary posture | Future BIR/Annex header projection | Z / committed / report profile | `READY_EXISTING_DERIVATION` | Must bind the profile historically | Reference immutable approved header profile |
-| H07 MIN | `pos.sales_invoice_header_profiles.machine_identification_number`; BIR summary posture | Future BIR/Annex header projection | Z / committed / report profile | `READY_EXISTING_DERIVATION` | Must bind the profile historically | Reference immutable approved header profile |
+| H06 Serial no. | `pos.bir_sales_summary_reports.pos_serial_number` | Committed BIR Sales Summary readback | Z / committed / report profile | `READY_EXISTING_FIELD` | None for the committed summary binding | Copy the immutable BIR Summary value |
+| H07 MIN | `pos.bir_sales_summary_reports.machine_identification_number` | Committed BIR Sales Summary readback | Z / committed / report profile | `READY_EXISTING_FIELD` | None for the committed summary binding | Copy the immutable BIR Summary value |
 | H08 POS terminal no. | Governed Site POS Server/fiscal-identity header profile; child `pos.channel_terminals` are not output identities | Future header projection | Z / committed / scope | `REQUIRES_Z_SNAPSHOT_EXTENSION` | Historical terminal identity is not Z-bound; examiner acceptance remains external | Snapshot the governed fiscal terminal identity; confirm under AE-DR-020A |
 | H09 Generated date/time | `pos.annex_e_reports.generated_at` | Future export operation | Annex E / committed / output | `READY_EXISTING_FIELD` | Deterministic regeneration semantics unresolved | Freeze operation identity and regeneration lineage |
 | H10 UserID | Fiscal report request/audit service identity reference | Future Annex E audit adapter | Annex E / committed / output | `REQUIRES_NEW_REPORT_PROJECTION` | No immutable Annex E actor projection | Persist the server-derived privacy-safe actor/service reference approved under AE-DR-005A |
@@ -62,8 +62,8 @@ Readiness values are limited to the classifications required by Z-009A.
 
 | Classification | Count |
 | --- | ---: |
-| `READY_EXISTING_FIELD` | 17 |
-| `READY_EXISTING_DERIVATION` | 6 |
+| `READY_EXISTING_FIELD` | 19 |
+| `READY_EXISTING_DERIVATION` | 4 |
 | `REQUIRES_Z_SNAPSHOT_EXTENSION` | 7 |
 | `REQUIRES_NEW_REPORT_PROJECTION` | 1 |
 | `REQUIRES_SCHEMA_CHANGE` | 2 |
@@ -76,6 +76,8 @@ These are primary per-field readiness classifications and total 42. A field can 
 
 ## 5. Source-of-truth boundary
 
-The future runtime must consume the committed Z snapshot, immutable children, immutable counter snapshot, and an approved historical header/profile binding. It must not query live transaction tables to recalculate closed-period totals. A new first-class BIR/Annex E projection may validate and reshape recorded facts, but it must not become a second independently recomputed fiscal truth.
+The future runtime must consume the committed Z snapshot, immutable children, immutable counter snapshot, committed BIR Sales Summary, and an approved historical header/profile binding. It must not query live transaction tables to recalculate closed-period totals. Z-010's BIR Sales Summary is the preferred first-class source where it carries the required fact. A new Annex E projection may validate and reshape recorded facts, but it must not become a second independently recomputed fiscal truth. Z-011A Electronic Journal events provide traceability and integrity evidence only; they are not the financial authority.
 
 The readiness classifications above describe data availability. AE-DR-005A, AE-DR-011, AE-DR-010A, AE-DR-017, and AE-DR-018 are approved ExitPass decisions under `Z-009B-USER-APPROVAL-001`. AE-DR-006 through AE-DR-009, AE-DR-011A, AE-DR-012, and AE-DR-019 remain external gates where they affect mandatory E-1 values.
+
+The exact per-position Z-012A reconciliation, including null, zero, no-activity, unsupported behavior, and staged gate classification, is in [Z-012A Runtime Authorization Revalidation](ExitPass_POS_Server_Z012A_Annex_E1_Runtime_Authorization_Revalidation_v1.0.md).

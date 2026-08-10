@@ -4,14 +4,14 @@
 
 Every scenario uses synthetic data. A successful action is read-only with respect to fiscal documents, Z, counters, GTA, periods, and sequences. Audit records contain references and outcomes, not output payloads or customer data.
 
-All project-owned decisions are approved under `Z-009B-USER-APPROVAL-001`. `PENDING_EXTERNAL` means authoritative external evidence is still required. A fail-closed scenario can be design-ready even when unsupported positive-value behavior remains out of scope.
+All project-owned decisions are approved under `Z-009B-USER-APPROVAL-001`. `PENDING_EXTERNAL` means authoritative external evidence is still required. Z-012A confirms that AE-DR-006 through AE-DR-009 block the initial generator; a fail-closed nonzero privilege scenario can be design-ready only after those common row blockers are resolved.
 
 ## 2. Scenarios
 
 | ID | Precondition / authoritative input | Action | Expected output and validation | Safe error | Audit / mutation | Readiness |
 | --- | --- | --- | --- | --- | --- | --- |
 | AE-AC-001 | Closed period, committed Z, complete approved profile, normal VATable facts | Generate E-1 | Exact H01:H10 and D01:D32; all reconciliations exact | None | `annex_e_generated`; no fiscal mutation | User gates AE-DR-001/002A/003A/004A/005A/010A/011/016A/017/018/019A/021/022/024A; external mandatory-field gates remain |
-| AE-AC-002 | Committed empty-period Z | Generate | One zero row; blank SI range; equal GTA; advanced Z; controlled `NO_ACTIVITY` | None when authoritative zero facts are complete | Success/none | Approved AE-DR-010A/021 |
+| AE-AC-002 | Committed empty-period Z | Generate | One zero row only after Manual SI/OR, overrun/overflow, Total Income, and formula rules supply authoritative known-zero behavior; blank SI range; equal GTA; advanced Z; controlled `NO_ACTIVITY` | `annex_e_contract_unresolved` until AE-DR-006/007/008/009 are approved | Failure/none before approval; success/none after complete sources | Approved design AE-DR-010A/021; initial generator still blocked |
 | AE-AC-003 | Z has VATable, VAT-exempt, zero-rated values | Generate | Copy recorded categories without tax recalculation | None if profile complete | Success/none | Ready after common gates |
 | AE-AC-004 | Z has separate SC/PWD discount and VAT-removal children | Generate | D12/D13/D20/D21 exact; no identity | None | Success/none | Ready after common gates |
 | AE-AC-005 | Z tenders contain cash, QRPH, card; sum equals net | Generate | No tender columns; tender validation passes | None | Success/none | Ready after common gates |

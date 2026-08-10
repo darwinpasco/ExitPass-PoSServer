@@ -6,6 +6,8 @@ This register isolates questions that internal architecture cannot answer. Silen
 
 It contains 14 currently active `REQUIRES_EXTERNAL_CONFIRMATION` records plus two deferred future-profile questions (AE-DR-013 and AE-DR-014). The deferred questions do not block bounded E-1.
 
+Z-012A revalidated this exact count on 2026-08-10 PHT. Merged Z-010 and Z-011A did not satisfy any external confirmation. They improve authoritative source availability and traceability but do not supply Accounting, BIR/examiner, or Legal/Compliance approval.
+
 | ID | External question | Why internal resolution is insufficient / source ambiguity | Proposed question and acceptable evidence | Blocking impact | Interim safe posture |
 | --- | --- | --- | --- | --- | --- |
 | AE-DR-002 | Is deterministic XLSX using RMO 24-2023 E-1 accepted as the official electronic artifact, and are PDF/JSON required companions? | Official workbook is XLSX; API contract says formats remain open. | Written BIR/examiner response identifying accepted artifact and companions; signed accreditation minutes also acceptable. | Controlled UAT | Build only the approved internally labeled E-1 profile; no BIR-accepted claim. |
@@ -24,6 +26,27 @@ It contains 14 currently active `REQUIRES_EXTERNAL_CONFIRMATION` records plus tw
 | AE-DR-019 | What official number/date display profile is accepted? | Workbook uses General formatting. | Accounting/examiner-approved decimal places, separators, date format, currency, negatives, and zeros. | Controlled UAT | Use internal invariant profile only, labeled pending confirmation. |
 | AE-DR-020A | What should H08 POS Terminal No. contain for one Site POS Server with child channels? | Workbook expects one value; architecture has many channels. | Examiner acceptance of governed Site POS Server fiscal terminal identity, or alternate exact rule. | Controlled UAT | Use server fiscal terminal identity internally; never concatenate channel labels. |
 | AE-DR-024 | Must exact template geometry be preserved, and what wrapping is accepted? | Source has widths but no overflow rule. | Examiner-approved golden workbook/printed sample and overflow examples. | Controlled UAT | Preserve source geometry and fail unrepresentable values under the approved internal policy. |
+
+## Z-012A authoritative classifications and staged gates
+
+| ID | Authoritative resolution classification | Gate labels |
+|---|---|---|
+| AE-DR-002 | `REQUIRES_BIR_OR_EXAMINER_CONFIRMATION` | `BLOCKING_CONTROLLED_UAT`, `BLOCKING_EXTERNAL_DELIVERY`, `BLOCKING_PRODUCTION` |
+| AE-DR-004 | `REQUIRES_BIR_OR_EXAMINER_CONFIRMATION` | `BLOCKING_CONTROLLED_UAT`, `BLOCKING_EXTERNAL_DELIVERY`, `BLOCKING_PRODUCTION` |
+| AE-DR-006 | `REQUIRES_ACCOUNTING_APPROVAL` | `BLOCKING_INITIAL_GENERATOR`, `BLOCKING_CONTROLLED_UAT`, `BLOCKING_PRODUCTION` |
+| AE-DR-007 | `REQUIRES_ACCOUNTING_APPROVAL` | `BLOCKING_INITIAL_GENERATOR`, `BLOCKING_SCHEMA_IMPLEMENTATION`, `BLOCKING_CONTROLLED_UAT`, `BLOCKING_PRODUCTION` |
+| AE-DR-008 | `REQUIRES_ACCOUNTING_APPROVAL` | `BLOCKING_INITIAL_GENERATOR`, `BLOCKING_SCHEMA_IMPLEMENTATION`, `BLOCKING_CONTROLLED_UAT`, `BLOCKING_PRODUCTION` |
+| AE-DR-009 | `REQUIRES_ACCOUNTING_APPROVAL` | `BLOCKING_INITIAL_GENERATOR`, `BLOCKING_CONTROLLED_UAT`, `BLOCKING_PRODUCTION` |
+| AE-DR-010 | `REQUIRES_BIR_OR_EXAMINER_CONFIRMATION` | `BLOCKING_CONTROLLED_UAT`, `BLOCKING_EXTERNAL_DELIVERY`, `BLOCKING_PRODUCTION` |
+| AE-DR-011A | `REQUIRES_BIR_OR_EXAMINER_CONFIRMATION` | `BLOCKING_NONZERO_PRIVILEGE_PATH`, `BLOCKING_CONTROLLED_UAT`, `BLOCKING_PRODUCTION` |
+| AE-DR-012 | `REQUIRES_ACCOUNTING_APPROVAL` | `BLOCKING_NONZERO_PRIVILEGE_PATH`, `BLOCKING_CONTROLLED_UAT`, `BLOCKING_PRODUCTION` |
+| AE-DR-016 | `REQUIRES_BIR_OR_EXAMINER_CONFIRMATION` | `BLOCKING_EXTERNAL_DELIVERY`, `BLOCKING_CONTROLLED_UAT`, `BLOCKING_PRODUCTION` |
+| AE-DR-016B | `REQUIRES_LEGAL_COMPLIANCE_APPROVAL` | `BLOCKING_PRODUCTION` |
+| AE-DR-019 | `REQUIRES_ACCOUNTING_APPROVAL` | `BLOCKING_CONTROLLED_UAT`, `BLOCKING_PRODUCTION` |
+| AE-DR-020A | `REQUIRES_BIR_OR_EXAMINER_CONFIRMATION` | `BLOCKING_SCHEMA_IMPLEMENTATION`, `BLOCKING_CONTROLLED_UAT`, `BLOCKING_PRODUCTION` |
+| AE-DR-024 | `REQUIRES_BIR_OR_EXAMINER_CONFIRMATION` | `BLOCKING_CONTROLLED_UAT`, `BLOCKING_EXTERNAL_DELIVERY`, `BLOCKING_PRODUCTION` |
+
+Exactly 14 rows appear in this table. The questions, acceptable evidence, and fail-closed posture in the primary table remain controlling. AE-DR-013 and AE-DR-014 remain separate deferred E-2 through E-5 matters.
 
 ## Evidence handling
 
