@@ -51,3 +51,12 @@ Exactly 14 rows appear in this table. The questions, acceptable evidence, and fa
 ## Evidence handling
 
 Acceptable evidence must identify the authority, date, affected Annex E profile/version, exact decision ID, and selected rule. Do not store confidential correspondence or personal examiner contact details in the repository; store a controlled approval reference and a privacy-safe summary.
+
+## Z-012A1 Accounting approval instrument
+
+The 2026-08-10 Accounting statement establishes `ACCOUNTING_AUTHORITY_AND_APPROVAL_IN_PRINCIPLE_CONFIRMED` for AE-DR-006 through AE-DR-009. It does not approve an unstated formula. The exact proposal and pending instrument are:
+
+* [Accounting Calculation Profile Proposal](ExitPass_POS_Server_Annex_E1_Accounting_Calculation_Profile_Proposal_v1.0.md)
+* [Accounting Calculation Profile Approval Form](ExitPass_POS_Server_Annex_E1_Accounting_Calculation_Profile_Approval_Form_v1.0.md)
+
+All four rows remain active external confirmations and continue to block initial generation until the exact profile version and SHA-256 are approved. The register therefore still contains exactly 14 unresolved external confirmations.

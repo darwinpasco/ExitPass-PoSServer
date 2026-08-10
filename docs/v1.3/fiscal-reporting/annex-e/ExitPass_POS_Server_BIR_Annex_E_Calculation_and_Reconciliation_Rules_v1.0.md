@@ -143,3 +143,19 @@ Unknown source facts still fail closed rather than being converted into placehol
 ## 11. Replay and regeneration
 
 Exact replay of one approved Annex E operation over one governing Z/profile/version must return identical bytes. A changed profile, grouping, or output contract is a semantic conflict or a new versioned operation, not silent replacement. Prior-period regeneration reads only immutable sources and must not change fiscal state.
+
+## 12. Z-012A1 proposed executable calculation profile
+
+The exact pending recommendation is governed by the [Accounting Calculation Profile Proposal](ExitPass_POS_Server_Annex_E1_Accounting_Calculation_Profile_Proposal_v1.0.md). Its principal equations, all in checked PHP minor units with zero tolerance, are:
+
+```text
+D07 = ACTIVE_GROSS + RETURN_AMOUNT + VOID_AMOUNT
+D16 = OTHER_STATUTORY_DISCOUNT + COUPON_DISCOUNT + PROMOTIONAL_DISCOUNT
+D19 = D12 + D13 + D14 + D15 + D16 + D17 + D18
+D25 = D20 + D21 + D22 + D23 + D24
+D26 = D09 - D22
+D27 = D07 - D19 - D09
+D29 = D27 + D06 + D28
+```
+
+D26 preserves literal official expression `23=8-19`; D27 preserves `24=6-16-8`. D27 is a proposed Annex-calculated VAT-exclusive net value and is not the existing VAT-inclusive Z/BIR Summary net amount. D06 and D28 require new immutable period facts or explicit zero attestations. This section is `PENDING_EXACT_PROFILE_APPROVAL`, not an approved calculation rule.

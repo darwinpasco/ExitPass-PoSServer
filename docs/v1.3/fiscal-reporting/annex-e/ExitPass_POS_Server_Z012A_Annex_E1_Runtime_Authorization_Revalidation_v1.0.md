@@ -243,3 +243,9 @@ This is a handoff boundary, not an authorization to implement. Once AE-DR-006 th
 ## 11. Residual approval questions
 
 Accounting must answer AE-DR-006 through AE-DR-009 before a generator task starts. Accounting must also answer AE-DR-012 before nonzero Diplomat or other unresolved VAT-privilege scenarios are enabled. The BIR/examiner and Legal/Compliance questions in section 7 retain their narrower stage gates and fail-closed posture.
+
+## 12. Z-012A1 follow-up status
+
+Z-012A1 records the 2026-08-10 Accounting statement as `ACCOUNTING_AUTHORITY_AND_APPROVAL_IN_PRINCIPLE_CONFIRMED` and prepares one exact, hash-bound [Accounting Calculation Profile Proposal](ExitPass_POS_Server_Annex_E1_Accounting_Calculation_Profile_Proposal_v1.0.md) plus [Approval Form](ExitPass_POS_Server_Annex_E1_Accounting_Calculation_Profile_Approval_Form_v1.0.md).
+
+This does not revise Z-012A's generator decision. AE-DR-006 through AE-DR-009 remain `REQUIRES_ACCOUNTING_APPROVAL`, the proposal remains `PENDING_EXACT_PROFILE_APPROVAL`, and `EXECUTABLE_CALCULATION_PROFILE_NOT_YET_APPROVED` remains controlling. No Z-012B runtime authorization is issued by Z-012A1.

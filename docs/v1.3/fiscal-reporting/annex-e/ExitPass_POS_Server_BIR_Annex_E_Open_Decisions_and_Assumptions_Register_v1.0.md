@@ -123,3 +123,9 @@ The inventory and original resolution statuses remain unchanged: 13 project-owne
 | AE-DR-013, AE-DR-014 | `DEFERRED_NONBLOCKING` | E-2 through E-5 only |
 
 The resulting generator decision is `BLOCKED_PENDING_ACCOUNTING_CONFIRMATION`. See [Z-012A Runtime Authorization Revalidation](ExitPass_POS_Server_Z012A_Annex_E1_Runtime_Authorization_Revalidation_v1.0.md) for the exact 42-position map and each external gate.
+
+## 7. Z-012A1 exact-profile proposal
+
+On 2026-08-10, Accounting authority and approval in principle were confirmed for AE-DR-006 through AE-DR-009. Z-012A1 converts the prior alternatives into one implementation-ready recommendation in the [Accounting Calculation Profile Proposal](ExitPass_POS_Server_Annex_E1_Accounting_Calculation_Profile_Proposal_v1.0.md), with selection captured by the [Accounting Approval Form](ExitPass_POS_Server_Annex_E1_Accounting_Calculation_Profile_Approval_Form_v1.0.md).
+
+This evidence does not change the four decision rows above. They remain `REQUIRES_EXTERNAL_CONFIRMATION` with Accounting as approver until Accounting selects `APPROVED_EXACTLY_AS_SPECIFIED` for the identified profile hash. The proposal's statuses are `ACCOUNTING_AUTHORITY_AND_APPROVAL_IN_PRINCIPLE_CONFIRMED`, `PENDING_EXACT_PROFILE_APPROVAL`, and `EXECUTABLE_CALCULATION_PROFILE_NOT_YET_APPROVED`.
