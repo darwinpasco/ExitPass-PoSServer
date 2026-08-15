@@ -2,7 +2,7 @@
 
 ## Purpose
 
-This package records the source-grounded Annex E-1 contract, the local bounded runtime implemented by Z-012B, the Z-012D preparation package, the Controlled UAT authorization review, the historical v1.0-v1.2 synthetic dataset packages and reviews, and the prospective v1.3 documentation-only correction package. It does not authorize dataset or validator implementation, runtime modification, environment provisioning, database access or loading, Controlled UAT execution, workbook generation, submission, signing, encryption, or Production.
+This package records the source-grounded Annex E-1 contract, the local bounded runtime implemented by Z-012B, the Z-012D preparation package, the Controlled UAT authorization review, the historical v1.0-v1.3 synthetic dataset packages, and their authorization reviews. It does not authorize dataset or validator implementation, runtime modification, environment provisioning, database access or loading, Controlled UAT execution, workbook generation, submission, signing, encryption, or Production.
 
 ## Reading order
 
@@ -15,7 +15,8 @@ This package records the source-grounded Annex E-1 contract, the local bounded r
 7. [Synthetic UAT Canonical Source Row Population v1.3](ExitPass_POS_Server_Annex_E1_Synthetic_UAT_Canonical_Source_Row_Population_v1.3.md)
 8. [Synthetic UAT Dataset Specification Correction Resolution Matrix v1.3](ExitPass_POS_Server_Annex_E1_Synthetic_UAT_Dataset_Specification_Correction_Resolution_Matrix_v1.3.md)
 9. [Synthetic UAT Dataset Specification Manifest v1.3](ExitPass_POS_Server_Annex_E1_Synthetic_UAT_Dataset_Specification_Manifest_v1.3.md)
-10. [Synthetic UAT Dataset Specification v1.2 Authorization Review](ExitPass_POS_Server_Annex_E1_Synthetic_UAT_Dataset_Specification_v1.2_Authorization_Review_v1.0.md)
+10. [Synthetic UAT Dataset Specification v1.3 Authorization Review](ExitPass_POS_Server_Annex_E1_Synthetic_UAT_Dataset_Specification_v1.3_Authorization_Review_v1.0.md)
+11. [Synthetic UAT Dataset Specification v1.2 Authorization Review](ExitPass_POS_Server_Annex_E1_Synthetic_UAT_Dataset_Specification_v1.2_Authorization_Review_v1.0.md)
 
 ## Historical and governing reading order
 
@@ -125,4 +126,12 @@ All ten external confirmations remain `UNRESOLVED`: AE-DR-002, AE-DR-004, AE-DR-
 
 **Current canonical token: `BLOCKED_ANNEX_E1_SYNTHETIC_DATASET_IMPLEMENTATION`.** Version 1.3 does not authorize dataset or validator implementation, runtime/application/API/database/migration/configuration/dependency/CI changes, provisioning, role assignment, loading, UAT, workbook generation, evidence acceptance, delivery, BIR submission, Production, Annex E-2 through E-5, ARTS POSLog, signing, encryption, or destructive retention.
 
-**Exact next bounded activity: Review Annex E-1 Synthetic UAT Dataset Specification v1.3.** The review must independently reconstruct identities, hashes, source rows, SP-A finality, C02, Electronic Journal chains, R01-R12, counts, manifest bytes, and scope boundaries before the canonical implementation gate can change.
+**Historical v1.3 package next step (completed by the review below): Review Annex E-1 Synthetic UAT Dataset Specification v1.3.** The package itself conferred no dataset or validator implementation authority.
+
+**Synthetic dataset specification v1.3 authorization review: `BLOCKED_ANNEX_E1_SYNTHETIC_DATASET_IMPLEMENTATION`.** The independent review matched all eight member-file hashes and byte lengths, reproduced all four AE1H vectors, all 2,364 identities, 155 C02 facts, 148 Electronic Journal chains, the 19/6 scenario partition, 22 expected rows, governed counts, and R01-R12 arithmetic. Implementation remains blocked because the normative 1,895-byte package root produces a different SHA-256 than the manifest, SP-A statutory requests use a parking-session reference that current runtime finality rejects, eleven canonical row families still omit byte-material bindings, and the case-package/workbook artifact hash forms an undefined recursive digest. The review task is `READY_FOR_REVIEW`; that task status is not dataset authority.
+
+All ten external confirmations remain `UNRESOLVED`: AE-DR-002, AE-DR-004, AE-DR-010, AE-DR-011A, AE-DR-012, AE-DR-016, AE-DR-016B, AE-DR-019, AE-DR-020A, and AE-DR-024. The six excluded scenarios AE1-UAT-002, AE1-UAT-006, AE1-UAT-008, AE1-UAT-015, AE1-UAT-022, and AE1-UAT-025 remain non-executable.
+
+**Current canonical token: `BLOCKED_ANNEX_E1_SYNTHETIC_DATASET_IMPLEMENTATION`.** Dataset and offline-validator implementation, excluded scenarios, runtime/application/API/database/migration/configuration/dependency/CI changes, provisioning, role assignment, loading, Controlled UAT, evidence acceptance, workbook generation, delivery, BIR submission, Production, Annex E-2 through E-5, ARTS POSLog, signing, encryption, and destructive retention or purge remain unauthorized.
+
+**Exact next bounded activity: Prepare a new-version documentation-only correction package for the four v1.3 review findings.** Correct the manifest package-root digest or normative root construction; align SP-A command and statutory parking-session references with current runtime finality; provide exact AE1H member bindings for every governed row-family instance; and define a non-recursive case-package/workbook artifact hash contract. Another independent authorization review is mandatory before dataset or validator implementation.
