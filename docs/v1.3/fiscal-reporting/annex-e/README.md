@@ -2,7 +2,7 @@
 
 ## Purpose
 
-This package records the source-grounded Annex E-1 contract, the local bounded runtime implemented by Z-012B, the Z-012D preparation package, the Controlled UAT authorization review, the historical v1.0-v1.3 synthetic dataset packages and reviews, and the prospective v1.4 correction package. It does not authorize dataset or validator implementation, runtime modification, environment provisioning, database access or loading, Controlled UAT execution, workbook generation, submission, signing, encryption, or Production.
+This package records the source-grounded Annex E-1 contract, the local bounded runtime implemented by Z-012B, the Z-012D preparation package, the Controlled UAT authorization review, the historical v1.0-v1.3 synthetic dataset packages and reviews, and the v1.4 correction package and authorization review. It does not authorize dataset or validator implementation, runtime modification, environment provisioning, database access or loading, Controlled UAT execution, workbook generation, submission, signing, encryption, or Production.
 
 ## Reading order
 
@@ -15,9 +15,10 @@ This package records the source-grounded Annex E-1 contract, the local bounded r
 7. [Synthetic UAT Canonical Source Row Population v1.4](ExitPass_POS_Server_Annex_E1_Synthetic_UAT_Canonical_Source_Row_Population_v1.4.md)
 8. [Synthetic UAT Dataset Specification Correction Resolution Matrix v1.4](ExitPass_POS_Server_Annex_E1_Synthetic_UAT_Dataset_Specification_Correction_Resolution_Matrix_v1.4.md)
 9. [Synthetic UAT Dataset Specification Manifest v1.4](ExitPass_POS_Server_Annex_E1_Synthetic_UAT_Dataset_Specification_Manifest_v1.4.md)
-10. [Synthetic UAT Dataset Specification v1.3 Authorization Review](ExitPass_POS_Server_Annex_E1_Synthetic_UAT_Dataset_Specification_v1.3_Authorization_Review_v1.0.md)
-11. [Synthetic UAT Dataset Specification v1.3](ExitPass_POS_Server_Annex_E1_Synthetic_UAT_Dataset_Specification_v1.3.md)
-12. [Synthetic UAT Dataset Specification v1.2 Authorization Review](ExitPass_POS_Server_Annex_E1_Synthetic_UAT_Dataset_Specification_v1.2_Authorization_Review_v1.0.md)
+10. [Synthetic UAT Dataset Specification v1.4 Authorization Review](ExitPass_POS_Server_Annex_E1_Synthetic_UAT_Dataset_Specification_v1.4_Authorization_Review_v1.0.md)
+11. [Synthetic UAT Dataset Specification v1.3 Authorization Review](ExitPass_POS_Server_Annex_E1_Synthetic_UAT_Dataset_Specification_v1.3_Authorization_Review_v1.0.md)
+12. [Synthetic UAT Dataset Specification v1.3](ExitPass_POS_Server_Annex_E1_Synthetic_UAT_Dataset_Specification_v1.3.md)
+13. [Synthetic UAT Dataset Specification v1.2 Authorization Review](ExitPass_POS_Server_Annex_E1_Synthetic_UAT_Dataset_Specification_v1.2_Authorization_Review_v1.0.md)
 
 ## Historical and governing reading order
 
@@ -142,3 +143,9 @@ All ten external confirmations remain `UNRESOLVED`: AE-DR-002, AE-DR-004, AE-DR-
 **Current canonical token: `BLOCKED_ANNEX_E1_SYNTHETIC_DATASET_IMPLEMENTATION`.** Version 1.4 package-author readiness does not authorize dataset or validator implementation, excluded scenarios, runtime/application/API/database/migration/configuration/dependency/CI changes, provisioning, role assignment, loading, Controlled UAT, evidence acceptance, workbook generation, delivery, BIR submission, Production, Annex E-2 through E-5, ARTS POSLog, signing, encryption, or destructive retention.
 
 **Exact next bounded activity: Review Annex E-1 Synthetic UAT Dataset Specification v1.4.** The review must independently reproduce M01-M04 corrections before the canonical implementation gate may change.
+
+**Synthetic dataset specification v1.4 authorization review: `BLOCKED_ANNEX_E1_SYNTHETIC_DATASET_IMPLEMENTATION`.** The independent review reproduced all eight exact member hashes, the 1,897-byte package root, all 840 corrected AE1H semantic rows, all 30 current-runtime parking-session/finality comparisons, the acyclic hash graph, 2,364 UUIDv5 identities, 155 C02 facts, 148 Electronic Journal chains, R01-R12, governed counts, and the scenario/external-decision boundaries. M01, M02, and M04 are verified resolved. M03 remains unresolved: only 148 of the inherited 850 instances can be revalidated from the incorporated Electronic Journal ledger; 702 inherited instances lack an exact source/runtime value tuple, complete semantic preimage, byte length, and expected semantic digest. Appendix A's 1,690 informational binding digests are also unreproducible because the AE1H family token is not specified. The review task is `READY_FOR_REVIEW`; that status is not implementation authority.
+
+**Current canonical token: `BLOCKED_ANNEX_E1_SYNTHETIC_DATASET_IMPLEMENTATION`.** Dataset and offline-validator implementation, excluded scenarios, runtime/application/API/database/migration/configuration/dependency/CI changes, provisioning, role assignment, loading, Controlled UAT, evidence acceptance, workbook generation, delivery, BIR submission, Production, Annex E-2 through E-5, ARTS POSLog, signing, encryption, and destructive retention or purge remain unauthorized.
+
+**Exact next bounded activity: Prepare a narrow documentation-only v1.5 correction.** Publish authorization-critical semantic tuples, complete preimages, lengths, and expected digests for the 702 blocked inherited instances in F01, F07-F10, F12-F15, and F23; fully specify and correct or remove the informational Appendix A digest envelope. Preserve all independently verified v1.4 results. Another independent authorization review is mandatory before dataset or validator implementation.
