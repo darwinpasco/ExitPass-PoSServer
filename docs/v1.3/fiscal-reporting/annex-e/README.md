@@ -2,9 +2,20 @@
 
 ## Purpose
 
-This package records the source-grounded Annex E-1 contract, the local bounded runtime implemented by Z-012B, the Z-012D preparation package, the Controlled UAT authorization review, the historical synthetic UAT dataset specification v1.0, its implementation-authorization review, the corrective v1.1 specification package, and the independent v1.1 authorization review. It does not authorize dataset or validator implementation, runtime modification, environment provisioning, database access or loading, Controlled UAT execution, workbook generation, submission, signing, encryption, or Production.
+This package records the source-grounded Annex E-1 contract, the local bounded runtime implemented by Z-012B, the Z-012D preparation package, the Controlled UAT authorization review, the historical v1.0 and v1.1 synthetic dataset packages and reviews, and the v1.2 documentation-only correction package. It does not authorize dataset or validator implementation, runtime modification, environment provisioning, database access or loading, Controlled UAT execution, workbook generation, submission, signing, encryption, or Production.
 
 ## Reading order
+
+1. [Synthetic UAT Dataset Specification v1.2](ExitPass_POS_Server_Annex_E1_Synthetic_UAT_Dataset_Specification_v1.2.md)
+2. [Synthetic UAT Scenario-to-Dataset Mapping v1.2](ExitPass_POS_Server_Annex_E1_Synthetic_UAT_Scenario_to_Dataset_Mapping_v1.2.md)
+3. [Synthetic UAT Expected Value Matrix v1.2](ExitPass_POS_Server_Annex_E1_Synthetic_UAT_Expected_Value_Matrix_v1.2.md)
+4. [Synthetic UAT Source Population and Reconciliation Matrix v1.2](ExitPass_POS_Server_Annex_E1_Synthetic_UAT_Source_Population_and_Reconciliation_Matrix_v1.2.md)
+5. [External Decision-to-Scenario Reconciliation Matrix v1.2](ExitPass_POS_Server_Annex_E1_External_Decision_to_Scenario_Reconciliation_Matrix_v1.2.md)
+6. [Synthetic UAT Canonical Source Row and Hash Contract v1.2](ExitPass_POS_Server_Annex_E1_Synthetic_UAT_Canonical_Source_Row_and_Hash_Contract_v1.2.md)
+7. [Synthetic UAT Dataset Specification Correction Resolution Matrix v1.2](ExitPass_POS_Server_Annex_E1_Synthetic_UAT_Dataset_Specification_Correction_Resolution_Matrix_v1.2.md)
+8. [Synthetic UAT Dataset Specification Manifest v1.2](ExitPass_POS_Server_Annex_E1_Synthetic_UAT_Dataset_Specification_Manifest_v1.2.md)
+
+## Historical and governing reading order
 
 1. [Synthetic UAT Dataset Specification v1.1](ExitPass_POS_Server_Annex_E1_Synthetic_UAT_Dataset_Specification_v1.1.md)
 2. [Synthetic UAT Scenario-to-Dataset Mapping v1.1](ExitPass_POS_Server_Annex_E1_Synthetic_UAT_Scenario_to_Dataset_Mapping_v1.1.md)
@@ -94,4 +105,10 @@ All ten external confirmations remain `UNRESOLVED`: AE-DR-002, AE-DR-004, AE-DR-
 
 **Current canonical token: `BLOCKED_ANNEX_E1_SYNTHETIC_DATASET_IMPLEMENTATION`.** Preparing v1.1 does not authorize dataset implementation, validator implementation, runtime modification, database access or loading, environment provisioning, role assignment, scenario execution, evidence acceptance, workbook generation, external delivery, BIR submission, or Production. Re-review is mandatory after this correction package is reviewed and merged.
 
-**Exact next bounded activity: Prepare a new-version, documentation-only correction package for Annex E-1 Synthetic UAT Dataset Specification v1.1.** It must resolve the five numbered findings in the v1.1 authorization review without rewriting v1.1 or implementing datasets, validators, runtime code, APIs, database changes, environment provisioning, loading, workbook generation, or Controlled UAT. A separate authorization review remains mandatory. No new task identifier is assigned.
+**Synthetic dataset specification v1.2 correction status: `READY_FOR_V1_2_SPECIFICATION_AUTHORIZATION_REVIEW`.** This is a document status, not an implementation authorization token. Version 1.2 resolves the five v1.1 review blockers through byte-complete package and source-object hash grammars, runtime-valid SP-A arithmetic, complete canonical row contracts, explicit offline-versus-runtime C02 boundaries, and a reproducible 148-record Electronic Journal transition and hash-chain ledger. Version 1.2 retains 19 included scenarios, six non-executable scenarios, and exactly 22 expected Annex rows. The v1.0 and v1.1 packages and reviews remain historical and unchanged.
+
+All ten external confirmations remain `UNRESOLVED`: AE-DR-002, AE-DR-004, AE-DR-010, AE-DR-011A, AE-DR-012, AE-DR-016, AE-DR-016B, AE-DR-019, AE-DR-020A, and AE-DR-024.
+
+**Current canonical token: `BLOCKED_ANNEX_E1_SYNTHETIC_DATASET_IMPLEMENTATION`.** Preparing v1.2 does not authorize dataset implementation, validator implementation, runtime clock changes, deterministic persisted-identity changes, other runtime or API changes, database or migration changes, environment provisioning, role assignment, data loading, Controlled UAT execution, evidence acceptance, workbook generation, external delivery, BIR submission, or Production.
+
+**Exact next bounded activity: Review Annex E-1 Synthetic UAT Dataset Specification v1.2.** A separate merged review is mandatory before dataset or validator implementation can be authorized. No new task identifier is assigned.
