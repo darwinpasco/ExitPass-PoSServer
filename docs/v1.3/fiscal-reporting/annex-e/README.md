@@ -2,7 +2,7 @@
 
 ## Purpose
 
-This package records the source-grounded Annex E-1 contract, the local bounded runtime implemented by Z-012B, the Z-012D preparation package, the Controlled UAT authorization review, the historical v1.0 and v1.1 synthetic dataset packages and reviews, and the v1.2 documentation-only correction package. It does not authorize dataset or validator implementation, runtime modification, environment provisioning, database access or loading, Controlled UAT execution, workbook generation, submission, signing, encryption, or Production.
+This package records the source-grounded Annex E-1 contract, the local bounded runtime implemented by Z-012B, the Z-012D preparation package, the Controlled UAT authorization review, the historical v1.0 and v1.1 synthetic dataset packages and reviews, the v1.2 documentation-only correction package, and its independent authorization review. It does not authorize dataset or validator implementation, runtime modification, environment provisioning, database access or loading, Controlled UAT execution, workbook generation, submission, signing, encryption, or Production.
 
 ## Reading order
 
@@ -14,6 +14,7 @@ This package records the source-grounded Annex E-1 contract, the local bounded r
 6. [Synthetic UAT Canonical Source Row and Hash Contract v1.2](ExitPass_POS_Server_Annex_E1_Synthetic_UAT_Canonical_Source_Row_and_Hash_Contract_v1.2.md)
 7. [Synthetic UAT Dataset Specification Correction Resolution Matrix v1.2](ExitPass_POS_Server_Annex_E1_Synthetic_UAT_Dataset_Specification_Correction_Resolution_Matrix_v1.2.md)
 8. [Synthetic UAT Dataset Specification Manifest v1.2](ExitPass_POS_Server_Annex_E1_Synthetic_UAT_Dataset_Specification_Manifest_v1.2.md)
+9. [Synthetic UAT Dataset Specification v1.2 Authorization Review](ExitPass_POS_Server_Annex_E1_Synthetic_UAT_Dataset_Specification_v1.2_Authorization_Review_v1.0.md)
 
 ## Historical and governing reading order
 
@@ -111,4 +112,10 @@ All ten external confirmations remain `UNRESOLVED`: AE-DR-002, AE-DR-004, AE-DR-
 
 **Current canonical token: `BLOCKED_ANNEX_E1_SYNTHETIC_DATASET_IMPLEMENTATION`.** Preparing v1.2 does not authorize dataset implementation, validator implementation, runtime clock changes, deterministic persisted-identity changes, other runtime or API changes, database or migration changes, environment provisioning, role assignment, data loading, Controlled UAT execution, evidence acceptance, workbook generation, external delivery, BIR submission, or Production.
 
-**Exact next bounded activity: Review Annex E-1 Synthetic UAT Dataset Specification v1.2.** A separate merged review is mandatory before dataset or validator implementation can be authorized. No new task identifier is assigned.
+**Historical v1.2 package next step (completed by the review below): Review Annex E-1 Synthetic UAT Dataset Specification v1.2.** The package itself conferred no dataset or validator implementation authority.
+
+**Synthetic dataset specification v1.2 authorization review: `BLOCKED_ANNEX_E1_SYNTHETIC_DATASET_IMPLEMENTATION`.** The independent review reproduced all 2,364 UUIDv5 identities, V01-V13, all 155 C02 checks, all 148 Electronic Journal semantic and integrity chains, the 19/6 scenario partition, 22 expected rows, governed counts, and arithmetic. F01, F05, F06, F07, and F08 are verified resolved. F02, F03, and F04 remain unresolved because non-empty package/source-row hash grammar is incomplete, SP-A statutory snapshots fail current finality validation, and multiple canonical row families still require discretionary material values. The review task is `READY_FOR_REVIEW`; that task status is not dataset authority.
+
+**Current canonical token: `BLOCKED_ANNEX_E1_SYNTHETIC_DATASET_IMPLEMENTATION`.** Dataset and offline-validator implementation, scenario subsets, runtime/application/API/database/configuration changes, migrations, provisioning, role assignment, loading, Controlled UAT, evidence acceptance, workbook generation, delivery, BIR submission, Production, Annex E-2 through E-5, ARTS POSLog, signing, encryption, and destructive retention or purge remain unauthorized.
+
+**Exact next bounded activity: Prepare a new-version documentation-only correction package.** It must close the non-empty package/source hash grammar, provide a current-runtime-valid SP-A statutory source posture, and replace every unresolved material row value with a literal or deterministic rule. Another independent authorization review is mandatory before dataset or validator implementation.
