@@ -2,19 +2,20 @@
 
 ## Purpose
 
-This package records the source-grounded Annex E-1 contract, the local bounded runtime implemented by Z-012B, the Z-012D preparation package, the Controlled UAT authorization review, the historical v1.0 and v1.1 synthetic dataset packages and reviews, the v1.2 documentation-only correction package, and its independent authorization review. It does not authorize dataset or validator implementation, runtime modification, environment provisioning, database access or loading, Controlled UAT execution, workbook generation, submission, signing, encryption, or Production.
+This package records the source-grounded Annex E-1 contract, the local bounded runtime implemented by Z-012B, the Z-012D preparation package, the Controlled UAT authorization review, the historical v1.0-v1.2 synthetic dataset packages and reviews, and the prospective v1.3 documentation-only correction package. It does not authorize dataset or validator implementation, runtime modification, environment provisioning, database access or loading, Controlled UAT execution, workbook generation, submission, signing, encryption, or Production.
 
 ## Reading order
 
-1. [Synthetic UAT Dataset Specification v1.2](ExitPass_POS_Server_Annex_E1_Synthetic_UAT_Dataset_Specification_v1.2.md)
-2. [Synthetic UAT Scenario-to-Dataset Mapping v1.2](ExitPass_POS_Server_Annex_E1_Synthetic_UAT_Scenario_to_Dataset_Mapping_v1.2.md)
-3. [Synthetic UAT Expected Value Matrix v1.2](ExitPass_POS_Server_Annex_E1_Synthetic_UAT_Expected_Value_Matrix_v1.2.md)
-4. [Synthetic UAT Source Population and Reconciliation Matrix v1.2](ExitPass_POS_Server_Annex_E1_Synthetic_UAT_Source_Population_and_Reconciliation_Matrix_v1.2.md)
-5. [External Decision-to-Scenario Reconciliation Matrix v1.2](ExitPass_POS_Server_Annex_E1_External_Decision_to_Scenario_Reconciliation_Matrix_v1.2.md)
-6. [Synthetic UAT Canonical Source Row and Hash Contract v1.2](ExitPass_POS_Server_Annex_E1_Synthetic_UAT_Canonical_Source_Row_and_Hash_Contract_v1.2.md)
-7. [Synthetic UAT Dataset Specification Correction Resolution Matrix v1.2](ExitPass_POS_Server_Annex_E1_Synthetic_UAT_Dataset_Specification_Correction_Resolution_Matrix_v1.2.md)
-8. [Synthetic UAT Dataset Specification Manifest v1.2](ExitPass_POS_Server_Annex_E1_Synthetic_UAT_Dataset_Specification_Manifest_v1.2.md)
-9. [Synthetic UAT Dataset Specification v1.2 Authorization Review](ExitPass_POS_Server_Annex_E1_Synthetic_UAT_Dataset_Specification_v1.2_Authorization_Review_v1.0.md)
+1. [Synthetic UAT Dataset Specification v1.3](ExitPass_POS_Server_Annex_E1_Synthetic_UAT_Dataset_Specification_v1.3.md)
+2. [Synthetic UAT Scenario-to-Dataset Mapping v1.3](ExitPass_POS_Server_Annex_E1_Synthetic_UAT_Scenario_to_Dataset_Mapping_v1.3.md)
+3. [Synthetic UAT Expected Value Matrix v1.3](ExitPass_POS_Server_Annex_E1_Synthetic_UAT_Expected_Value_Matrix_v1.3.md)
+4. [Synthetic UAT Source Population and Reconciliation Matrix v1.3](ExitPass_POS_Server_Annex_E1_Synthetic_UAT_Source_Population_and_Reconciliation_Matrix_v1.3.md)
+5. [External Decision-to-Scenario Reconciliation Matrix v1.3](ExitPass_POS_Server_Annex_E1_External_Decision_to_Scenario_Reconciliation_Matrix_v1.3.md)
+6. [Synthetic UAT Canonical Source Row and Hash Contract v1.3](ExitPass_POS_Server_Annex_E1_Synthetic_UAT_Canonical_Source_Row_and_Hash_Contract_v1.3.md)
+7. [Synthetic UAT Canonical Source Row Population v1.3](ExitPass_POS_Server_Annex_E1_Synthetic_UAT_Canonical_Source_Row_Population_v1.3.md)
+8. [Synthetic UAT Dataset Specification Correction Resolution Matrix v1.3](ExitPass_POS_Server_Annex_E1_Synthetic_UAT_Dataset_Specification_Correction_Resolution_Matrix_v1.3.md)
+9. [Synthetic UAT Dataset Specification Manifest v1.3](ExitPass_POS_Server_Annex_E1_Synthetic_UAT_Dataset_Specification_Manifest_v1.3.md)
+10. [Synthetic UAT Dataset Specification v1.2 Authorization Review](ExitPass_POS_Server_Annex_E1_Synthetic_UAT_Dataset_Specification_v1.2_Authorization_Review_v1.0.md)
 
 ## Historical and governing reading order
 
@@ -119,3 +120,9 @@ All ten external confirmations remain `UNRESOLVED`: AE-DR-002, AE-DR-004, AE-DR-
 **Current canonical token: `BLOCKED_ANNEX_E1_SYNTHETIC_DATASET_IMPLEMENTATION`.** Dataset and offline-validator implementation, scenario subsets, runtime/application/API/database/configuration changes, migrations, provisioning, role assignment, loading, Controlled UAT, evidence acceptance, workbook generation, delivery, BIR submission, Production, Annex E-2 through E-5, ARTS POSLog, signing, encryption, and destructive retention or purge remain unauthorized.
 
 **Exact next bounded activity: Prepare a new-version documentation-only correction package.** It must close the non-empty package/source hash grammar, provide a current-runtime-valid SP-A statutory source posture, and replace every unresolved material row value with a literal or deterministic rule. Another independent authorization review is mandatory before dataset or validator implementation.
+
+**Synthetic dataset specification v1.3 package status: `READY_FOR_V1_3_SPECIFICATION_AUTHORIZATION_REVIEW`.** Version 1.3 prospectively closes the three v1.2 review blockers through an explicit binary length-prefixed hash grammar and non-empty vectors, a current-runtime-valid tax-inclusive SP-A statutory original amount of 11200, and a dedicated deterministic population contract for all 29 row families. It preserves the 2,364 identities, 19/6 scenario partition, 22 Annex rows, 155 in-period Accounting facts, 148-event Electronic Journal ledger, and all governed counts. This is package-author readiness, not implementation authority.
+
+**Current canonical token: `BLOCKED_ANNEX_E1_SYNTHETIC_DATASET_IMPLEMENTATION`.** Version 1.3 does not authorize dataset or validator implementation, runtime/application/API/database/migration/configuration/dependency/CI changes, provisioning, role assignment, loading, UAT, workbook generation, evidence acceptance, delivery, BIR submission, Production, Annex E-2 through E-5, ARTS POSLog, signing, encryption, or destructive retention.
+
+**Exact next bounded activity: Review Annex E-1 Synthetic UAT Dataset Specification v1.3.** The review must independently reconstruct identities, hashes, source rows, SP-A finality, C02, Electronic Journal chains, R01-R12, counts, manifest bytes, and scope boundaries before the canonical implementation gate can change.
