@@ -2,23 +2,24 @@
 
 ## Purpose
 
-This package records the source-grounded Annex E-1 contract, the local bounded runtime implemented by Z-012B, the Z-012D preparation package, the Controlled UAT authorization review, the historical v1.0-v1.4 synthetic dataset packages and reviews, and the authorized v1.5 specification and review. The v1.5 authorization permits only a later bounded task to implement the exact synthetic dataset and its deterministic offline validator. It does not authorize runtime modification, environment provisioning, database access or loading, Controlled UAT execution, workbook generation, submission, signing, encryption, or Production.
+This package records the source-grounded Annex E-1 contract, the local bounded runtime implemented by Z-012B, the Z-012D preparation package, the Controlled UAT authorization review, the historical v1.0-v1.5 synthetic dataset packages and reviews, and the corrected v1.6 offline dataset and validator. The v1.6 package corrects the confirmed SP-A F20 arithmetic defect under the merged v1.5 implementation authorization and explicit operator correction authority. It does not authorize runtime modification, environment provisioning, database access or loading, Controlled UAT execution, workbook generation, submission, signing, encryption, or Production.
 
 ## Reading order
 
-1. [Synthetic UAT Dataset Specification v1.5](ExitPass_POS_Server_Annex_E1_Synthetic_UAT_Dataset_Specification_v1.5.md)
-2. [Synthetic UAT Scenario-to-Dataset Mapping v1.5](ExitPass_POS_Server_Annex_E1_Synthetic_UAT_Scenario_to_Dataset_Mapping_v1.5.md)
-3. [Synthetic UAT Expected Value Matrix v1.5](ExitPass_POS_Server_Annex_E1_Synthetic_UAT_Expected_Value_Matrix_v1.5.md)
-4. [Synthetic UAT Source Population and Reconciliation Matrix v1.5](ExitPass_POS_Server_Annex_E1_Synthetic_UAT_Source_Population_and_Reconciliation_Matrix_v1.5.md)
-5. [External Decision-to-Scenario Reconciliation Matrix v1.5](ExitPass_POS_Server_Annex_E1_External_Decision_to_Scenario_Reconciliation_Matrix_v1.5.md)
-6. [Synthetic UAT Canonical Source Row and Hash Contract v1.5](ExitPass_POS_Server_Annex_E1_Synthetic_UAT_Canonical_Source_Row_and_Hash_Contract_v1.5.md)
-7. [Synthetic UAT Canonical Source Row Population v1.5](ExitPass_POS_Server_Annex_E1_Synthetic_UAT_Canonical_Source_Row_Population_v1.5.md)
-8. [Synthetic UAT Dataset Specification Correction Resolution Matrix v1.5](ExitPass_POS_Server_Annex_E1_Synthetic_UAT_Dataset_Specification_Correction_Resolution_Matrix_v1.5.md)
-9. [Synthetic UAT Dataset Specification Manifest v1.5](ExitPass_POS_Server_Annex_E1_Synthetic_UAT_Dataset_Specification_Manifest_v1.5.md)
+1. [Synthetic UAT Dataset Specification v1.6](ExitPass_POS_Server_Annex_E1_Synthetic_UAT_Dataset_Specification_v1.6.md)
+2. [Synthetic UAT Scenario-to-Dataset Mapping v1.6](ExitPass_POS_Server_Annex_E1_Synthetic_UAT_Scenario_to_Dataset_Mapping_v1.6.md)
+3. [Synthetic UAT Expected Value Matrix v1.6](ExitPass_POS_Server_Annex_E1_Synthetic_UAT_Expected_Value_Matrix_v1.6.md)
+4. [Synthetic UAT Source Population and Reconciliation Matrix v1.6](ExitPass_POS_Server_Annex_E1_Synthetic_UAT_Source_Population_and_Reconciliation_Matrix_v1.6.md)
+5. [External Decision-to-Scenario Reconciliation Matrix v1.6](ExitPass_POS_Server_Annex_E1_External_Decision_to_Scenario_Reconciliation_Matrix_v1.6.md)
+6. [Synthetic UAT Canonical Source Row and Hash Contract v1.6](ExitPass_POS_Server_Annex_E1_Synthetic_UAT_Canonical_Source_Row_and_Hash_Contract_v1.6.md)
+7. [Synthetic UAT Canonical Source Row Population v1.6](ExitPass_POS_Server_Annex_E1_Synthetic_UAT_Canonical_Source_Row_Population_v1.6.md)
+8. [Synthetic UAT Dataset Specification Correction Resolution Matrix v1.6](ExitPass_POS_Server_Annex_E1_Synthetic_UAT_Dataset_Specification_Correction_Resolution_Matrix_v1.6.md)
+9. [Synthetic UAT Dataset Specification Manifest v1.6](ExitPass_POS_Server_Annex_E1_Synthetic_UAT_Dataset_Specification_Manifest_v1.6.md)
 10. [Synthetic UAT Dataset Specification v1.5 Authorization Review](ExitPass_POS_Server_Annex_E1_Synthetic_UAT_Dataset_Specification_v1.5_Authorization_Review_v1.0.md)
-11. [Synthetic UAT Dataset Specification v1.4 Authorization Review](ExitPass_POS_Server_Annex_E1_Synthetic_UAT_Dataset_Specification_v1.4_Authorization_Review_v1.0.md)
-12. [Synthetic UAT Dataset Specification v1.4](ExitPass_POS_Server_Annex_E1_Synthetic_UAT_Dataset_Specification_v1.4.md)
-13. [Synthetic UAT Dataset Specification v1.3 Authorization Review](ExitPass_POS_Server_Annex_E1_Synthetic_UAT_Dataset_Specification_v1.3_Authorization_Review_v1.0.md)
+11. [Synthetic UAT Dataset v1.6 and offline validator](dataset/v1.6/README.md)
+12. [Synthetic UAT Dataset Specification v1.4 Authorization Review](ExitPass_POS_Server_Annex_E1_Synthetic_UAT_Dataset_Specification_v1.4_Authorization_Review_v1.0.md)
+13. [Synthetic UAT Dataset Specification v1.4](ExitPass_POS_Server_Annex_E1_Synthetic_UAT_Dataset_Specification_v1.4.md)
+14. [Synthetic UAT Dataset Specification v1.3 Authorization Review](ExitPass_POS_Server_Annex_E1_Synthetic_UAT_Dataset_Specification_v1.3_Authorization_Review_v1.0.md)
 
 ## Historical and governing reading order
 
@@ -161,3 +162,7 @@ All ten external confirmations remain `UNRESOLVED`: AE-DR-002, AE-DR-004, AE-DR-
 **Further specification version: `NO_FURTHER_SYNTHETIC_DATASET_SPECIFICATION_VERSION_REQUIRED`.** This authorizes only a later bounded task to implement the exact v1.5 machine-readable dataset for the 19 included scenarios and its deterministic offline validator. It does not authorize excluded scenarios, runtime/application/API/database/migration/configuration/dependency/CI changes, provisioning, loading, Controlled UAT, workbook generation, evidence acceptance, delivery, BIR submission, Production, signing, encryption, or destructive retention or purge.
 
 **Exact next bounded activity: Implement Annex E-1 Synthetic UAT Dataset and Offline Validator from Authorized Specification v1.5.** Implementation must use a separate branch, worktree, and explicit task; it must not execute or load the artifacts.
+
+**Corrected v1.6 package and offline implementation: `READY_FOR_REVIEW`.** The v1.6 package corrects the fifteen SP-A F20 rows to D07 41200, R01 30000, and R06 41200, then deterministically regenerates all affected semantic, workbook, evidence, case-package, member, and package-root commitments. The JSONL dataset and Windows PowerShell 5.1 offline validator implement the corrected package in this branch. All 2,364 identity values and 1,630 unaffected semantic tuples remain unchanged from v1.5.
+
+**Execution boundary remains closed.** The v1.6 implementation is an offline source artifact only. It does not authorize or perform database loading, environment provisioning, runtime changes, Controlled UAT, workbook generation, evidence acceptance, external delivery, BIR submission, or Production use.
