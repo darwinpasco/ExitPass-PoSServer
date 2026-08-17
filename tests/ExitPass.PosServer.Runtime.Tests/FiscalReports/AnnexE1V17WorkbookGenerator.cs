@@ -255,6 +255,7 @@ internal static class AnnexE1V17WorkbookGenerator
 
     internal static void ValidateWorkbook(string path, WorkbookCase expected)
     {
+        AnnexE1OpenXmlStandardsValidator.Validate(path);
         using var stream = File.OpenRead(path);
         using var archive = new ZipArchive(stream, ZipArchiveMode.Read, leaveOpen: false, entryNameEncoding: Encoding.UTF8);
         var names = archive.Entries.Select(x => x.FullName).ToArray();
@@ -365,7 +366,11 @@ internal static class AnnexE1V17WorkbookGenerator
         using var input = new ZipArchive(inputStream, ZipArchiveMode.Read, leaveOpen: false, entryNameEncoding: Encoding.UTF8);
         var parts = input.Entries.ToDictionary(x => x.FullName, ReadEntryBytes, StringComparer.Ordinal);
         parts["[Content_Types].xml"] = ReplaceUtf8(parts["[Content_Types].xml"], "</Types>", "<Override PartName=\"/xl/worksheets/sheet2.xml\" ContentType=\"application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml\"/><Override PartName=\"/xl/worksheets/sheet3.xml\" ContentType=\"application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml\"/></Types>");
+        // Excel rejects the runtime renderer's incomplete optional fileVersion element with 0x800A03EC.
+        parts["xl/workbook.xml"] = ReplaceUtf8(parts["xl/workbook.xml"], "<fileVersion appName=\"xl\"/>", string.Empty);
         parts["xl/workbook.xml"] = ReplaceUtf8(parts["xl/workbook.xml"], "</sheets>", "<sheet name=\"Validation\" sheetId=\"2\" r:id=\"rId3\"/><sheet name=\"Fact Links\" sheetId=\"3\" r:id=\"rId4\"/></sheets>");
+        parts["xl/worksheets/sheet1.xml"] = ReplaceUtf8(parts["xl/worksheets/sheet1.xml"], "<row r=\"11\"/>", $"<row r=\"11\" ht=\"21.75\"><c r=\"A11\" s=\"1\" t=\"inlineStr\"><is><t>{Escape(InternalMark)}</t></is></c></row>");
+        parts["xl/worksheets/sheet1.xml"] = ReplaceUtf8(parts["xl/worksheets/sheet1.xml"], "<mergeCells count=\"32\">", "<mergeCells count=\"33\"><mergeCell ref=\"A11:AF11\"/>");
         parts["xl/_rels/workbook.xml.rels"] = ReplaceUtf8(parts["xl/_rels/workbook.xml.rels"], "</Relationships>", "<Relationship Id=\"rId3\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet\" Target=\"worksheets/sheet2.xml\"/><Relationship Id=\"rId4\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet\" Target=\"worksheets/sheet3.xml\"/></Relationships>");
         parts["xl/worksheets/sheet2.xml"] = Utf8NoBom.GetBytes(ValidationWorksheet(item));
         parts["xl/worksheets/sheet3.xml"] = Utf8NoBom.GetBytes(FactLinkWorksheet(item));
@@ -479,6 +484,9 @@ internal static class AnnexE1V17WorkbookGenerator
         var sheets = workbook.Descendants(ns + "sheet").ToArray();
         Require(sheets.Select(x => (string?)x.Attribute("name")).SequenceEqual(["E-1", "Validation", "Fact Links"], StringComparer.Ordinal), "Workbook sheet set or order mismatch.");
         Require(sheets.All(x => x.Attribute("state") is null), "Workbook contains a hidden sheet.");
+        Require(workbook.Descendants(ns + "fileVersion").Any() is false, "Workbook contains the Excel-incompatible incomplete fileVersion element.");
+        var printArea = workbook.Descendants(ns + "definedName").SingleOrDefault(x => (string?)x.Attribute("name") == "_xlnm.Print_Area" && (string?)x.Attribute("localSheetId") == "0");
+        Require(printArea is not null && printArea.Value.StartsWith("'E-1'!$A$1:", StringComparison.Ordinal), "E-1 print area is missing or excludes the internal-test warning row.");
         var core = ReadEntry(archive.GetEntry("docProps/core.xml")!);
         Require(core.Contains("2000-01-01T00:00:00Z", StringComparison.Ordinal), "Workbook core properties are not fixed.");
         Require(expected.WorkbookId.Length == 36, "Workbook identity is invalid.");
@@ -486,7 +494,10 @@ internal static class AnnexE1V17WorkbookGenerator
 
     private static void ValidateMainSheet(ZipArchive archive, WorkbookCase expected)
     {
-        var cells = ReadCells(archive.GetEntry("xl/worksheets/sheet1.xml")!);
+        var entry = archive.GetEntry("xl/worksheets/sheet1.xml")!;
+        var document = XDocument.Parse(ReadEntry(entry));
+        var ns = document.Root!.Name.Namespace;
+        var cells = ReadCells(entry);
         var headers = ObjectMembers(expected.AnnexRows[0], "headers");
         EqualCell(cells, "A1", headers["H01"].Value.GetString()!);
         EqualCell(cells, "A2", headers["H02"].Value.GetString()!);
@@ -497,6 +508,11 @@ internal static class AnnexE1V17WorkbookGenerator
         EqualCell(cells, "A8", headers["H08"].Value.GetString()!);
         EqualCell(cells, "A9", headers["H09"].Value.GetString()!);
         EqualCell(cells, "A10", headers["H10"].Value.GetString()!);
+        EqualCell(cells, "A11", InternalMark);
+        Require(document.Descendants(ns + "t").Count(x => x.Value == InternalMark) == 1, "Printable E-1 sheet must contain the exact internal-test warning exactly once.");
+        var warningRow = document.Descendants(ns + "row").Single(x => (string?)x.Attribute("r") == "11");
+        Require((string?)warningRow.Attribute("hidden") is null or "0", "Printable E-1 internal-test warning row is hidden.");
+        Require(document.Descendants(ns + "mergeCell").Any(x => (string?)x.Attribute("ref") == "A11:AF11"), "Printable E-1 warning is not visibly merged across the report width.");
         var annexRows = expected.AnnexRows.OrderBy(x => x.Ordinal).ToArray();
         for (var rowIndex = 0; rowIndex < annexRows.Length; rowIndex++)
         {

@@ -73,6 +73,16 @@ public sealed class AnnexE1V17WorkbookGenerationTests
             RewriteAndReject(sourceWorkbook, Path.Combine(root, "external-formula.xlsx"), firstCase, xml =>
                 ReplaceRequired(xml, "</sheetData>", "<row r=\"99\"><c r=\"A99\"><f>NOW()</f><v>0</v></c></row></sheetData>"), "external link or volatile formula");
 
+            var malformedFileVersion = Path.Combine(root, "malformed-file-version.xlsx");
+            AnnexE1V17WorkbookGenerator.RewriteEntry(sourceWorkbook, malformedFileVersion, "xl/workbook.xml", xml =>
+                ReplaceRequired(xml, "<workbookPr/>", "<fileVersion appName=\"xl\"/><workbookPr/>"));
+            Reject("Excel-incompatible incomplete fileVersion", () => AnnexE1OpenXmlStandardsValidator.Validate(malformedFileVersion));
+
+            RewriteEntryAndReject(sourceWorkbook, Path.Combine(root, "missing-printable-warning.xlsx"), "xl/worksheets/sheet1.xml", firstCase, xml =>
+                ReplaceRequired(xml, AnnexE1V17WorkbookGenerator.InternalMark, string.Empty), "missing printable-sheet warning");
+            RewriteEntryAndReject(sourceWorkbook, Path.Combine(root, "warning-outside-print-area.xlsx"), "xl/workbook.xml", firstCase, xml =>
+                ReplaceRequired(xml, "'E-1'!$A$1:", "'E-1'!$A$12:"), "print area excludes printable-sheet warning");
+
             var corruptWorkbook = Path.Combine(root, "corrupt-workbook.xlsx");
             var workbookBytes = File.ReadAllBytes(sourceWorkbook);
             File.WriteAllBytes(corruptWorkbook, workbookBytes[..^17]);
@@ -125,8 +135,11 @@ public sealed class AnnexE1V17WorkbookGenerationTests
     }
 
     private static void RewriteAndReject(string source, string target, AnnexE1V17WorkbookGenerator.WorkbookCase expected, Func<string, string> transform, string name)
+        => RewriteEntryAndReject(source, target, "xl/worksheets/sheet2.xml", expected, transform, name);
+
+    private static void RewriteEntryAndReject(string source, string target, string entryName, AnnexE1V17WorkbookGenerator.WorkbookCase expected, Func<string, string> transform, string name)
     {
-        AnnexE1V17WorkbookGenerator.RewriteEntry(source, target, "xl/worksheets/sheet2.xml", transform);
+        AnnexE1V17WorkbookGenerator.RewriteEntry(source, target, entryName, transform);
         Reject(name, () => AnnexE1V17WorkbookGenerator.ValidateWorkbook(target, expected));
     }
 

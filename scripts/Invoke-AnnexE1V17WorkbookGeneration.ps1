@@ -95,7 +95,7 @@ try {
     Write-Output $report.TrimEnd()
     Write-Output 'OFFLINE_VALIDATOR=PASS'
     Write-Output 'ISOLATED_EXECUTION=PASS'
-    Write-Output 'NEGATIVE_TESTS=12_PASS'
+    Write-Output 'NEGATIVE_TESTS=15_PASS'
     Write-Output 'TWO_RUN_BYTE_DETERMINISM=PASS'
 }
 finally {
