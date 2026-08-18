@@ -202,3 +202,9 @@ The authorization document does not execute Controlled UAT. The exact next bound
 ## Annex E-1 v1.7 single-principal Controlled UAT amendment
 
 [Single-Principal Controlled UAT Amendment v1.0](ExitPass_POS_Server_Annex_E1_v1.7_Single_Principal_Controlled_UAT_Amendment_v1.0.md) records `AUTHORIZED_FOR_ANNEX_E1_V1_7_SINGLE_PRINCIPAL_CONTROLLED_UAT`. When separate staffing is not reasonably available, one accountable principal may explicitly accept all eight roles for the local isolated synthetic test. Every resulting conclusion and outcome must be labeled `SELF-REVIEWED`; the amendment grants no independent assurance, BIR submission, external delivery, Production, or broader testing authority.
+
+## Annex E-1 v1.7 self-reviewed Controlled UAT authorization correction
+
+[Self-Reviewed Controlled UAT Authorization Correction v1.0](ExitPass_POS_Server_Annex_E1_v1.7_Self_Reviewed_Controlled_UAT_Authorization_Correction_v1.0.md) records `AUTHORIZED_FOR_SELF_REVIEWED_ANNEX_E1_V1_7_CONTROLLED_UAT_EXECUTION`. It prospectively removes only the role-assignment, identity-register, acceptance-record, signature, and independence prerequisites for a future local isolated synthetic execution. Darwin Pasco is the accountable authorization owner, and Codex I may perform the technical execution and evidence work under Darwin Pasco's direction with every executor conclusion labeled `SELF_REVIEWED` and no independent-review claim.
+
+All frozen package, validator, deterministic execution, runtime-test, workbook, Excel, PDF, visual-review, Accounting, evidence, prohibited-access, and cleanup controls remain mandatory. A later retry must use a new branch, worktree, opaque run ID, the exact post-merge `origin/dev`, and the approved local evidence-root base. The correction does not execute Controlled UAT and grants no BIR submission, external delivery, Production, real-data, Annex E-2 through E-5, or ARTS POSLog authority.
