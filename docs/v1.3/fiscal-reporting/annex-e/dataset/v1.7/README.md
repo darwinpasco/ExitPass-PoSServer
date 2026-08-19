@@ -16,6 +16,8 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\Invoke-AnnexE1
 
 The harness permits only loopback access to uniquely named disposable PostgreSQL resources. It stages all 4,074 records, maps all 29 semantic families, loads the canonical scope and Accounting-fact subset needed for current application behavior, executes all 19 included cases, compares two clean normalized reports, runs corruption and missing-reference tests, and removes every resource it creates.
 
+PostgreSQL readiness requires initialization completion, final PID 1 `postgres` process evidence, and three consecutive SQL probes with the same `pg_postmaster_start_time()`. A temporary initialization server that accepts `pg_isready` is not accepted as final readiness. This runner correction changes the required execution baseline but does not change any of the eight v1.7 governed package members, dataset commitments, or package-root hash.
+
 Generate and validate deterministic internal test workbooks after the offline and isolated execution checks:
 
 ```powershell

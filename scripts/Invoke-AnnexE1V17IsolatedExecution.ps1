@@ -8,6 +8,7 @@ $ErrorActionPreference = 'Stop'
 
 $scriptRoot = Split-Path -Parent $MyInvocation.MyCommand.Path
 $repoRoot = (Resolve-Path (Join-Path $scriptRoot '..')).Path
+. (Join-Path $scriptRoot 'AnnexE1V17PostgresFinalReadiness.ps1')
 $datasetPath = Join-Path $repoRoot 'docs\v1.3\fiscal-reporting\annex-e\dataset\v1.7\annex-e1-synthetic-uat-dataset-v1.7.jsonl'
 $validatorPath = Join-Path $repoRoot 'scripts\Invoke-AnnexE1SyntheticUatDatasetV17Validation.ps1'
 $testProject = Join-Path $repoRoot 'tests\ExitPass.PosServer.Api.IntegrationTests\ExitPass.PosServer.Api.IntegrationTests.csproj'
@@ -107,13 +108,14 @@ function Invoke-IsolatedRun {
         $createdResources.Add("container:$containerName")
         $createdResources.Add("database:$databaseName")
 
-        $ready = $false
-        for ($attempt = 1; $attempt -le 60; $attempt++) {
-            & docker exec $containerName pg_isready --username postgres --dbname $databaseName *> $null
-            if ($LASTEXITCODE -eq 0) { $ready = $true; break }
-            Start-Sleep -Seconds 1
+        $readiness = Wait-AnnexE1V17PostgresFinalReadiness `
+            -ContainerName $containerName `
+            -DatabaseName $databaseName `
+            -TimeoutSeconds 60
+        foreach ($entry in $readiness.Trace) {
+            Write-Verbose ("PostgreSQL readiness ordinal {0}: {1}" -f $Ordinal, ($entry | ConvertTo-Json -Compress))
         }
-        if (-not $ready) { throw "Disposable PostgreSQL did not become ready." }
+        if ($readiness.State -ne 'READY') { throw "Disposable PostgreSQL final readiness was not established." }
         $version = Invoke-CheckedNative 'read PostgreSQL version' 'docker' @('exec',$containerName,'psql','--username','postgres','--dbname',$databaseName,'--tuples-only','--no-align','--command','show server_version;')
         if (-not (($version -join '').Trim().StartsWith('16.', [StringComparison]::Ordinal))) { throw "Disposable PostgreSQL is not version 16." }
 
