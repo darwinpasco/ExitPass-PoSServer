@@ -1240,7 +1240,7 @@ function Invoke-ReportingSchemaProofChecks {
         'reporting-proof-x-count|1',
         'reporting-proof-z-count|1',
         'reporting-proof-bir-bound-to-z|1',
-        'reporting-proof-normalized-triggers|17',
+        'reporting-proof-normalized-triggers|26',
         'reporting-proof-x-at-period-start|passed',
         'reporting-proof-x-during-open-period|passed',
         'reporting-proof-x-immediately-before-period-end|passed',

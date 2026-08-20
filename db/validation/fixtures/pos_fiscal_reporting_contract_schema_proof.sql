@@ -276,20 +276,62 @@ INSERT INTO pos.bir_sales_summary_reports (
     '2026-08-02T00:00:05Z', '2026-08-02T00:00:06Z'
 );
 
-INSERT INTO pos.annex_e_reports (
-    annex_e_report_id, fiscal_report_request_id, report_kind_code_id, report_status_code_id,
-    fiscal_reporting_contract_version_id, fiscal_reporting_period_id, governing_z_report_id,
-    governing_report_kind_code_id, site_pos_server_id, fiscal_identity_id,
-    annex_e_contract_profile_ref, business_day_date, reporting_period_start_date,
-    reporting_period_end_date, related_bir_sales_summary_report_id, generated_at, committed_at
+INSERT INTO pos.annex_e1_workbooks (
+    annex_e1_workbook_id, annex_e_reference, operation_key, site_pos_server_id,
+    fiscal_identity_id, currency_code, calendar_year, calendar_month, profile_ref,
+    calculation_profile_ref, calculation_profile_sha256, template_sha256,
+    renderer_version, revision, semantic_hash_version, semantic_hash,
+    artifact_sha256, artifact_byte_length, artifact_storage_key, mime_type, file_name,
+    taxpayer_name, taxpayer_address, tin, pos_serial_number, machine_identification_number,
+    pos_terminal_number, software_name, software_version, release_number, release_date,
+    workbook_status_code_id, generated_at, committed_at, generated_by_ref,
+    service_identity_ref, correlation_id
 ) VALUES (
-    '46000000-0000-4000-8000-000000000722', '46000000-0000-4000-8000-000000000604',
-    'd4c4615e-2cf2-59b7-a6d2-97d22210114c', '84ef4d12-b3a1-5385-88b1-3a3eadeb8a04',
-    'f6766f48-62f0-513f-b9eb-e61c2f3e8c66', '46000000-0000-4000-8000-000000000501',
-    '46000000-0000-4000-8000-000000000702', '1c628bc2-49c3-53e8-ae83-2082bcf28467',
-    '46000000-0000-4000-8000-000000000301', '46000000-0000-4000-8000-000000000302',
-    'ANNEX-E-INTERNAL-PROFILE-V1', '2026-08-01', '2026-08-01', '2026-08-01',
-    '46000000-0000-4000-8000-000000000721', '2026-08-02T00:00:07Z', '2026-08-02T00:00:08Z'
+    '46000000-0000-4000-8000-000000000723', 'ANNEX-E1-REPORTING-PROOF-2026-08',
+    'ANNEX-E1-REPORTING-PROOF-OPERATION', '46000000-0000-4000-8000-000000000301',
+    '46000000-0000-4000-8000-000000000302', 'PHP', 2026, 8,
+    'pos-server-bir-annex-e1-rmo24-2023:v1', 'pos-server-annex-e1-accounting-calculation:v1',
+    '36bbba7f014f5713955d50fe2fdab63f0cb6e80aab77713fe5fef45fbe7c1a4f',
+    '7e46f34ae8779b303baa903f01bde794a519732de881d78109f79047d5a44197',
+    'reporting-proof-renderer-v1', 1, 'reporting-proof-semantic:v1', repeat('e', 64),
+    repeat('f', 64), 1234, 'reporting-proof/annex-e1.xlsx',
+    'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    'ANNEX-E1_REPORTING-PROOF_2026-08.xlsx', 'TEST TAXPAYER', 'TEST ADDRESS',
+    'TEST-TIN', 'TEST-SERIAL-REPORTING-0001', 'TEST-MIN-REPORTING-0001',
+    'TEST-TERMINAL-REPORTING-0001', 'ExitPass POS Server', 'v1.3',
+    'REPORTING-PROOF-V1', '2026-08-01', 'f5c2b69b-7d60-5fcb-a532-728d179de646',
+    '2026-08-02T00:00:07Z', '2026-08-02T00:00:08Z', 'Z-006A-PROOF',
+    'Z-006A-PROOF-SERVICE', 'REPORTING-PROOF-ANNEX-E1'
+);
+
+INSERT INTO pos.annex_e_reports (
+    annex_e_report_id, annex_e1_workbook_id, row_sequence, fiscal_reporting_period_id,
+    governing_z_report_id, governing_report_kind_code_id,
+    related_bir_sales_summary_report_id, site_pos_server_id, fiscal_identity_id,
+    currency_code, business_day_date, beginning_fiscal_number, ending_fiscal_number,
+    d04_gta_ending, d05_gta_beginning, d06_manual_net_income, d07_annex_gross_sales,
+    d08_vatable_sales, d09_vat_amount, d10_vat_exempt_sales, d11_zero_rated_sales,
+    d12_sc_discount, d13_pwd_discount, d14_naac_discount, d15_solo_parent_discount,
+    d16_other_discount, d17_returns, d18_voids, d19_total_deductions,
+    d20_sc_vat_adjustment, d21_pwd_vat_adjustment, d22_other_vat_adjustment,
+    d23_vat_on_returns, d24_residual_vat_adjustment, d25_total_vat_adjustment,
+    d26_vat_payable, d27_net_sales_ex_vat, d28_overflow_net_income,
+    d29_total_income, d30_reset_counter, d31_z_counter, remarks_code_id,
+    source_semantic_hash, created_at
+) VALUES (
+    '46000000-0000-4000-8000-000000000722',
+    '46000000-0000-4000-8000-000000000723', 1,
+    '46000000-0000-4000-8000-000000000501',
+    '46000000-0000-4000-8000-000000000702',
+    '1c628bc2-49c3-53e8-ae83-2082bcf28467',
+    '46000000-0000-4000-8000-000000000721',
+    '46000000-0000-4000-8000-000000000301',
+    '46000000-0000-4000-8000-000000000302', 'PHP', '2026-08-01',
+    'SI-TEST-000100', 'SI-TEST-000102', 120000, 100000, 0, 20000,
+    17857, 2143, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+    2143, 17857, 0, 17857, 1, 1,
+    '0dafc990-56aa-559f-9424-5569488a8126', repeat('e', 64),
+    '2026-08-02T00:00:08Z'
 );
 
 DO $$
@@ -635,7 +677,7 @@ BEGIN
     END;
 
     BEGIN
-        UPDATE pos.annex_e_reports SET generated_at = generated_at
+        UPDATE pos.annex_e_reports SET created_at = created_at
         WHERE annex_e_report_id = '46000000-0000-4000-8000-000000000722';
         RAISE EXCEPTION 'committed Annex E metadata update was not rejected';
     EXCEPTION WHEN check_violation THEN NULL;
