@@ -107,6 +107,27 @@ public static class FiscalDocumentServiceCollectionExtensions
         services.AddAuthorization(options =>
         {
             options.AddPolicy(
+                FiscalDocumentAuthorization.CreatePolicyName,
+                policy => policy
+                    .AddAuthenticationSchemes(SalesInvoiceHeaderProfileAdminAuthorization.AuthenticationScheme)
+                    .RequireClaim(
+                        SalesInvoiceHeaderProfileAdminAuthorization.PermissionClaimType,
+                        FiscalDocumentAuthorization.CreatePermission));
+            options.AddPolicy(
+                FiscalDocumentAuthorization.ReadPolicyName,
+                policy => policy
+                    .AddAuthenticationSchemes(SalesInvoiceHeaderProfileAdminAuthorization.AuthenticationScheme)
+                    .RequireClaim(
+                        SalesInvoiceHeaderProfileAdminAuthorization.PermissionClaimType,
+                        FiscalDocumentAuthorization.ReadPermission));
+            options.AddPolicy(
+                FiscalDocumentAuthorization.VoidPolicyName,
+                policy => policy
+                    .AddAuthenticationSchemes(SalesInvoiceHeaderProfileAdminAuthorization.AuthenticationScheme)
+                    .RequireClaim(
+                        SalesInvoiceHeaderProfileAdminAuthorization.PermissionClaimType,
+                        FiscalDocumentAuthorization.VoidPermission));
+            options.AddPolicy(
                 SalesInvoiceHeaderProfileAdminAuthorization.PolicyName,
                 policy => policy
                     .AddAuthenticationSchemes(SalesInvoiceHeaderProfileAdminAuthorization.AuthenticationScheme)

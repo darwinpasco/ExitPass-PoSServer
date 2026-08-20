@@ -17,7 +17,7 @@ public static class FiscalDocumentEndpointRouteBuilderExtensions
                 .ConfigureAwait(false);
 
             return Results.Json(response, statusCode: response.HttpStatusCode);
-        });
+        }).RequireAuthorization(FiscalDocumentAuthorization.CreatePolicyName);
 
         group.MapGet("/{fiscalDocumentId:guid}", async (
             Guid fiscalDocumentId,
@@ -28,7 +28,7 @@ public static class FiscalDocumentEndpointRouteBuilderExtensions
                 .ConfigureAwait(false);
 
             return Results.Json(response, statusCode: response.HttpStatusCode);
-        });
+        }).RequireAuthorization(FiscalDocumentAuthorization.ReadPolicyName);
 
         group.MapPost("/{fiscalDocumentId:guid}/void", async (
             Guid fiscalDocumentId,
@@ -41,7 +41,7 @@ public static class FiscalDocumentEndpointRouteBuilderExtensions
                 .ConfigureAwait(false);
 
             return Results.Json(response, statusCode: response.HttpStatusCode);
-        });
+        }).RequireAuthorization(FiscalDocumentAuthorization.VoidPolicyName);
 
         group.MapPost("/{fiscalDocumentId:guid}/reprints", async (
             Guid fiscalDocumentId,
@@ -68,7 +68,7 @@ public static class FiscalDocumentEndpointRouteBuilderExtensions
                 .ConfigureAwait(false);
 
             return Results.Json(response, statusCode: response.HttpStatusCode);
-        });
+        }).RequireAuthorization(FiscalDocumentAuthorization.ReadPolicyName);
 
         group.MapGet("/{fiscalDocumentId:guid}/digital-sales-invoice/presentation", async (
             Guid fiscalDocumentId,
@@ -84,7 +84,7 @@ public static class FiscalDocumentEndpointRouteBuilderExtensions
                 .ConfigureAwait(false);
 
             return Results.Json(response, statusCode: response.HttpStatusCode);
-        });
+        }).RequireAuthorization(FiscalDocumentAuthorization.ReadPolicyName);
 
         return group;
     }
