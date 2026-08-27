@@ -241,8 +241,8 @@ public sealed class PostgresSalesInvoiceHeaderProfileRepository : ISalesInvoiceH
              order by profile.site_id, profile.site_pos_server_id, profile.profile_version, profile.effective_from;
             """,
             connection);
-        command.Parameters.AddWithValue("site_id", (object?)siteId ?? DBNull.Value);
-        command.Parameters.AddWithValue("site_pos_server_id", (object?)sitePosServerId ?? DBNull.Value);
+        command.Parameters.Add("site_id", NpgsqlDbType.Uuid).Value = (object?)siteId ?? DBNull.Value;
+        command.Parameters.Add("site_pos_server_id", NpgsqlDbType.Uuid).Value = (object?)sitePosServerId ?? DBNull.Value;
         await using var reader = await command.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
         var profiles = new List<SalesInvoiceHeaderProfile>();
         while (await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
