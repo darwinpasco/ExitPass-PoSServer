@@ -125,6 +125,16 @@ public sealed class SalesInvoiceHeaderProfilePersistenceTests
         Assert.DoesNotContain("apt", source, StringComparison.OrdinalIgnoreCase);
     }
 
+    [Fact]
+    public void NullableHeaderProfileListFiltersDeclareUuidParameterTypes()
+    {
+        var source = File.ReadAllText(FindProfileRepositorySourcePath());
+
+        Assert.Contains("using NpgsqlTypes;", source, StringComparison.Ordinal);
+        Assert.Contains("command.Parameters.Add(\"site_id\", NpgsqlDbType.Uuid)", source, StringComparison.Ordinal);
+        Assert.Contains("command.Parameters.Add(\"site_pos_server_id\", NpgsqlDbType.Uuid)", source, StringComparison.Ordinal);
+    }
+
     private static string FindRepositorySourcePath([CallerFilePath] string testFilePath = "")
     {
         var testSourceDirectory = Path.GetDirectoryName(testFilePath) ?? string.Empty;
