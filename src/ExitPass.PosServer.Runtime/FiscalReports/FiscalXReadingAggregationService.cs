@@ -168,7 +168,7 @@ public sealed class FiscalXReadingAggregationService
 
                 if (document.Statutory is not null && privilegeDiscount != statutoryDiscount)
                     throw Reconciliation("Statutory privilege detail does not reconcile to the immutable applied statutory snapshot.");
-                if (documentDiscount != statutoryDiscount + vatExemptionFor(document) + document.Discounts.Where(d => document.Statutory is null).SumChecked(d => d.DiscountAmount))
+                if (documentDiscount != statutoryDiscount + document.Discounts.Where(d => document.Statutory is null).SumChecked(d => d.DiscountAmount))
                     throw Reconciliation("Line discount totals do not reconcile to governed statutory and commercial discount facts.");
             }
 
@@ -232,8 +232,6 @@ public sealed class FiscalXReadingAggregationService
             (document.Statutory is not null && document.Statutory.Currency != currency))
             throw new FiscalXReadingSafeException(FiscalXReadingOutcome.MixedCurrency, "Mixed-currency fiscal facts cannot be aggregated into one X Reading.");
     }
-
-    private static long vatExemptionFor(FiscalXReadingSourceDocument document) => document.Discounts.SumChecked(detail => detail.VatPrivilegeAmount);
 
     private static void AddDiscount(Dictionary<string, (long Count, long Discount, long Vat)> totals, string key, long discount, long vat)
     {
