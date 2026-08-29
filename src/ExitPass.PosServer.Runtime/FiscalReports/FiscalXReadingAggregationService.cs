@@ -78,7 +78,7 @@ public sealed class FiscalXReadingAggregationService
                     throw Unsupported("Unsupported fiscal document type is present in the reporting period.");
                 }
 
-                if (string.Equals(document.Status, "recorded", StringComparison.Ordinal)) sales.Add(document);
+                if (document.Status is "recorded" or "issued") sales.Add(document);
                 else if (string.Equals(document.Status, "voided", StringComparison.Ordinal)) voided.Add(document);
                 else if (!ExcludedStatuses.Contains(document.Status)) throw Unsupported("Unsupported fiscal document status is present in the reporting period.");
             }
