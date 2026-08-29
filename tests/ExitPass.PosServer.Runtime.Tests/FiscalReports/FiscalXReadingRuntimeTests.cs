@@ -52,6 +52,18 @@ public sealed class FiscalXReadingRuntimeTests
     }
 
     [Fact]
+    public void IssuedSalesInvoiceAggregatesAsAuthoritativeSale()
+    {
+        var aggregate = new FiscalXReadingAggregationService().Aggregate(
+            [Document("issued", sequence: 1)], [], "PHP");
+
+        Assert.Equal(1, aggregate.QualifyingDocumentCount);
+        Assert.Equal(10_000, aggregate.Amounts.GrossSalesAmountMinorUnits);
+        Assert.Equal(8_000, aggregate.Amounts.NetSalesAmountMinorUnits);
+        Assert.Equal(8_000, aggregate.Tenders.Single().AmountMinorUnits);
+    }
+
+    [Fact]
     public void SeniorCitizenAndPwdRemainSeparateFromVatExemption()
     {
         var senior = Document("recorded", 1) with
