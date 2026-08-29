@@ -68,11 +68,15 @@ public sealed class FiscalXReadingRuntimeTests
     {
         var senior = Document("recorded", 1) with
         {
+            Lines = [new("parking_fee", 9_500, 1_500, 0, 8_000, "PHP")],
+            Taxes = [new("vat_exempt", false, 9_500, 0, "PHP")],
             Statutory = new("SENIOR_CITIZEN", 1_500, 500, 8_000, "PHP"),
             Discounts = [new("statutory_peer", 1_500, 500, "PHP")]
         };
         var pwd = Document("recorded", 2) with
         {
+            Lines = [new("parking_fee", 9_500, 1_500, 0, 8_000, "PHP")],
+            Taxes = [new("vat_exempt", false, 9_500, 0, "PHP")],
             Statutory = new("PWD", 1_500, 500, 8_000, "PHP"),
             Discounts = [new("statutory_peer", 1_500, 500, "PHP")]
         };
@@ -85,6 +89,26 @@ public sealed class FiscalXReadingRuntimeTests
         Assert.Contains(aggregate.Discounts, item => item.Classification == "senior_citizen_statutory");
         Assert.Contains(aggregate.Discounts, item => item.Classification == "pwd_statutory");
         Assert.Contains(aggregate.Discounts, item => item.Classification == "vat_exemption_adjustment");
+    }
+
+    [Fact]
+    public void StatutoryInvoiceDoesNotCountVatExemptionAsLineDiscount()
+    {
+        var document = Document("issued", 1) with
+        {
+            Lines = [new("parking_fee", 2_232, 446, 0, 1_786, "PHP")],
+            Tenders = [new("digital_wallet", 1_786, "PHP")],
+            Taxes = [new("vat_exempt", false, 2_232, 0, "PHP")],
+            Discounts = [new("statutory_peer", 446, 268, "PHP")],
+            Statutory = new("SENIOR_CITIZEN", 446, 268, 1_786, "PHP")
+        };
+
+        var aggregate = new FiscalXReadingAggregationService().Aggregate([document], [], "PHP");
+
+        Assert.Equal(2_232, aggregate.Amounts.GrossSalesAmountMinorUnits);
+        Assert.Equal(446, aggregate.Amounts.DiscountAmountMinorUnits);
+        Assert.Equal(268, aggregate.Amounts.VatExemptionAmountMinorUnits);
+        Assert.Equal(1_786, aggregate.Amounts.NetSalesAmountMinorUnits);
     }
 
     [Fact]
