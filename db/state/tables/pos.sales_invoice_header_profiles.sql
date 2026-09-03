@@ -12,6 +12,9 @@ CREATE TABLE IF NOT EXISTS pos.sales_invoice_header_profiles (
     pos_serial_number text NULL,
     machine_identification_number text NULL,
     parking_location_display text NULL,
+    supplier_developer_registered_name text NULL,
+    supplier_developer_address text NULL,
+    supplier_developer_tin text NULL,
     bir_accreditation_number text NULL,
     bir_accreditation_issued_date date NULL,
     bir_accreditation_valid_until date NULL,
@@ -41,6 +44,9 @@ CREATE TABLE IF NOT EXISTS pos.sales_invoice_header_profiles (
     CONSTRAINT ck_sales_invoice_header_profiles__pos_serial_number_not_blank CHECK (pos_serial_number IS NULL OR char_length(btrim(pos_serial_number)) > 0),
     CONSTRAINT ck_sales_invoice_header_profiles__min_not_blank CHECK (machine_identification_number IS NULL OR char_length(btrim(machine_identification_number)) > 0),
     CONSTRAINT ck_sales_invoice_header_profiles__parking_location_not_blank CHECK (parking_location_display IS NULL OR char_length(btrim(parking_location_display)) > 0),
+    CONSTRAINT ck_sales_invoice_header_profiles__supplier_name_not_blank CHECK (supplier_developer_registered_name IS NULL OR char_length(btrim(supplier_developer_registered_name)) > 0),
+    CONSTRAINT ck_sales_invoice_header_profiles__supplier_address_not_blank CHECK (supplier_developer_address IS NULL OR char_length(btrim(supplier_developer_address)) > 0),
+    CONSTRAINT ck_sales_invoice_header_profiles__supplier_tin_not_blank CHECK (supplier_developer_tin IS NULL OR char_length(btrim(supplier_developer_tin)) > 0),
     CONSTRAINT ck_sales_invoice_header_profiles__bir_accreditation_number_not_blank CHECK (bir_accreditation_number IS NULL OR char_length(btrim(bir_accreditation_number)) > 0),
     CONSTRAINT ck_sales_invoice_header_profiles__bir_dates_order CHECK (
         bir_accreditation_issued_date IS NULL OR
@@ -60,6 +66,9 @@ CREATE TABLE IF NOT EXISTS pos.sales_invoice_header_profiles (
             pos_serial_number IS NOT NULL AND char_length(btrim(pos_serial_number)) > 0 AND
             machine_identification_number IS NOT NULL AND char_length(btrim(machine_identification_number)) > 0 AND
             parking_location_display IS NOT NULL AND char_length(btrim(parking_location_display)) > 0 AND
+            supplier_developer_registered_name IS NOT NULL AND char_length(btrim(supplier_developer_registered_name)) > 0 AND
+            supplier_developer_address IS NOT NULL AND char_length(btrim(supplier_developer_address)) > 0 AND
+            supplier_developer_tin IS NOT NULL AND char_length(btrim(supplier_developer_tin)) > 0 AND
             bir_accreditation_number IS NOT NULL AND char_length(btrim(bir_accreditation_number)) > 0 AND
             bir_accreditation_issued_date IS NOT NULL AND
             bir_accreditation_valid_until IS NOT NULL AND
@@ -86,6 +95,9 @@ CREATE UNIQUE INDEX IF NOT EXISTS ux_sales_invoice_header_profiles__one_open_app
 
 COMMENT ON TABLE pos.sales_invoice_header_profiles IS 'Approved Sales Invoice statutory/site header profiles resolved by Site POS Server at issuance and snapshotted into fiscal documents.';
 COMMENT ON COLUMN pos.sales_invoice_header_profiles.site_id IS 'Site identifier used for profile ownership and resolution. POS Server stores the approved site reference only.';
+COMMENT ON COLUMN pos.sales_invoice_header_profiles.supplier_developer_registered_name IS 'Registered name of the POS software supplier/developer, distinct from the merchant fiscal identity.';
+COMMENT ON COLUMN pos.sales_invoice_header_profiles.supplier_developer_address IS 'Registered address of the POS software supplier/developer.';
+COMMENT ON COLUMN pos.sales_invoice_header_profiles.supplier_developer_tin IS 'Taxpayer identification number of the POS software supplier/developer.';
 COMMENT ON COLUMN pos.sales_invoice_header_profiles.bir_accreditation_issued_date IS 'BIR accreditation issued date. Distinct from PTU issued date.';
 COMMENT ON COLUMN pos.sales_invoice_header_profiles.bir_accreditation_valid_until IS 'BIR accreditation valid-until date. Must not precede BIR accreditation issued date.';
 COMMENT ON COLUMN pos.sales_invoice_header_profiles.ptu_issued_date IS 'PTU issued date. Distinct from BIR accreditation dates.';

@@ -22,6 +22,9 @@
       "posSerialNumber": "TEST-SERIAL-0001",
       "machineIdentificationNumber": "TEST-MIN-0001",
       "parkingLocationDisplay": "GOVERNED TEST PARKING LOCATION",
+      "supplierDeveloperRegisteredName": "GOVERNED TEST SOFTWARE SUPPLIER",
+      "supplierDeveloperAddress": "GOVERNED TEST SOFTWARE ADDRESS",
+      "supplierDeveloperTin": "TEST-SUPPLIER-TIN-0001",
       "birAccreditationNumber": "TEST-BIR-ACCREDITATION-0001",
       "birAccreditationIssuedDate": "2026-01-15",
       "birAccreditationValidUntil": "2027-01-15",
@@ -67,7 +70,10 @@
         "birAccreditationValidUntil",
         "ptuNumber",
         "ptuIssuedDate",
-        "parkingLocationDisplay"
+        "parkingLocationDisplay",
+        "supplierDeveloperRegisteredName",
+        "supplierDeveloperAddress",
+        "supplierDeveloperTin"
       ]
     },
     {
@@ -92,6 +98,9 @@
       "machineIdentificationNumber": "TEST-MIN-0001",
       "parkingLocationDisplay": "GOVERNED TEST PARKING LOCATION",
       "terminalId": "RUNTIME-TERMINAL-001",
+      "supplierDeveloperRegisteredName": "GOVERNED TEST SOFTWARE SUPPLIER",
+      "supplierDeveloperAddress": "GOVERNED TEST SOFTWARE ADDRESS",
+      "supplierDeveloperTin": "TEST-SUPPLIER-TIN-0001",
       "birAccreditationNumber": "TEST-BIR-ACCREDITATION-0001",
       "birAccreditationIssuedDate": "2026-01-15",
       "birAccreditationValidUntil": "2027-01-15",

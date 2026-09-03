@@ -387,7 +387,12 @@ public sealed class SalesInvoiceHeaderProfileAdminService
             command.RequestedAt,
             command.RequestedAt,
             command.ActorRef.Trim(),
-            command.ActorRef.Trim());
+            command.ActorRef.Trim())
+        {
+            SupplierDeveloperRegisteredName = Normalize(command.SupplierDeveloperRegisteredName),
+            SupplierDeveloperAddress = Normalize(command.SupplierDeveloperAddress),
+            SupplierDeveloperTin = Normalize(command.SupplierDeveloperTin)
+        };
 
     private static SalesInvoiceHeaderProfile ToProfile(
         UpdateSalesInvoiceHeaderProfileDraftCommand command,
@@ -410,6 +415,9 @@ public sealed class SalesInvoiceHeaderProfileAdminService
             PtuIssuedDate = command.PtuIssuedDate,
             SalesInvoiceLegalStatement = Normalize(command.SalesInvoiceLegalStatement),
             CustomerServiceFooter = Normalize(command.CustomerServiceFooter),
+            SupplierDeveloperRegisteredName = Normalize(command.SupplierDeveloperRegisteredName),
+            SupplierDeveloperAddress = Normalize(command.SupplierDeveloperAddress),
+            SupplierDeveloperTin = Normalize(command.SupplierDeveloperTin),
             EffectiveFrom = command.EffectiveFrom,
             EffectiveTo = command.EffectiveTo,
             UpdatedAt = command.RequestedAt,

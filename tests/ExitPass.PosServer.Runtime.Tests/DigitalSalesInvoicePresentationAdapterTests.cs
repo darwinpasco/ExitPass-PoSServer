@@ -199,7 +199,10 @@ public sealed class DigitalSalesInvoicePresentationAdapterTests
             SalesInvoiceHeaderProfileVersions.TemplateVersion,
             SalesInvoiceHeaderProfileVersions.PresentationVersion,
             DateTimeOffset.Parse("2026-07-18T08:00:00Z"),
-            DateTimeOffset.Parse("2026-07-18T08:00:01Z"));
+            DateTimeOffset.Parse("2026-07-18T08:00:01Z"),
+            "GOVERNED TEST SOFTWARE SUPPLIER",
+            "GOVERNED TEST SOFTWARE ADDRESS",
+            "TEST-SUPPLIER-TIN-0001");
         var render = ValidRenderModel(assignedNumber: true) with { SalesInvoiceHeaderSnapshot = snapshot };
         var adapter = new DigitalSalesInvoicePresentationAdapter();
 
@@ -209,6 +212,13 @@ public sealed class DigitalSalesInvoicePresentationAdapterTests
         Assert.NotNull(result.Presentation);
         var rows = Section(result.Presentation, "salesInvoiceHeaderSnapshot").Rows;
         Assert.Contains(rows, row => row.Key == "salesInvoiceHeaderSnapshot.registeredBusinessName" && row.DisplayValue == "GOVERNED TEST BUSINESS NAME");
+        Assert.Contains(rows, row => row.Key == "salesInvoiceHeaderSnapshot.registeredBusinessAddress" && row.DisplayValue == "GOVERNED TEST ADDRESS");
+        Assert.Contains(rows, row => row.Key == "salesInvoiceHeaderSnapshot.supplierDeveloperRegisteredName" && row.DisplayValue == "GOVERNED TEST SOFTWARE SUPPLIER");
+        Assert.Contains(rows, row => row.Key == "salesInvoiceHeaderSnapshot.supplierDeveloperAddress" && row.DisplayValue == "GOVERNED TEST SOFTWARE ADDRESS");
+        Assert.Contains(rows, row => row.Key == "salesInvoiceHeaderSnapshot.supplierDeveloperTin" && row.DisplayValue == "TEST-SUPPLIER-TIN-0001");
+        Assert.DoesNotContain(rows, row =>
+            row.Key.StartsWith("salesInvoiceHeaderSnapshot.supplierDeveloper", StringComparison.Ordinal) &&
+            row.Posture == "not_available");
         Assert.Contains(rows, row => row.Key == "salesInvoiceHeaderSnapshot.birAccreditationIssuedDate" && row.DisplayValue == "2026-01-15");
         Assert.Contains(rows, row => row.Key == "salesInvoiceHeaderSnapshot.birAccreditationValidUntil" && row.DisplayValue == "2027-01-15");
         Assert.Contains(rows, row => row.Key == "salesInvoiceHeaderSnapshot.ptuIssuedDate" && row.DisplayValue == "2026-02-10");

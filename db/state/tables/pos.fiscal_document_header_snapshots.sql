@@ -14,6 +14,9 @@ CREATE TABLE IF NOT EXISTS pos.fiscal_document_header_snapshots (
     machine_identification_number text NOT NULL,
     parking_location_display text NOT NULL,
     terminal_id text NULL,
+    supplier_developer_registered_name text NOT NULL,
+    supplier_developer_address text NOT NULL,
+    supplier_developer_tin text NOT NULL,
     bir_accreditation_number text NOT NULL,
     bir_accreditation_issued_date date NOT NULL,
     bir_accreditation_valid_until date NOT NULL,
@@ -43,6 +46,9 @@ CREATE TABLE IF NOT EXISTS pos.fiscal_document_header_snapshots (
     CONSTRAINT ck_fiscal_document_header_snapshots__min_not_blank CHECK (char_length(btrim(machine_identification_number)) > 0),
     CONSTRAINT ck_fiscal_document_header_snapshots__parking_location_not_blank CHECK (char_length(btrim(parking_location_display)) > 0),
     CONSTRAINT ck_fiscal_document_header_snapshots__terminal_id_not_blank CHECK (terminal_id IS NULL OR char_length(btrim(terminal_id)) > 0),
+    CONSTRAINT ck_fiscal_document_header_snapshots__supplier_name_not_blank CHECK (char_length(btrim(supplier_developer_registered_name)) > 0),
+    CONSTRAINT ck_fiscal_document_header_snapshots__supplier_address_not_blank CHECK (char_length(btrim(supplier_developer_address)) > 0),
+    CONSTRAINT ck_fiscal_document_header_snapshots__supplier_tin_not_blank CHECK (char_length(btrim(supplier_developer_tin)) > 0),
     CONSTRAINT ck_fiscal_document_header_snapshots__bir_accreditation_number_not_blank CHECK (char_length(btrim(bir_accreditation_number)) > 0),
     CONSTRAINT ck_fiscal_document_header_snapshots__bir_dates_order CHECK (bir_accreditation_valid_until >= bir_accreditation_issued_date),
     CONSTRAINT ck_fiscal_document_header_snapshots__ptu_number_not_blank CHECK (char_length(btrim(ptu_number)) > 0),
@@ -55,6 +61,7 @@ CREATE TABLE IF NOT EXISTS pos.fiscal_document_header_snapshots (
 
 COMMENT ON TABLE pos.fiscal_document_header_snapshots IS 'Immutable Sales Invoice header snapshot captured at fiscal-document issuance. Historical presentations must read this snapshot, not the current profile.';
 COMMENT ON COLUMN pos.fiscal_document_header_snapshots.terminal_id IS 'Runtime terminal identifier captured from issuance context when supplied. It is not stored on the reusable taxpayer/header profile.';
+COMMENT ON COLUMN pos.fiscal_document_header_snapshots.supplier_developer_registered_name IS 'Immutable POS software supplier/developer registered name, distinct from merchant identity.';
 COMMENT ON COLUMN pos.fiscal_document_header_snapshots.bir_accreditation_issued_date IS 'BIR accreditation issued date snapshotted at issuance. Distinct from PTU issued date.';
 COMMENT ON COLUMN pos.fiscal_document_header_snapshots.bir_accreditation_valid_until IS 'BIR accreditation valid-until date snapshotted at issuance.';
 COMMENT ON COLUMN pos.fiscal_document_header_snapshots.ptu_issued_date IS 'PTU issued date snapshotted at issuance. Distinct from BIR accreditation dates.';

@@ -42,7 +42,10 @@ public static class PostgresFiscalDocumentSql
             identity.created_at,
             identity.updated_at,
             identity.created_by_ref,
-            identity.updated_by_ref
+            identity.updated_by_ref,
+            profile.supplier_developer_registered_name,
+            profile.supplier_developer_address,
+            profile.supplier_developer_tin
         from pos.sales_invoice_header_profiles profile
         inner join pos.fiscal_identities identity
             on identity.fiscal_identity_id = profile.fiscal_identity_id
@@ -78,6 +81,9 @@ public static class PostgresFiscalDocumentSql
             ptu_issued_date,
             sales_invoice_legal_statement,
             customer_service_footer,
+            supplier_developer_registered_name,
+            supplier_developer_address,
+            supplier_developer_tin,
             template_version,
             presentation_version,
             effective_at,
@@ -104,6 +110,9 @@ public static class PostgresFiscalDocumentSql
             @ptu_issued_date,
             @sales_invoice_legal_statement,
             @customer_service_footer,
+            @supplier_developer_registered_name,
+            @supplier_developer_address,
+            @supplier_developer_tin,
             @template_version,
             @presentation_version,
             @effective_at,
@@ -238,7 +247,10 @@ public static class PostgresFiscalDocumentSql
             template_version,
             presentation_version,
             effective_at,
-            snapshot_created_at
+            snapshot_created_at,
+            supplier_developer_registered_name,
+            supplier_developer_address,
+            supplier_developer_tin
         from pos.fiscal_document_header_snapshots
         where fiscal_document_id = @fiscal_document_id;
         """;

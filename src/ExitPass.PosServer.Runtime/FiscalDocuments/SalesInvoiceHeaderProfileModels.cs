@@ -54,7 +54,10 @@ public sealed record SalesInvoiceHeaderProfile(
     string? CreatedByRef,
     string? UpdatedByRef,
     FiscalIdentityProfile? FiscalIdentity = null,
-    bool HasBeenSnapshotted = false);
+    bool HasBeenSnapshotted = false,
+    string? SupplierDeveloperRegisteredName = null,
+    string? SupplierDeveloperAddress = null,
+    string? SupplierDeveloperTin = null);
 
 public sealed record SalesInvoiceHeaderSnapshot(
     Guid FiscalIdentityId,
@@ -77,7 +80,10 @@ public sealed record SalesInvoiceHeaderSnapshot(
     string TemplateVersion,
     string PresentationVersion,
     DateTimeOffset EffectiveAt,
-    DateTimeOffset SnapshotCreatedAt);
+    DateTimeOffset SnapshotCreatedAt,
+    string SupplierDeveloperRegisteredName,
+    string SupplierDeveloperAddress,
+    string SupplierDeveloperTin);
 
 public sealed record SalesInvoiceHeaderProfileCompletenessResult(
     bool IsComplete,

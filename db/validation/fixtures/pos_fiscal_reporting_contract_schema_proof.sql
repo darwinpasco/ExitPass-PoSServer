@@ -41,7 +41,8 @@ INSERT INTO pos.fiscal_identities (
 INSERT INTO pos.sales_invoice_header_profiles (
     sales_invoice_header_profile_id, fiscal_identity_id, site_id, site_pos_server_id,
     profile_version, template_version, presentation_version, pos_serial_number,
-    machine_identification_number, parking_location_display, bir_accreditation_number,
+    machine_identification_number, parking_location_display, supplier_developer_registered_name,
+    supplier_developer_address, supplier_developer_tin, bir_accreditation_number,
     bir_accreditation_issued_date, bir_accreditation_valid_until, ptu_number, ptu_issued_date,
     sales_invoice_legal_statement, customer_service_footer, effective_from, effective_to,
     lifecycle_status, approved_at, approved_by_ref, created_by_ref, updated_by_ref
@@ -53,6 +54,8 @@ INSERT INTO pos.sales_invoice_header_profiles (
     'REPORTING-PROOF-V1', 'digital-sales-invoice-json-v1',
     'digital-sales-invoice-presentation-json-v1', 'TEST-SERIAL-REPORTING-0001',
     'TEST-MIN-REPORTING-0001', 'REPORTING PROOF PARKING LOCATION',
+    'GOVERNED REPORTING TEST SOFTWARE SUPPLIER', 'GOVERNED REPORTING TEST SOFTWARE ADDRESS',
+    'TEST-SUPPLIER-TIN-REPORTING-0001',
     'TEST-BIR-ACCREDITATION-REPORTING-0001', '2026-01-01', '2027-01-01',
     'TEST-PTU-REPORTING-0001', '2026-01-02', 'TEST LEGAL STATEMENT',
     'TEST CUSTOMER SERVICE FOOTER', '2026-01-01T00:00:00Z', NULL,

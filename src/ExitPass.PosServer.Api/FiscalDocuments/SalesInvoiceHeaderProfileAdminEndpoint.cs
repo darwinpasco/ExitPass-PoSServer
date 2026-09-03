@@ -315,7 +315,10 @@ public static class SalesInvoiceHeaderProfileAdminEndpoint
             request.EffectiveFrom,
             request.EffectiveTo,
             request.CreatedByRef ?? request.ActorRef ?? string.Empty,
-            DateTimeOffset.UtcNow);
+            DateTimeOffset.UtcNow,
+            request.SupplierDeveloperRegisteredName,
+            request.SupplierDeveloperAddress,
+            request.SupplierDeveloperTin);
 
     private static UpdateSalesInvoiceHeaderProfileDraftCommand ToUpdateCommand(Guid id, CreateSalesInvoiceHeaderProfileRequest request) =>
         new(
@@ -339,7 +342,10 @@ public static class SalesInvoiceHeaderProfileAdminEndpoint
             request.EffectiveFrom,
             request.EffectiveTo,
             request.UpdatedByRef ?? request.ActorRef ?? string.Empty,
-            DateTimeOffset.UtcNow);
+            DateTimeOffset.UtcNow,
+            request.SupplierDeveloperRegisteredName,
+            request.SupplierDeveloperAddress,
+            request.SupplierDeveloperTin);
 
     private static SalesInvoiceHeaderProfileAdminResponse Success(string code, int statusCode, string correlationId, object? resource) =>
         new(true, code, statusCode, correlationId, resource, []);
@@ -411,7 +417,10 @@ public sealed record CreateSalesInvoiceHeaderProfileRequest(
     DateTimeOffset? EffectiveTo,
     string? CreatedByRef,
     string? UpdatedByRef = null,
-    string? ActorRef = null);
+    string? ActorRef = null,
+    string? SupplierDeveloperRegisteredName = null,
+    string? SupplierDeveloperAddress = null,
+    string? SupplierDeveloperTin = null);
 
 public sealed record ApproveSalesInvoiceHeaderProfileRequest(
     string? ApprovedByRef,

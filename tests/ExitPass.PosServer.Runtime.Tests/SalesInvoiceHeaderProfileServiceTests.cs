@@ -122,6 +122,9 @@ public sealed class SalesInvoiceHeaderProfileServiceTests
             BirAccreditationValidUntil = null,
             PtuNumber = "",
             PtuIssuedDate = null,
+            SupplierDeveloperRegisteredName = "",
+            SupplierDeveloperAddress = "",
+            SupplierDeveloperTin = "",
             ParkingLocationDisplay = "",
             TemplateVersion = "unsupported",
             PresentationVersion = "unsupported"
@@ -140,6 +143,9 @@ public sealed class SalesInvoiceHeaderProfileServiceTests
         Assert.Contains("bir_accreditation_valid_until_missing", result.FailureCodes);
         Assert.Contains("ptu_number_missing", result.FailureCodes);
         Assert.Contains("ptu_issued_date_missing", result.FailureCodes);
+        Assert.Contains("supplier_developer_registered_name_missing", result.FailureCodes);
+        Assert.Contains("supplier_developer_address_missing", result.FailureCodes);
+        Assert.Contains("supplier_developer_tin_missing", result.FailureCodes);
         Assert.Contains("parking_location_display_missing", result.FailureCodes);
         Assert.Contains("unsupported_template_version", result.FailureCodes);
         Assert.Contains("unsupported_presentation_version", result.FailureCodes);
@@ -156,6 +162,9 @@ public sealed class SalesInvoiceHeaderProfileServiceTests
         Assert.Equal(new DateOnly(2027, 1, 15), snapshot.BirAccreditationValidUntil);
         Assert.Equal("TEST-PTU-0001", snapshot.PtuNumber);
         Assert.Equal(new DateOnly(2026, 2, 10), snapshot.PtuIssuedDate);
+        Assert.Equal("GOVERNED TEST SOFTWARE SUPPLIER", snapshot.SupplierDeveloperRegisteredName);
+        Assert.Equal("GOVERNED TEST SOFTWARE ADDRESS", snapshot.SupplierDeveloperAddress);
+        Assert.Equal("TEST-SUPPLIER-TIN-0001", snapshot.SupplierDeveloperTin);
         Assert.Equal("RUNTIME-TERMINAL-001", snapshot.TerminalId);
         Assert.Equal(SalesInvoiceHeaderProfileVersions.TemplateVersion, snapshot.TemplateVersion);
         Assert.Equal(SalesInvoiceHeaderProfileVersions.PresentationVersion, snapshot.PresentationVersion);
@@ -239,5 +248,10 @@ public sealed class SalesInvoiceHeaderProfileServiceTests
             EffectiveAt.AddDays(-1),
             "profile-test",
             "approver-test",
-            ValidIdentity());
+            ValidIdentity())
+        {
+            SupplierDeveloperRegisteredName = "GOVERNED TEST SOFTWARE SUPPLIER",
+            SupplierDeveloperAddress = "GOVERNED TEST SOFTWARE ADDRESS",
+            SupplierDeveloperTin = "TEST-SUPPLIER-TIN-0001"
+        };
 }

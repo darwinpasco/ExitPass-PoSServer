@@ -286,6 +286,9 @@ public sealed class SalesInvoiceHeaderProfileAdminEndpointTests
                 service,
                 context)).Resource);
         Assert.Equal("TEST-SERIAL-0001", updated.PosSerialNumber);
+        Assert.Equal("GOVERNED TEST SOFTWARE SUPPLIER", updated.SupplierDeveloperRegisteredName);
+        Assert.Equal("GOVERNED TEST SOFTWARE ADDRESS", updated.SupplierDeveloperAddress);
+        Assert.Equal("TEST-SUPPLIER-TIN-0001", updated.SupplierDeveloperTin);
 
         var approved = Assert.IsType<SalesInvoiceHeaderProfile>(
             (await SalesInvoiceHeaderProfileAdminEndpoint.ApproveHeaderProfileAsync(
@@ -382,7 +385,10 @@ public sealed class SalesInvoiceHeaderProfileAdminEndpointTests
             "CUSTOMER SERVICE TEST FOOTER",
             EffectiveAt.AddDays(-1),
             null,
-            "admin-creator");
+            "admin-creator",
+            SupplierDeveloperRegisteredName: "GOVERNED TEST SOFTWARE SUPPLIER",
+            SupplierDeveloperAddress: "GOVERNED TEST SOFTWARE ADDRESS",
+            SupplierDeveloperTin: "TEST-SUPPLIER-TIN-0001");
 
     private static IConfiguration AdminApiKeyConfiguration() =>
         new ConfigurationBuilder()
