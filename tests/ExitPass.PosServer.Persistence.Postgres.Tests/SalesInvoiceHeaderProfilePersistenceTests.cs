@@ -7,6 +7,23 @@ namespace ExitPass.PosServer.Persistence.Postgres.Tests;
 public sealed class SalesInvoiceHeaderProfilePersistenceTests
 {
     [Fact]
+    public void PersistentDatabaseReconciliationUsesCanonicalStateWithoutFabricatingHistoricalValues()
+    {
+        var reconciliation = File.ReadAllText(FindDatabaseScriptPath("Invoke-PosPersistentStateReconciliation.ps1"));
+
+        Assert.Contains("db\\state\\tables\\pos.sales_invoice_header_profiles.sql", reconciliation, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("db\\state\\tables\\pos.fiscal_document_header_snapshots.sql", reconciliation, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("Get-StateColumnDefinition", reconciliation, StringComparison.Ordinal);
+        Assert.Contains("Get-StateConstraintDefinition", reconciliation, StringComparison.Ordinal);
+        Assert.Contains("ADD COLUMN IF NOT EXISTS", reconciliation, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("historical snapshot rows lack authoritative supplier identity", reconciliation, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("approved profile rows lack authoritative supplier identity", reconciliation, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("SET NOT NULL", reconciliation, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("UPDATE pos.fiscal_document_header_snapshots", reconciliation, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("UPDATE pos.sales_invoice_header_profiles", reconciliation, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
     public void SalesInvoiceHeaderProfileSchemaContainsRequiredLifecycleDatesAndVersionConstraints()
     {
         var schema = File.ReadAllText(FindTableSourcePath("pos.sales_invoice_header_profiles.sql"));
@@ -224,4 +241,26 @@ public sealed class SalesInvoiceHeaderProfilePersistenceTests
 
         throw new FileNotFoundException($"Could not locate {fileName}.");
     }
+
+    private static string FindDatabaseScriptPath(string fileName, [CallerFilePath] string testFilePath = "")
+    {
+        var testSourceDirectory = Path.GetDirectoryName(testFilePath) ?? string.Empty;
+        foreach (var startDirectory in new[] { testSourceDirectory, AppContext.BaseDirectory, Directory.GetCurrentDirectory() })
+        {
+            var current = new DirectoryInfo(startDirectory);
+            while (current is not null)
+            {
+                var candidate = Path.Combine(current.FullName, "db", "scripts", fileName);
+                if (File.Exists(candidate))
+                {
+                    return candidate;
+                }
+
+                current = current.Parent;
+            }
+        }
+
+        throw new FileNotFoundException($"Could not locate {fileName}.");
+    }
+
 }

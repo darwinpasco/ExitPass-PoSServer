@@ -10,6 +10,13 @@ The script validates repository SQL under `db/state` against:
 
 Repository SQL is the source of truth. Local database drift is reported only and must not be promoted into repository artifacts.
 
+`Invoke-PosPersistentStateReconciliation.ps1` is the guarded upgrade path for an existing
+non-production persistent IST database. It extracts the approved supplier column and constraint
+definitions directly from `db/state`, applies only missing additive columns, and then reconciles
+the affected constraints. It is not a migration-history mechanism and does not create a second
+schema source of truth. The script refuses production-like database names and stops when existing
+approved profiles or immutable snapshots would require fabricated supplier facts.
+
 Controlled-code JSON source under `db/reference-data/controlled-codes/source/` is the source of truth for controlled-code reference data. Generated controlled-code SQL under `db/reference-data/controlled-codes/generated/sql/` is validated only through the opt-in `ControlledCodeLoad` mode.
 
 ## Modes
@@ -30,6 +37,24 @@ Controlled-code JSON source under `db/reference-data/controlled-codes/source/` i
 
 .\db\scripts\Invoke-PosDbChecks.ps1 -Mode All -ConnectionString $env:POSSERVER_DB_URL -EvidenceDir .\db\validation\evidence\local-all
 ```
+
+Inspect or reconcile an approved persistent IST database hosted by its PostgreSQL container:
+
+```powershell
+.\db\scripts\Invoke-PosPersistentStateReconciliation.ps1 `
+  -Mode Inspect `
+  -ContainerName exitpass-pos-ist-persistent-db `
+  -DatabaseName exitpass_pos_ist
+
+.\db\scripts\Invoke-PosPersistentStateReconciliation.ps1 `
+  -Mode Apply `
+  -ContainerName exitpass-pos-ist-persistent-db `
+  -DatabaseName exitpass_pos_ist `
+  -EvidenceDir .\db\validation\evidence\persistent-ist
+```
+
+Back up the target before `-Mode Apply`. Rebuild and ControlledCodeLoad remain disposable-database
+operations and must not be used against the persistent IST database.
 
 Optional database name evidence/safety context:
 
