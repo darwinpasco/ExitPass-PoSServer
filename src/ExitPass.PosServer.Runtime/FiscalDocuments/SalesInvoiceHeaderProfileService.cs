@@ -21,6 +21,9 @@ public sealed class SalesInvoiceHeaderProfileService
         Require(profile.BirAccreditationValidUntil is not null, "bir_accreditation_valid_until_missing");
         Require(!string.IsNullOrWhiteSpace(profile.PtuNumber), "ptu_number_missing");
         Require(profile.PtuIssuedDate is not null, "ptu_issued_date_missing");
+        Require(!string.IsNullOrWhiteSpace(profile.SupplierDeveloperRegisteredName), "supplier_developer_registered_name_missing");
+        Require(!string.IsNullOrWhiteSpace(profile.SupplierDeveloperAddress), "supplier_developer_address_missing");
+        Require(!string.IsNullOrWhiteSpace(profile.SupplierDeveloperTin), "supplier_developer_tin_missing");
         Require(!string.IsNullOrWhiteSpace(profile.ParkingLocationDisplay), "parking_location_display_missing");
         Require(!string.IsNullOrWhiteSpace(profile.SalesInvoiceLegalStatement), "sales_invoice_legal_statement_missing");
         Require(!string.IsNullOrWhiteSpace(profile.CustomerServiceFooter), "customer_service_footer_missing");
@@ -159,6 +162,9 @@ public sealed class SalesInvoiceHeaderProfileService
             profile.TemplateVersion,
             profile.PresentationVersion,
             effectiveAt,
-            snapshotCreatedAt);
+            snapshotCreatedAt,
+            profile.SupplierDeveloperRegisteredName!.Trim(),
+            profile.SupplierDeveloperAddress!.Trim(),
+            profile.SupplierDeveloperTin!.Trim());
     }
 }

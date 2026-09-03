@@ -230,7 +230,10 @@ public sealed class SalesInvoiceHeaderProfileAdminServiceTests
             Now.AddDays(-1),
             null,
             "admin-creator",
-            Now);
+            Now,
+            "GOVERNED TEST SOFTWARE SUPPLIER",
+            "GOVERNED TEST SOFTWARE ADDRESS",
+            "TEST-SUPPLIER-TIN-0001");
 
     private static UpdateSalesInvoiceHeaderProfileDraftCommand ValidUpdateCommand(SalesInvoiceHeaderProfile profile, Guid fiscalIdentityId) =>
         new(
@@ -254,7 +257,10 @@ public sealed class SalesInvoiceHeaderProfileAdminServiceTests
             Now.AddDays(-1),
             null,
             "admin-updater",
-            Now.AddMinutes(1));
+            Now.AddMinutes(1),
+            "GOVERNED TEST SOFTWARE SUPPLIER",
+            "GOVERNED TEST SOFTWARE ADDRESS",
+            "TEST-SUPPLIER-TIN-0001");
 
     private sealed class InMemoryProfileRepository : ISalesInvoiceHeaderProfileRepository
     {

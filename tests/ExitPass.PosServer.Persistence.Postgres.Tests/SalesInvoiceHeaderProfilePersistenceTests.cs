@@ -21,6 +21,9 @@ public sealed class SalesInvoiceHeaderProfilePersistenceTests
         Assert.Contains("bir_accreditation_issued_date date null", schema, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("bir_accreditation_valid_until date null", schema, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("ptu_issued_date date null", schema, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("supplier_developer_registered_name text null", schema, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("supplier_developer_address text null", schema, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("supplier_developer_tin text null", schema, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("ck_sales_invoice_header_profiles__approved_completeness", schema, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("lifecycle_status <> 'APPROVED' OR", schema, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("lifecycle_status in ('DRAFT', 'APPROVED', 'RETIRED')", schema, StringComparison.OrdinalIgnoreCase);
@@ -38,6 +41,9 @@ public sealed class SalesInvoiceHeaderProfilePersistenceTests
         Assert.Contains("registered_business_name text not null", schema, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("tin text not null", schema, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("terminal_id text null", schema, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("supplier_developer_registered_name text not null", schema, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("supplier_developer_address text not null", schema, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("supplier_developer_tin text not null", schema, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("bir_accreditation_issued_date date not null", schema, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("bir_accreditation_valid_until date not null", schema, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("ptu_issued_date date not null", schema, StringComparison.OrdinalIgnoreCase);

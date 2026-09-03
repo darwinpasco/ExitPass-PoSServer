@@ -736,7 +736,11 @@ public sealed class PostgresFiscalDocumentRepository : IFiscalDocumentRepository
                 ReadDateTimeOffset(reader, 24),
                 reader.IsDBNull(25) ? null : reader.GetString(25),
                 reader.IsDBNull(26) ? null : reader.GetString(26),
-                fiscalIdentity));
+                fiscalIdentity,
+                false,
+                reader.IsDBNull(36) ? null : reader.GetString(36),
+                reader.IsDBNull(37) ? null : reader.GetString(37),
+                reader.IsDBNull(38) ? null : reader.GetString(38)));
         }
 
         return profiles;
@@ -850,7 +854,10 @@ public sealed class PostgresFiscalDocumentRepository : IFiscalDocumentRepository
             reader.GetString(17),
             reader.GetString(18),
             ReadDateTimeOffset(reader, 19),
-            ReadDateTimeOffset(reader, 20));
+            ReadDateTimeOffset(reader, 20),
+            reader.GetString(21),
+            reader.GetString(22),
+            reader.GetString(23));
     }
 
     private static async Task<AppliedStatutoryFiscalFactsSnapshot?> ReadAppliedStatutoryFactsAsync(
@@ -1296,6 +1303,9 @@ public sealed class PostgresFiscalDocumentRepository : IFiscalDocumentRepository
         command.Parameters.AddWithValue("ptu_issued_date", snapshot.PtuIssuedDate);
         command.Parameters.AddWithValue("sales_invoice_legal_statement", snapshot.SalesInvoiceLegalStatement);
         command.Parameters.AddWithValue("customer_service_footer", snapshot.CustomerServiceFooter);
+        command.Parameters.AddWithValue("supplier_developer_registered_name", snapshot.SupplierDeveloperRegisteredName);
+        command.Parameters.AddWithValue("supplier_developer_address", snapshot.SupplierDeveloperAddress);
+        command.Parameters.AddWithValue("supplier_developer_tin", snapshot.SupplierDeveloperTin);
         command.Parameters.AddWithValue("template_version", snapshot.TemplateVersion);
         command.Parameters.AddWithValue("presentation_version", snapshot.PresentationVersion);
         command.Parameters.AddWithValue("effective_at", snapshot.EffectiveAt);

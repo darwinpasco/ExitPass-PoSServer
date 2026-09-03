@@ -167,6 +167,9 @@ public sealed class PostgresSalesInvoiceHeaderProfileRepository : ISalesInvoiceH
                 pos_serial_number,
                 machine_identification_number,
                 parking_location_display,
+                supplier_developer_registered_name,
+                supplier_developer_address,
+                supplier_developer_tin,
                 bir_accreditation_number,
                 bir_accreditation_issued_date,
                 bir_accreditation_valid_until,
@@ -195,6 +198,9 @@ public sealed class PostgresSalesInvoiceHeaderProfileRepository : ISalesInvoiceH
                 @pos_serial_number,
                 @machine_identification_number,
                 @parking_location_display,
+                @supplier_developer_registered_name,
+                @supplier_developer_address,
+                @supplier_developer_tin,
                 @bir_accreditation_number,
                 @bir_accreditation_issued_date,
                 @bir_accreditation_valid_until,
@@ -278,6 +284,9 @@ public sealed class PostgresSalesInvoiceHeaderProfileRepository : ISalesInvoiceH
                 pos_serial_number = @pos_serial_number,
                 machine_identification_number = @machine_identification_number,
                 parking_location_display = @parking_location_display,
+                supplier_developer_registered_name = @supplier_developer_registered_name,
+                supplier_developer_address = @supplier_developer_address,
+                supplier_developer_tin = @supplier_developer_tin,
                 bir_accreditation_number = @bir_accreditation_number,
                 bir_accreditation_issued_date = @bir_accreditation_issued_date,
                 bir_accreditation_valid_until = @bir_accreditation_valid_until,
@@ -499,6 +508,9 @@ public sealed class PostgresSalesInvoiceHeaderProfileRepository : ISalesInvoiceH
         AddText(command, "pos_serial_number", profile.PosSerialNumber);
         AddText(command, "machine_identification_number", profile.MachineIdentificationNumber);
         AddText(command, "parking_location_display", profile.ParkingLocationDisplay);
+        AddText(command, "supplier_developer_registered_name", profile.SupplierDeveloperRegisteredName);
+        AddText(command, "supplier_developer_address", profile.SupplierDeveloperAddress);
+        AddText(command, "supplier_developer_tin", profile.SupplierDeveloperTin);
         AddText(command, "bir_accreditation_number", profile.BirAccreditationNumber);
         AddDate(command, "bir_accreditation_issued_date", profile.BirAccreditationIssuedDate);
         AddDate(command, "bir_accreditation_valid_until", profile.BirAccreditationValidUntil);
@@ -613,7 +625,10 @@ public sealed class PostgresSalesInvoiceHeaderProfileRepository : ISalesInvoiceH
             reader.IsDBNull(25) ? null : reader.GetString(25),
             reader.IsDBNull(26) ? null : reader.GetString(26),
             identity,
-            reader.GetBoolean(36));
+            reader.GetBoolean(36),
+            reader.IsDBNull(37) ? null : reader.GetString(37),
+            reader.IsDBNull(38) ? null : reader.GetString(38),
+            reader.IsDBNull(39) ? null : reader.GetString(39));
     }
 
     private static DateTimeOffset ReadDateTimeOffset(NpgsqlDataReader reader, int ordinal)
@@ -685,7 +700,10 @@ public sealed class PostgresSalesInvoiceHeaderProfileRepository : ISalesInvoiceH
                 select 1
                 from pos.fiscal_document_header_snapshots snapshot
                 where snapshot.sales_invoice_header_profile_id = profile.sales_invoice_header_profile_id
-            )
+            ),
+            profile.supplier_developer_registered_name,
+            profile.supplier_developer_address,
+            profile.supplier_developer_tin
         from pos.sales_invoice_header_profiles profile
         inner join pos.fiscal_identities identity
             on identity.fiscal_identity_id = profile.fiscal_identity_id

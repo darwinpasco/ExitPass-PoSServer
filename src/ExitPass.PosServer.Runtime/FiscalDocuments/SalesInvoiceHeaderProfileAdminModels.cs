@@ -39,7 +39,10 @@ public sealed record CreateSalesInvoiceHeaderProfileCommand(
     DateTimeOffset EffectiveFrom,
     DateTimeOffset? EffectiveTo,
     string ActorRef,
-    DateTimeOffset RequestedAt);
+    DateTimeOffset RequestedAt,
+    string? SupplierDeveloperRegisteredName = null,
+    string? SupplierDeveloperAddress = null,
+    string? SupplierDeveloperTin = null);
 
 public sealed record UpdateSalesInvoiceHeaderProfileDraftCommand(
     Guid SalesInvoiceHeaderProfileId,
@@ -62,7 +65,10 @@ public sealed record UpdateSalesInvoiceHeaderProfileDraftCommand(
     DateTimeOffset EffectiveFrom,
     DateTimeOffset? EffectiveTo,
     string ActorRef,
-    DateTimeOffset RequestedAt);
+    DateTimeOffset RequestedAt,
+    string? SupplierDeveloperRegisteredName = null,
+    string? SupplierDeveloperAddress = null,
+    string? SupplierDeveloperTin = null);
 
 public sealed record ValidateSalesInvoiceHeaderProfileResult(
     Guid SalesInvoiceHeaderProfileId,
