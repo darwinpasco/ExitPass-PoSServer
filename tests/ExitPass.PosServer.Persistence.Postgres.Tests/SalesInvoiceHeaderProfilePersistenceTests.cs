@@ -7,6 +7,18 @@ namespace ExitPass.PosServer.Persistence.Postgres.Tests;
 public sealed class SalesInvoiceHeaderProfilePersistenceTests
 {
     [Fact]
+    public void ExistingDatabaseMigrationAddsSupplierIdentityWithoutFabricatingHistoricalValues()
+    {
+        var migration = File.ReadAllText(FindMigrationSourcePath("ExitPass_PosSalesInvoiceSupplierIdentity_v1.0.sql"));
+
+        Assert.Contains("ADD COLUMN IF NOT EXISTS supplier_developer_registered_name", migration, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("ADD COLUMN IF NOT EXISTS supplier_developer_address", migration, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("ADD COLUMN IF NOT EXISTS supplier_developer_tin", migration, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("Existing fiscal snapshots require governed supplier identity backfill", migration, StringComparison.Ordinal);
+        Assert.DoesNotContain("UPDATE pos.fiscal_document_header_snapshots", migration, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
     public void SalesInvoiceHeaderProfileSchemaContainsRequiredLifecycleDatesAndVersionConstraints()
     {
         var schema = File.ReadAllText(FindTableSourcePath("pos.sales_invoice_header_profiles.sql"));
@@ -224,4 +236,26 @@ public sealed class SalesInvoiceHeaderProfilePersistenceTests
 
         throw new FileNotFoundException($"Could not locate {fileName}.");
     }
+
+    private static string FindMigrationSourcePath(string fileName, [CallerFilePath] string testFilePath = "")
+    {
+        var testSourceDirectory = Path.GetDirectoryName(testFilePath) ?? string.Empty;
+        foreach (var startDirectory in new[] { testSourceDirectory, AppContext.BaseDirectory, Directory.GetCurrentDirectory() })
+        {
+            var current = new DirectoryInfo(startDirectory);
+            while (current is not null)
+            {
+                var candidate = Path.Combine(current.FullName, "db", "migrations", fileName);
+                if (File.Exists(candidate))
+                {
+                    return candidate;
+                }
+
+                current = current.Parent;
+            }
+        }
+
+        throw new FileNotFoundException($"Could not locate {fileName}.");
+    }
+
 }
