@@ -7,15 +7,20 @@ namespace ExitPass.PosServer.Persistence.Postgres.Tests;
 public sealed class SalesInvoiceHeaderProfilePersistenceTests
 {
     [Fact]
-    public void ExistingDatabaseMigrationAddsSupplierIdentityWithoutFabricatingHistoricalValues()
+    public void PersistentDatabaseReconciliationUsesCanonicalStateWithoutFabricatingHistoricalValues()
     {
-        var migration = File.ReadAllText(FindMigrationSourcePath("ExitPass_PosSalesInvoiceSupplierIdentity_v1.0.sql"));
+        var reconciliation = File.ReadAllText(FindDatabaseScriptPath("Invoke-PosPersistentStateReconciliation.ps1"));
 
-        Assert.Contains("ADD COLUMN IF NOT EXISTS supplier_developer_registered_name", migration, StringComparison.OrdinalIgnoreCase);
-        Assert.Contains("ADD COLUMN IF NOT EXISTS supplier_developer_address", migration, StringComparison.OrdinalIgnoreCase);
-        Assert.Contains("ADD COLUMN IF NOT EXISTS supplier_developer_tin", migration, StringComparison.OrdinalIgnoreCase);
-        Assert.Contains("Existing fiscal snapshots require governed supplier identity backfill", migration, StringComparison.Ordinal);
-        Assert.DoesNotContain("UPDATE pos.fiscal_document_header_snapshots", migration, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("db\\state\\tables\\pos.sales_invoice_header_profiles.sql", reconciliation, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("db\\state\\tables\\pos.fiscal_document_header_snapshots.sql", reconciliation, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("Get-StateColumnDefinition", reconciliation, StringComparison.Ordinal);
+        Assert.Contains("Get-StateConstraintDefinition", reconciliation, StringComparison.Ordinal);
+        Assert.Contains("ADD COLUMN IF NOT EXISTS", reconciliation, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("historical snapshot rows lack authoritative supplier identity", reconciliation, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("approved profile rows lack authoritative supplier identity", reconciliation, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("SET NOT NULL", reconciliation, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("UPDATE pos.fiscal_document_header_snapshots", reconciliation, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("UPDATE pos.sales_invoice_header_profiles", reconciliation, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]
@@ -237,7 +242,7 @@ public sealed class SalesInvoiceHeaderProfilePersistenceTests
         throw new FileNotFoundException($"Could not locate {fileName}.");
     }
 
-    private static string FindMigrationSourcePath(string fileName, [CallerFilePath] string testFilePath = "")
+    private static string FindDatabaseScriptPath(string fileName, [CallerFilePath] string testFilePath = "")
     {
         var testSourceDirectory = Path.GetDirectoryName(testFilePath) ?? string.Empty;
         foreach (var startDirectory in new[] { testSourceDirectory, AppContext.BaseDirectory, Directory.GetCurrentDirectory() })
@@ -245,7 +250,7 @@ public sealed class SalesInvoiceHeaderProfilePersistenceTests
             var current = new DirectoryInfo(startDirectory);
             while (current is not null)
             {
-                var candidate = Path.Combine(current.FullName, "db", "migrations", fileName);
+                var candidate = Path.Combine(current.FullName, "db", "scripts", fileName);
                 if (File.Exists(candidate))
                 {
                     return candidate;
