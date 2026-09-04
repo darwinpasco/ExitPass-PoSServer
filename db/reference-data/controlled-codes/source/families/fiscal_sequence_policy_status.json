@@ -1,0 +1,30 @@
+{
+  "schema_version": "1.0",
+  "source_key": "controlled_codes.fiscal_sequence_policy_status.v1",
+  "source_name": "Fiscal Sequence Policy Status Controlled Codes",
+  "source_description": "Approved fiscal sequence policy lifecycle states.",
+  "governance_owner": "Accounting",
+  "source_ref": "Restart 41 persistent PITX POS issuance readiness",
+  "code_sets": [{
+    "code_set_key": "fiscal_sequence_policy_status",
+    "display_name": "Fiscal Sequence Policy Status",
+    "description": "Lifecycle states for fiscal sequence policies.",
+    "governance_owner": "Accounting",
+    "source_ref": "Restart 41 persistent PITX POS issuance readiness",
+    "is_active": true,
+    "effective_start_at": "2026-09-04T00:00:00Z",
+    "effective_end_at": null,
+    "codes": [{
+      "code_key": "active",
+      "display_name": "Active",
+      "description": "Policy is approved for current fiscal number allocation.",
+      "source_ref": "Restart 41 persistent PITX POS issuance readiness",
+      "sort_order": 10,
+      "is_active": true,
+      "is_deprecated": false,
+      "effective_start_at": "2026-09-04T00:00:00Z",
+      "effective_end_at": null,
+      "replaced_by_code_key": null
+    }]
+  }]
+}

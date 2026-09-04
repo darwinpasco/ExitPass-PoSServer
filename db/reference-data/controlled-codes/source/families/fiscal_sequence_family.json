@@ -1,0 +1,30 @@
+{
+  "schema_version": "1.0",
+  "source_key": "controlled_codes.fiscal_sequence_family.v1",
+  "source_name": "Fiscal Sequence Family Controlled Codes",
+  "source_description": "Approved fiscal numbering families.",
+  "governance_owner": "Accounting",
+  "source_ref": "Restart 41 persistent PITX POS issuance readiness",
+  "code_sets": [{
+    "code_set_key": "fiscal_sequence_family",
+    "display_name": "Fiscal Sequence Family",
+    "description": "Fiscal numbering families selected by document type.",
+    "governance_owner": "Accounting",
+    "source_ref": "Restart 41 persistent PITX POS issuance readiness",
+    "is_active": true,
+    "effective_start_at": "2026-09-04T00:00:00Z",
+    "effective_end_at": null,
+    "codes": [{
+      "code_key": "sales_invoice",
+      "display_name": "Sales Invoice",
+      "description": "Sales Invoice numbering family.",
+      "source_ref": "Restart 41 persistent PITX POS issuance readiness",
+      "sort_order": 10,
+      "is_active": true,
+      "is_deprecated": false,
+      "effective_start_at": "2026-09-04T00:00:00Z",
+      "effective_end_at": null,
+      "replaced_by_code_key": null
+    }]
+  }]
+}

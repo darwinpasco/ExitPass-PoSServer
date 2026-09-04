@@ -56,6 +56,21 @@ Inspect or reconcile an approved persistent IST database hosted by its PostgreSQ
 Back up the target before `-Mode Apply`. Rebuild and ControlledCodeLoad remain disposable-database
 operations and must not be used against the persistent IST database.
 
+Persistent PITX fiscal issuance configuration remains separate from schema reconciliation:
+
+```powershell
+.\db\scripts\Set-PosPersistentIstFiscalOperationalConfiguration.ps1 -Mode Inspect
+.\db\scripts\Set-PosPersistentIstFiscalOperationalConfiguration.ps1 -Mode Apply
+.\db\scripts\Ensure-PosPersistentIstFiscalReportingPeriod.ps1 -Mode Apply
+.\db\scripts\Test-PosPersistentIstFiscalIssuanceReadiness.ps1 -RequireReady
+```
+
+The static configuration command additively loads the canonical fiscal-issuance controlled-code
+slice and materializes one stable PITX WebPay terminal, Sales Invoice sequence policy, and sequence
+state. It never updates an existing sequence counter. The period command is intentionally separate:
+it derives the current half-open Asia/Manila business day, reuses an existing current OPEN period,
+and rejects overlap or ambiguity. All three commands refuse production-like database names.
+
 Optional database name evidence/safety context:
 
 ```powershell

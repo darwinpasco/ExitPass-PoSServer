@@ -42,6 +42,11 @@
       "governance_owner": "Operations"
     },
     {
+      "code_set_key": "channel_terminal_type",
+      "path": "families/channel_terminal_type.json",
+      "governance_owner": "Operations"
+    },
+    {
       "code_set_key": "configuration_action",
       "path": "families/configuration_action.json",
       "governance_owner": "Engineering"
@@ -77,9 +82,24 @@
       "governance_owner": "Engineering"
     },
     {
+      "code_set_key": "fiscal_document_status",
+      "path": "families/fiscal_document_status.json",
+      "governance_owner": "Accounting"
+    },
+    {
+      "code_set_key": "fiscal_document_type",
+      "path": "families/fiscal_document_type.json",
+      "governance_owner": "Accounting"
+    },
+    {
       "code_set_key": "fiscal_export_status",
       "path": "families/fiscal_export_status.json",
       "governance_owner": "Engineering"
+    },
+    {
+      "code_set_key": "fiscal_line_type",
+      "path": "families/fiscal_line_type.json",
+      "governance_owner": "Accounting"
     },
     {
       "code_set_key": "fiscal_operation_dead_letter_status",
@@ -162,9 +182,29 @@
       "governance_owner": "Engineering"
     },
     {
+      "code_set_key": "fiscal_sequence_family",
+      "path": "families/fiscal_sequence_family.json",
+      "governance_owner": "Accounting"
+    },
+    {
       "code_set_key": "fiscal_sequence_gap_classification",
       "path": "families/fiscal_sequence_gap_classification.json",
       "governance_owner": "Engineering"
+    },
+    {
+      "code_set_key": "fiscal_sequence_policy_status",
+      "path": "families/fiscal_sequence_policy_status.json",
+      "governance_owner": "Accounting"
+    },
+    {
+      "code_set_key": "fiscal_sequence_state",
+      "path": "families/fiscal_sequence_state.json",
+      "governance_owner": "Accounting"
+    },
+    {
+      "code_set_key": "fiscal_total_type",
+      "path": "families/fiscal_total_type.json",
+      "governance_owner": "Accounting"
     },
     {
       "code_set_key": "fiscal_z_state_identity",
@@ -255,6 +295,21 @@
       "code_set_key": "statutory_vat_treatment",
       "path": "families/statutory_vat_treatment.json",
       "governance_owner": "Engineering"
+    },
+    {
+      "code_set_key": "tax_classification",
+      "path": "families/tax_classification.json",
+      "governance_owner": "Accounting"
+    },
+    {
+      "code_set_key": "tax_type",
+      "path": "families/tax_type.json",
+      "governance_owner": "Accounting"
+    },
+    {
+      "code_set_key": "tender_type",
+      "path": "families/tender_type.json",
+      "governance_owner": "Accounting"
     }
   ],
   "notes": [

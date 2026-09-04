@@ -1,0 +1,30 @@
+{
+  "schema_version": "1.0",
+  "source_key": "controlled_codes.fiscal_document_type.v1",
+  "source_name": "Fiscal Document Type Controlled Codes",
+  "source_description": "Approved fiscal document classifications used by issuance.",
+  "governance_owner": "Accounting",
+  "source_ref": "Restart 41 persistent PITX POS issuance readiness",
+  "code_sets": [{
+    "code_set_key": "fiscal_document_type",
+    "display_name": "Fiscal Document Type",
+    "description": "Fiscal document classifications governed by POS issuance.",
+    "governance_owner": "Accounting",
+    "source_ref": "Restart 41 persistent PITX POS issuance readiness",
+    "is_active": true,
+    "effective_start_at": "2026-09-04T00:00:00Z",
+    "effective_end_at": null,
+    "codes": [{
+      "code_key": "sales_invoice",
+      "display_name": "Sales Invoice",
+      "description": "Original Sales Invoice fiscal document.",
+      "source_ref": "Restart 41 persistent PITX POS issuance readiness",
+      "sort_order": 10,
+      "is_active": true,
+      "is_deprecated": false,
+      "effective_start_at": "2026-09-04T00:00:00Z",
+      "effective_end_at": null,
+      "replaced_by_code_key": null
+    }]
+  }]
+}
