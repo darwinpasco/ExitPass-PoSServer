@@ -1,0 +1,30 @@
+{
+  "schema_version": "1.0",
+  "source_key": "controlled_codes.fiscal_line_type.v1",
+  "source_name": "Fiscal Line Type Controlled Codes",
+  "source_description": "Approved fiscal line classifications.",
+  "governance_owner": "Accounting",
+  "source_ref": "Restart 41 persistent PITX POS issuance readiness",
+  "code_sets": [{
+    "code_set_key": "fiscal_line_type",
+    "display_name": "Fiscal Line Type",
+    "description": "Fiscal line classifications used by Sales Invoice issuance.",
+    "governance_owner": "Accounting",
+    "source_ref": "Restart 41 persistent PITX POS issuance readiness",
+    "is_active": true,
+    "effective_start_at": "2026-09-04T00:00:00Z",
+    "effective_end_at": null,
+    "codes": [{
+      "code_key": "parking_fee",
+      "display_name": "Parking Fee",
+      "description": "Parking service fee line.",
+      "source_ref": "Restart 41 persistent PITX POS issuance readiness",
+      "sort_order": 10,
+      "is_active": true,
+      "is_deprecated": false,
+      "effective_start_at": "2026-09-04T00:00:00Z",
+      "effective_end_at": null,
+      "replaced_by_code_key": null
+    }]
+  }]
+}
