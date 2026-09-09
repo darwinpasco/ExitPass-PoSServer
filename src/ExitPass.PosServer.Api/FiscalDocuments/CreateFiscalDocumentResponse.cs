@@ -20,5 +20,8 @@ public sealed record CreateFiscalDocumentResponse(
     string? FiscalNumberSuffixText = null,
     DateTimeOffset? FiscalNumberAssignedAt = null,
     string? FiscalNumberAssignedByRef = null,
+    string? CompletionBasis = null,
+    string? CompletionAuthorityRef = null,
+    string? ElectronicJournalEventReference = null,
     string? ErrorPosture = null,
     [property: JsonIgnore] int HttpStatusCode = StatusCodes.Status400BadRequest);

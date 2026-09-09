@@ -1,4 +1,5 @@
 using ExitPass.PosServer.Runtime.FiscalReports;
+using ExitPass.PosServer.Runtime.FiscalDocuments;
 using Xunit;
 
 namespace ExitPass.PosServer.Runtime.Tests.FiscalReports;
@@ -109,6 +110,53 @@ public sealed class FiscalXReadingRuntimeTests
         Assert.Equal(446, aggregate.Amounts.DiscountAmountMinorUnits);
         Assert.Equal(268, aggregate.Amounts.VatExemptionAmountMinorUnits);
         Assert.Equal(1_786, aggregate.Amounts.NetSalesAmountMinorUnits);
+    }
+
+    [Fact]
+    public void ZeroPayableStatutoryInvoiceAggregatesWithoutTenderOrRevenueLeakageException()
+    {
+        var document = Document("issued", 1) with
+        {
+            CompletionBasis = FiscalCompletionBasisCodes.ZeroPayableStatutoryFinality,
+            Lines = [new("parking_fee", 2_679, 2_679, 0, 0, "PHP")],
+            Tenders = [],
+            Taxes = [new("vatable", false, 2_679, 321, "PHP")],
+            Discounts = [new("statutory_peer", 2_679, 321, "PHP")],
+            Statutory = new("SENIOR_CITIZEN", 2_679, 321, 0, "PHP")
+        };
+
+        var aggregate = new FiscalXReadingAggregationService().Aggregate([document], [], "PHP");
+
+        Assert.Equal(1, aggregate.QualifyingDocumentCount);
+        Assert.Equal(2_679, aggregate.Amounts.GrossSalesAmountMinorUnits);
+        Assert.Equal(0, aggregate.Amounts.NetSalesAmountMinorUnits);
+        Assert.Equal(2_679, aggregate.Amounts.SeniorCitizenDiscountAmountMinorUnits);
+        Assert.Equal(321, aggregate.Amounts.VatExemptionAmountMinorUnits);
+        Assert.Empty(aggregate.Tenders);
+    }
+
+    [Fact]
+    public void TenderRequirementRemainsCompletionBasisSpecific()
+    {
+        var paymentWithoutTender = Document("issued", 1) with { Tenders = [] };
+        Assert.Equal(
+            FiscalXReadingOutcome.ReconciliationFailure,
+            Assert.Throws<FiscalXReadingSafeException>(() =>
+                new FiscalXReadingAggregationService().Aggregate([paymentWithoutTender], [], "PHP")).Outcome);
+
+        var zeroPayableWithTender = Document("issued", 2) with
+        {
+            CompletionBasis = FiscalCompletionBasisCodes.ZeroPayableStatutoryFinality,
+            Lines = [new("parking_fee", 2_679, 2_679, 0, 0, "PHP")],
+            Tenders = [new("cash", 0, "PHP")],
+            Taxes = [new("vatable", false, 2_679, 321, "PHP")],
+            Discounts = [new("statutory_peer", 2_679, 321, "PHP")],
+            Statutory = new("PWD", 2_679, 321, 0, "PHP")
+        };
+        Assert.Equal(
+            FiscalXReadingOutcome.ReconciliationFailure,
+            Assert.Throws<FiscalXReadingSafeException>(() =>
+                new FiscalXReadingAggregationService().Aggregate([zeroPayableWithTender], [], "PHP")).Outcome);
     }
 
     [Fact]

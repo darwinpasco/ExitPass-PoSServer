@@ -17,6 +17,7 @@ namespace ExitPass.PosServer.Api.IntegrationTests;
 public sealed class FiscalDocumentApiPostgresSmokeTests
 {
     private const string ConnectionStringEnvironmentVariable = "POSSERVER_API_SMOKE_DB_URL";
+    private const string SmokeApiKey = "synthetic-fiscal-document-smoke-key";
     private static readonly Guid SitePosServerId = Guid.Parse("10000000-0000-0000-0000-000000000001");
     private static readonly Guid FiscalDocumentTypeCodeId = Guid.Parse("10000000-0000-0000-0000-000000000101");
     private static readonly Guid FiscalDocumentStatusCodeId = Guid.Parse("10000000-0000-0000-0000-000000000102");
@@ -261,6 +262,93 @@ public sealed class FiscalDocumentApiPostgresSmokeTests
 
         Assert.Equal(0, await CountTablesLikeAsync(connection, "%exit%"));
         Assert.Equal(0, await CountTablesLikeAsync(connection, "%gate%"));
+    }
+
+    [Fact]
+    public async Task PostZeroPayableStatutoryFiscalDocumentPersistsSalesInvoiceAndEjWithoutTenderOrPaymentAncestry()
+    {
+        if (!TryGetSmokeConnectionString(out var connectionString))
+        {
+            return;
+        }
+
+        await RebuildDisposableDatabaseAsync(connectionString);
+        await InsertDisposableSmokeFixtureAsync(connectionString);
+        await using var app = await StartApiAsync(connectionString);
+        using var client = CreateClient(app);
+        var request = CreateValidZeroPayableStatutoryRequest("zero-payable");
+
+        using var response = await client.PostAsJsonAsync("/v1/fiscal-documents/", request);
+        var responseText = await response.Content.ReadAsStringAsync();
+        Assert.True(response.StatusCode == HttpStatusCode.Accepted,
+            $"Unexpected POS response {response.StatusCode}: {responseText}");
+        var body = await response.Content.ReadFromJsonAsync<CreateFiscalDocumentResponse>();
+
+        Assert.NotNull(body);
+        Assert.True(body.Succeeded);
+        Assert.Equal("newly_created", body.ResultClassification);
+        Assert.Equal("ZERO_PAYABLE_STATUTORY_FINALITY", body.CompletionBasis);
+        Assert.Equal(request.CompletionAuthorityRef, body.CompletionAuthorityRef);
+        Assert.False(string.IsNullOrWhiteSpace(body.ElectronicJournalEventReference));
+        var fiscalDocumentId = body.FiscalDocumentId!.Value;
+
+        using var getResponse = await client.GetAsync($"/v1/fiscal-documents/{fiscalDocumentId}");
+        var getBody = await getResponse.Content.ReadFromJsonAsync<GetFiscalDocumentResponse>();
+
+        Assert.Equal(HttpStatusCode.OK, getResponse.StatusCode);
+        Assert.NotNull(getBody?.Document);
+        Assert.Equal("ZERO_PAYABLE_STATUTORY_FINALITY", getBody.Document.CompletionBasis);
+        Assert.Equal(request.CompletionAuthorityRef, getBody.Document.CompletionAuthorityRef);
+        Assert.Null(getBody.Document.CentralPmsPaymentAttemptRef);
+        Assert.Null(getBody.Document.CentralPmsPaymentConfirmationRef);
+        Assert.Null(getBody.Document.PaymentFinalityRef);
+        Assert.Empty(getBody.Document.Tenders);
+        Assert.Equal(0, Assert.Single(getBody.Document.Totals).AmountMinorUnits);
+        Assert.Equal(body.ElectronicJournalEventReference, getBody.Document.ElectronicJournalEventReference);
+
+        await using var connection = new NpgsqlConnection(connectionString);
+        await connection.OpenAsync();
+        Assert.Equal(1, await CountAsync(
+            connection,
+            "pos.electronic_journal_records",
+            "fiscal_document_id = @id and is_canonical",
+            "id",
+            fiscalDocumentId));
+        Assert.Equal("ZERO_PAYABLE_STATUTORY_FINALITY", await ScalarStringAsync(
+            connection,
+            "select event_facts ->> 'completion_basis' from pos.electronic_journal_records where fiscal_document_id = @id and is_canonical;",
+            fiscalDocumentId));
+        Assert.Equal("false", await ScalarStringAsync(
+            connection,
+            "select event_facts ->> 'monetary_payment_received' from pos.electronic_journal_records where fiscal_document_id = @id and is_canonical;",
+            fiscalDocumentId));
+        Assert.Equal("0", await ScalarStringAsync(
+            connection,
+            "select event_facts ->> 'payable_amount_minor_units' from pos.electronic_journal_records where fiscal_document_id = @id and is_canonical;",
+            fiscalDocumentId));
+
+        using var replayResponse = await client.PostAsJsonAsync("/v1/fiscal-documents/", request);
+        var replayBody = await replayResponse.Content.ReadFromJsonAsync<CreateFiscalDocumentResponse>();
+        Assert.Equal(HttpStatusCode.Accepted, replayResponse.StatusCode);
+        Assert.Equal("idempotent_replay", replayBody!.ResultClassification);
+        Assert.Equal(fiscalDocumentId, replayBody.FiscalDocumentId);
+        Assert.Equal(body.ElectronicJournalEventReference, replayBody.ElectronicJournalEventReference);
+        Assert.Equal(1, await CountAsync(
+            connection,
+            "pos.electronic_journal_records",
+            "fiscal_document_id = @id and is_canonical",
+            "id",
+            fiscalDocumentId));
+
+        var conflict = request with
+        {
+            DocumentLines =
+            [
+                request.DocumentLines![0] with { Description = "Conflicting zero-payable parking fee" }
+            ]
+        };
+        using var conflictResponse = await client.PostAsJsonAsync("/v1/fiscal-documents/", conflict);
+        Assert.Equal(HttpStatusCode.Conflict, conflictResponse.StatusCode);
     }
 
     [Fact]
@@ -1082,11 +1170,18 @@ public sealed class FiscalDocumentApiPostgresSmokeTests
         builder.WebHost.UseUrls("http://127.0.0.1:0");
         builder.Configuration.AddInMemoryCollection(new Dictionary<string, string?>
         {
-            ["ConnectionStrings:PosServer"] = connectionString
+            ["ConnectionStrings:PosServer"] = connectionString,
+            ["PosServer:Admin:ApiKeys:smoke:Principal"] = "fiscal-document-smoke",
+            ["PosServer:Admin:ApiKeys:smoke:Key"] = SmokeApiKey,
+            ["PosServer:Admin:ApiKeys:smoke:Permissions:0"] = FiscalDocumentAuthorization.CreatePermission,
+            ["PosServer:Admin:ApiKeys:smoke:Permissions:1"] = FiscalDocumentAuthorization.ReadPermission,
+            ["PosServer:Admin:ApiKeys:smoke:Permissions:2"] = FiscalDocumentAuthorization.VoidPermission
         });
         builder.Services.AddPosServerFiscalDocumentApi(builder.Configuration);
 
         var app = builder.Build();
+        app.UseAuthentication();
+        app.UseAuthorization();
         app.MapFiscalDocumentEndpoints();
         await app.StartAsync();
         return app;
@@ -1101,7 +1196,9 @@ public sealed class FiscalDocumentApiPostgresSmokeTests
         var address = addresses?.SingleOrDefault() ??
             throw new InvalidOperationException("Could not resolve smoke API server address.");
 
-        return new HttpClient { BaseAddress = new Uri(address) };
+        var client = new HttpClient { BaseAddress = new Uri(address) };
+        client.DefaultRequestHeaders.Add(SalesInvoiceHeaderProfileAdminAuthorization.ApiKeyHeaderName, SmokeApiKey);
+        return client;
     }
 
     private static CreateFiscalDocumentRequest CreateValidRequest(string suffix) =>
@@ -1297,6 +1394,70 @@ public sealed class FiscalDocumentApiPostgresSmokeTests
                     new Dictionary<string, string> { ["source_system"] = "central_pms" })
             ],
             AppliedStatutoryFiscalFacts: facts);
+    }
+
+    private static CreateFiscalDocumentRequest CreateValidZeroPayableStatutoryRequest(string suffix)
+    {
+        var paid = CreateValidStatutoryRequest(suffix);
+        var facts = paid.AppliedStatutoryFiscalFacts! with
+        {
+            BenefitClassification = "FREE_PARKING",
+            OriginalAmountMinorUnits = 3000,
+            VatExclusiveBasisAmountMinorUnits = 2679,
+            VatAmountMinorUnits = 321,
+            VatTreatment = "VAT_EXCLUSIVE",
+            StatutoryDiscountAmountMinorUnits = 2679,
+            FinalPayableAmountMinorUnits = 0
+        };
+        var authorityRef = facts.StatutoryPayableBasisApplicationCommandId!.Value.ToString("D");
+        var upstreamRef = $"ZERO_PAYABLE_STATUTORY_FINALITY:{authorityRef}";
+
+        return paid with
+        {
+            CentralPmsPaymentAttemptRef = null,
+            CentralPmsPaymentConfirmationRef = null,
+            PaymentFinalityRef = null,
+            CompletionBasis = "ZERO_PAYABLE_STATUTORY_FINALITY",
+            CompletionAuthorityRef = authorityRef,
+            PayableBasis = paid.PayableBasis! with
+            {
+                PayableBasisRef = facts.AppliedTariffSnapshotId!.Value.ToString("D"),
+                UpstreamFinalityRef = upstreamRef,
+                PayableAmountMinorUnits = 0
+            },
+            DocumentLines =
+            [
+                paid.DocumentLines![0] with
+                {
+                    UnitAmountMinorUnits = 2679,
+                    GrossAmountMinorUnits = 2679,
+                    DiscountAmountMinorUnits = 2679,
+                    TaxAmountMinorUnits = 0,
+                    NetAmountMinorUnits = 0
+                }
+            ],
+            Tenders = [],
+            TaxDetails =
+            [
+                paid.TaxDetails![0] with
+                {
+                    TaxableAmountMinorUnits = 2679,
+                    TaxAmountMinorUnits = 321,
+                    TaxRate = 12
+                }
+            ],
+            DiscountPrivilegeDetails =
+            [
+                paid.DiscountPrivilegeDetails![0] with
+                {
+                    BasisAmountMinorUnits = 2679,
+                    DiscountAmountMinorUnits = 2679,
+                    VatPrivilegeAmountMinorUnits = 321
+                }
+            ],
+            Totals = [paid.Totals![0] with { AmountMinorUnits = 0 }],
+            AppliedStatutoryFiscalFacts = facts
+        };
     }
 
     private static CreateFiscalDocumentRequest CreateValidPwdStatutoryRequest(string suffix)

@@ -220,9 +220,18 @@ public static class PostgresFiscalDocumentSql
             fiscal_number_prefix_text,
             fiscal_number_suffix_text,
             fiscal_number_assigned_at,
-            fiscal_number_assigned_by_ref
-        from pos.fiscal_documents
-        where fiscal_document_id = @fiscal_document_id;
+            fiscal_number_assigned_by_ref,
+            journal.event_reference
+        from pos.fiscal_documents document
+        left join lateral (
+            select event_reference
+            from pos.electronic_journal_records
+            where fiscal_document_id = document.fiscal_document_id
+              and is_canonical
+            order by stream_sequence_value desc, electronic_journal_record_id
+            limit 1
+        ) journal on true
+        where document.fiscal_document_id = @fiscal_document_id;
         """;
 
     public const string SelectReplayFiscalDocumentHeaderSnapshot = """
@@ -567,6 +576,8 @@ public static class PostgresFiscalDocumentSql
             central_pms_payment_attempt_ref,
             central_pms_payment_confirmation_ref,
             payment_finality_ref,
+            completion_basis,
+            completion_authority_ref,
             vendor_ack_ref,
             business_day_date,
             currency_code,
@@ -594,6 +605,8 @@ public static class PostgresFiscalDocumentSql
             @central_pms_payment_attempt_ref,
             @central_pms_payment_confirmation_ref,
             @payment_finality_ref,
+            @completion_basis,
+            @completion_authority_ref,
             @vendor_ack_ref,
             @business_day_date,
             @currency_code,
@@ -821,6 +834,8 @@ public static class PostgresFiscalDocumentSql
             runtime_terminal_ref = draft.RuntimeTerminalRef,
             payable_basis_ref = draft.PayableBasisRef,
             upstream_finality_ref = draft.UpstreamFinalityRef,
+            completion_basis = draft.CompletionBasis,
+            completion_authority_ref = draft.CompletionAuthorityRef,
             currency_code = draft.CurrencyCode,
             payable_amount_minor_units = draft.PayableAmountMinorUnits,
             resolved_fiscal_identity_id = draft.ResolvedFiscalIdentityId,

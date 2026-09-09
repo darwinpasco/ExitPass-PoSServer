@@ -70,7 +70,9 @@ public static class FiscalDocumentCreationEndpoint
             request.DiscountPrivilegeDetails?.Select(MapDiscountPrivilegeDetail).ToArray(),
             request.Totals?.Select(MapTotal).ToArray(),
             request.ReferenceContext,
-            MapAppliedStatutoryFiscalFacts(request.AppliedStatutoryFiscalFacts));
+            MapAppliedStatutoryFiscalFacts(request.AppliedStatutoryFiscalFacts),
+            request.CompletionBasis ?? FiscalCompletionBasisCodes.PaymentFinality,
+            request.CompletionAuthorityRef);
 
     public static CreateFiscalDocumentResponse MapResult(FiscalDocumentCreationResult result)
     {
@@ -109,6 +111,9 @@ public static class FiscalDocumentCreationEndpoint
                 FiscalNumberSuffixText: result.Draft?.FiscalNumberSuffixText,
                 FiscalNumberAssignedAt: result.Draft?.FiscalNumberAssignedAt,
                 FiscalNumberAssignedByRef: result.Draft?.FiscalNumberAssignedByRef,
+                CompletionBasis: result.Draft?.CompletionBasis,
+                CompletionAuthorityRef: result.Draft?.CompletionAuthorityRef,
+                ElectronicJournalEventReference: result.Draft?.ElectronicJournalEventReference,
                 HttpStatusCode: StatusCodes.Status202Accepted);
         }
 
@@ -391,6 +396,7 @@ public static class FiscalDocumentCreationEndpoint
             FiscalDocumentCreationErrorCode.FiscalCloseBoundaryLockTimeout => "fiscal_close_boundary_lock_timeout",
             FiscalDocumentCreationErrorCode.FiscalCloseBoundaryRetryableConcurrencyFailure =>
                 "fiscal_close_boundary_retryable_concurrency_failure",
+            FiscalDocumentCreationErrorCode.InvalidCompletionAuthority => "invalid_completion_authority",
             _ => "fiscal_document_creation_failed"
         };
 }

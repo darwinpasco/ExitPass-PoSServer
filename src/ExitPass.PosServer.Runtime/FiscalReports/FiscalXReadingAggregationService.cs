@@ -1,3 +1,5 @@
+using ExitPass.PosServer.Runtime.FiscalDocuments;
+
 namespace ExitPass.PosServer.Runtime.FiscalReports;
 
 public sealed record FiscalXReadingSourceLine(string LineType, long Gross, long Discount, long Tax, long Net, string Currency);
@@ -18,7 +20,8 @@ public sealed record FiscalXReadingSourceDocument(
     IReadOnlyList<FiscalXReadingSourceTender> Tenders,
     IReadOnlyList<FiscalXReadingSourceTax> Taxes,
     IReadOnlyList<FiscalXReadingSourceDiscount> Discounts,
-    FiscalXReadingSourceStatutory? Statutory);
+    FiscalXReadingSourceStatutory? Statutory,
+    string CompletionBasis = FiscalCompletionBasisCodes.PaymentFinality);
 
 public sealed record FiscalXReadingSourceGap(Guid SourceSequenceGapAuditId, Guid SequencePolicyId, long SequenceValue, string Classification);
 
@@ -94,8 +97,31 @@ public sealed class FiscalXReadingAggregationService
             foreach (var document in sales)
             {
                 ValidateDocumentCurrency(document, currency);
-                if (document.Lines.Count == 0 || document.Tenders.Count == 0)
-                    throw Reconciliation("A recorded Sales Invoice is missing required line or tender facts.");
+                if (document.Lines.Count == 0)
+                    throw Reconciliation("A recorded Sales Invoice is missing required line facts.");
+
+                var zeroPayableStatutoryCompletion = string.Equals(
+                    document.CompletionBasis,
+                    FiscalCompletionBasisCodes.ZeroPayableStatutoryFinality,
+                    StringComparison.Ordinal);
+                if (zeroPayableStatutoryCompletion)
+                {
+                    if (document.Tenders.Count != 0 || document.Statutory is null)
+                        throw Reconciliation("A zero-payable statutory Sales Invoice must have statutory facts and no tender facts.");
+                }
+                else if (string.Equals(
+                             document.CompletionBasis,
+                             FiscalCompletionBasisCodes.PaymentFinality,
+                             StringComparison.Ordinal))
+                {
+                    if (document.Tenders.Count == 0)
+                        throw Reconciliation("A payment-finality Sales Invoice is missing required tender facts.");
+                }
+                else
+                {
+                    throw Unsupported("Unsupported fiscal completion basis is present in the reporting period.");
+                }
+
                 if (document.Lines.Any(line => string.Equals(line.LineType, "service_charge", StringComparison.Ordinal)))
                     throw Unsupported("Service-charge reporting is not governed by the current contract.");
 

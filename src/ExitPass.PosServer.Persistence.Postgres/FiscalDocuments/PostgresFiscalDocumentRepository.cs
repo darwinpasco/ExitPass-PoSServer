@@ -275,7 +275,7 @@ public sealed class PostgresFiscalDocumentRepository : IFiscalDocumentRepository
                 AddIdempotencyCompletionParameters(completeIdempotencyCommand, resolvedDraft, idempotency);
                 await completeIdempotencyCommand.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
 
-                await PostgresElectronicJournalWriter.AppendAsync(
+                var electronicJournalEventReference = await PostgresElectronicJournalWriter.AppendAsync(
                     connection,
                     transaction,
                     new ElectronicJournalAppendRequest(
@@ -296,6 +296,11 @@ public sealed class PostgresFiscalDocumentRepository : IFiscalDocumentRepository
                         BusinessDayDate: resolvedDraft.BusinessDayDate,
                         IdempotencyReference: idempotency.Key),
                     cancellationToken).ConfigureAwait(false);
+
+                resolvedDraft = resolvedDraft with
+                {
+                    ElectronicJournalEventReference = electronicJournalEventReference
+                };
 
                 await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
                 return FiscalDocumentPersistenceResult.Created(resolvedDraft);
@@ -796,7 +801,8 @@ public sealed class PostgresFiscalDocumentRepository : IFiscalDocumentRepository
             FiscalNumberPrefixText = reader.IsDBNull(5) ? null : reader.GetString(5),
             FiscalNumberSuffixText = reader.IsDBNull(6) ? null : reader.GetString(6),
             FiscalNumberAssignedAt = reader.IsDBNull(7) ? null : ReadDateTimeOffset(reader, 7),
-            FiscalNumberAssignedByRef = reader.IsDBNull(8) ? null : reader.GetString(8)
+            FiscalNumberAssignedByRef = reader.IsDBNull(8) ? null : reader.GetString(8),
+            ElectronicJournalEventReference = reader.IsDBNull(9) ? null : reader.GetString(9)
         };
 
         await reader.CloseAsync().ConfigureAwait(false);
@@ -1270,6 +1276,8 @@ public sealed class PostgresFiscalDocumentRepository : IFiscalDocumentRepository
         command.Parameters.AddWithValue("central_pms_payment_attempt_ref", (object?)draft.CentralPmsPaymentAttemptRef ?? DBNull.Value);
         command.Parameters.AddWithValue("central_pms_payment_confirmation_ref", (object?)draft.CentralPmsPaymentConfirmationRef ?? DBNull.Value);
         command.Parameters.AddWithValue("payment_finality_ref", (object?)draft.PaymentFinalityRef ?? DBNull.Value);
+        command.Parameters.AddWithValue("completion_basis", draft.CompletionBasis);
+        command.Parameters.AddWithValue("completion_authority_ref", (object?)draft.CompletionAuthorityRef ?? DBNull.Value);
         command.Parameters.AddWithValue("vendor_ack_ref", (object?)draft.VendorAckRef ?? DBNull.Value);
         command.Parameters.AddWithValue("business_day_date", (object?)draft.BusinessDayDate ?? DBNull.Value);
         command.Parameters.AddWithValue("currency_code", draft.CurrencyCode);
@@ -1431,6 +1439,10 @@ public sealed class PostgresFiscalDocumentRepository : IFiscalDocumentRepository
         {
             ["fiscal_document_type"] = draft.FiscalDocumentTypeCodeKey,
             ["fiscal_document_number"] = draft.FiscalDocumentNumber,
+            ["completion_basis"] = draft.CompletionBasis,
+            ["completion_source_ref"] = draft.CompletionAuthorityRef,
+            ["monetary_payment_received"] =
+                (draft.CompletionBasis == FiscalCompletionBasisCodes.PaymentFinality).ToString().ToLowerInvariant(),
             ["fiscal_series"] = draft.FiscalSeries,
             ["fiscal_sequence_value"] = draft.FiscalSequenceValue?.ToString(CultureInfo.InvariantCulture),
             ["payable_amount_minor_units"] = draft.PayableAmountMinorUnits.ToString(CultureInfo.InvariantCulture),

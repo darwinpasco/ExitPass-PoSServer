@@ -220,7 +220,8 @@ public sealed class PostgresFiscalXReadingRepository(
     {
         const string documentSql = """
             SELECT d.fiscal_document_id, type_code.code_key, status_code.code_key, d.created_at,
-                   d.fiscal_sequence_policy_id, d.fiscal_sequence_value, d.fiscal_document_number, d.fiscal_series
+                   d.fiscal_sequence_policy_id, d.fiscal_sequence_value, d.fiscal_document_number, d.fiscal_series,
+                   d.completion_basis
             FROM pos.fiscal_documents d
             JOIN pos.controlled_codes type_code ON type_code.controlled_code_id = d.fiscal_document_type_code_id
             JOIN pos.controlled_codes status_code ON status_code.controlled_code_id = d.fiscal_document_status_code_id
@@ -238,7 +239,8 @@ public sealed class PostgresFiscalXReadingRepository(
                 var id = reader.GetGuid(0);
                 documents[id] = new(id, reader.GetString(1), reader.GetString(2), reader.GetFieldValue<DateTimeOffset>(3),
                     reader.IsDBNull(4) ? null : reader.GetGuid(4), reader.IsDBNull(5) ? null : reader.GetInt64(5),
-                    reader.IsDBNull(6) ? null : reader.GetString(6), reader.IsDBNull(7) ? null : reader.GetString(7));
+                    reader.IsDBNull(6) ? null : reader.GetString(6), reader.IsDBNull(7) ? null : reader.GetString(7),
+                    reader.GetString(8));
             }
         }
         if (documents.Count == 0) return [];
@@ -373,7 +375,7 @@ public sealed class PostgresFiscalXReadingRepository(
         };
     }
 
-    private sealed class SourceBuilder(Guid id, string type, string status, DateTimeOffset created, Guid? policy, long? sequence, string? number, string? series)
-    { public List<FiscalXReadingSourceLine> Lines { get; } = []; public List<FiscalXReadingSourceTender> Tenders { get; } = []; public List<FiscalXReadingSourceTax> Taxes { get; } = []; public List<FiscalXReadingSourceDiscount> Discounts { get; } = []; public FiscalXReadingSourceStatutory? Statutory { get; set; } public FiscalXReadingSourceDocument Build() => new(id, type, status, created, policy, sequence, number, series, Lines, Tenders, Taxes, Discounts, Statutory); }
+    private sealed class SourceBuilder(Guid id, string type, string status, DateTimeOffset created, Guid? policy, long? sequence, string? number, string? series, string completionBasis)
+    { public List<FiscalXReadingSourceLine> Lines { get; } = []; public List<FiscalXReadingSourceTender> Tenders { get; } = []; public List<FiscalXReadingSourceTax> Taxes { get; } = []; public List<FiscalXReadingSourceDiscount> Discounts { get; } = []; public FiscalXReadingSourceStatutory? Statutory { get; set; } public FiscalXReadingSourceDocument Build() => new(id, type, status, created, policy, sequence, number, series, Lines, Tenders, Taxes, Discounts, Statutory, completionBasis); }
     private sealed record ReportingCodeIds(Dictionary<(string, string), Guid> Values) { public Guid Get(string set, string key) => Values[(set, key)]; }
 }

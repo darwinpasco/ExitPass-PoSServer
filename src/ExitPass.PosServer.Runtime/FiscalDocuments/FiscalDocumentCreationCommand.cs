@@ -1,5 +1,11 @@
 namespace ExitPass.PosServer.Runtime.FiscalDocuments;
 
+public static class FiscalCompletionBasisCodes
+{
+    public const string PaymentFinality = "PAYMENT_FINALITY";
+    public const string ZeroPayableStatutoryFinality = "ZERO_PAYABLE_STATUTORY_FINALITY";
+}
+
 public sealed record FiscalDocumentCreationCommand(
     string SitePosServerRef,
     string FiscalDocumentTypeCodeKey,
@@ -23,7 +29,9 @@ public sealed record FiscalDocumentCreationCommand(
     IReadOnlyList<FiscalDiscountPrivilegeDetailInput>? DiscountPrivilegeDetails = null,
     IReadOnlyList<FiscalTotalInput>? Totals = null,
     IReadOnlyDictionary<string, string>? ReferenceContext = null,
-    AppliedStatutoryFiscalFactsInput? AppliedStatutoryFiscalFacts = null);
+    AppliedStatutoryFiscalFactsInput? AppliedStatutoryFiscalFacts = null,
+    string CompletionBasis = FiscalCompletionBasisCodes.PaymentFinality,
+    string? CompletionAuthorityRef = null);
 
 public sealed record AppliedStatutoryFiscalFactsInput(
     Guid? StatutoryDiscountDecisionCommandId,

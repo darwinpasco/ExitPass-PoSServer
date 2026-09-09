@@ -39,7 +39,9 @@ public sealed record DigitalSalesInvoiceRenderModel(
     IReadOnlyList<DigitalSalesInvoiceTotalRenderModel> Totals,
     DigitalSalesInvoiceFooterRenderModel Footer,
     SalesInvoiceHeaderSnapshot? SalesInvoiceHeaderSnapshot = null,
-    AppliedStatutoryFiscalFactsSnapshot? AppliedStatutoryFiscalFacts = null);
+    AppliedStatutoryFiscalFactsSnapshot? AppliedStatutoryFiscalFacts = null,
+    string CompletionBasis = FiscalCompletionBasisCodes.PaymentFinality,
+    string? CompletionAuthorityRef = null);
 
 public sealed record DigitalSalesInvoiceLineRenderModel(
     int LineSequence,

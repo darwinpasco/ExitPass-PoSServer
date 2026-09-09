@@ -49,5 +49,6 @@ public enum FiscalDocumentCreationErrorCode
     ReportingPeriodClosed = 44,
     ReportingPeriodAssignmentMismatch = 45,
     FiscalCloseBoundaryLockTimeout = 46,
-    FiscalCloseBoundaryRetryableConcurrencyFailure = 47
+    FiscalCloseBoundaryRetryableConcurrencyFailure = 47,
+    InvalidCompletionAuthority = 48
 }

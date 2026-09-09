@@ -44,7 +44,10 @@ public sealed record FiscalDocumentReadModel(
     IReadOnlyList<FiscalDiscountPrivilegeDetailReadModel> DiscountPrivilegeDetails,
     IReadOnlyList<FiscalTotalReadModel> Totals,
     SalesInvoiceHeaderSnapshot? SalesInvoiceHeaderSnapshot = null,
-    AppliedStatutoryFiscalFactsSnapshot? AppliedStatutoryFiscalFacts = null);
+    AppliedStatutoryFiscalFactsSnapshot? AppliedStatutoryFiscalFacts = null,
+    string CompletionBasis = FiscalCompletionBasisCodes.PaymentFinality,
+    string? CompletionAuthorityRef = null,
+    string? ElectronicJournalEventReference = null);
 
 public sealed record FiscalDocumentStatusHistoryReadModel(
     Guid FiscalDocumentStatusHistoryId,

@@ -96,6 +96,81 @@ public sealed class FiscalDocumentCreationServiceTests
     }
 
     [Fact]
+    public async Task ZeroPayableStatutoryCompletionCreatesFiscalDocumentWithoutPaymentOrTender()
+    {
+        var repository = new RecordingFiscalDocumentRepository();
+        var service = new FiscalDocumentCreationService(repository);
+
+        var result = await service.CreateAsync(ValidZeroPayableStatutoryCommand());
+
+        Assert.True(result.Succeeded, $"{result.ErrorCode}: {result.Message}");
+        Assert.Equal(1, repository.CreateCount);
+        Assert.NotNull(result.Draft);
+        Assert.Equal(FiscalCompletionBasisCodes.ZeroPayableStatutoryFinality, result.Draft.CompletionBasis);
+        Assert.Equal("21000000-0000-4000-8000-000000000003", result.Draft.CompletionAuthorityRef);
+        Assert.Null(result.Draft.CentralPmsPaymentAttemptRef);
+        Assert.Null(result.Draft.CentralPmsPaymentConfirmationRef);
+        Assert.Null(result.Draft.PaymentFinalityRef);
+        Assert.Empty(result.Draft.Tenders);
+        Assert.Equal(2679, result.Draft.DocumentLines.Single().GrossAmountMinorUnits);
+        Assert.Equal(2679, result.Draft.DocumentLines.Single().DiscountAmountMinorUnits);
+        Assert.Equal(0, result.Draft.DocumentLines.Single().TaxAmountMinorUnits);
+        Assert.Equal(0, result.Draft.DocumentLines.Single().NetAmountMinorUnits);
+        Assert.Equal(321, result.Draft.TaxDetails.Single().TaxAmountMinorUnits);
+        Assert.Equal(0, result.Draft.Totals.Single().AmountMinorUnits);
+        Assert.Equal(FiscalDocumentSemanticRequestHasher.CompletionVersion,
+            FiscalDocumentSemanticRequestHasher.GetVersion(ValidZeroPayableStatutoryCommand()));
+    }
+
+    [Fact]
+    public async Task ZeroPayableStatutoryCompletionReplaysWithoutDuplicateDocument()
+    {
+        var repository = new RecordingFiscalDocumentRepository();
+        var service = new FiscalDocumentCreationService(repository);
+
+        var first = await service.CreateAsync(ValidZeroPayableStatutoryCommand());
+        var replay = await service.CreateAsync(ValidZeroPayableStatutoryCommand());
+
+        Assert.True(first.Succeeded, $"{first.ErrorCode}: {first.Message}");
+        Assert.True(replay.Succeeded, $"{replay.ErrorCode}: {replay.Message}");
+        Assert.Equal(1, repository.CreateCount);
+        Assert.Equal(first.Draft!.FiscalDocumentId, replay.Draft!.FiscalDocumentId);
+    }
+
+    [Theory]
+    [InlineData("positive_payable")]
+    [InlineData("missing_authority")]
+    [InlineData("payment_attempt")]
+    [InlineData("payment_confirmation")]
+    [InlineData("payment_finality")]
+    [InlineData("monetary_tender")]
+    public async Task ZeroPayableStatutoryCompletionRejectsIncompatibleCompletionFacts(string mutation)
+    {
+        var repository = new RecordingFiscalDocumentRepository();
+        var service = new FiscalDocumentCreationService(repository);
+        var command = ValidZeroPayableStatutoryCommand();
+        command = mutation switch
+        {
+            "positive_payable" => command with
+            {
+                PayableBasis = command.PayableBasis! with { PayableAmountMinorUnits = 1 }
+            },
+            "missing_authority" => command with { CompletionAuthorityRef = null },
+            "payment_attempt" => command with { CentralPmsPaymentAttemptRef = "payment-attempt-001" },
+            "payment_confirmation" => command with { CentralPmsPaymentConfirmationRef = "payment-confirmation-001" },
+            "payment_finality" => command with { PaymentFinalityRef = "payment-finality-001" },
+            "monetary_tender" => command with { Tenders = [ValidTender()] },
+            _ => command
+        };
+
+        var result = await service.CreateAsync(command);
+
+        Assert.False(result.Succeeded);
+        Assert.Equal(FiscalDocumentCreationErrorCode.InvalidCompletionAuthority, result.ErrorCode);
+        Assert.Equal(0, repository.CreateCount);
+    }
+
+    [Fact]
     public async Task PresentButIncompleteAppliedStatutoryFactsAreRejectedBeforePersistence()
     {
         var repository = new RecordingFiscalDocumentRepository();
@@ -837,6 +912,63 @@ public sealed class FiscalDocumentCreationServiceTests
             "PHP",
             DateTimeOffset.Parse("2026-07-29T08:15:00+08:00"),
             "WEBPAY");
+
+    private static FiscalDocumentCreationCommand ValidZeroPayableStatutoryCommand()
+    {
+        var facts = ValidAppliedStatutoryFiscalFacts() with
+        {
+            BenefitClassification = "FREE_PARKING",
+            OriginalAmountMinorUnits = 3000,
+            VatExclusiveBasisAmountMinorUnits = 2679,
+            VatAmountMinorUnits = 321,
+            VatTreatment = "VAT_EXCLUSIVE",
+            StatutoryDiscountAmountMinorUnits = 2679,
+            FinalPayableAmountMinorUnits = 0
+        };
+        var appliedTariffRef = facts.AppliedTariffSnapshotId!.Value.ToString("D");
+        var upstreamReference = $"ZERO_PAYABLE_STATUTORY_FINALITY:{facts.StatutoryPayableBasisApplicationCommandId:D}";
+
+        return ValidCommand() with
+        {
+            SiteId = facts.SiteId,
+            CentralPmsParkingSessionRef = facts.ParkingSessionId?.ToString("D"),
+            CentralPmsPaymentAttemptRef = null,
+            CentralPmsPaymentConfirmationRef = null,
+            PaymentFinalityRef = null,
+            CompletionBasis = FiscalCompletionBasisCodes.ZeroPayableStatutoryFinality,
+            CompletionAuthorityRef = facts.StatutoryPayableBasisApplicationCommandId?.ToString("D"),
+            PayableBasis = ValidPayableBasis() with
+            {
+                PayableBasisRef = appliedTariffRef,
+                UpstreamFinalityRef = upstreamReference,
+                PayableAmountMinorUnits = 0
+            },
+            DocumentLines =
+            [
+                ValidLine(1) with
+                {
+                    UnitAmountMinorUnits = 2679,
+                    GrossAmountMinorUnits = 2679,
+                    DiscountAmountMinorUnits = 2679,
+                    TaxAmountMinorUnits = 0,
+                    NetAmountMinorUnits = 0
+                }
+            ],
+            Tenders = [],
+            TaxDetails = [ValidTaxDetail() with { TaxableAmountMinorUnits = 2679, TaxAmountMinorUnits = 321, TaxRate = 12 }],
+            DiscountPrivilegeDetails =
+            [
+                ValidDiscountPrivilegeDetail() with
+                {
+                    BasisAmountMinorUnits = 2679,
+                    DiscountAmountMinorUnits = 2679,
+                    VatPrivilegeAmountMinorUnits = 321
+                }
+            ],
+            Totals = [ValidTotal() with { AmountMinorUnits = 0 }],
+            AppliedStatutoryFiscalFacts = facts
+        };
+    }
 
     private static FiscalizationPayableBasisInput ValidPayableBasis() =>
         new(
