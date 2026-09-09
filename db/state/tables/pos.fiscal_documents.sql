@@ -24,6 +24,8 @@ CREATE TABLE IF NOT EXISTS pos.fiscal_documents (
     central_pms_payment_attempt_ref text NULL,
     central_pms_payment_confirmation_ref text NULL,
     payment_finality_ref text NULL,
+    completion_basis varchar(64) NOT NULL DEFAULT 'PAYMENT_FINALITY',
+    completion_authority_ref text NULL,
     vendor_ack_ref text NULL,
     business_day_date date NULL,
     void_status text NULL,
@@ -166,7 +168,46 @@ CREATE TABLE IF NOT EXISTS pos.fiscal_documents (
 -- comments run; referential assignment enforcement is applied later in order.
 ALTER TABLE pos.fiscal_documents
     ADD COLUMN IF NOT EXISTS currency_code char(3) NULL,
-    ADD COLUMN IF NOT EXISTS fiscal_reporting_period_id uuid NULL;
+    ADD COLUMN IF NOT EXISTS fiscal_reporting_period_id uuid NULL,
+    ADD COLUMN IF NOT EXISTS completion_basis varchar(64),
+    ADD COLUMN IF NOT EXISTS completion_authority_ref text NULL;
+
+UPDATE pos.fiscal_documents
+SET completion_basis = COALESCE(completion_basis, 'PAYMENT_FINALITY'),
+    completion_authority_ref = COALESCE(
+        completion_authority_ref,
+        central_pms_payment_confirmation_ref,
+        payment_finality_ref,
+        document_context ->> 'upstream_finality_ref')
+WHERE completion_basis IS NULL OR completion_authority_ref IS NULL;
+
+ALTER TABLE pos.fiscal_documents
+    ALTER COLUMN completion_basis SET NOT NULL;
+
+ALTER TABLE pos.fiscal_documents
+    DROP CONSTRAINT IF EXISTS ck_fiscal_documents__completion_basis,
+    DROP CONSTRAINT IF EXISTS ck_fiscal_documents__completion_ancestry;
+
+ALTER TABLE pos.fiscal_documents
+    ADD CONSTRAINT ck_fiscal_documents__completion_basis CHECK (
+        completion_basis IN ('PAYMENT_FINALITY', 'ZERO_PAYABLE_STATUTORY_FINALITY')
+    ),
+    ADD CONSTRAINT ck_fiscal_documents__completion_ancestry CHECK (
+        completion_authority_ref IS NOT NULL
+        AND btrim(completion_authority_ref) <> ''
+        AND (
+            (
+                completion_basis = 'PAYMENT_FINALITY'
+                AND payment_finality_ref IS NOT NULL
+                AND btrim(payment_finality_ref) <> ''
+            ) OR (
+                completion_basis = 'ZERO_PAYABLE_STATUTORY_FINALITY'
+                AND central_pms_payment_attempt_ref IS NULL
+                AND central_pms_payment_confirmation_ref IS NULL
+                AND payment_finality_ref IS NULL
+            )
+        )
+    );
 
 CREATE UNIQUE INDEX IF NOT EXISTS ux_fiscal_documents__seq_policy_value
     ON pos.fiscal_documents (fiscal_sequence_policy_id, fiscal_sequence_value)
@@ -203,6 +244,8 @@ COMMENT ON COLUMN pos.fiscal_documents.central_pms_parking_session_ref IS 'Refer
 COMMENT ON COLUMN pos.fiscal_documents.central_pms_payment_attempt_ref IS 'Reference to Central PMS PaymentAttempt context; POS Server does not own PaymentAttempt lifecycle.';
 COMMENT ON COLUMN pos.fiscal_documents.central_pms_payment_confirmation_ref IS 'Reference to Central PMS PaymentConfirmation context; POS Server does not own PaymentConfirmation lifecycle.';
 COMMENT ON COLUMN pos.fiscal_documents.payment_finality_ref IS 'Reference to Central PMS payment finality context only; not POS-owned payment finality.';
+COMMENT ON COLUMN pos.fiscal_documents.completion_basis IS 'Canonical completion basis: PAYMENT_FINALITY or ZERO_PAYABLE_STATUTORY_FINALITY.';
+COMMENT ON COLUMN pos.fiscal_documents.completion_authority_ref IS 'Canonical Central PMS durable completion source reference; never a POS-owned finality assertion.';
 COMMENT ON COLUMN pos.fiscal_documents.vendor_ack_ref IS 'Reference to vendor acknowledgement context only; not vendor authority.';
 COMMENT ON COLUMN pos.fiscal_documents.void_status IS 'Void/cancellation runtime posture. Does not delete, reuse, unburn, reset, or decrement the original fiscal number.';
 COMMENT ON COLUMN pos.fiscal_documents.void_reason_code IS 'Reference-safe runtime void reason code captured by the POS Server void API.';

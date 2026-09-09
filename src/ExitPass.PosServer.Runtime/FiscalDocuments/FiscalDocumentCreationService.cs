@@ -121,6 +121,42 @@ public sealed class FiscalDocumentCreationService
                 "Fiscal document creation requires an upstream payment/finality reference.");
         }
 
+        var completionBasis = NormalizeRequiredCode(command.CompletionBasis).ToUpperInvariant();
+        var completionAuthorityRef = NormalizeOptionalReference(command.CompletionAuthorityRef);
+        if (completionBasis == FiscalCompletionBasisCodes.PaymentFinality)
+        {
+            completionAuthorityRef ??= NormalizeOptionalReference(command.CentralPmsPaymentConfirmationRef)
+                ?? NormalizeOptionalReference(command.PaymentFinalityRef)
+                ?? command.PayableBasis.UpstreamFinalityRef.Trim();
+
+            if (command.PayableBasis.PayableAmountMinorUnits <= 0)
+            {
+                return FiscalDocumentCreationResult.Failure(
+                    FiscalDocumentCreationErrorCode.InvalidCompletionAuthority,
+                    "PAYMENT_FINALITY fiscal issuance requires a positive payable amount.");
+            }
+        }
+        else if (completionBasis == FiscalCompletionBasisCodes.ZeroPayableStatutoryFinality)
+        {
+            if (completionAuthorityRef is null ||
+                command.PayableBasis.PayableAmountMinorUnits != 0 ||
+                command.AppliedStatutoryFiscalFacts is null ||
+                NormalizeOptionalReference(command.CentralPmsPaymentAttemptRef) is not null ||
+                NormalizeOptionalReference(command.CentralPmsPaymentConfirmationRef) is not null ||
+                NormalizeOptionalReference(command.PaymentFinalityRef) is not null)
+            {
+                return FiscalDocumentCreationResult.Failure(
+                    FiscalDocumentCreationErrorCode.InvalidCompletionAuthority,
+                    "ZERO_PAYABLE_STATUTORY_FINALITY requires complete statutory authority, zero payable, and no payment ancestry.");
+            }
+        }
+        else
+        {
+            return FiscalDocumentCreationResult.Failure(
+                FiscalDocumentCreationErrorCode.InvalidCompletionAuthority,
+                "Fiscal document completion basis is unsupported.");
+        }
+
         if (ContainsSensitiveEvidence(command))
         {
             return FiscalDocumentCreationResult.Failure(
@@ -182,11 +218,18 @@ public sealed class FiscalDocumentCreationService
 
         var payableBasisCurrency = command.PayableBasis.CurrencyCode.Trim().ToUpperInvariant();
         var tenders = command.Tenders ?? Array.Empty<FiscalTenderInput>();
-        if (tenders.Count == 0)
+        if (completionBasis == FiscalCompletionBasisCodes.PaymentFinality && tenders.Count == 0)
         {
             return FiscalDocumentCreationResult.Failure(
                 FiscalDocumentCreationErrorCode.MissingFiscalTender,
                 "Fiscal document creation requires at least one fiscal tender allocation.");
+        }
+
+        if (completionBasis == FiscalCompletionBasisCodes.ZeroPayableStatutoryFinality && tenders.Count != 0)
+        {
+            return FiscalDocumentCreationResult.Failure(
+                FiscalDocumentCreationErrorCode.InvalidCompletionAuthority,
+                "ZERO_PAYABLE_STATUTORY_FINALITY must not contain a monetary tender.");
         }
 
         if (ContainsSensitiveEvidence(tenders))
@@ -292,7 +335,9 @@ public sealed class FiscalDocumentCreationService
             NormalizeOptionalReference(command.CentralPmsParkingSessionRef),
             NormalizeOptionalReference(command.CentralPmsPaymentAttemptRef),
             NormalizeOptionalReference(command.CentralPmsPaymentConfirmationRef),
-            NormalizeOptionalReference(command.PaymentFinalityRef) ?? command.PayableBasis.UpstreamFinalityRef.Trim(),
+            completionBasis == FiscalCompletionBasisCodes.PaymentFinality
+                ? NormalizeOptionalReference(command.PaymentFinalityRef) ?? command.PayableBasis.UpstreamFinalityRef.Trim()
+                : null,
             NormalizeOptionalReference(command.VendorAckRef),
             documentLinks.Select(NormalizeDocumentLink).ToArray(),
             documentLines.Select(NormalizeDocumentLine).OrderBy(line => line.LineSequence).ToArray(),
@@ -305,7 +350,9 @@ public sealed class FiscalDocumentCreationService
                 .ToArray(),
             totals.Select(NormalizeTotal).OrderBy(total => total.TotalTypeCodeId).ToArray(),
             discountReferences.ToArray(),
-            AppliedStatutoryFiscalFacts: statutoryValidation.Snapshot);
+            AppliedStatutoryFiscalFacts: statutoryValidation.Snapshot,
+            CompletionBasis: completionBasis,
+            CompletionAuthorityRef: completionAuthorityRef);
 
         try
         {
@@ -496,7 +543,14 @@ public sealed class FiscalDocumentCreationService
                 "Applied statutory fiscal facts must match the fiscalized parking and Site scope."), null);
         }
 
-        if (sourcePaymentChannel == "ASSISTED_PAYMENT_TERMINAL" && facts.TerminalCashTenderId is null)
+        var zeroPayableStatutoryCompletion = string.Equals(
+            NormalizeRequiredCode(command.CompletionBasis),
+            FiscalCompletionBasisCodes.ZeroPayableStatutoryFinality,
+            StringComparison.OrdinalIgnoreCase);
+
+        if (sourcePaymentChannel == "ASSISTED_PAYMENT_TERMINAL" &&
+            !zeroPayableStatutoryCompletion &&
+            facts.TerminalCashTenderId is null)
         {
             return (FiscalDocumentCreationResult.Failure(
                 FiscalDocumentCreationErrorCode.AppliedStatutoryFactsIncomplete,
@@ -526,6 +580,22 @@ public sealed class FiscalDocumentCreationService
             return (FiscalDocumentCreationResult.Failure(
                 FiscalDocumentCreationErrorCode.AppliedStatutoryTotalMismatch,
                 "Free parking statutory facts must have a zero final payable amount."), null);
+        }
+
+        if (zeroPayableStatutoryCompletion &&
+            (benefitClassification != "FREE_PARKING" ||
+             originalAmount <= 0 ||
+             finalPayableAmount != 0 ||
+             vatExclusiveBasis + vatAmount != originalAmount ||
+             statutoryDiscountAmount != vatExclusiveBasis ||
+             !string.Equals(
+                 command.AppliedStatutoryFiscalFacts!.AppliedTariffSnapshotId!.Value.ToString("D"),
+                 command.PayableBasis!.PayableBasisRef.Trim(),
+                 StringComparison.OrdinalIgnoreCase)))
+        {
+            return (FiscalDocumentCreationResult.Failure(
+                FiscalDocumentCreationErrorCode.InvalidCompletionAuthority,
+                "ZERO_PAYABLE_STATUTORY_FINALITY fiscal facts do not reconcile with the canonical applied payable basis."), null);
         }
 
         return (null, new AppliedStatutoryFiscalFactsSnapshot(

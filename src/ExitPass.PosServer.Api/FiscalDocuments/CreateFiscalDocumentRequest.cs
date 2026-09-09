@@ -28,7 +28,9 @@ public sealed record CreateFiscalDocumentRequest(
     IReadOnlyList<CreateFiscalDiscountPrivilegeDetailRequest>? DiscountPrivilegeDetails = null,
     IReadOnlyList<CreateFiscalTotalRequest>? Totals = null,
     IReadOnlyDictionary<string, string>? ReferenceContext = null,
-    AppliedStatutoryFiscalFactsRequest? AppliedStatutoryFiscalFacts = null);
+    AppliedStatutoryFiscalFactsRequest? AppliedStatutoryFiscalFacts = null,
+    string? CompletionBasis = null,
+    string? CompletionAuthorityRef = null);
 
 public sealed record AppliedStatutoryFiscalFactsRequest(
     Guid? StatutoryDiscountDecisionCommandId,

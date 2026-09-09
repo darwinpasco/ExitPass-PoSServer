@@ -73,7 +73,9 @@ public sealed class DigitalSalesInvoiceRenderService
                 "placeholder_only",
                 FooterPlaceholders),
             document.SalesInvoiceHeaderSnapshot,
-            document.AppliedStatutoryFiscalFacts);
+            document.AppliedStatutoryFiscalFacts,
+            document.CompletionBasis,
+            document.CompletionAuthorityRef);
     }
 
     private static DigitalSalesInvoiceLineRenderModel MapLine(FiscalDocumentLineReadModel line) =>

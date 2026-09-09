@@ -117,7 +117,10 @@ public sealed class PostgresFiscalDocumentReader : IFiscalDocumentReader
                 document.document_context::text,
                 document.is_active,
                 document.created_at,
-                document.updated_at
+                document.updated_at,
+                document.completion_basis,
+                document.completion_authority_ref,
+                journal.event_reference
             from pos.fiscal_documents document
             left join pos.controlled_codes type_code
                 on type_code.controlled_code_id = document.fiscal_document_type_code_id
@@ -134,6 +137,14 @@ public sealed class PostgresFiscalDocumentReader : IFiscalDocumentReader
                 order by updated_at desc, created_at desc, idempotency_record_id
                 limit 1
             ) idempotency on true
+            left join lateral (
+                select event_reference
+                from pos.electronic_journal_records
+                where fiscal_document_id = document.fiscal_document_id
+                  and is_canonical
+                order by stream_sequence_value desc, electronic_journal_record_id
+                limit 1
+            ) journal on true
             where document.fiscal_document_id = @fiscal_document_id;
             """,
             fiscalDocumentId);
@@ -186,7 +197,10 @@ public sealed class PostgresFiscalDocumentReader : IFiscalDocumentReader
             [],
             [],
             [],
-            []);
+            [],
+            CompletionBasis: GetSafeString(reader, 35) ?? FiscalCompletionBasisCodes.PaymentFinality,
+            CompletionAuthorityRef: GetSafeString(reader, 36),
+            ElectronicJournalEventReference: GetSafeString(reader, 37));
     }
 
     private static async Task<IReadOnlyList<FiscalDocumentStatusHistoryReadModel>> ReadStatusHistoryAsync(

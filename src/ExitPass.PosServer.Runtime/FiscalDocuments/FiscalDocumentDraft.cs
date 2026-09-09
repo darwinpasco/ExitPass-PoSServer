@@ -38,4 +38,7 @@ public sealed record FiscalDocumentDraft(
     string? FiscalNumberAssignedByRef = null,
     SalesInvoiceHeaderSnapshot? SalesInvoiceHeaderSnapshot = null,
     AppliedStatutoryFiscalFactsSnapshot? AppliedStatutoryFiscalFacts = null,
-    Guid? FiscalReportingPeriodId = null);
+    Guid? FiscalReportingPeriodId = null,
+    string CompletionBasis = FiscalCompletionBasisCodes.PaymentFinality,
+    string? CompletionAuthorityRef = null,
+    string? ElectronicJournalEventReference = null);

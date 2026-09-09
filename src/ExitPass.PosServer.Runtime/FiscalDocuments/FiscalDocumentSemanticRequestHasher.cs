@@ -11,6 +11,7 @@ public static class FiscalDocumentSemanticRequestHasher
     public const string Algorithm = "SHA-256";
     public const string Version = "sha256:v1";
     public const string StatutoryVersion = "pos-server-fiscal-document-create:sha256:v2";
+    public const string CompletionVersion = "pos-server-fiscal-document-create:sha256:v3";
     public const string Status = "calculated";
 
     private static readonly JsonSerializerOptions SerializerOptions = new()
@@ -39,13 +40,17 @@ public static class FiscalDocumentSemanticRequestHasher
     public static string GetVersion(FiscalDocumentCreationCommand command)
     {
         ArgumentNullException.ThrowIfNull(command);
-        return command.AppliedStatutoryFiscalFacts is null ? Version : StatutoryVersion;
+        return command.CompletionBasis == FiscalCompletionBasisCodes.ZeroPayableStatutoryFinality
+            ? CompletionVersion
+            : command.AppliedStatutoryFiscalFacts is null ? Version : StatutoryVersion;
     }
 
     public static string GetVersion(FiscalDocumentDraft draft)
     {
         ArgumentNullException.ThrowIfNull(draft);
-        return draft.AppliedStatutoryFiscalFacts is null ? Version : StatutoryVersion;
+        return draft.CompletionBasis == FiscalCompletionBasisCodes.ZeroPayableStatutoryFinality
+            ? CompletionVersion
+            : draft.AppliedStatutoryFiscalFacts is null ? Version : StatutoryVersion;
     }
 
     private static SortedDictionary<string, object?> BuildCanonicalPayloadForVersion(
@@ -56,6 +61,12 @@ public static class FiscalDocumentSemanticRequestHasher
         {
             payload["applied_statutory_fiscal_facts"] =
                 NormalizeAppliedStatutoryFiscalFacts(command.AppliedStatutoryFiscalFacts);
+        }
+
+        if (command.CompletionBasis == FiscalCompletionBasisCodes.ZeroPayableStatutoryFinality)
+        {
+            payload["completion_authority_ref"] = Normalize(command.CompletionAuthorityRef);
+            payload["completion_basis"] = NormalizeCode(command.CompletionBasis);
         }
 
         return payload;
