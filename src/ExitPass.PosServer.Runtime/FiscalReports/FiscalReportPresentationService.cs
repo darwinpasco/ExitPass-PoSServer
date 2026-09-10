@@ -240,7 +240,6 @@ public sealed class FiscalReportPresentationService
             var tenderTotal = tenders.Aggregate(0L, (total, item) => checked(total + item.AmountMinorUnits));
             var discountTotal = discounts.Aggregate(0L, (total, item) => checked(total + item.DiscountAmountMinorUnits));
             var vatExemptionTotal = discounts.Aggregate(0L, (total, item) => checked(total + item.VatExemptionAmountMinorUnits));
-            var adjustmentTotal = checked(discountTotal + vatExemptionTotal);
             var rangeCount = ranges.Aggregate(0L, (total, item) => checked(total + item.QualifyingDocumentCount));
             var discountByClass = discounts
                 .GroupBy(item => item.Classification, StringComparer.Ordinal)
@@ -272,7 +271,7 @@ public sealed class FiscalReportPresentationService
                                                         string.IsNullOrWhiteSpace(gap.Classification))) ||
                 (tenders.Count > 0 && tenderTotal != amounts.NetSalesAmountMinorUnits) ||
                 (discounts.Count > 0 &&
-                    (adjustmentTotal != amounts.DiscountAmountMinorUnits ||
+                    (discountTotal != amounts.DiscountAmountMinorUnits ||
                      vatExemptionTotal != amounts.VatExemptionAmountMinorUnits ||
                      !classificationsValid)) ||
                 (ranges.Count > 0 && rangeCount != documentCount))
@@ -352,19 +351,18 @@ public sealed class FiscalReportPresentationService
         var tenderTotal = tenderRows.Aggregate(0L, (total, item) => checked(total + item.AmountMinorUnits));
         var discountTotal = discountRows.Aggregate(0L, (total, item) => checked(total + item.DiscountAmountMinorUnits));
         var vatExemptionTotal = discountRows.Aggregate(0L, (total, item) => checked(total + item.VatExemptionAmountMinorUnits));
-        var adjustmentTotal = checked(discountTotal + vatExemptionTotal);
         var rangeCount = rangeRows.Aggregate(0L, (total, item) => checked(total + item.QualifyingDocumentCount));
         var gapCount = rangeRows.Aggregate(0L, (total, item) => checked(total + item.Gaps.Count));
         var reconciliation = new FiscalReportReconciliationPresentation(
             "RECONCILED",
             amounts.NetSalesAmountMinorUnits,
             tenderTotal,
-            adjustmentTotal,
+            discountTotal,
             rangeCount,
             gapCount,
             tenderRows.Length == 0 || tenderTotal == amounts.NetSalesAmountMinorUnits,
             discountRows.Length == 0 ||
-                (adjustmentTotal == amounts.DiscountAmountMinorUnits &&
+                (discountTotal == amounts.DiscountAmountMinorUnits &&
                  vatExemptionTotal == amounts.VatExemptionAmountMinorUnits),
             rangeRows.Length == 0 || rangeCount == documentCount,
             counters is null || counters.CurrentPeriodGrandTotalAmountMinorUnits == amounts.NetSalesAmountMinorUnits);

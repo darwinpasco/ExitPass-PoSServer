@@ -7,6 +7,78 @@ namespace ExitPass.PosServer.Runtime.Tests;
 public sealed class DigitalSalesInvoicePresentationAdapterTests
 {
     [Fact]
+    public void CustomerInformationAndOrdinaryVatBreakdownArePresentedFromAuthoritativeTaxFacts()
+    {
+        var render = ValidRenderModel(assignedNumber: true) with
+        {
+            InvoiceCustomerInformation = new InvoiceCustomerInformationSnapshot(
+                "Juan Dela Cruz", "100 Sample Street", "123-456-789", "Sample Trading", null),
+            TaxDetails =
+            [
+                TaxDetail(Guid.Parse("33333333-3333-3333-3333-333333333333"), "vatable") with
+                {
+                    TaxableAmountMinorUnits = 12500,
+                    TaxAmountMinorUnits = 1500
+                }
+            ]
+        };
+
+        var result = new DigitalSalesInvoicePresentationAdapter().Adapt(
+            DigitalSalesInvoiceRenderResult.Success(render),
+            DigitalSalesInvoiceTemplateContract.Create());
+
+        Assert.True(result.Succeeded);
+        var customer = Section(result.Presentation!, "customerInformation").Rows;
+        Assert.Contains(customer, row => row.Key == "customerInformation.customerName" && row.DisplayValue == "Juan Dela Cruz");
+        Assert.Contains(customer, row => row.Key == "customerInformation.address" && row.DisplayValue == "100 Sample Street");
+        Assert.Contains(customer, row => row.Key == "customerInformation.tin" && row.DisplayValue == "123-456-789");
+        Assert.Contains(customer, row => row.Key == "customerInformation.businessStyle" && row.DisplayValue == "Sample Trading");
+        Assert.Contains(customer, row => row.Key == "customerInformation.statutoryIdNumber" && row.RawValue is null);
+
+        var vat = Section(result.Presentation!, "vatBreakdown").Rows;
+        Assert.Equal(4, vat.Count);
+        Assert.Contains(vat, row => row.Key == "totals.vatableSales" && row.RawValue is 12500L);
+        Assert.Contains(vat, row => row.Key == "totals.vatAmount" && row.RawValue is 1500L);
+        Assert.Contains(vat, row => row.Key == "totals.vatExemptSales" && row.DisplayValue == "PHP 0.00");
+        Assert.Contains(vat, row => row.Key == "totals.zeroRatedSales" && row.DisplayValue == "PHP 0.00");
+    }
+
+    [Fact]
+    public void StatutoryVatExemptBreakdownAndApprovedOscaPwdIdUseAuthoritativeFacts()
+    {
+        var render = ValidRenderModel(assignedNumber: true) with
+        {
+            AppliedStatutoryFiscalFacts = StatutoryFacts(),
+            InvoiceCustomerInformation = new InvoiceCustomerInformationSnapshot(
+                "Maria Santos", null, null, null, "OSCA-12345"),
+            TaxDetails =
+            [
+                TaxDetail(Guid.Parse("33333333-3333-3333-3333-333333333333"), "vat_exempt") with
+                {
+                    TaxableAmountMinorUnits = 8929,
+                    TaxAmountMinorUnits = 0
+                }
+            ]
+        };
+
+        var result = new DigitalSalesInvoicePresentationAdapter().Adapt(
+            DigitalSalesInvoiceRenderResult.Success(render),
+            DigitalSalesInvoiceTemplateContract.Create());
+
+        Assert.True(result.Succeeded);
+        var customer = Section(result.Presentation!, "customerInformation").Rows;
+        Assert.Contains(customer, row =>
+            row.Key == "customerInformation.statutoryIdNumber" &&
+            row.Label == "OSCA ID No. / PWD ID No." &&
+            row.DisplayValue == "OSCA-12345");
+        var vat = Section(result.Presentation!, "vatBreakdown").Rows;
+        Assert.Contains(vat, row => row.Key == "totals.vatableSales" && row.DisplayValue == "PHP 0.00");
+        Assert.Contains(vat, row => row.Key == "totals.vatAmount" && row.DisplayValue == "PHP 0.00");
+        Assert.Contains(vat, row => row.Key == "totals.vatExemptSales" && row.RawValue is 8929L);
+        Assert.Contains(vat, row => row.Key == "totals.zeroRatedSales" && row.DisplayValue == "PHP 0.00");
+    }
+
+    [Fact]
     public void PresentsAssignedNumberedFiscalDocument()
     {
         var render = ValidRenderModel(assignedNumber: true);
@@ -77,9 +149,11 @@ public sealed class DigitalSalesInvoicePresentationAdapterTests
                 "documentIdentity",
                 "fiscalNumbering",
                 "parkingPaymentReferences",
+                "customerInformation",
                 "lineItems",
                 "discounts",
                 "taxes",
+                "vatBreakdown",
                 "tenders",
                 "totals",
                 "auditHashStatus",
@@ -357,7 +431,9 @@ public sealed class DigitalSalesInvoicePresentationAdapterTests
             paymentFinalityRef,
             providerRef);
 
-    private static DigitalSalesInvoiceTaxDetailRenderModel TaxDetail(Guid taxTypeCodeId) =>
+    private static DigitalSalesInvoiceTaxDetailRenderModel TaxDetail(
+        Guid taxTypeCodeId,
+        string taxClassificationCodeKey = "vatable") =>
         new(
             Guid.Parse("10000000-0000-0000-0000-000000000201"),
             taxTypeCodeId,
@@ -365,7 +441,34 @@ public sealed class DigitalSalesInvoicePresentationAdapterTests
             0,
             12500,
             0,
-            "PHP");
+            "PHP",
+            taxClassificationCodeKey);
+
+    private static AppliedStatutoryFiscalFactsSnapshot StatutoryFacts() =>
+        new(
+            Guid.Parse("21000000-0000-4000-8000-000000000001"),
+            Guid.Parse("21000000-0000-4000-8000-000000000002"),
+            Guid.Parse("21000000-0000-4000-8000-000000000003"),
+            Guid.Parse("21000000-0000-4000-8000-000000000004"),
+            Guid.Parse("21000000-0000-4000-8000-000000000005"),
+            Guid.Parse("21000000-0000-4000-8000-000000000006"),
+            Guid.Parse("21000000-0000-4000-8000-000000000007"),
+            "SENIOR_CITIZEN",
+            "VAT_EXEMPTION_AND_STATUTORY_DISCOUNT",
+            new AppliedStatutoryPolicyReferenceSnapshot(
+                "NATIONAL_LAW",
+                AppliedPolicyReferenceId: Guid.Parse("21000000-0000-4000-8000-000000000008")),
+            Guid.Parse("21000000-0000-4000-8000-000000000009"),
+            Guid.Parse("21000000-0000-4000-8000-000000000010"),
+            10000,
+            8929,
+            0,
+            "VAT_EXEMPT",
+            1786,
+            7143,
+            "PHP",
+            DateTimeOffset.Parse("2026-07-29T08:15:00+08:00"),
+            "WEBPAY");
 
     private static DigitalSalesInvoiceTotalRenderModel Total(Guid totalTypeCodeId, long amountMinorUnits) =>
         new(totalTypeCodeId, amountMinorUnits, "PHP");

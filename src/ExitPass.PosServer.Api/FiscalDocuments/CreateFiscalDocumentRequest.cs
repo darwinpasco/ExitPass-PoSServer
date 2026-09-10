@@ -30,7 +30,15 @@ public sealed record CreateFiscalDocumentRequest(
     IReadOnlyDictionary<string, string>? ReferenceContext = null,
     AppliedStatutoryFiscalFactsRequest? AppliedStatutoryFiscalFacts = null,
     string? CompletionBasis = null,
-    string? CompletionAuthorityRef = null);
+    string? CompletionAuthorityRef = null,
+    InvoiceCustomerInformationRequest? InvoiceCustomerInformation = null);
+
+public sealed record InvoiceCustomerInformationRequest(
+    string? CustomerName,
+    string? Address,
+    string? Tin,
+    string? BusinessStyle,
+    string? StatutoryIdNumber);
 
 public sealed record AppliedStatutoryFiscalFactsRequest(
     Guid? StatutoryDiscountDecisionCommandId,

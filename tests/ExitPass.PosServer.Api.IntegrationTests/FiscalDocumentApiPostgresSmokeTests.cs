@@ -26,6 +26,7 @@ public sealed class FiscalDocumentApiPostgresSmokeTests
     private static readonly Guid FiscalTenderTypeCodeId = Guid.Parse("10000000-0000-0000-0000-000000000301");
     private static readonly Guid FiscalTaxTypeCodeId = Guid.Parse("10000000-0000-0000-0000-000000000401");
     private static readonly Guid FiscalTaxClassificationCodeId = Guid.Parse("10000000-0000-0000-0000-000000000402");
+    private static readonly Guid FiscalVatExemptTaxClassificationCodeId = Guid.Parse("10000000-0000-0000-0000-000000000403");
     private static readonly Guid FiscalDiscountPrivilegeTypeCodeId = Guid.Parse("10000000-0000-0000-0000-000000000501");
     private static readonly Guid FiscalTotalTypeCodeId = Guid.Parse("10000000-0000-0000-0000-000000000601");
     private static readonly Guid FiscalIdentityId = Guid.Parse("10000000-0000-0000-0000-000000000701");
@@ -55,7 +56,15 @@ public sealed class FiscalDocumentApiPostgresSmokeTests
 
         await using var app = await StartApiAsync(connectionString);
         using var client = CreateClient(app);
-        var request = CreateValidRequest("success");
+        var request = CreateValidRequest("success") with
+        {
+            InvoiceCustomerInformation = new InvoiceCustomerInformationRequest(
+                "  Juan Dela Cruz  ",
+                "  100 Sample Street  ",
+                "  123-456-789  ",
+                "  Sample Trading  ",
+                "UNAPPROVED-ID-MUST-BE-DISCARDED")
+        };
 
         using var response = await client.PostAsJsonAsync("/v1/fiscal-documents/", request);
         var body = await response.Content.ReadFromJsonAsync<CreateFiscalDocumentResponse>();
@@ -118,8 +127,28 @@ public sealed class FiscalDocumentApiPostgresSmokeTests
         Assert.Equal("upstream_finality_ref", getBody.Document.IdempotencyKeySource);
         Assert.NotNull(getBody.Document.SemanticRequestHash);
         Assert.Equal(64, getBody.Document.SemanticRequestHash.Length);
-        Assert.Equal("sha256:v1", getBody.Document.SemanticRequestHashVersion);
+        Assert.Equal("pos-server-fiscal-document-create:sha256:v4", getBody.Document.SemanticRequestHashVersion);
         Assert.Equal("matched", getBody.Document.SemanticRequestHashStatus);
+        Assert.NotNull(getBody.Document.InvoiceCustomerInformation);
+        Assert.Equal("Juan Dela Cruz", getBody.Document.InvoiceCustomerInformation.CustomerName);
+        Assert.Equal("100 Sample Street", getBody.Document.InvoiceCustomerInformation.Address);
+        Assert.Equal("123-456-789", getBody.Document.InvoiceCustomerInformation.Tin);
+        Assert.Equal("Sample Trading", getBody.Document.InvoiceCustomerInformation.BusinessStyle);
+        Assert.Null(getBody.Document.InvoiceCustomerInformation.StatutoryIdNumber);
+        Assert.Equal("vatable", getBody.Document.TaxDetails.Single().TaxClassificationCodeKey);
+
+        using var presentationResponse = await client.GetAsync($"/v1/fiscal-documents/{fiscalDocumentId}/digital-sales-invoice/presentation");
+        var presentationBody = await presentationResponse.Content.ReadFromJsonAsync<GetDigitalSalesInvoicePresentationResponse>();
+        Assert.Equal(HttpStatusCode.OK, presentationResponse.StatusCode);
+        Assert.NotNull(presentationBody?.Presentation);
+        var customerSection = presentationBody.Presentation.Sections.Single(section => section.Name == "customerInformation");
+        Assert.Contains(customerSection.Rows, row => row.Key == "customerInformation.customerName" && row.DisplayValue == "Juan Dela Cruz");
+        var vatSection = presentationBody.Presentation.Sections.Single(section => section.Name == "vatBreakdown");
+        Assert.Equal(4, vatSection.Rows.Count);
+        Assert.Contains(vatSection.Rows, row => row.Key == "totals.vatableSales" && row.DisplayValue == "PHP 125.00");
+        Assert.Contains(vatSection.Rows, row => row.Key == "totals.vatAmount" && row.DisplayValue == "PHP 0.00");
+        Assert.Contains(vatSection.Rows, row => row.Key == "totals.vatExemptSales" && row.DisplayValue == "PHP 0.00");
+        Assert.Contains(vatSection.Rows, row => row.Key == "totals.zeroRatedSales" && row.DisplayValue == "PHP 0.00");
 
         using var replayResponse = await client.PostAsJsonAsync("/v1/fiscal-documents/", request);
         var replayBody = await replayResponse.Content.ReadFromJsonAsync<CreateFiscalDocumentResponse>();
@@ -137,14 +166,7 @@ public sealed class FiscalDocumentApiPostgresSmokeTests
 
         var conflictRequest = request with
         {
-            DocumentLines =
-            [
-                request.DocumentLines![0] with
-                {
-                    GrossAmountMinorUnits = 13000,
-                    NetAmountMinorUnits = 12000
-                }
-            ]
+            InvoiceCustomerInformation = request.InvoiceCustomerInformation! with { CustomerName = "Changed Customer" }
         };
         using var conflictResponse = await client.PostAsJsonAsync("/v1/fiscal-documents/", conflictRequest);
         var conflictBody = await conflictResponse.Content.ReadFromJsonAsync<CreateFiscalDocumentResponse>();
@@ -219,9 +241,13 @@ public sealed class FiscalDocumentApiPostgresSmokeTests
             fiscalDocumentId);
         Assert.NotNull(semanticRequestHash);
         Assert.Equal(64, semanticRequestHash.Length);
-        Assert.Equal("sha256:v1", await ScalarStringAsync(
+        Assert.Equal("pos-server-fiscal-document-create:sha256:v4", await ScalarStringAsync(
             connection,
             "select idempotency_context ->> 'semantic_request_hash_version' from pos.idempotency_records where linked_fiscal_document_id = @id",
+            fiscalDocumentId));
+        Assert.Equal("Juan Dela Cruz", await ScalarStringAsync(
+            connection,
+            "select document_context -> 'invoice_customer_information' ->> 'customer_name' from pos.fiscal_documents where fiscal_document_id = @id",
             fiscalDocumentId));
         Assert.Equal("evidence-ref-success", await ScalarStringAsync(
             connection,
@@ -305,9 +331,28 @@ public sealed class FiscalDocumentApiPostgresSmokeTests
         Assert.Empty(getBody.Document.Tenders);
         Assert.Equal(0, Assert.Single(getBody.Document.Totals).AmountMinorUnits);
         Assert.Equal(body.ElectronicJournalEventReference, getBody.Document.ElectronicJournalEventReference);
+        Assert.Equal("OSCA-12345", getBody.Document.InvoiceCustomerInformation!.StatutoryIdNumber);
+        Assert.Equal("vatable", getBody.Document.TaxDetails.Single().TaxClassificationCodeKey);
+        Assert.Equal("pos-server-fiscal-document-create:sha256:v4", getBody.Document.SemanticRequestHashVersion);
+
+        using var presentationResponse = await client.GetAsync($"/v1/fiscal-documents/{fiscalDocumentId}/digital-sales-invoice/presentation");
+        var presentationBody = await presentationResponse.Content.ReadFromJsonAsync<GetDigitalSalesInvoicePresentationResponse>();
+        Assert.Equal(HttpStatusCode.OK, presentationResponse.StatusCode);
+        Assert.NotNull(presentationBody?.Presentation);
+        var vatSection = presentationBody.Presentation.Sections.Single(section => section.Name == "vatBreakdown");
+        Assert.Contains(vatSection.Rows, row => row.Key == "totals.vatableSales" && row.DisplayValue == "PHP 26.79");
+        Assert.Contains(vatSection.Rows, row => row.Key == "totals.vatAmount" && row.DisplayValue == "PHP 3.21");
+        Assert.Contains(vatSection.Rows, row => row.Key == "totals.vatExemptSales" && row.DisplayValue == "PHP 0.00");
+        Assert.Contains(vatSection.Rows, row => row.Key == "totals.zeroRatedSales" && row.DisplayValue == "PHP 0.00");
 
         await using var connection = new NpgsqlConnection(connectionString);
         await connection.OpenAsync();
+        Assert.Equal(1, await CountAsync(
+            connection,
+            "pos.fiscal_documents",
+            "fiscal_document_id = @id",
+            "id",
+            fiscalDocumentId));
         Assert.Equal(1, await CountAsync(
             connection,
             "pos.electronic_journal_records",
@@ -342,10 +387,7 @@ public sealed class FiscalDocumentApiPostgresSmokeTests
 
         var conflict = request with
         {
-            DocumentLines =
-            [
-                request.DocumentLines![0] with { Description = "Conflicting zero-payable parking fee" }
-            ]
+            InvoiceCustomerInformation = request.InvoiceCustomerInformation! with { CustomerName = "Conflicting Customer" }
         };
         using var conflictResponse = await client.PostAsJsonAsync("/v1/fiscal-documents/", conflict);
         Assert.Equal(HttpStatusCode.Conflict, conflictResponse.StatusCode);
@@ -531,11 +573,13 @@ public sealed class FiscalDocumentApiPostgresSmokeTests
         Assert.NotNull(getBody?.Document);
         Assert.NotNull(getBody.Document.AppliedStatutoryFiscalFacts);
         Assert.Null(getBody.Document.SemanticRequestHash);
-        Assert.Equal("pos-server-fiscal-document-create:sha256:v2", getBody.Document.SemanticRequestHashVersion);
+        Assert.Equal("pos-server-fiscal-document-create:sha256:v4", getBody.Document.SemanticRequestHashVersion);
         Assert.Equal("SENIOR_CITIZEN", getBody.Document.AppliedStatutoryFiscalFacts.EntitlementType);
         Assert.Equal("VAT_EXEMPTION_AND_STATUTORY_DISCOUNT", getBody.Document.AppliedStatutoryFiscalFacts.BenefitClassification);
         Assert.Equal("VAT_EXEMPT", getBody.Document.AppliedStatutoryFiscalFacts.VatTreatment);
         Assert.Equal(7143, getBody.Document.AppliedStatutoryFiscalFacts.FinalPayableAmountMinorUnits);
+        Assert.Equal("OSCA-12345", getBody.Document.InvoiceCustomerInformation!.StatutoryIdNumber);
+        Assert.Equal("vat_exempt", getBody.Document.TaxDetails.Single().TaxClassificationCodeKey);
 
         using var presentationResponse = await client.GetAsync($"/v1/fiscal-documents/{fiscalDocumentId}/digital-sales-invoice/presentation");
         var presentationBody = await presentationResponse.Content.ReadFromJsonAsync<GetDigitalSalesInvoicePresentationResponse>();
@@ -553,6 +597,14 @@ public sealed class FiscalDocumentApiPostgresSmokeTests
             statutorySection.Rows,
             row => row.Key.Contains("decision", StringComparison.OrdinalIgnoreCase) ||
                 row.Key.Contains("evidence", StringComparison.OrdinalIgnoreCase));
+        var customerSection = presentationBody.Presentation.Sections.Single(section => section.Name == "customerInformation");
+        Assert.Contains(customerSection.Rows, row =>
+            row.Key == "customerInformation.statutoryIdNumber" && row.DisplayValue == "OSCA-12345");
+        var vatSection = presentationBody.Presentation.Sections.Single(section => section.Name == "vatBreakdown");
+        Assert.Contains(vatSection.Rows, row => row.Key == "totals.vatableSales" && row.DisplayValue == "PHP 0.00");
+        Assert.Contains(vatSection.Rows, row => row.Key == "totals.vatAmount" && row.DisplayValue == "PHP 0.00");
+        Assert.Contains(vatSection.Rows, row => row.Key == "totals.vatExemptSales" && row.DisplayValue == "PHP 89.29");
+        Assert.Contains(vatSection.Rows, row => row.Key == "totals.zeroRatedSales" && row.DisplayValue == "PHP 0.00");
 
         using var replayResponse = await client.PostAsJsonAsync("/v1/fiscal-documents/", request);
         var replayBody = await replayResponse.Content.ReadFromJsonAsync<CreateFiscalDocumentResponse>();
@@ -627,7 +679,7 @@ public sealed class FiscalDocumentApiPostgresSmokeTests
             connection,
             "select current_sequence_value from pos.fiscal_sequence_states where fiscal_sequence_policy_id = @id",
             FiscalSequencePolicyId));
-        Assert.Equal("pos-server-fiscal-document-create:sha256:v2", await ScalarStringAsync(
+        Assert.Equal("pos-server-fiscal-document-create:sha256:v4", await ScalarStringAsync(
             connection,
             "select idempotency_context ->> 'semantic_request_hash_version' from pos.idempotency_records where linked_fiscal_document_id = @id",
             fiscalDocumentId));
@@ -1365,7 +1417,7 @@ public sealed class FiscalDocumentApiPostgresSmokeTests
             [
                 new CreateFiscalTaxDetailRequest(
                     FiscalTaxTypeCodeId,
-                    FiscalTaxClassificationCodeId,
+                    FiscalVatExemptTaxClassificationCodeId,
                     8929,
                     0,
                     "PHP",
@@ -1393,7 +1445,13 @@ public sealed class FiscalDocumentApiPostgresSmokeTests
                     "PHP",
                     new Dictionary<string, string> { ["source_system"] = "central_pms" })
             ],
-            AppliedStatutoryFiscalFacts: facts);
+            AppliedStatutoryFiscalFacts: facts,
+            InvoiceCustomerInformation: new InvoiceCustomerInformationRequest(
+                "Maria Santos",
+                "100 Sample Street",
+                "123-456-789",
+                "Sample Trading",
+                "OSCA-12345"));
     }
 
     private static CreateFiscalDocumentRequest CreateValidZeroPayableStatutoryRequest(string suffix)
@@ -1441,6 +1499,7 @@ public sealed class FiscalDocumentApiPostgresSmokeTests
             [
                 paid.TaxDetails![0] with
                 {
+                    TaxClassificationCodeId = FiscalTaxClassificationCodeId,
                     TaxableAmountMinorUnits = 2679,
                     TaxAmountMinorUnits = 321,
                     TaxRate = 12
@@ -1548,7 +1607,7 @@ public sealed class FiscalDocumentApiPostgresSmokeTests
             [
                 new CreateFiscalTaxDetailRequest(
                     FiscalTaxTypeCodeId,
-                    FiscalTaxClassificationCodeId,
+                    FiscalVatExemptTaxClassificationCodeId,
                     10714,
                     0,
                     "PHP",
@@ -1641,9 +1700,18 @@ public sealed class FiscalDocumentApiPostgresSmokeTests
             "API Smoke Fiscal Tax Classification",
             "Disposable smoke-test fiscal tax classification code set.",
             FiscalTaxClassificationCodeId,
-            "tax_classification_smoke",
-            "Tax Classification Smoke",
-            "Disposable smoke-test tax classification posture."),
+            "vatable",
+            "VATable",
+            "Authoritative VATable tax classification for the disposable smoke fixture."),
+        new(
+            Guid.Parse("20000000-0000-0000-0000-000000000402"),
+            "api_smoke_fiscal_tax_classification",
+            "API Smoke Fiscal Tax Classification",
+            "Disposable smoke-test fiscal tax classification code set.",
+            FiscalVatExemptTaxClassificationCodeId,
+            "vat_exempt",
+            "VAT Exempt",
+            "Authoritative VAT-exempt tax classification for the disposable smoke fixture."),
         new(
             Guid.Parse("20000000-0000-0000-0000-000000000501"),
             "api_smoke_discount_privilege_type",

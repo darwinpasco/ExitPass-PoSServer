@@ -216,7 +216,7 @@ public sealed class FiscalReportOutputApiTests
             "CLOSED", "stored-z-correlation", "Z-20260806-00000012", true, 7, "COMMITTED");
     }
 
-    private static FiscalXReadingAmounts Amounts() => new(12_000, 10_000, 8_000, 960, 2_000, 0, 2_000, 1_500, 0, 0, 500, 0, 0, 0, 0, 0, 0, 0);
+    private static FiscalXReadingAmounts Amounts() => new(12_000, 10_000, 8_000, 960, 2_000, 0, 1_500, 1_500, 0, 0, 500, 0, 0, 0, 0, 0, 0, 0);
 
     private static string FindSource(params string[] parts)
     {

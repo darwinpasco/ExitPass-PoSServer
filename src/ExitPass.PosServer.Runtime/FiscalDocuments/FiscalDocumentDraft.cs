@@ -41,4 +41,12 @@ public sealed record FiscalDocumentDraft(
     Guid? FiscalReportingPeriodId = null,
     string CompletionBasis = FiscalCompletionBasisCodes.PaymentFinality,
     string? CompletionAuthorityRef = null,
-    string? ElectronicJournalEventReference = null);
+    string? ElectronicJournalEventReference = null,
+    InvoiceCustomerInformationSnapshot? InvoiceCustomerInformation = null);
+
+public sealed record InvoiceCustomerInformationSnapshot(
+    string? CustomerName,
+    string? Address,
+    string? Tin,
+    string? BusinessStyle,
+    string? StatutoryIdNumber);

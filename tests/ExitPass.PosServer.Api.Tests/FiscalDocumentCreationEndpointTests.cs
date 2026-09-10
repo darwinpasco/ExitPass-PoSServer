@@ -56,6 +56,38 @@ public sealed class FiscalDocumentCreationEndpointTests
     }
 
     [Fact]
+    public async Task InvoiceCustomerInformationIsMappedAndInvalidLengthReturnsDeterministicFailure()
+    {
+        var repository = new RecordingFiscalDocumentRepository();
+        var service = new FiscalDocumentCreationService(repository);
+        var validRequest = ValidRequest() with
+        {
+            InvoiceCustomerInformation = new InvoiceCustomerInformationRequest(
+                "  Juan Dela Cruz  ",
+                "  100 Sample Street  ",
+                "  123-456-789  ",
+                "  Sample Trading  ",
+                null)
+        };
+
+        var validResponse = await FiscalDocumentCreationEndpoint.CreateAsync(validRequest, service);
+        var invalidResponse = await CreateWithRecordingRepository(validRequest with
+        {
+            PayableBasis = validRequest.PayableBasis! with { UpstreamFinalityRef = "invalid-customer-length" },
+            InvoiceCustomerInformation = validRequest.InvoiceCustomerInformation with
+            {
+                Address = new string('X', 301)
+            }
+        });
+
+        Assert.True(validResponse.Succeeded);
+        Assert.Equal("Juan Dela Cruz", repository.LastDraft!.InvoiceCustomerInformation!.CustomerName);
+        Assert.False(invalidResponse.Succeeded);
+        Assert.Equal("invalid_invoice_customer_information", invalidResponse.Code);
+        Assert.Equal(StatusCodes.Status400BadRequest, invalidResponse.HttpStatusCode);
+    }
+
+    [Fact]
     public async Task MissingPayableBasisMapsToDeterministicFailure()
     {
         var response = await CreateWithRecordingRepository(ValidRequest() with { PayableBasis = null });

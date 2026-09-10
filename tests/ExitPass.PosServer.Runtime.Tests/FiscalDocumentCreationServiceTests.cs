@@ -75,6 +75,114 @@ public sealed class FiscalDocumentCreationServiceTests
     }
 
     [Fact]
+    public async Task InvoiceCustomerInformationIsTrimmedAndUnapprovedStatutoryIdIsDiscarded()
+    {
+        var repository = new RecordingFiscalDocumentRepository();
+        var service = new FiscalDocumentCreationService(repository);
+        var command = ValidCommand() with
+        {
+            InvoiceCustomerInformation = new InvoiceCustomerInformationInput(
+                "  Juan Dela Cruz  ",
+                "  100 Sample Street  ",
+                "  123-456-789  ",
+                "  Sample Trading  ",
+                "  PWD-UNAPPROVED  ")
+        };
+
+        var result = await service.CreateAsync(command);
+
+        Assert.True(result.Succeeded, $"{result.ErrorCode}: {result.Message}");
+        var customer = Assert.IsType<InvoiceCustomerInformationSnapshot>(result.Draft!.InvoiceCustomerInformation);
+        Assert.Equal("Juan Dela Cruz", customer.CustomerName);
+        Assert.Equal("100 Sample Street", customer.Address);
+        Assert.Equal("123-456-789", customer.Tin);
+        Assert.Equal("Sample Trading", customer.BusinessStyle);
+        Assert.Null(customer.StatutoryIdNumber);
+        Assert.Null(result.Draft.AppliedStatutoryFiscalFacts);
+        Assert.Equal(
+            FiscalDocumentSemanticRequestHasher.InvoiceCustomerInformationVersion,
+            FiscalDocumentSemanticRequestHasher.GetVersion(result.Draft));
+    }
+
+    [Theory]
+    [InlineData("customer_name")]
+    [InlineData("address")]
+    [InlineData("tin")]
+    [InlineData("business_style")]
+    [InlineData("statutory_id")]
+    public async Task InvoiceCustomerInformationMaximumLengthsAreValidated(string field)
+    {
+        var command = field == "statutory_id" ? ValidStatutoryCommand() : ValidCommand();
+        var customer = new InvoiceCustomerInformationInput(
+            new string('N', field == "customer_name" ? 161 : 160),
+            new string('A', field == "address" ? 301 : 300),
+            new string('T', field == "tin" ? 41 : 40),
+            new string('B', field == "business_style" ? 161 : 160),
+            new string('S', field == "statutory_id" ? 81 : 80));
+        var service = new FiscalDocumentCreationService(new RecordingFiscalDocumentRepository());
+
+        var result = await service.CreateAsync(command with { InvoiceCustomerInformation = customer });
+
+        Assert.False(result.Succeeded);
+        Assert.Equal(FiscalDocumentCreationErrorCode.InvalidInvoiceCustomerInformation, result.ErrorCode);
+    }
+
+    [Fact]
+    public async Task ApprovedStatutoryIdIsSnapshottedAndCustomerChangeChangesReplayHash()
+    {
+        var repository = new RecordingFiscalDocumentRepository();
+        var service = new FiscalDocumentCreationService(repository);
+        var command = ValidStatutoryCommand() with
+        {
+            InvoiceCustomerInformation = new InvoiceCustomerInformationInput(
+                "Maria Santos", null, null, null, "OSCA-12345")
+        };
+
+        var first = await service.CreateAsync(command);
+        var replay = await service.CreateAsync(command);
+        var changed = await service.CreateAsync(command with
+        {
+            InvoiceCustomerInformation = command.InvoiceCustomerInformation with { CustomerName = "Changed Name" }
+        });
+
+        Assert.True(first.Succeeded);
+        Assert.True(replay.Succeeded);
+        Assert.True(replay.Replayed);
+        Assert.Equal("OSCA-12345", first.Draft!.InvoiceCustomerInformation!.StatutoryIdNumber);
+        Assert.Equal(1, repository.CreateCount);
+        Assert.False(changed.Succeeded);
+        Assert.Equal(FiscalDocumentCreationErrorCode.IdempotencyConflict, changed.ErrorCode);
+    }
+
+    [Fact]
+    public async Task ZeroPayableCustomerInformationPreservesCompletionAuthorityAndPaymentFreeAncestry()
+    {
+        var service = new FiscalDocumentCreationService(new RecordingFiscalDocumentRepository());
+        var command = ValidZeroPayableStatutoryCommand() with
+        {
+            InvoiceCustomerInformation = new InvoiceCustomerInformationInput(
+                "Maria Santos", "100 Sample Street", "123-456-789", "Sample Trading", "OSCA-12345")
+        };
+
+        var result = await service.CreateAsync(command);
+
+        Assert.True(result.Succeeded, $"{result.ErrorCode}: {result.Message}");
+        Assert.Equal(FiscalCompletionBasisCodes.ZeroPayableStatutoryFinality, result.Draft!.CompletionBasis);
+        Assert.Equal(command.CompletionAuthorityRef, result.Draft.CompletionAuthorityRef);
+        Assert.Null(result.Draft.CentralPmsPaymentAttemptRef);
+        Assert.Null(result.Draft.CentralPmsPaymentConfirmationRef);
+        Assert.Null(result.Draft.PaymentFinalityRef);
+        Assert.Empty(result.Draft.Tenders);
+        Assert.Equal("OSCA-12345", result.Draft.InvoiceCustomerInformation!.StatutoryIdNumber);
+        Assert.Equal(
+            FiscalDocumentSemanticRequestHasher.InvoiceCustomerInformationVersion,
+            FiscalDocumentSemanticRequestHasher.GetVersion(result.Draft));
+        var canonical = FiscalDocumentSemanticRequestHasher.Canonicalize(command);
+        Assert.Contains("ZERO_PAYABLE_STATUTORY_FINALITY", canonical, StringComparison.Ordinal);
+        Assert.Contains(command.CompletionAuthorityRef!, canonical, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task AppliedStatutoryFactsCreateSnapshotAndUseStatutoryHashVersion()
     {
         var repository = new RecordingFiscalDocumentRepository();

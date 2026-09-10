@@ -50,5 +50,6 @@ public enum FiscalDocumentCreationErrorCode
     ReportingPeriodAssignmentMismatch = 45,
     FiscalCloseBoundaryLockTimeout = 46,
     FiscalCloseBoundaryRetryableConcurrencyFailure = 47,
-    InvalidCompletionAuthority = 48
+    InvalidCompletionAuthority = 48,
+    InvalidInvoiceCustomerInformation = 49
 }

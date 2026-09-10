@@ -59,9 +59,11 @@ public sealed class DigitalSalesInvoiceEndpointTests
         Assert.Contains("document_identity", sectionNames);
         Assert.Contains("fiscal_numbering", sectionNames);
         Assert.Contains("parking_payment_references", sectionNames);
+        Assert.Contains("customer_information", sectionNames);
         Assert.Contains("line_items", sectionNames);
         Assert.Contains("discounts", sectionNames);
         Assert.Contains("taxes", sectionNames);
+        Assert.Contains("vat_breakdown", sectionNames);
         Assert.Contains("tenders", sectionNames);
         Assert.Contains("totals", sectionNames);
         Assert.Contains("audit_hash_status", sectionNames);
@@ -266,9 +268,11 @@ public sealed class DigitalSalesInvoiceEndpointTests
                 "documentIdentity",
                 "fiscalNumbering",
                 "parkingPaymentReferences",
+                "customerInformation",
                 "lineItems",
                 "discounts",
                 "taxes",
+                "vatBreakdown",
                 "tenders",
                 "totals",
                 "auditHashStatus",

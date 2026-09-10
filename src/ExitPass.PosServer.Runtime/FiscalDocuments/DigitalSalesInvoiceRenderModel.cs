@@ -41,7 +41,8 @@ public sealed record DigitalSalesInvoiceRenderModel(
     SalesInvoiceHeaderSnapshot? SalesInvoiceHeaderSnapshot = null,
     AppliedStatutoryFiscalFactsSnapshot? AppliedStatutoryFiscalFacts = null,
     string CompletionBasis = FiscalCompletionBasisCodes.PaymentFinality,
-    string? CompletionAuthorityRef = null);
+    string? CompletionAuthorityRef = null,
+    InvoiceCustomerInformationSnapshot? InvoiceCustomerInformation = null);
 
 public sealed record DigitalSalesInvoiceLineRenderModel(
     int LineSequence,
@@ -75,7 +76,8 @@ public sealed record DigitalSalesInvoiceTaxDetailRenderModel(
     decimal? TaxRate,
     long TaxableAmountMinorUnits,
     long TaxAmountMinorUnits,
-    string CurrencyCode);
+    string CurrencyCode,
+    string? TaxClassificationCodeKey = null);
 
 public sealed record DigitalSalesInvoiceTenderRenderModel(
     Guid TenderTypeCodeId,

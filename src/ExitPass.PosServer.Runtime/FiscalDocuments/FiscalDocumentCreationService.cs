@@ -317,6 +317,14 @@ public sealed class FiscalDocumentCreationService
             return statutoryValidation.Failure;
         }
 
+        var customerInformation = NormalizeInvoiceCustomerInformation(
+            command.InvoiceCustomerInformation,
+            statutoryValidation.Snapshot is not null);
+        if (customerInformation.Failure is not null)
+        {
+            return customerInformation.Failure;
+        }
+
         var draft = new FiscalDocumentDraft(
             Guid.NewGuid(),
             command.SitePosServerId.Value,
@@ -352,7 +360,8 @@ public sealed class FiscalDocumentCreationService
             discountReferences.ToArray(),
             AppliedStatutoryFiscalFacts: statutoryValidation.Snapshot,
             CompletionBasis: completionBasis,
-            CompletionAuthorityRef: completionAuthorityRef);
+            CompletionAuthorityRef: completionAuthorityRef,
+            InvoiceCustomerInformation: customerInformation.Snapshot);
 
         try
         {
@@ -389,6 +398,47 @@ public sealed class FiscalDocumentCreationService
                 },
                 ex.Message);
         }
+    }
+
+    private static (FiscalDocumentCreationResult? Failure, InvoiceCustomerInformationSnapshot? Snapshot)
+        NormalizeInvoiceCustomerInformation(
+            InvoiceCustomerInformationInput? value,
+            bool approvedStatutoryBenefit)
+    {
+        if (value is null)
+        {
+            return (null, null);
+        }
+
+        var customerName = NormalizeOptionalReference(value.CustomerName);
+        var address = NormalizeOptionalReference(value.Address);
+        var tin = NormalizeOptionalReference(value.Tin);
+        var businessStyle = NormalizeOptionalReference(value.BusinessStyle);
+        var statutoryIdNumber = approvedStatutoryBenefit
+            ? NormalizeOptionalReference(value.StatutoryIdNumber)
+            : null;
+
+        if (customerName?.Length > 160 ||
+            address?.Length > 300 ||
+            tin?.Length > 40 ||
+            businessStyle?.Length > 160 ||
+            statutoryIdNumber?.Length > 80)
+        {
+            return (
+                FiscalDocumentCreationResult.Failure(
+                    FiscalDocumentCreationErrorCode.InvalidInvoiceCustomerInformation,
+                    "Invoice customer information exceeds an allowed field length."),
+                null);
+        }
+
+        return (
+            null,
+            new InvoiceCustomerInformationSnapshot(
+                customerName,
+                address,
+                tin,
+                businessStyle,
+                statutoryIdNumber));
     }
 
     private static (FiscalDocumentCreationResult? Failure, AppliedStatutoryFiscalFactsSnapshot? Snapshot)

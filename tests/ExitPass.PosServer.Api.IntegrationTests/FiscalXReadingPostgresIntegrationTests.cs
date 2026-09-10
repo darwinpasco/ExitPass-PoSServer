@@ -45,7 +45,7 @@ public sealed class FiscalXReadingPostgresIntegrationTests
         Assert.Equal(HttpStatusCode.Created, createdResponse.StatusCode);
         Assert.NotNull(created?.XReading);
         Assert.Equal(2, created.XReading.QualifyingDocumentCount);
-        Assert.Equal(22_000, created.XReading.Amounts.GrossSalesAmountMinorUnits);
+        Assert.Equal(20_714, created.XReading.Amounts.GrossSalesAmountMinorUnits);
         Assert.Equal(16_571, created.XReading.Amounts.NetSalesAmountMinorUnits);
         Assert.Equal(2_143, created.XReading.Amounts.PwdDiscountAmountMinorUnits);
         Assert.Equal(1_286, created.XReading.Amounts.VatExemptionAmountMinorUnits);
@@ -111,7 +111,7 @@ public sealed class FiscalXReadingPostgresIntegrationTests
     {
         await using var connection = new NpgsqlConnection(connectionString); await connection.OpenAsync();
         await using var transaction = await connection.BeginTransactionAsync();
-        await using (var command = new NpgsqlCommand("INSERT INTO pos.fiscal_documents(fiscal_document_id,site_pos_server_id,fiscal_identity_id,fiscal_document_type_code_id,fiscal_document_status_code_id,currency_code,fiscal_reporting_period_id,created_at,updated_at) VALUES('73000000-0000-4000-8000-000000000399',@site,@identity,'73000000-0000-4000-8000-000000000201','73000000-0000-4000-8000-000000000202','PHP','73000000-0000-4000-8000-000000000010','2026-08-03T03:00:00Z','2026-08-03T03:00:00Z')", connection, transaction))
+        await using (var command = new NpgsqlCommand("INSERT INTO pos.fiscal_documents(fiscal_document_id,site_pos_server_id,fiscal_identity_id,fiscal_document_type_code_id,fiscal_document_status_code_id,currency_code,fiscal_reporting_period_id,payment_finality_ref,completion_basis,completion_authority_ref,created_at,updated_at) VALUES('73000000-0000-4000-8000-000000000399',@site,@identity,'73000000-0000-4000-8000-000000000201','73000000-0000-4000-8000-000000000202','PHP','73000000-0000-4000-8000-000000000010','payment-finality-x-399','PAYMENT_FINALITY','payment-finality-x-399','2026-08-03T03:00:00Z','2026-08-03T03:00:00Z')", connection, transaction))
         { command.Parameters.AddWithValue("site", SiteId); command.Parameters.AddWithValue("identity", IdentityId); await command.ExecuteNonQueryAsync(); }
         using var response = await client.PostAsJsonAsync("/v1/fiscal-reports/x-readings/", new GenerateFiscalXReadingRequest("x-proof-concurrent", SiteId, IdentityId, ObservedAt));
         var body = await response.Content.ReadFromJsonAsync<FiscalXReadingApiResponse>();
@@ -124,7 +124,7 @@ public sealed class FiscalXReadingPostgresIntegrationTests
     {
         const string sql = """
         INSERT INTO pos.controlled_codes VALUES('73000000-0000-4000-8000-000000000299','73000000-0000-4000-8000-000000000104','unsupported_tender','Unsupported Tender',NULL,NULL,99,true,NULL,NULL,clock_timestamp(),clock_timestamp());
-        INSERT INTO pos.fiscal_documents(fiscal_document_id,site_pos_server_id,fiscal_identity_id,fiscal_document_type_code_id,fiscal_document_status_code_id,fiscal_sequence_policy_id,fiscal_sequence_value,fiscal_document_number,fiscal_series,fiscal_number_assigned_at,currency_code,fiscal_reporting_period_id,created_at,updated_at) VALUES('73000000-0000-4000-8000-000000000303','73000000-0000-4000-8000-000000000001','73000000-0000-4000-8000-000000000002','73000000-0000-4000-8000-000000000201','73000000-0000-4000-8000-000000000202','73000000-0000-4000-8000-000000000003',3,'SI-00000003','SI','2026-08-03T03:00:00Z','PHP','73000000-0000-4000-8000-000000000010','2026-08-03T03:00:00Z','2026-08-03T03:00:00Z');
+        INSERT INTO pos.fiscal_documents(fiscal_document_id,site_pos_server_id,fiscal_identity_id,fiscal_document_type_code_id,fiscal_document_status_code_id,fiscal_sequence_policy_id,fiscal_sequence_value,fiscal_document_number,fiscal_series,fiscal_number_assigned_at,currency_code,fiscal_reporting_period_id,payment_finality_ref,completion_basis,completion_authority_ref,created_at,updated_at) VALUES('73000000-0000-4000-8000-000000000303','73000000-0000-4000-8000-000000000001','73000000-0000-4000-8000-000000000002','73000000-0000-4000-8000-000000000201','73000000-0000-4000-8000-000000000202','73000000-0000-4000-8000-000000000003',3,'SI-00000003','SI','2026-08-03T03:00:00Z','PHP','73000000-0000-4000-8000-000000000010','payment-finality-x-003','PAYMENT_FINALITY','payment-finality-x-003','2026-08-03T03:00:00Z','2026-08-03T03:00:00Z');
         INSERT INTO pos.fiscal_document_lines(fiscal_document_line_id,fiscal_document_id,line_sequence,line_type_code_id,description,gross_amount_minor_units,net_amount_minor_units,currency_code) VALUES('73000000-0000-4000-8000-000000000403','73000000-0000-4000-8000-000000000303',1,'73000000-0000-4000-8000-000000000204','Synthetic unsupported tender',5000,5000,'PHP');
         INSERT INTO pos.fiscal_tenders(fiscal_tender_id,fiscal_document_id,tender_type_code_id,amount_minor_units,currency_code) VALUES('73000000-0000-4000-8000-000000000503','73000000-0000-4000-8000-000000000303','73000000-0000-4000-8000-000000000299',5000,'PHP');
         """;

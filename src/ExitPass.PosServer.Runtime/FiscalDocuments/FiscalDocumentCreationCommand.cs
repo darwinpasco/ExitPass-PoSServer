@@ -31,7 +31,15 @@ public sealed record FiscalDocumentCreationCommand(
     IReadOnlyDictionary<string, string>? ReferenceContext = null,
     AppliedStatutoryFiscalFactsInput? AppliedStatutoryFiscalFacts = null,
     string CompletionBasis = FiscalCompletionBasisCodes.PaymentFinality,
-    string? CompletionAuthorityRef = null);
+    string? CompletionAuthorityRef = null,
+    InvoiceCustomerInformationInput? InvoiceCustomerInformation = null);
+
+public sealed record InvoiceCustomerInformationInput(
+    string? CustomerName,
+    string? Address,
+    string? Tin,
+    string? BusinessStyle,
+    string? StatutoryIdNumber);
 
 public sealed record AppliedStatutoryFiscalFactsInput(
     Guid? StatutoryDiscountDecisionCommandId,

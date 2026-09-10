@@ -499,6 +499,45 @@ public sealed class PostgresFiscalDocumentRepositoryTests
     }
 
     [Fact]
+    public void DocumentContextPersistsNormalizedInvoiceCustomerInformation()
+    {
+        var draft = ValidDraft() with
+        {
+            InvoiceCustomerInformation = new InvoiceCustomerInformationSnapshot(
+                "Juan Dela Cruz",
+                "100 Sample Street",
+                "123-456-789",
+                "Sample Trading",
+                null)
+        };
+
+        var json = PostgresFiscalDocumentSql.CreateDocumentContextJson(draft);
+        using var document = System.Text.Json.JsonDocument.Parse(json);
+        var customer = document.RootElement.GetProperty("invoice_customer_information");
+
+        Assert.Equal("Juan Dela Cruz", customer.GetProperty("customer_name").GetString());
+        Assert.Equal("100 Sample Street", customer.GetProperty("address").GetString());
+        Assert.Equal("123-456-789", customer.GetProperty("tin").GetString());
+        Assert.Equal("Sample Trading", customer.GetProperty("business_style").GetString());
+        Assert.Equal(System.Text.Json.JsonValueKind.Null, customer.GetProperty("statutory_id_number").ValueKind);
+    }
+
+    [Fact]
+    public void CustomerInformationIdempotencyContextUsesAdditiveSha256V4()
+    {
+        var draft = ValidDraft() with
+        {
+            InvoiceCustomerInformation = new InvoiceCustomerInformationSnapshot(
+                "Juan Dela Cruz", null, null, null, null)
+        };
+        var idempotency = new FiscalIssuanceIdempotency("scope", "key", new string('c', 64));
+
+        var json = PostgresFiscalDocumentSql.CreateIdempotencyContextJson(draft, idempotency);
+
+        Assert.Contains(FiscalDocumentSemanticRequestHasher.InvoiceCustomerInformationVersion, json, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void IdempotencyContextDocumentsStableSourceKeyAndSemanticHashVersion()
     {
         var draft = ValidDraft();

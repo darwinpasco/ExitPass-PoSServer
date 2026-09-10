@@ -47,7 +47,8 @@ public sealed record FiscalDocumentReadModel(
     AppliedStatutoryFiscalFactsSnapshot? AppliedStatutoryFiscalFacts = null,
     string CompletionBasis = FiscalCompletionBasisCodes.PaymentFinality,
     string? CompletionAuthorityRef = null,
-    string? ElectronicJournalEventReference = null);
+    string? ElectronicJournalEventReference = null,
+    InvoiceCustomerInformationSnapshot? InvoiceCustomerInformation = null);
 
 public sealed record FiscalDocumentStatusHistoryReadModel(
     Guid FiscalDocumentStatusHistoryId,
@@ -118,7 +119,8 @@ public sealed record FiscalTaxDetailReadModel(
     string CurrencyCode,
     string? TaxContextJson,
     DateTimeOffset CreatedAt,
-    DateTimeOffset UpdatedAt);
+    DateTimeOffset UpdatedAt,
+    string? TaxClassificationCodeKey = null);
 
 public sealed record FiscalDiscountPrivilegeDetailReadModel(
     Guid FiscalDiscountPrivilegeDetailId,
