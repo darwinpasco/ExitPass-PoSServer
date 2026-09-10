@@ -65,6 +65,7 @@ public sealed class PostgresFiscalDocumentReaderTests
         Assert.Contains("type_code.code_key", source, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("status_code.code_key", source, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("tender_type_code.code_key", source, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("classification_code.code_key", source, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("void_status", source, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("void_reason_code", source, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("voided_at", source, StringComparison.OrdinalIgnoreCase);
@@ -75,6 +76,7 @@ public sealed class PostgresFiscalDocumentReaderTests
         Assert.Contains("matched", source, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("AppliedStatutoryFiscalFacts = appliedStatutoryFacts", source, StringComparison.Ordinal);
         Assert.Contains("SemanticRequestHash = appliedStatutoryFacts is null ? header.SemanticRequestHash : null", source, StringComparison.Ordinal);
+        Assert.Contains("InvoiceCustomerInformation = ParseInvoiceCustomerInformation", source, StringComparison.Ordinal);
         Assert.Contains("GetNullableInt64(reader", source, StringComparison.Ordinal);
         Assert.Contains("GetNullableDateTimeOffset(reader", source, StringComparison.Ordinal);
     }
@@ -104,7 +106,7 @@ public sealed class PostgresFiscalDocumentReaderTests
         Assert.Contains("order by created_at, fiscal_document_link_id", source, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("order by line_sequence, fiscal_document_line_id", source, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("order by tender.created_at, tender.fiscal_tender_id", source, StringComparison.OrdinalIgnoreCase);
-        Assert.Contains("order by created_at, fiscal_tax_detail_id", source, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("order by tax.created_at, tax.fiscal_tax_detail_id", source, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("order by created_at, fiscal_discount_privilege_detail_id", source, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("order by total_type_code_id, fiscal_total_id", source, StringComparison.OrdinalIgnoreCase);
     }

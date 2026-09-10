@@ -57,7 +57,10 @@ public sealed class PostgresFiscalDocumentReader : IFiscalDocumentReader
                 DiscountPrivilegeDetails = await ReadDiscountPrivilegeDetailsAsync(connection, fiscalDocumentId, cancellationToken).ConfigureAwait(false),
                 Totals = await ReadTotalsAsync(connection, fiscalDocumentId, cancellationToken).ConfigureAwait(false),
                 SalesInvoiceHeaderSnapshot = await ReadHeaderSnapshotAsync(connection, fiscalDocumentId, cancellationToken).ConfigureAwait(false),
-                AppliedStatutoryFiscalFacts = appliedStatutoryFacts
+                AppliedStatutoryFiscalFacts = appliedStatutoryFacts,
+                InvoiceCustomerInformation = ParseInvoiceCustomerInformation(
+                    header.DocumentContextJson,
+                    appliedStatutoryFacts is not null)
             };
         }
         catch (Exception ex) when (ex is NpgsqlException or TimeoutException or InvalidOperationException)
@@ -66,6 +69,36 @@ public sealed class PostgresFiscalDocumentReader : IFiscalDocumentReader
                 "Fiscal document read failed.",
                 ex);
         }
+    }
+
+    private static InvoiceCustomerInformationSnapshot? ParseInvoiceCustomerInformation(
+        string? documentContextJson,
+        bool approvedStatutoryBenefit)
+    {
+        if (string.IsNullOrWhiteSpace(documentContextJson))
+        {
+            return null;
+        }
+
+        using var document = System.Text.Json.JsonDocument.Parse(documentContextJson);
+        if (!document.RootElement.TryGetProperty("invoice_customer_information", out var customer) ||
+            customer.ValueKind is System.Text.Json.JsonValueKind.Null or System.Text.Json.JsonValueKind.Undefined)
+        {
+            return null;
+        }
+
+        static string? Read(System.Text.Json.JsonElement element, string name) =>
+            element.TryGetProperty(name, out var property) &&
+            property.ValueKind == System.Text.Json.JsonValueKind.String
+                ? property.GetString()
+                : null;
+
+        return new InvoiceCustomerInformationSnapshot(
+            Read(customer, "customer_name"),
+            Read(customer, "address"),
+            Read(customer, "tin"),
+            Read(customer, "business_style"),
+            approvedStatutoryBenefit ? Read(customer, "statutory_id_number") : null);
     }
 
     private static async Task<FiscalDocumentReadModel?> ReadHeaderAsync(
@@ -503,21 +536,24 @@ public sealed class PostgresFiscalDocumentReader : IFiscalDocumentReader
             connection,
             """
             select
-                fiscal_tax_detail_id,
-                fiscal_document_id,
-                fiscal_document_line_id,
-                tax_type_code_id,
-                tax_classification_code_id,
-                tax_rate,
-                taxable_amount_minor_units,
-                tax_amount_minor_units,
-                currency_code,
-                tax_context::text,
-                created_at,
-                updated_at
-            from pos.fiscal_tax_details
-            where fiscal_document_id = @fiscal_document_id
-            order by created_at, fiscal_tax_detail_id;
+                tax.fiscal_tax_detail_id,
+                tax.fiscal_document_id,
+                tax.fiscal_document_line_id,
+                tax.tax_type_code_id,
+                tax.tax_classification_code_id,
+                tax.tax_rate,
+                tax.taxable_amount_minor_units,
+                tax.tax_amount_minor_units,
+                tax.currency_code,
+                tax.tax_context::text,
+                tax.created_at,
+                tax.updated_at,
+                classification_code.code_key
+            from pos.fiscal_tax_details tax
+            left join pos.controlled_codes classification_code
+                on classification_code.controlled_code_id = tax.tax_classification_code_id
+            where tax.fiscal_document_id = @fiscal_document_id
+            order by tax.created_at, tax.fiscal_tax_detail_id;
             """,
             fiscalDocumentId);
 
@@ -537,7 +573,8 @@ public sealed class PostgresFiscalDocumentReader : IFiscalDocumentReader
                 reader.GetString(8),
                 GetSafeString(reader, 9),
                 reader.GetFieldValue<DateTimeOffset>(10),
-                reader.GetFieldValue<DateTimeOffset>(11)));
+                reader.GetFieldValue<DateTimeOffset>(11),
+                GetSafeString(reader, 12)));
         }
 
         return results;

@@ -72,7 +72,15 @@ public static class FiscalDocumentCreationEndpoint
             request.ReferenceContext,
             MapAppliedStatutoryFiscalFacts(request.AppliedStatutoryFiscalFacts),
             request.CompletionBasis ?? FiscalCompletionBasisCodes.PaymentFinality,
-            request.CompletionAuthorityRef);
+            request.CompletionAuthorityRef,
+            request.InvoiceCustomerInformation is null
+                ? null
+                : new InvoiceCustomerInformationInput(
+                    request.InvoiceCustomerInformation.CustomerName,
+                    request.InvoiceCustomerInformation.Address,
+                    request.InvoiceCustomerInformation.Tin,
+                    request.InvoiceCustomerInformation.BusinessStyle,
+                    request.InvoiceCustomerInformation.StatutoryIdNumber));
 
     public static CreateFiscalDocumentResponse MapResult(FiscalDocumentCreationResult result)
     {
@@ -397,6 +405,8 @@ public static class FiscalDocumentCreationEndpoint
             FiscalDocumentCreationErrorCode.FiscalCloseBoundaryRetryableConcurrencyFailure =>
                 "fiscal_close_boundary_retryable_concurrency_failure",
             FiscalDocumentCreationErrorCode.InvalidCompletionAuthority => "invalid_completion_authority",
+            FiscalDocumentCreationErrorCode.InvalidInvoiceCustomerInformation =>
+                "invalid_invoice_customer_information",
             _ => "fiscal_document_creation_failed"
         };
 }

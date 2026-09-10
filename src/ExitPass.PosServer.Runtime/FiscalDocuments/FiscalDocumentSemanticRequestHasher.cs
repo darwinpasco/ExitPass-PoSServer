@@ -12,6 +12,7 @@ public static class FiscalDocumentSemanticRequestHasher
     public const string Version = "sha256:v1";
     public const string StatutoryVersion = "pos-server-fiscal-document-create:sha256:v2";
     public const string CompletionVersion = "pos-server-fiscal-document-create:sha256:v3";
+    public const string InvoiceCustomerInformationVersion = "pos-server-fiscal-document-create:sha256:v4";
     public const string Status = "calculated";
 
     private static readonly JsonSerializerOptions SerializerOptions = new()
@@ -40,7 +41,9 @@ public static class FiscalDocumentSemanticRequestHasher
     public static string GetVersion(FiscalDocumentCreationCommand command)
     {
         ArgumentNullException.ThrowIfNull(command);
-        return command.CompletionBasis == FiscalCompletionBasisCodes.ZeroPayableStatutoryFinality
+        return command.InvoiceCustomerInformation is not null
+            ? InvoiceCustomerInformationVersion
+            : command.CompletionBasis == FiscalCompletionBasisCodes.ZeroPayableStatutoryFinality
             ? CompletionVersion
             : command.AppliedStatutoryFiscalFacts is null ? Version : StatutoryVersion;
     }
@@ -48,7 +51,9 @@ public static class FiscalDocumentSemanticRequestHasher
     public static string GetVersion(FiscalDocumentDraft draft)
     {
         ArgumentNullException.ThrowIfNull(draft);
-        return draft.CompletionBasis == FiscalCompletionBasisCodes.ZeroPayableStatutoryFinality
+        return draft.InvoiceCustomerInformation is not null
+            ? InvoiceCustomerInformationVersion
+            : draft.CompletionBasis == FiscalCompletionBasisCodes.ZeroPayableStatutoryFinality
             ? CompletionVersion
             : draft.AppliedStatutoryFiscalFacts is null ? Version : StatutoryVersion;
     }
@@ -67,6 +72,20 @@ public static class FiscalDocumentSemanticRequestHasher
         {
             payload["completion_authority_ref"] = Normalize(command.CompletionAuthorityRef);
             payload["completion_basis"] = NormalizeCode(command.CompletionBasis);
+        }
+
+        if (command.InvoiceCustomerInformation is not null)
+        {
+            payload["invoice_customer_information"] = new SortedDictionary<string, object?>
+            {
+                ["address"] = Normalize(command.InvoiceCustomerInformation.Address),
+                ["business_style"] = Normalize(command.InvoiceCustomerInformation.BusinessStyle),
+                ["customer_name"] = Normalize(command.InvoiceCustomerInformation.CustomerName),
+                ["statutory_id_number"] = command.AppliedStatutoryFiscalFacts is null
+                    ? null
+                    : Normalize(command.InvoiceCustomerInformation.StatutoryIdNumber),
+                ["tin"] = Normalize(command.InvoiceCustomerInformation.Tin)
+            };
         }
 
         return payload;

@@ -849,6 +849,14 @@ public static class PostgresFiscalDocumentSql
             fiscal_number_assigned_at = draft.FiscalNumberAssignedAt,
             fiscal_number_assigned_by_ref = draft.FiscalNumberAssignedByRef,
             sales_invoice_header_snapshot = draft.SalesInvoiceHeaderSnapshot,
+            invoice_customer_information = draft.InvoiceCustomerInformation is null ? null : new
+            {
+                customer_name = draft.InvoiceCustomerInformation.CustomerName,
+                address = draft.InvoiceCustomerInformation.Address,
+                tin = draft.InvoiceCustomerInformation.Tin,
+                business_style = draft.InvoiceCustomerInformation.BusinessStyle,
+                statutory_id_number = draft.InvoiceCustomerInformation.StatutoryIdNumber
+            },
             fiscal_document_links = draft.DocumentLinks.Select(link => new
             {
                 target_fiscal_document_id = link.TargetFiscalDocumentId,

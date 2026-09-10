@@ -195,7 +195,7 @@ public sealed class FiscalReportPresentationTests
         960,
         2_000,
         0,
-        2_000,
+        1_500,
         1_000,
         0,
         0,

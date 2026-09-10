@@ -75,7 +75,8 @@ public sealed class DigitalSalesInvoiceRenderService
             document.SalesInvoiceHeaderSnapshot,
             document.AppliedStatutoryFiscalFacts,
             document.CompletionBasis,
-            document.CompletionAuthorityRef);
+            document.CompletionAuthorityRef,
+            document.InvoiceCustomerInformation);
     }
 
     private static DigitalSalesInvoiceLineRenderModel MapLine(FiscalDocumentLineReadModel line) =>
@@ -113,7 +114,8 @@ public sealed class DigitalSalesInvoiceRenderService
             taxDetail.TaxRate,
             taxDetail.TaxableAmountMinorUnits,
             taxDetail.TaxAmountMinorUnits,
-            taxDetail.CurrencyCode);
+            taxDetail.CurrencyCode,
+            taxDetail.TaxClassificationCodeKey);
 
     private static DigitalSalesInvoiceTenderRenderModel MapTender(FiscalTenderReadModel tender) =>
         new(

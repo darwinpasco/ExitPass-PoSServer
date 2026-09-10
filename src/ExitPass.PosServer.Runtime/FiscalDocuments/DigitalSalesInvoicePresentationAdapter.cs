@@ -34,9 +34,11 @@ public sealed class DigitalSalesInvoicePresentationAdapter
             Section(templateContract, "documentIdentity", "Document Identity", 40, DocumentIdentityRows(render, templateContract)),
             Section(templateContract, "fiscalNumbering", "Fiscal Numbering", 50, FiscalNumberingRows(render, templateContract)),
             Section(templateContract, "parkingPaymentReferences", "Parking / Payment References", 60, ParkingPaymentRows(render, templateContract)),
+            Section(templateContract, "customerInformation", "Customer Information", 65, CustomerInformationRows(render, templateContract)),
             Section(templateContract, "lineItems", "Line Items", 70, LineRows(render, templateContract)),
             Section(templateContract, "discounts", "Discounts", 80, DiscountRows(render, templateContract)),
             Section(templateContract, "taxes", "Taxes", 90, TaxRows(render, templateContract)),
+            Section(templateContract, "vatBreakdown", "VAT Breakdown", 95, VatBreakdownRows(render, templateContract)),
             Section(templateContract, "tenders", "Tenders", 100, TenderRows(render, templateContract)),
             Section(templateContract, "totals", "Totals", 110, TotalRows(render, templateContract)),
             Section(templateContract, "auditHashStatus", "Audit / Hash / Status", 120, AuditRows(render, templateContract)),
@@ -47,7 +49,7 @@ public sealed class DigitalSalesInvoicePresentationAdapter
         if (render.AppliedStatutoryFiscalFacts is not null)
         {
             sections.Insert(
-                8,
+                9,
                 Section(
                     templateContract,
                     "appliedStatutoryFiscalFacts",
@@ -173,6 +175,51 @@ public sealed class DigitalSalesInvoicePresentationAdapter
             Row("parkingPaymentReferences.paymentFinalityRef", "Payment Finality Ref", "identifier", FieldPosture(contract, "parkingPaymentReferences.paymentFinalityRef"), render.PaymentFinalityRef),
             Row("parkingPaymentReferences.vendorAckRef", "Vendor Acknowledgement Ref", "identifier", FieldPosture(contract, "parkingPaymentReferences.vendorAckRef"), render.VendorAckRef)
         ];
+
+    private static IReadOnlyList<DigitalSalesInvoicePresentationRowModel> CustomerInformationRows(
+        DigitalSalesInvoiceRenderModel render,
+        DigitalSalesInvoiceTemplateContractModel contract)
+    {
+        var customer = render.InvoiceCustomerInformation;
+        return
+        [
+            Row("customerInformation.customerName", "Customer Name", "text", FieldPosture(contract, "customerInformation.customerName"), customer?.CustomerName),
+            Row("customerInformation.address", "Address", "text", FieldPosture(contract, "customerInformation.address"), customer?.Address),
+            Row("customerInformation.tin", "TIN", "identifier", FieldPosture(contract, "customerInformation.tin"), customer?.Tin),
+            Row("customerInformation.businessStyle", "Business Style", "text", FieldPosture(contract, "customerInformation.businessStyle"), customer?.BusinessStyle),
+            Row("customerInformation.statutoryIdNumber", "OSCA ID No. / PWD ID No.", "identifier", FieldPosture(contract, "customerInformation.statutoryIdNumber"), render.AppliedStatutoryFiscalFacts is null ? null : customer?.StatutoryIdNumber)
+        ];
+    }
+
+    private static IReadOnlyList<DigitalSalesInvoicePresentationRowModel> VatBreakdownRows(
+        DigitalSalesInvoiceRenderModel render,
+        DigitalSalesInvoiceTemplateContractModel contract)
+    {
+        var currency = render.TaxDetails.Select(tax => tax.CurrencyCode)
+            .Concat(render.Totals.Select(total => total.CurrencyCode))
+            .FirstOrDefault() ?? "PHP";
+        var vatableSales = SumTaxableAmount(render.TaxDetails, "vatable");
+        var vatExemptSales = SumTaxableAmount(render.TaxDetails, "vat_exempt");
+        var zeroRatedSales = SumTaxableAmount(render.TaxDetails, "zero_rated");
+        var vatAmount = render.TaxDetails
+            .Where(tax => tax.TaxClassificationCodeKey is "vatable" or "vat_exempt" or "zero_rated")
+            .Sum(tax => tax.TaxAmountMinorUnits);
+
+        return
+        [
+            AmountRow("totals.vatableSales", "VATable Sales", FieldPosture(contract, "totals.vatableSales"), vatableSales, currency),
+            AmountRow("totals.vatAmount", "VAT Amount", FieldPosture(contract, "totals.vatAmount"), vatAmount, currency),
+            AmountRow("totals.vatExemptSales", "VAT Exempt Sales", FieldPosture(contract, "totals.vatExemptSales"), vatExemptSales, currency),
+            AmountRow("totals.zeroRatedSales", "Zero Rated Sales", FieldPosture(contract, "totals.zeroRatedSales"), zeroRatedSales, currency)
+        ];
+    }
+
+    private static long SumTaxableAmount(
+        IEnumerable<DigitalSalesInvoiceTaxDetailRenderModel> taxDetails,
+        string classification) =>
+        taxDetails
+            .Where(tax => string.Equals(tax.TaxClassificationCodeKey, classification, StringComparison.Ordinal))
+            .Sum(tax => tax.TaxableAmountMinorUnits);
 
     private static IReadOnlyList<DigitalSalesInvoicePresentationRowModel> LineRows(
         DigitalSalesInvoiceRenderModel render,
@@ -400,8 +447,10 @@ public sealed class DigitalSalesInvoicePresentationAdapter
             "documentIdentity" => "document_identity",
             "fiscalNumbering" => "fiscal_numbering",
             "parkingPaymentReferences" => "parking_payment_references",
+            "customerInformation" => "customer_information",
             "lineItems" => "line_items",
             "appliedStatutoryFiscalFacts" => "applied_statutory_fiscal_facts",
+            "vatBreakdown" => "vat_breakdown",
             "auditHashStatus" => "audit_hash_status",
             "footerDisclaimers" => "footer_disclaimers",
             "deferredPlaceholders" => "deferred_placeholders",
