@@ -59,6 +59,23 @@ public static class PostgresFiscalCloseBoundaryCoordinator
         Guid fiscalIdentityId,
         string currencyCode,
         CancellationToken cancellationToken)
+        => await ResolveAndLockOpenPeriodAsync(
+            connection,
+            transaction,
+            sitePosServerId,
+            fiscalIdentityId,
+            currencyCode,
+            businessDayDate: null,
+            cancellationToken).ConfigureAwait(false);
+
+    public static async Task<FiscalReportingPeriodAssignment> ResolveAndLockOpenPeriodAsync(
+        NpgsqlConnection connection,
+        NpgsqlTransaction transaction,
+        Guid sitePosServerId,
+        Guid fiscalIdentityId,
+        string currencyCode,
+        DateOnly? businessDayDate,
+        CancellationToken cancellationToken)
     {
         const string sql = """
             SELECT period.fiscal_reporting_period_id,
@@ -68,14 +85,21 @@ public static class PostgresFiscalCloseBoundaryCoordinator
                    period.period_end_at,
                    period.period_sequence,
                    period.expected_prior_period_id,
-                   transaction_timestamp()
+                   transaction_timestamp(),
+                   period.period_status_code_id
             FROM pos.fiscal_reporting_periods period
             WHERE period.site_pos_server_id = @site
               AND period.fiscal_identity_id = @identity
               AND period.currency_code = @currency
-              AND period.period_status_code_id = '1a6f7021-bc84-5c01-afaa-c5d6685633c8'
-              AND transaction_timestamp() >= period.period_start_at
-              AND transaction_timestamp() < period.period_end_at
+              AND (
+                    (@business_day_date IS NULL
+                     AND period.period_status_code_id = '1a6f7021-bc84-5c01-afaa-c5d6685633c8'
+                     AND transaction_timestamp() >= period.period_start_at
+                     AND transaction_timestamp() < period.period_end_at)
+                    OR
+                    (@business_day_date IS NOT NULL
+                     AND period.business_day_date = @business_day_date)
+                  )
             ORDER BY period.period_sequence
             LIMIT 2
             FOR UPDATE;
@@ -84,27 +108,48 @@ public static class PostgresFiscalCloseBoundaryCoordinator
         command.Parameters.AddWithValue("site", sitePosServerId);
         command.Parameters.AddWithValue("identity", fiscalIdentityId);
         command.Parameters.AddWithValue("currency", currencyCode);
+        command.Parameters.Add(new NpgsqlParameter("business_day_date", NpgsqlTypes.NpgsqlDbType.Date)
+        {
+            Value = businessDayDate is null ? DBNull.Value : businessDayDate.Value
+        });
         await using var reader = await command.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
-        var periods = new List<FiscalReportingPeriodAssignment>(2);
+        var periods = new List<(FiscalReportingPeriodAssignment Assignment, Guid Status)>(2);
         while (await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
         {
-            periods.Add(new FiscalReportingPeriodAssignment(
+            periods.Add((new FiscalReportingPeriodAssignment(
                 reader.GetGuid(0), reader.GetGuid(1), sitePosServerId, fiscalIdentityId, currencyCode,
                 DateOnly.FromDateTime(reader.GetDateTime(2)), reader.GetFieldValue<DateTimeOffset>(3),
                 reader.GetFieldValue<DateTimeOffset>(4), reader.GetInt64(5),
-                reader.IsDBNull(6) ? null : reader.GetGuid(6), reader.GetFieldValue<DateTimeOffset>(7)));
+                reader.IsDBNull(6) ? null : reader.GetGuid(6), reader.GetFieldValue<DateTimeOffset>(7)),
+                reader.GetGuid(8)));
         }
 
-        return periods.Count switch
+        if (periods.Count == 0)
         {
-            1 => periods[0],
-            0 => throw new FiscalCloseBoundaryException(
+            throw new FiscalCloseBoundaryException(
                 FiscalCloseBoundaryErrorCode.ReportingPeriodUnavailable,
-                "A governed OPEN fiscal reporting period is unavailable for this scope."),
-            _ => throw new FiscalCloseBoundaryException(
+                businessDayDate is null
+                    ? "A governed OPEN fiscal reporting period is unavailable for this scope."
+                    : "A governed fiscal reporting period is unavailable for the immutable business date.");
+        }
+
+        if (periods.Count > 1)
+        {
+            throw new FiscalCloseBoundaryException(
                 FiscalCloseBoundaryErrorCode.ReportingPeriodAmbiguous,
-                "Multiple governed OPEN fiscal reporting periods match this scope.")
-        };
+                businessDayDate is null
+                    ? "Multiple governed OPEN fiscal reporting periods match this scope."
+                    : "Multiple governed fiscal reporting periods match the immutable business date.");
+        }
+
+        if (periods[0].Status != Guid.Parse("1a6f7021-bc84-5c01-afaa-c5d6685633c8"))
+        {
+            throw new FiscalCloseBoundaryException(
+                FiscalCloseBoundaryErrorCode.ReportingPeriodClosed,
+                "The canonical fiscal reporting period for the immutable business date is not OPEN.");
+        }
+
+        return periods[0].Assignment;
     }
 
     public static async Task LockAndValidateAssignedPeriodAsync(

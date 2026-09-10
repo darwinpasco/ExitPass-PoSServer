@@ -44,10 +44,9 @@ public sealed class PostgresFiscalXReadingRepository(
                         : new(FiscalXReadingOutcome.Replayed, replay);
                 }
 
-                var effectiveEnd = command.ObservedAt < period.PeriodEndAt ? command.ObservedAt : period.PeriodEndAt;
-                var sourceDocuments = effectiveEnd <= period.PeriodStartAt
+                var sourceDocuments = command.ObservedAt <= period.PeriodStartAt
                     ? []
-                    : await ReadSourceDocumentsAsync(connection, transaction, period, effectiveEnd, cancellationToken).ConfigureAwait(false);
+                    : await ReadSourceDocumentsAsync(connection, transaction, period, command.ObservedAt, cancellationToken).ConfigureAwait(false);
                 var sourceGaps = await ReadSourceGapsAsync(connection, transaction, sourceDocuments, cancellationToken).ConfigureAwait(false);
                 var aggregate = aggregationService.Aggregate(sourceDocuments, sourceGaps, period.CurrencyCode);
 
@@ -216,7 +215,7 @@ public sealed class PostgresFiscalXReadingRepository(
         return (reader.GetString(0), reader.IsDBNull(1) ? string.Empty : reader.GetString(1));
     }
 
-    private static async Task<IReadOnlyList<FiscalXReadingSourceDocument>> ReadSourceDocumentsAsync(NpgsqlConnection connection, NpgsqlTransaction transaction, FiscalXReadingPeriod period, DateTimeOffset effectiveEnd, CancellationToken cancellationToken)
+    private static async Task<IReadOnlyList<FiscalXReadingSourceDocument>> ReadSourceDocumentsAsync(NpgsqlConnection connection, NpgsqlTransaction transaction, FiscalXReadingPeriod period, DateTimeOffset observedAt, CancellationToken cancellationToken)
     {
         const string documentSql = """
             SELECT d.fiscal_document_id, type_code.code_key, status_code.code_key, d.created_at,
@@ -225,14 +224,15 @@ public sealed class PostgresFiscalXReadingRepository(
             FROM pos.fiscal_documents d
             JOIN pos.controlled_codes type_code ON type_code.controlled_code_id = d.fiscal_document_type_code_id
             JOIN pos.controlled_codes status_code ON status_code.controlled_code_id = d.fiscal_document_status_code_id
-            WHERE d.site_pos_server_id = @site_pos_server_id AND d.fiscal_identity_id = @fiscal_identity_id
-              AND d.created_at >= @period_start_at AND d.created_at < @effective_end
+            WHERE d.fiscal_reporting_period_id = @fiscal_reporting_period_id
+              AND d.site_pos_server_id = @site_pos_server_id AND d.fiscal_identity_id = @fiscal_identity_id
+              AND d.currency_code = @currency_code AND d.created_at < @observed_at
             ORDER BY d.created_at, d.fiscal_document_id;
             """;
         var documents = new Dictionary<Guid, SourceBuilder>();
         await using (var command = CreateCommand(connection, transaction, documentSql))
         {
-            AddPeriodParameters(command, period, effectiveEnd);
+            AddPeriodParameters(command, period, observedAt);
             await using var reader = await command.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
             while (await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
             {
@@ -358,7 +358,7 @@ public sealed class PostgresFiscalXReadingRepository(
 
     private static Guid? FindSourceGap(FiscalXReadingAggregate aggregate, FiscalXReadingFiscalNumberRange range, FiscalXReadingSequenceGap gap) => null;
 
-    private static void AddPeriodParameters(NpgsqlCommand c, FiscalXReadingPeriod p, DateTimeOffset end) { c.Parameters.AddWithValue("site_pos_server_id", p.SitePosServerId); c.Parameters.AddWithValue("fiscal_identity_id", p.FiscalIdentityId); c.Parameters.AddWithValue("period_start_at", p.PeriodStartAt); c.Parameters.AddWithValue("effective_end", end); }
+    private static void AddPeriodParameters(NpgsqlCommand c, FiscalXReadingPeriod p, DateTimeOffset observedAt) { c.Parameters.AddWithValue("fiscal_reporting_period_id", p.FiscalReportingPeriodId); c.Parameters.AddWithValue("site_pos_server_id", p.SitePosServerId); c.Parameters.AddWithValue("fiscal_identity_id", p.FiscalIdentityId); c.Parameters.AddWithValue("currency_code", p.CurrencyCode); c.Parameters.AddWithValue("observed_at", observedAt); }
     private static void AddAmountParameters(NpgsqlParameterCollection p, FiscalXReadingAmounts a) { p.AddWithValue("gross", a.GrossSalesAmountMinorUnits); p.AddWithValue("net", a.NetSalesAmountMinorUnits); p.AddWithValue("vatable", a.VatableSalesAmountMinorUnits); p.AddWithValue("vat", a.VatAmountMinorUnits); p.AddWithValue("vat_exempt", a.VatExemptSalesAmountMinorUnits); p.AddWithValue("zero_rated", a.ZeroRatedSalesAmountMinorUnits); p.AddWithValue("discount", a.DiscountAmountMinorUnits); p.AddWithValue("senior", a.SeniorCitizenDiscountAmountMinorUnits); p.AddWithValue("pwd", a.PwdDiscountAmountMinorUnits); p.AddWithValue("other_stat", a.OtherStatutoryDiscountAmountMinorUnits); p.AddWithValue("vat_exemption", a.VatExemptionAmountMinorUnits); p.AddWithValue("coupon", a.CouponDiscountAmountMinorUnits); p.AddWithValue("promo", a.PromotionalDiscountAmountMinorUnits); p.AddWithValue("void", a.VoidAmountMinorUnits); }
     private static void AddNullable(NpgsqlParameterCollection parameters, string name, object? value, NpgsqlDbType type) { var parameter = new NpgsqlParameter(name, type) { Value = value ?? DBNull.Value }; parameters.Add(parameter); }
     private static NpgsqlCommand CreateCommand(NpgsqlConnection c, NpgsqlTransaction? t, string sql) { var x = c.CreateCommand(); x.CommandText = sql; x.Transaction = t; return x; }

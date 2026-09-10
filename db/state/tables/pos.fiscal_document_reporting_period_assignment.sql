@@ -28,11 +28,16 @@ WITH candidates AS (
            count(*) OVER (PARTITION BY document.fiscal_document_id) AS candidate_count
     FROM pos.fiscal_documents document
     JOIN pos.fiscal_reporting_periods period
-      ON period.site_pos_server_id = document.site_pos_server_id
+     ON period.site_pos_server_id = document.site_pos_server_id
      AND period.fiscal_identity_id = document.fiscal_identity_id
      AND period.currency_code = document.currency_code
-     AND document.created_at >= period.period_start_at
-     AND document.created_at < period.period_end_at
+     AND (
+         (document.business_day_date IS NOT NULL AND document.business_day_date = period.business_day_date)
+         OR
+         (document.business_day_date IS NULL
+          AND document.created_at >= period.period_start_at
+          AND document.created_at < period.period_end_at)
+     )
     WHERE document.fiscal_reporting_period_id IS NULL
       AND document.fiscal_identity_id IS NOT NULL
       AND document.currency_code IS NOT NULL
@@ -89,6 +94,7 @@ BEGIN
            OR NEW.site_pos_server_id IS DISTINCT FROM OLD.site_pos_server_id
            OR NEW.fiscal_identity_id IS DISTINCT FROM OLD.fiscal_identity_id
            OR NEW.currency_code IS DISTINCT FROM OLD.currency_code
+           OR NEW.business_day_date IS DISTINCT FROM OLD.business_day_date
            OR NEW.created_at IS DISTINCT FROM OLD.created_at THEN
             RAISE EXCEPTION 'fiscal document reporting-period assignment is immutable'
                 USING ERRCODE = 'check_violation';
@@ -112,8 +118,7 @@ BEGIN
        OR period_row.site_pos_server_id <> NEW.site_pos_server_id
        OR period_row.fiscal_identity_id <> NEW.fiscal_identity_id
        OR period_row.currency_code <> NEW.currency_code
-       OR NEW.created_at < period_row.period_start_at
-       OR NEW.created_at >= period_row.period_end_at THEN
+       OR NEW.business_day_date IS DISTINCT FROM period_row.business_day_date THEN
         RAISE EXCEPTION 'fiscal document reporting-period assignment is invalid'
             USING ERRCODE = 'check_violation';
     END IF;
@@ -125,4 +130,4 @@ CREATE OR REPLACE TRIGGER trg_fiscal_documents_reporting_period_assignment
 BEFORE INSERT OR UPDATE ON pos.fiscal_documents
 FOR EACH ROW EXECUTE FUNCTION pos.validate_fiscal_document_reporting_period_assignment();
 
-COMMENT ON FUNCTION pos.validate_fiscal_document_reporting_period_assignment() IS 'Requires new fiscal documents to be assigned to one matching OPEN half-open reporting period and prevents assignment mutation.';
+COMMENT ON FUNCTION pos.validate_fiscal_document_reporting_period_assignment() IS 'Requires new fiscal documents to be assigned to the matching OPEN immutable business-date reporting period, permits a later actual issuance timestamp, and prevents assignment or business-date mutation.';

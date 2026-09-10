@@ -35,6 +35,7 @@ public sealed class FiscalDocumentApiPostgresSmokeTests
     private static readonly Guid FiscalSequencePolicyId = Guid.Parse("10000000-0000-0000-0000-000000000803");
     private static readonly Guid FiscalSequenceStateId = Guid.Parse("10000000-0000-0000-0000-000000000804");
     private static readonly Guid FiscalReportingPeriodId = Guid.Parse("10000000-0000-0000-0000-000000000805");
+    private static readonly Guid HistoricalFiscalReportingPeriodId = Guid.Parse("10000000-0000-0000-0000-000000000806");
 
     private readonly ITestOutputHelper output;
 
@@ -394,6 +395,161 @@ public sealed class FiscalDocumentApiPostgresSmokeTests
     }
 
     [Fact]
+    public async Task DelayedIssuanceResolvesUniqueOpenHistoricalPeriodByImmutableBusinessDate()
+    {
+        if (!TryGetSmokeConnectionString(out var connectionString)) return;
+
+        await RebuildDisposableDatabaseAsync(connectionString);
+        await InsertDisposableSmokeFixtureAsync(connectionString);
+        await ConfigureHistoricalAndCurrentPeriodsAsync(connectionString);
+        await using var app = await StartApiAsync(connectionString);
+        using var client = CreateClient(app);
+        var businessDate = DateOnly.FromDateTime(DateTime.UtcNow.AddDays(-2));
+        var request = CreateValidRequest("delayed-business-date") with { BusinessDayDate = businessDate };
+
+        using var response = await client.PostAsJsonAsync("/v1/fiscal-documents/", request);
+        var body = await response.Content.ReadFromJsonAsync<CreateFiscalDocumentResponse>();
+
+        Assert.Equal(HttpStatusCode.Accepted, response.StatusCode);
+        Assert.True(body?.Succeeded);
+        Assert.Equal("newly_created", body?.ResultClassification);
+        Assert.NotNull(body?.FiscalDocumentId);
+
+        await using var connection = new NpgsqlConnection(connectionString);
+        await connection.OpenAsync();
+        await using (var proof = new NpgsqlCommand(
+            """
+            select d.fiscal_reporting_period_id,d.business_day_date,d.created_at,p.period_end_at,
+                   (select count(*) from pos.fiscal_documents x where x.central_pms_payment_attempt_ref=@attempt),
+                   (select count(*) from pos.idempotency_records i where i.linked_fiscal_document_id=d.fiscal_document_id),
+                   (select count(*) from pos.electronic_journal_records e where e.fiscal_document_id=d.fiscal_document_id and e.is_canonical),
+                   (select min(e.business_day_date) from pos.electronic_journal_records e where e.fiscal_document_id=d.fiscal_document_id and e.is_canonical),
+                   (select min(e.recorded_at) from pos.electronic_journal_records e where e.fiscal_document_id=d.fiscal_document_id and e.is_canonical),
+                   d.fiscal_document_number,
+                   (select count(*) from pos.fiscal_documents x where x.fiscal_reporting_period_id=@current_period),
+                   (select count(*) from pos.fiscal_document_lines x where x.fiscal_document_id=d.fiscal_document_id),
+                   (select count(*) from pos.fiscal_tenders x where x.fiscal_document_id=d.fiscal_document_id),
+                   (select count(*) from pos.fiscal_totals x where x.fiscal_document_id=d.fiscal_document_id)
+            from pos.fiscal_documents d
+            join pos.fiscal_reporting_periods p on p.fiscal_reporting_period_id=d.fiscal_reporting_period_id
+            where d.fiscal_document_id=@document;
+            """, connection))
+        {
+            proof.Parameters.AddWithValue("document", body!.FiscalDocumentId!.Value);
+            proof.Parameters.AddWithValue("attempt", "payment-attempt-delayed-business-date");
+            proof.Parameters.AddWithValue("current_period", FiscalReportingPeriodId);
+            await using var reader = await proof.ExecuteReaderAsync();
+            Assert.True(await reader.ReadAsync());
+            Assert.Equal(HistoricalFiscalReportingPeriodId, reader.GetGuid(0));
+            Assert.Equal(businessDate, reader.GetFieldValue<DateOnly>(1));
+            Assert.True(reader.GetFieldValue<DateTimeOffset>(2) >= reader.GetFieldValue<DateTimeOffset>(3));
+            Assert.Equal(1, reader.GetInt64(4));
+            Assert.Equal(1, reader.GetInt64(5));
+            Assert.Equal(1, reader.GetInt64(6));
+            Assert.Equal(businessDate, reader.GetFieldValue<DateOnly>(7));
+            Assert.True(reader.GetFieldValue<DateTimeOffset>(8) >= reader.GetFieldValue<DateTimeOffset>(3));
+            Assert.StartsWith("SI-", reader.GetString(9), StringComparison.Ordinal);
+            Assert.Equal(0, reader.GetInt64(10));
+            Assert.Equal(1, reader.GetInt64(11));
+            Assert.Equal(1, reader.GetInt64(12));
+            Assert.Equal(1, reader.GetInt64(13));
+        }
+
+        using var replay = await client.PostAsJsonAsync("/v1/fiscal-documents/", request);
+        var replayBody = await replay.Content.ReadFromJsonAsync<CreateFiscalDocumentResponse>();
+        Assert.Equal(HttpStatusCode.Accepted, replay.StatusCode);
+        Assert.Equal("idempotent_replay", replayBody?.ResultClassification);
+        Assert.Equal(body!.FiscalDocumentId, replayBody?.FiscalDocumentId);
+
+        using var changedBusinessDate = await client.PostAsJsonAsync(
+            "/v1/fiscal-documents/",
+            request with { BusinessDayDate = businessDate.AddDays(1) });
+        var conflict = await changedBusinessDate.Content.ReadFromJsonAsync<CreateFiscalDocumentResponse>();
+        Assert.Equal(HttpStatusCode.Conflict, changedBusinessDate.StatusCode);
+        Assert.Equal("fiscal_document_idempotency_conflict", conflict?.Code);
+
+        var mutation = new NpgsqlCommand(
+            "update pos.fiscal_documents set business_day_date=business_day_date+1 where fiscal_document_id=@document",
+            connection);
+        mutation.Parameters.AddWithValue("document", body.FiscalDocumentId.Value);
+        var mutationFailure = await Assert.ThrowsAsync<PostgresException>(() => mutation.ExecuteNonQueryAsync());
+        Assert.Equal(PostgresErrorCodes.CheckViolation, mutationFailure.SqlState);
+    }
+
+    [Fact]
+    public async Task BusinessDatePeriodResolutionFailsClosedWhenMissingAmbiguousOrClosed()
+    {
+        if (!TryGetSmokeConnectionString(out var connectionString)) return;
+
+        await RebuildDisposableDatabaseAsync(connectionString);
+        await InsertDisposableSmokeFixtureAsync(connectionString);
+        await using var app = await StartApiAsync(connectionString);
+        using var client = CreateClient(app);
+
+        using var missing = await client.PostAsJsonAsync(
+            "/v1/fiscal-documents/",
+            CreateValidRequest("missing-period") with { BusinessDayDate = DateOnly.FromDateTime(DateTime.UtcNow.AddDays(-5)) });
+        var missingBody = await missing.Content.ReadFromJsonAsync<CreateFiscalDocumentResponse>();
+        Assert.Equal(HttpStatusCode.Conflict, missing.StatusCode);
+        Assert.Equal("fiscal_reporting_period_unavailable", missingBody?.Code);
+
+        await using (var connection = new NpgsqlConnection(connectionString))
+        {
+            await connection.OpenAsync();
+            await ExecuteSqlAsync(connection,
+                """
+                update pos.fiscal_reporting_periods set period_sequence=2 where fiscal_reporting_period_id=@current;
+                insert into pos.fiscal_reporting_periods(
+                    fiscal_reporting_period_id,fiscal_reporting_contract_version_id,site_pos_server_id,fiscal_identity_id,
+                    period_status_code_id,business_day_date,period_start_at,period_end_at,reporting_timezone_name,
+                    business_day_cutoff_local_time,currency_code,period_sequence,opened_at,created_by_ref,updated_by_ref)
+                values(@historical,'f6766f48-62f0-513f-b9eb-e61c2f3e8c66',@site,@identity,
+                    '1a6f7021-bc84-5c01-afaa-c5d6685633c8',current_date,
+                    transaction_timestamp()-interval '3 days',transaction_timestamp()-interval '2 days',
+                    'Etc/UTC','00:00:00','PHP',1,transaction_timestamp()-interval '3 days','LATE-ISSUANCE-TEST','LATE-ISSUANCE-TEST');
+                """,
+                command =>
+                {
+                    command.Parameters.AddWithValue("current", FiscalReportingPeriodId);
+                    command.Parameters.AddWithValue("historical", HistoricalFiscalReportingPeriodId);
+                    command.Parameters.AddWithValue("site", SitePosServerId);
+                    command.Parameters.AddWithValue("identity", FiscalIdentityId);
+                });
+        }
+
+        using var ambiguous = await client.PostAsJsonAsync("/v1/fiscal-documents/", CreateValidRequest("ambiguous-period"));
+        var ambiguousBody = await ambiguous.Content.ReadFromJsonAsync<CreateFiscalDocumentResponse>();
+        Assert.Equal(HttpStatusCode.Conflict, ambiguous.StatusCode);
+        Assert.Equal("fiscal_reporting_period_ambiguous", ambiguousBody?.Code);
+
+        await using (var connection = new NpgsqlConnection(connectionString))
+        {
+            await connection.OpenAsync();
+            await ExecuteSqlAsync(connection,
+                "delete from pos.fiscal_reporting_periods where fiscal_reporting_period_id=@historical; update pos.fiscal_reporting_periods set period_status_code_id='af7ee931-a023-507e-81a4-17adf047eb94',closing_started_at=clock_timestamp(),closed_at=clock_timestamp() where fiscal_reporting_period_id=@current",
+                command =>
+                {
+                    command.Parameters.AddWithValue("historical", HistoricalFiscalReportingPeriodId);
+                    command.Parameters.AddWithValue("current", FiscalReportingPeriodId);
+                });
+        }
+
+        using var closed = await client.PostAsJsonAsync("/v1/fiscal-documents/", CreateValidRequest("closed-period"));
+        var closedBody = await closed.Content.ReadFromJsonAsync<CreateFiscalDocumentResponse>();
+        Assert.Equal(HttpStatusCode.Conflict, closed.StatusCode);
+        Assert.Equal("fiscal_reporting_period_closed", closedBody?.Code);
+
+        await using var verify = new NpgsqlConnection(connectionString);
+        await verify.OpenAsync();
+        Assert.Equal(0, await CountAsync(verify, "pos.fiscal_documents"));
+        Assert.Equal(0, await CountAsync(verify, "pos.idempotency_records"));
+        Assert.Equal(0, await CountAsync(verify, "pos.electronic_journal_records"));
+        Assert.Equal(0, await ScalarLongAsync(verify,
+            "select current_sequence_value from pos.fiscal_sequence_states where fiscal_sequence_policy_id=@id",
+            FiscalSequencePolicyId));
+    }
+
+    [Fact]
     public async Task ClosedReportingPeriodRejectsIssuanceAndVoidWithoutAllocatingAnotherFiscalNumber()
     {
         if (!TryGetSmokeConnectionString(out var connectionString)) return;
@@ -419,7 +575,7 @@ public sealed class FiscalDocumentApiPostgresSmokeTests
         using var rejectedCreateResponse = await client.PostAsJsonAsync("/v1/fiscal-documents/", CreateValidRequest("boundary-closed"));
         var rejectedCreate = await rejectedCreateResponse.Content.ReadFromJsonAsync<CreateFiscalDocumentResponse>();
         Assert.Equal(HttpStatusCode.Conflict, rejectedCreateResponse.StatusCode);
-        Assert.Equal("fiscal_reporting_period_unavailable", rejectedCreate?.Code);
+        Assert.Equal("fiscal_reporting_period_closed", rejectedCreate?.Code);
 
         using var rejectedVoidResponse = await client.PostAsJsonAsync(
             $"/v1/fiscal-documents/{created!.FiscalDocumentId}/void",
@@ -472,7 +628,7 @@ public sealed class FiscalDocumentApiPostgresSmokeTests
         using var rejected = await pendingIssuance;
         var body = await rejected.Content.ReadFromJsonAsync<CreateFiscalDocumentResponse>();
         Assert.Equal(HttpStatusCode.Conflict, rejected.StatusCode);
-        Assert.Equal("fiscal_reporting_period_unavailable", body?.Code);
+        Assert.Equal("fiscal_reporting_period_closed", body?.Code);
 
         await using var verify = new NpgsqlConnection(connectionString);
         await verify.OpenAsync();
@@ -1212,6 +1368,32 @@ public sealed class FiscalDocumentApiPostgresSmokeTests
                 command.Parameters.AddWithValue("fiscal_sequence_state_id", FiscalSequenceStateId);
                 command.Parameters.AddWithValue("fiscal_sequence_policy_id", FiscalSequencePolicyId);
                 command.Parameters.AddWithValue("sequence_state_code_id", FiscalSequencePolicyStatusCodeId);
+            });
+    }
+
+    private static async Task ConfigureHistoricalAndCurrentPeriodsAsync(string connectionString)
+    {
+        await using var connection = new NpgsqlConnection(connectionString);
+        await connection.OpenAsync();
+        await ExecuteSqlAsync(connection,
+            """
+            update pos.fiscal_reporting_periods set period_sequence=2 where fiscal_reporting_period_id=@current;
+            insert into pos.fiscal_reporting_periods(
+                fiscal_reporting_period_id,fiscal_reporting_contract_version_id,site_pos_server_id,fiscal_identity_id,
+                period_status_code_id,business_day_date,period_start_at,period_end_at,reporting_timezone_name,
+                business_day_cutoff_local_time,currency_code,period_sequence,opened_at,created_by_ref,updated_by_ref)
+            values(@historical,'f6766f48-62f0-513f-b9eb-e61c2f3e8c66',@site,@identity,
+                '1a6f7021-bc84-5c01-afaa-c5d6685633c8',current_date-2,
+                transaction_timestamp()-interval '3 days',transaction_timestamp()-interval '2 days',
+                'Etc/UTC','00:00:00','PHP',1,transaction_timestamp()-interval '3 days','LATE-ISSUANCE-TEST','LATE-ISSUANCE-TEST');
+            update pos.fiscal_reporting_periods set expected_prior_period_id=@historical where fiscal_reporting_period_id=@current;
+            """,
+            command =>
+            {
+                command.Parameters.AddWithValue("current", FiscalReportingPeriodId);
+                command.Parameters.AddWithValue("historical", HistoricalFiscalReportingPeriodId);
+                command.Parameters.AddWithValue("site", SitePosServerId);
+                command.Parameters.AddWithValue("identity", FiscalIdentityId);
             });
     }
 
