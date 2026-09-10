@@ -113,6 +113,7 @@ public sealed class PostgresFiscalDocumentRepository : IFiscalDocumentRepository
                     resolvedDraft.SitePosServerId,
                     resolvedContext.FiscalIdentityId,
                     resolvedDraft.CurrencyCode,
+                    resolvedDraft.BusinessDayDate,
                     cancellationToken).ConfigureAwait(false);
                 if (resolvedDraft.BusinessDayDate is not null &&
                     resolvedDraft.BusinessDayDate.Value != reportingPeriod.BusinessDayDate)
@@ -124,7 +125,7 @@ public sealed class PostgresFiscalDocumentRepository : IFiscalDocumentRepository
                 resolvedDraft = resolvedDraft with
                 {
                     FiscalReportingPeriodId = reportingPeriod.FiscalReportingPeriodId,
-                    BusinessDayDate = reportingPeriod.BusinessDayDate
+                    BusinessDayDate = resolvedDraft.BusinessDayDate ?? reportingPeriod.BusinessDayDate
                 };
                 var assignment = await AllocateFiscalNumberAsync(
                     connection,

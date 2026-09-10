@@ -321,8 +321,13 @@ public sealed class PostgresFiscalZReadingRepository(
             SELECT count(*)
             FROM pos.fiscal_documents d
             WHERE d.site_pos_server_id=@site AND d.fiscal_identity_id=@identity
-              AND d.created_at>=@start AND d.created_at<@end
-              AND (d.currency_code IS NULL OR d.currency_code<>@currency OR d.fiscal_reporting_period_id IS DISTINCT FROM @period);
+              AND (
+                    (d.business_day_date=@business
+                     AND (d.currency_code IS NULL OR d.currency_code<>@currency OR d.fiscal_reporting_period_id IS DISTINCT FROM @period))
+                    OR
+                    (d.fiscal_reporting_period_id=@period
+                     AND (d.business_day_date IS DISTINCT FROM @business OR d.currency_code IS DISTINCT FROM @currency))
+                  );
             """;
         await using var command = CreateCommand(connection, transaction, sql);
         AddPeriodParameters(command, period);
@@ -629,7 +634,7 @@ public sealed class PostgresFiscalZReadingRepository(
     };
 
     private static FiscalZReadingResult Failure(FiscalZReadingOutcome outcome, string message) => new(outcome, SafeMessage: message);
-    private static void AddPeriodParameters(NpgsqlCommand c,FiscalZReadingPeriod p) { c.Parameters.AddWithValue("period",p.FiscalReportingPeriodId);c.Parameters.AddWithValue("site",p.SitePosServerId);c.Parameters.AddWithValue("identity",p.FiscalIdentityId);c.Parameters.AddWithValue("currency",p.CurrencyCode);c.Parameters.AddWithValue("start",p.PeriodStartAt);c.Parameters.AddWithValue("end",p.PeriodEndAt); }
+    private static void AddPeriodParameters(NpgsqlCommand c,FiscalZReadingPeriod p) { c.Parameters.AddWithValue("period",p.FiscalReportingPeriodId);c.Parameters.AddWithValue("site",p.SitePosServerId);c.Parameters.AddWithValue("identity",p.FiscalIdentityId);c.Parameters.AddWithValue("currency",p.CurrencyCode);c.Parameters.AddWithValue("business",p.BusinessDayDate);c.Parameters.AddWithValue("start",p.PeriodStartAt);c.Parameters.AddWithValue("end",p.PeriodEndAt); }
     private static void AddAmountParameters(NpgsqlParameterCollection p,FiscalXReadingAmounts a) { p.AddWithValue("gross",a.GrossSalesAmountMinorUnits);p.AddWithValue("net",a.NetSalesAmountMinorUnits);p.AddWithValue("vatable",a.VatableSalesAmountMinorUnits);p.AddWithValue("vat",a.VatAmountMinorUnits);p.AddWithValue("vat_exempt",a.VatExemptSalesAmountMinorUnits);p.AddWithValue("zero_rated",a.ZeroRatedSalesAmountMinorUnits);p.AddWithValue("discount",a.DiscountAmountMinorUnits);p.AddWithValue("senior",a.SeniorCitizenDiscountAmountMinorUnits);p.AddWithValue("pwd",a.PwdDiscountAmountMinorUnits);p.AddWithValue("other_stat",a.OtherStatutoryDiscountAmountMinorUnits);p.AddWithValue("vat_exemption",a.VatExemptionAmountMinorUnits);p.AddWithValue("coupon",a.CouponDiscountAmountMinorUnits);p.AddWithValue("promo",a.PromotionalDiscountAmountMinorUnits);p.AddWithValue("void",a.VoidAmountMinorUnits); }
     private static void AddNullable(NpgsqlParameterCollection p,string name,object? value,NpgsqlDbType type) { p.Add(new NpgsqlParameter(name,type){Value=value??DBNull.Value}); }
     private static NpgsqlCommand CreateCommand(NpgsqlConnection c,NpgsqlTransaction? t,string sql) { var command=c.CreateCommand();command.CommandText=sql;command.Transaction=t;return command; }

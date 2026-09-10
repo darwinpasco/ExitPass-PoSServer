@@ -25,10 +25,12 @@ public sealed class PostgresFiscalXReadingRepositoryTests
     }
 
     [Fact]
-    public void SourceQueriesUseHalfOpenWindowAndGovernedFirstClassTables()
+    public void SourceQueriesUseAssignedPeriodAndActualObservationCutoffWithGovernedFirstClassTables()
     {
         var source = File.ReadAllText(FindSource());
-        Assert.Contains("d.created_at >= @period_start_at AND d.created_at < @effective_end", source, StringComparison.Ordinal);
+        Assert.Contains("d.fiscal_reporting_period_id = @fiscal_reporting_period_id", source, StringComparison.Ordinal);
+        Assert.Contains("d.currency_code = @currency_code AND d.created_at < @observed_at", source, StringComparison.Ordinal);
+        Assert.DoesNotContain("d.created_at >= @period_start_at", source, StringComparison.Ordinal);
         Assert.Contains("pos.fiscal_document_applied_statutory_facts", source, StringComparison.Ordinal);
         Assert.Contains("pos.fiscal_sequence_gap_audit", source, StringComparison.Ordinal);
         Assert.Contains("status.code_key = 'open'", source, StringComparison.Ordinal);
@@ -36,12 +38,22 @@ public sealed class PostgresFiscalXReadingRepositoryTests
         Assert.DoesNotContain("tender_context", source, StringComparison.OrdinalIgnoreCase);
     }
 
-    private static string FindSource()
+    [Fact]
+    public void ZCloseAssignmentValidationUsesPeriodBusinessDateAndBindsItsParameter()
+    {
+        var source = File.ReadAllText(FindSource("PostgresFiscalZReadingRepository.cs"));
+        Assert.Contains("d.business_day_date=@business", source, StringComparison.Ordinal);
+        Assert.Contains("d.fiscal_reporting_period_id=@period", source, StringComparison.Ordinal);
+        Assert.Contains("c.Parameters.AddWithValue(\"business\",p.BusinessDayDate)", source, StringComparison.Ordinal);
+        Assert.DoesNotContain("d.created_at>=@start AND d.created_at<@end", source, StringComparison.Ordinal);
+    }
+
+    private static string FindSource(string fileName = "PostgresFiscalXReadingRepository.cs")
     {
         var directory = new DirectoryInfo(AppContext.BaseDirectory);
         while (directory is not null)
         {
-            var candidate = Path.Combine(directory.FullName, "src", "ExitPass.PosServer.Persistence.Postgres", "FiscalReports", "PostgresFiscalXReadingRepository.cs");
+            var candidate = Path.Combine(directory.FullName, "src", "ExitPass.PosServer.Persistence.Postgres", "FiscalReports", fileName);
             if (File.Exists(candidate)) return candidate;
             directory = directory.Parent;
         }
