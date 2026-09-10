@@ -76,7 +76,8 @@ public sealed class DigitalSalesInvoiceRenderService
             document.AppliedStatutoryFiscalFacts,
             document.CompletionBasis,
             document.CompletionAuthorityRef,
-            document.InvoiceCustomerInformation);
+            document.InvoiceCustomerInformation,
+            document.DocumentContextJson);
     }
 
     private static DigitalSalesInvoiceLineRenderModel MapLine(FiscalDocumentLineReadModel line) =>

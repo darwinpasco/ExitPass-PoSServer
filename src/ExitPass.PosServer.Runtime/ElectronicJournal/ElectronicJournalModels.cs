@@ -34,7 +34,8 @@ public sealed record ElectronicJournalAppendRequest(
     Guid? FiscalSequencePolicyId = null,
     DateOnly? BusinessDayDate = null,
     string? IdempotencyReference = null,
-    Guid? ReprintRequestId = null);
+    Guid? ReprintRequestId = null,
+    string? PrintableSalesInvoiceText = null);
 
 public sealed record ElectronicJournalEvent(
     string EventReference,
@@ -66,7 +67,8 @@ public sealed record ElectronicJournalEvent(
     string IntegrityHash,
     string RetentionPolicy,
     IReadOnlyDictionary<string, string?> Facts,
-    Guid? ReprintRequestId = null);
+    Guid? ReprintRequestId = null,
+    string? PrintableSalesInvoiceText = null);
 
 public sealed record ElectronicJournalQuery(
     Guid SitePosServerId,

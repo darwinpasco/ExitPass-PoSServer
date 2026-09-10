@@ -42,7 +42,8 @@ public sealed record DigitalSalesInvoiceRenderModel(
     AppliedStatutoryFiscalFactsSnapshot? AppliedStatutoryFiscalFacts = null,
     string CompletionBasis = FiscalCompletionBasisCodes.PaymentFinality,
     string? CompletionAuthorityRef = null,
-    InvoiceCustomerInformationSnapshot? InvoiceCustomerInformation = null);
+    InvoiceCustomerInformationSnapshot? InvoiceCustomerInformation = null,
+    string? DocumentContextJson = null);
 
 public sealed record DigitalSalesInvoiceLineRenderModel(
     int LineSequence,

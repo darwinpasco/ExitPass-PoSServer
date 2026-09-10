@@ -836,6 +836,7 @@ public static class PostgresFiscalDocumentSql
             upstream_finality_ref = draft.UpstreamFinalityRef,
             completion_basis = draft.CompletionBasis,
             completion_authority_ref = draft.CompletionAuthorityRef,
+            reference_context = draft.ReferenceContext,
             currency_code = draft.CurrencyCode,
             payable_amount_minor_units = draft.PayableAmountMinorUnits,
             resolved_fiscal_identity_id = draft.ResolvedFiscalIdentityId,

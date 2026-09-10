@@ -19,6 +19,20 @@
     },
     {
       "method": "GET",
+      "path": "/v1/electronic-journal/invoice-text",
+      "permission": "electronic_journal.read",
+      "output": "application/json",
+      "authority": "canonical_sales_invoice_print_text"
+    },
+    {
+      "method": "GET",
+      "path": "/v1/electronic-journal/invoice-text.txt",
+      "permission": "electronic_journal.export",
+      "output": "text/plain; charset=utf-8",
+      "authority": "canonical_sales_invoice_print_text"
+    },
+    {
+      "method": "GET",
       "path": "/v1/electronic-journal/exports/{format}",
       "permission": "electronic_journal.export",
       "formats": ["json", "csv"]

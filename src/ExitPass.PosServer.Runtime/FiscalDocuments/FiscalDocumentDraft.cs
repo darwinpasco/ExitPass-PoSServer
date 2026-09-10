@@ -42,7 +42,8 @@ public sealed record FiscalDocumentDraft(
     string CompletionBasis = FiscalCompletionBasisCodes.PaymentFinality,
     string? CompletionAuthorityRef = null,
     string? ElectronicJournalEventReference = null,
-    InvoiceCustomerInformationSnapshot? InvoiceCustomerInformation = null);
+    InvoiceCustomerInformationSnapshot? InvoiceCustomerInformation = null,
+    IReadOnlyDictionary<string, string>? ReferenceContext = null);
 
 public sealed record InvoiceCustomerInformationSnapshot(
     string? CustomerName,

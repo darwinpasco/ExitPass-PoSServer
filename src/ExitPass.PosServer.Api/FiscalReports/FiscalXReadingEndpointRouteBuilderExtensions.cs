@@ -7,6 +7,10 @@ public static class FiscalXReadingEndpointRouteBuilderExtensions
     public static IEndpointRouteBuilder MapFiscalXReadingEndpoints(this IEndpointRouteBuilder endpoints)
     {
         var group = endpoints.MapGroup("/v1/fiscal-reports/x-readings");
+        group.MapGet("/history", (Guid sitePosServerId, Guid fiscalIdentityId, string? currencyCode,
+            FiscalReportingHistoryService service, HttpContext context, CancellationToken ct) =>
+            FiscalReportingHistoryEndpoint.ReadAsync(sitePosServerId, fiscalIdentityId, currencyCode, "X", service, context, ct))
+            .RequireAuthorization(FiscalXReadingAuthorization.ReadPolicyName);
 
         group.MapPost("/", async (GenerateFiscalXReadingRequest request, FiscalXReadingService service, HttpContext context, CancellationToken cancellationToken) =>
         {
