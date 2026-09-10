@@ -28,6 +28,27 @@ public sealed class PostgresElectronicJournalContractTests
     }
 
     [Fact]
+    public void PrintableSalesInvoiceHasDedicatedNullableGovernedStorage()
+    {
+        var schema = File.ReadAllText(FindSchema("pos.electronic_journal_records.sql"));
+        var writer = File.ReadAllText(Find("PostgresElectronicJournalWriter.cs"));
+        var reader = File.ReadAllText(Find("PostgresElectronicJournalRepository.cs"));
+
+        Assert.Contains("printable_sales_invoice_text text NULL", schema, StringComparison.Ordinal);
+        Assert.Contains("ck_ej_records__printable_sales_invoice", schema, StringComparison.Ordinal);
+        Assert.Contains("char_length(printable_sales_invoice_text) BETWEEN 1 AND 131072", schema, StringComparison.Ordinal);
+        Assert.Contains("journal_record_type_code_id = '89dd11fb-87d8-51fe-a042-ef8b2e2e7829'", schema, StringComparison.Ordinal);
+        Assert.Contains("@journal_context,@printable_text", writer, StringComparison.Ordinal);
+        Assert.Contains("NpgsqlDbType.Jsonb, DBNull.Value", writer, StringComparison.Ordinal);
+        Assert.Contains("AddNullableText(insert, \"printable_text\", request.PrintableSalesInvoiceText)", writer, StringComparison.Ordinal);
+        Assert.Contains("ElectronicJournalContract.MaximumPrintableSalesInvoiceTextCharacters", writer, StringComparison.Ordinal);
+        Assert.DoesNotContain("JsonSerializer.Serialize(new { printableSalesInvoiceText", writer, StringComparison.Ordinal);
+        Assert.Contains("e.printable_sales_invoice_text", reader, StringComparison.Ordinal);
+        Assert.DoesNotContain("e.journal_context::text", reader, StringComparison.Ordinal);
+        Assert.DoesNotContain("ParsePrintableText", reader, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void WriterRejectsSensitiveAndUnboundedFactMaterial()
     {
         var source = File.ReadAllText(Find("PostgresElectronicJournalWriter.cs"));

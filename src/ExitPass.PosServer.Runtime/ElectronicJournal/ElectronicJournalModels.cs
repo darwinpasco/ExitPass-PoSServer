@@ -11,6 +11,7 @@ public static class ElectronicJournalContract
     public const int MaximumPageSize = 200;
     public const int MaximumExportEvents = 10_000;
     public const int MaximumTimeRangeDays = 31;
+    public const int MaximumPrintableSalesInvoiceTextCharacters = 131_072;
     public const string GenesisHash = "0000000000000000000000000000000000000000000000000000000000000000";
 }
 

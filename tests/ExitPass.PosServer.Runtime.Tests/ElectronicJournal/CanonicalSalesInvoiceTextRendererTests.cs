@@ -123,6 +123,50 @@ public sealed class CanonicalSalesInvoiceTextRendererTests
         Assert.False(File.ReadAllBytes(evidencePath).AsSpan().StartsWith(Encoding.UTF8.Preamble));
     }
 
+    [Fact]
+    public async Task HistoricalCanonicalInvoiceWithoutPersistedTextFailsClosedWithoutReconstruction()
+    {
+        var invoice = Invoice();
+        var append = new ElectronicJournalAppendRequest(
+            Guid.Parse("aaaaaaaa-0000-4000-8000-000000000010"),
+            Guid.Parse("aaaaaaaa-0000-4000-8000-000000000011"),
+            "PHP",
+            Guid.Parse("aaaaaaaa-0000-4000-8000-000000000012"),
+            "fiscal_document_committed",
+            "historical:invoice:1",
+            "v1",
+            invoice.IssuedAt,
+            "actor",
+            "service",
+            "correlation",
+            new SortedDictionary<string, string?> { ["fiscal_document_number"] = invoice.FiscalDocumentNumber },
+            invoice.FiscalDocumentId,
+            BusinessDayDate: invoice.BusinessDayDate,
+            PrintableSalesInvoiceText: null);
+        var semantic = ElectronicJournalCanonicalizer.ComputeSemanticHash(append);
+        var historical = new ElectronicJournalEvent(
+            "EJ-HISTORICAL-1", append.EventType, ElectronicJournalContract.EventSchemaVersion,
+            append.SitePosServerId, append.FiscalIdentityId, append.CurrencyCode, append.FiscalReportingPeriodId,
+            append.FiscalDocumentId, null, null, null, null, append.BusinessDayDate, 1, append.EffectiveAt,
+            append.EffectiveAt.AddSeconds(1), append.ActorReference, append.ServiceIdentityReference,
+            append.CorrelationReference, append.SourceTransitionReference, append.SourceTransitionVersion,
+            null, ElectronicJournalContract.SemanticHashVersion, semantic, ElectronicJournalContract.IntegrityHashVersion,
+            ElectronicJournalContract.GenesisHash, new string('a', 64), "fiscal_reconstruction_hold", append.Facts,
+            PrintableSalesInvoiceText: null);
+        var repository = new HistoricalRepository(historical);
+        var service = new ElectronicJournalInvoiceTextService(
+            repository, new ElectronicJournalInvoiceTextRenderer(new CanonicalSalesInvoiceTextRenderer()));
+
+        var result = await service.ReadAsync(
+            new ElectronicJournalQuery(append.SitePosServerId, append.FiscalIdentityId, append.CurrencyCode),
+            createExport: true);
+
+        Assert.Equal(ElectronicJournalOutcome.IntegrityFailure, result.Outcome);
+        Assert.Null(result.Export);
+        Assert.Contains("no immutable canonical printable text payload", result.SafeMessage, StringComparison.Ordinal);
+        Assert.Equal("fiscal_document_committed", repository.LastQuery?.EventType);
+    }
+
     private static CanonicalSalesInvoiceText Invoice() => new(
         Guid.Parse("aaaaaaaa-0000-4000-8000-000000000001"),
         "SI-00000001",
@@ -164,4 +208,25 @@ public sealed class CanonicalSalesInvoiceTextRendererTests
 
     private static int Count(string text, string value) =>
         (text.Length - text.Replace(value, string.Empty, StringComparison.Ordinal).Length) / value.Length;
+
+    private sealed class HistoricalRepository(ElectronicJournalEvent historical) : IElectronicJournalRepository
+    {
+        public ElectronicJournalQuery? LastQuery { get; private set; }
+
+        public Task<ElectronicJournalPageResult> ReadAsync(ElectronicJournalQuery query, CancellationToken cancellationToken = default)
+        {
+            LastQuery = query;
+            return Task.FromResult(new ElectronicJournalPageResult(
+                ElectronicJournalOutcome.Success,
+                new ElectronicJournalPage([historical], null, 1, ElectronicJournalContract.ChronologyVersion)));
+        }
+
+        public Task<ElectronicJournalIntegrityOutcome> VerifyIntegrityAsync(ElectronicJournalQuery query, CancellationToken cancellationToken = default) =>
+            throw new NotSupportedException();
+
+        public Task RecordAccessAsync(Guid sitePosServerId, Guid fiscalIdentityId, string currencyCode, string action,
+            string result, string actorReference, string serviceIdentityReference, string correlationReference,
+            string supportReference, int eventCount, CancellationToken cancellationToken = default) =>
+            throw new NotSupportedException();
+    }
 }
