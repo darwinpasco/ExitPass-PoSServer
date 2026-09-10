@@ -180,7 +180,7 @@ public sealed class PostgresElectronicJournalRepository(NpgsqlDataSource dataSou
               e.reprint_request_id,e.fiscal_sequence_policy_id,e.business_day_date,e.stream_sequence_value,e.effective_at,e.recorded_at,e.actor_ref,
               e.service_identity_ref,e.correlation_ref,e.source_transition_ref,e.source_transition_version,e.idempotency_ref,
               e.semantic_hash_version,e.semantic_hash,e.integrity_hash_version,e.previous_integrity_hash,e.integrity_hash,
-              retention.code_key,e.event_facts
+              retention.code_key,e.event_facts,e.journal_context::text
             FROM pos.electronic_journal_records e
             JOIN pos.controlled_codes type ON type.controlled_code_id=e.journal_record_type_code_id
             JOIN pos.controlled_codes retention ON retention.controlled_code_id=e.retention_policy_code_id
@@ -225,7 +225,15 @@ public sealed class PostgresElectronicJournalRepository(NpgsqlDataSource dataSou
         r.IsDBNull(13) ? null : r.GetFieldValue<DateOnly>(13), r.GetInt64(14), r.GetFieldValue<DateTimeOffset>(15),
         r.GetFieldValue<DateTimeOffset>(16), r.GetString(17), r.GetString(18), r.GetString(19), r.GetString(20), r.GetString(21),
         r.IsDBNull(22) ? null : r.GetString(22), r.GetString(23), r.GetString(24), r.GetString(25), r.GetString(26), r.GetString(27),
-        r.GetString(28), ParseFacts(r.GetString(29)), NullableGuid(r, 11));
+        r.GetString(28), ParseFacts(r.GetString(29)), NullableGuid(r, 11), ParsePrintableText(r.GetString(30)));
+
+    private static string? ParsePrintableText(string json)
+    {
+        using var document = JsonDocument.Parse(json);
+        return document.RootElement.TryGetProperty("printableSalesInvoiceText", out var value) && value.ValueKind == JsonValueKind.String
+            ? value.GetString()
+            : null;
+    }
 
     private static IReadOnlyDictionary<string, string?> ParseFacts(string json) =>
         JsonSerializer.Deserialize<SortedDictionary<string, string?>>(json)
@@ -238,7 +246,7 @@ public sealed class PostgresElectronicJournalRepository(NpgsqlDataSource dataSou
         e.SourceTransitionReference, e.SourceTransitionVersion, e.EffectiveAt, e.ActorReference,
         e.ServiceIdentityReference, e.CorrelationReference, e.Facts, e.FiscalDocumentId,
         e.FiscalReportRequestId, e.XZReportId, e.BirSalesSummaryReportId, e.FiscalSequencePolicyId,
-        e.BusinessDayDate, e.IdempotencyReference, e.ReprintRequestId);
+        e.BusinessDayDate, e.IdempotencyReference, e.ReprintRequestId, e.PrintableSalesInvoiceText);
 
     private static ElectronicJournalIntegrityOutcome IntegrityFailure(
         IReadOnlyList<ElectronicJournalEvent> events, long sequence, string code, string support) =>

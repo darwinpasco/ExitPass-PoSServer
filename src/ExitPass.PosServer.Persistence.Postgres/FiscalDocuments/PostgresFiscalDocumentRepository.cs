@@ -295,7 +295,9 @@ public sealed class PostgresFiscalDocumentRepository : IFiscalDocumentRepository
                         FiscalDocumentId: resolvedDraft.FiscalDocumentId,
                         FiscalSequencePolicyId: resolvedDraft.ResolvedFiscalSequencePolicyId,
                         BusinessDayDate: resolvedDraft.BusinessDayDate,
-                        IdempotencyReference: idempotency.Key),
+                        IdempotencyReference: idempotency.Key,
+                        PrintableSalesInvoiceText: new CanonicalSalesInvoiceTextRenderer().Render(
+                            new CanonicalSalesInvoiceTextFactory().Create(resolvedDraft)).Text),
                     cancellationToken).ConfigureAwait(false);
 
                 resolvedDraft = resolvedDraft with

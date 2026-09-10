@@ -361,7 +361,8 @@ public sealed class FiscalDocumentCreationService
             AppliedStatutoryFiscalFacts: statutoryValidation.Snapshot,
             CompletionBasis: completionBasis,
             CompletionAuthorityRef: completionAuthorityRef,
-            InvoiceCustomerInformation: customerInformation.Snapshot);
+            InvoiceCustomerInformation: customerInformation.Snapshot,
+            ReferenceContext: command.ReferenceContext);
 
         try
         {

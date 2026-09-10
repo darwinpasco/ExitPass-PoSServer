@@ -26,10 +26,63 @@ public sealed class ElectronicJournalFilterRequest
 
 public sealed record ElectronicJournalErrorResponse(bool Succeeded, string Code, string CorrelationId, string SupportReference, string Message);
 public sealed record ElectronicJournalReadResponse(bool Succeeded, string Code, string CorrelationId, string SupportReference, ElectronicJournalPage Page);
+public sealed record ElectronicJournalInvoiceTextResponse(bool Succeeded, string Code, string CorrelationId, string SupportReference, IReadOnlyList<ElectronicJournalInvoiceTextItem> Invoices);
 public sealed record VerifyElectronicJournalIntegrityRequest(Guid SitePosServerId, Guid FiscalIdentityId, string? CurrencyCode, long? ThroughSequence = null);
 
 public static class ElectronicJournalEndpoint
 {
+    public static async Task<IResult> ReadInvoiceTextAsync(
+        ElectronicJournalFilterRequest request,
+        ElectronicJournalInvoiceTextService invoiceTextService,
+        ElectronicJournalService accessService,
+        HttpContext context,
+        IHostEnvironment environment,
+        CancellationToken cancellationToken)
+    {
+        var preflight = Preflight(request, context, environment, ElectronicJournalContract.MaximumPageSize);
+        if (preflight.Error is not null) return preflight.Error;
+        var query = ToQuery(request);
+        var result = await invoiceTextService.ReadAsync(query, false, cancellationToken).ConfigureAwait(false);
+        var support = Support();
+        if (result.Invoices is null) return MapFailure(context, result.Outcome, result.SafeMessage, preflight.Correlation!, support);
+        try
+        {
+            await accessService.RecordAccessAsync(query.SitePosServerId, query.FiscalIdentityId, query.CurrencyCode, "read", "allowed",
+                preflight.Actor!, preflight.Actor!, preflight.Correlation!, support, result.Invoices.Count, cancellationToken).ConfigureAwait(false);
+        }
+        catch { return Unavailable(context, preflight.Correlation!, support); }
+        NoStore(context);
+        return Results.Json(new ElectronicJournalInvoiceTextResponse(true, "electronic_journal_invoice_text_read", preflight.Correlation!, support, result.Invoices));
+    }
+
+    public static async Task<IResult> ExportInvoiceTextAsync(
+        ElectronicJournalFilterRequest request,
+        ElectronicJournalInvoiceTextService invoiceTextService,
+        ElectronicJournalService accessService,
+        HttpContext context,
+        IHostEnvironment environment,
+        CancellationToken cancellationToken)
+    {
+        var preflight = Preflight(request, context, environment, ElectronicJournalContract.MaximumPageSize);
+        if (preflight.Error is not null) return preflight.Error;
+        var query = ToQuery(request);
+        var result = await invoiceTextService.ReadAsync(query, true, cancellationToken).ConfigureAwait(false);
+        var support = Support();
+        if (result.Invoices is null) return MapFailure(context, result.Outcome, result.SafeMessage, preflight.Correlation!, support);
+        if (result.Export is null)
+            return Error(context, "electronic_journal_no_invoice_activity", "No issued Sales Invoice text exists for the requested period.", preflight.Correlation!, support, 404);
+        try
+        {
+            await accessService.RecordAccessAsync(query.SitePosServerId, query.FiscalIdentityId, query.CurrencyCode, "export", "allowed",
+                preflight.Actor!, preflight.Actor!, preflight.Correlation!, support, result.Invoices.Count, cancellationToken).ConfigureAwait(false);
+        }
+        catch { return Unavailable(context, preflight.Correlation!, support); }
+        NoStore(context);
+        context.Response.Headers.ContentDisposition = $"attachment; filename=\"{result.Export.FileName}\"";
+        context.Response.Headers["X-ExitPass-Output-Contract"] = "pos-server-electronic-journal-invoice-text:v1";
+        return Results.Bytes(result.Export.Bytes, result.Export.ContentType);
+    }
+
     public static async Task<IResult> ReadAsync(
         ElectronicJournalFilterRequest request,
         ElectronicJournalService service,

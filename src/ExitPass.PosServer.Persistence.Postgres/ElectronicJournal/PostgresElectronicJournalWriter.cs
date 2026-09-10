@@ -2,6 +2,7 @@ using System.Globalization;
 using ExitPass.PosServer.Runtime.ElectronicJournal;
 using Npgsql;
 using NpgsqlTypes;
+using System.Text.Json;
 
 namespace ExitPass.PosServer.Persistence.Postgres.ElectronicJournal;
 
@@ -105,7 +106,7 @@ public static class PostgresElectronicJournalWriter
                 previous_integrity_hash,retention_policy_code_id,event_facts,is_canonical)
             VALUES(
                 @id,@site,@document,@request,@type,@status,@business_date,@sequence_ref,@hash,@previous_hash,
-                @recorded_at,NULL,@recorded_at,@recorded_at,@stream,@identity,@currency,@sequence_policy,
+                @recorded_at,@journal_context,@recorded_at,@recorded_at,@stream,@identity,@currency,@sequence_policy,
                 @period,@xz,@bir,@reprint,@event_ref,@event_schema,@sequence,@effective_at,@actor,@service,@correlation,
                 @source_ref,@source_version,@idempotency,@semantic_version,@semantic_hash,@integrity_version,
                 @hash,@previous_hash,@retention,@facts,true)
@@ -117,7 +118,12 @@ public static class PostgresElectronicJournalWriter
             AddNullableDate(insert, "business_date", request.BusinessDayDate);
             insert.Parameters.AddWithValue("sequence_ref", sequence.ToString(CultureInfo.InvariantCulture));
             insert.Parameters.AddWithValue("hash", integrityHash); insert.Parameters.AddWithValue("previous_hash", previousHash);
-            insert.Parameters.AddWithValue("recorded_at", recordedAt); insert.Parameters.AddWithValue("stream", streamId);
+            insert.Parameters.AddWithValue("recorded_at", recordedAt);
+            insert.Parameters.AddWithValue("journal_context", NpgsqlDbType.Jsonb,
+                request.PrintableSalesInvoiceText is null
+                    ? "{}"
+                    : JsonSerializer.Serialize(new { printableSalesInvoiceText = request.PrintableSalesInvoiceText, encoding = "utf-8" }));
+            insert.Parameters.AddWithValue("stream", streamId);
             insert.Parameters.AddWithValue("identity", request.FiscalIdentityId); insert.Parameters.AddWithValue("currency", request.CurrencyCode.ToUpperInvariant());
             AddNullable(insert, "sequence_policy", request.FiscalSequencePolicyId); insert.Parameters.AddWithValue("period", request.FiscalReportingPeriodId);
             AddNullable(insert, "xz", request.XZReportId); AddNullable(insert, "bir", request.BirSalesSummaryReportId);
@@ -203,6 +209,9 @@ public static class PostgresElectronicJournalWriter
                 ProhibitedFactKeyFragments.Any(fragment => pair.Key.Contains(fragment, StringComparison.OrdinalIgnoreCase)) ||
                 pair.Value is { Length: > 2048 } || pair.Value?.Any(character => character is '\r' or '\n') == true))
             throw new InvalidOperationException("Canonical Electronic Journal event facts violate the privacy-safe contract.");
+        if (r.PrintableSalesInvoiceText is { Length: > 131072 } ||
+            r.PrintableSalesInvoiceText?.IndexOf('\0') >= 0)
+            throw new InvalidOperationException("Canonical Sales Invoice text exceeds the governed journal payload contract.");
     }
 
     private static void AddNullable(NpgsqlCommand command, string name, Guid? value) =>

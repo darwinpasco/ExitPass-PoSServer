@@ -53,6 +53,7 @@ public static class ElectronicJournalCanonicalizer
             $"fiscal_sequence_policy_id={GuidText(request.FiscalSequencePolicyId)}",
             $"business_day_date={request.BusinessDayDate?.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture) ?? string.Empty}",
             $"idempotency_ref={request.IdempotencyReference ?? string.Empty}",
+            $"printable_sales_invoice_text_sha256={(request.PrintableSalesInvoiceText is null ? string.Empty : Sha256(request.PrintableSalesInvoiceText))}",
             $"facts={CanonicalFactsJson(request.Facts)}",
             string.Empty
         });
