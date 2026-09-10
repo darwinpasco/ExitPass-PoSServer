@@ -253,6 +253,7 @@
     "pos.bir_sales_summary_reports.fk_bir_sales_summary__governing_z",
     "pos.electronic_journal_records.fk_ej_records__reprint",
     "pos.electronic_journal_records.fk_ej_records__stream",
+    "pos.electronic_journal_records.ck_ej_records__printable_sales_invoice",
     "pos.electronic_journal_streams.uq_ej_streams__scope",
     "pos.fiscal_report_discount_breakdowns.uq_fiscal_report_discount_breakdowns__report_class",
     "pos.fiscal_report_fiscal_number_ranges.uq_fiscal_report_fiscal_number_ranges__report_policy_series",

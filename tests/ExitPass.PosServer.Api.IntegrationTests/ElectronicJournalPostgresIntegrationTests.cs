@@ -161,6 +161,119 @@ public sealed class ElectronicJournalPostgresIntegrationTests
         }
     }
 
+    [Fact]
+    public async Task DedicatedPrintableTextRoundTripsExactlyAndReplayDoesNotDuplicatePayload()
+    {
+        var connectionString = Environment.GetEnvironmentVariable(ConnectionVariable);
+        if (string.IsNullOrWhiteSpace(connectionString)) return;
+
+        await RebuildAsync(connectionString);
+        await ExecuteFileAsync(connectionString, Path.Combine(FindRepositoryRoot(), "tests", "ExitPass.PosServer.Api.IntegrationTests", "Fixtures", "fiscal_x_reading_runtime_fixture.sql"));
+        const string firstText = "SALES INVOICE\r\nSI-00000001\r\nExact Ñ and ₱ UTF-8 text\r\n";
+        const string secondText = "SALES INVOICE\r\nSI-00000002\r\nWhitespace stays exact  \r\n";
+        var firstRequest = PrintableRequest(FiscalDocumentId, "SI-00000001", "printable:1", ObservedAt, firstText);
+        var secondRequest = PrintableRequest(Guid.Parse("73000000-0000-4000-8000-000000000302"), "SI-00000002", "printable:2", ObservedAt.AddHours(1), secondText);
+
+        string firstReference;
+        string replayReference;
+        await using (var connection = new NpgsqlConnection(connectionString))
+        {
+            await connection.OpenAsync();
+            await using var transaction = await connection.BeginTransactionAsync();
+            firstReference = await PostgresElectronicJournalWriter.AppendAsync(connection, transaction, firstRequest, default);
+            replayReference = await PostgresElectronicJournalWriter.AppendAsync(connection, transaction, firstRequest, default);
+            await PostgresElectronicJournalWriter.AppendAsync(connection, transaction, secondRequest, default);
+            await transaction.CommitAsync();
+        }
+
+        Assert.Equal(firstReference, replayReference);
+        Assert.Equal(2, await CanonicalEventCountAsync(connectionString));
+        Assert.Equal(2, await ScalarAsync<long>(connectionString, "SELECT last_sequence_value FROM pos.electronic_journal_streams"));
+        Assert.Equal(2, await ScalarAsync<long>(connectionString,
+            "SELECT count(*) FROM pos.electronic_journal_records WHERE printable_sales_invoice_text IS NOT NULL"));
+        Assert.Equal(2, await ScalarAsync<long>(connectionString,
+            "SELECT count(*) FROM pos.electronic_journal_records WHERE is_canonical AND journal_context IS NULL"));
+        Assert.Equal(firstText, await ScalarAsync<string>(connectionString,
+            "SELECT printable_sales_invoice_text FROM pos.electronic_journal_records WHERE event_reference='" + firstReference + "'"));
+        Assert.Equal(1, await ScalarAsync<long>(connectionString,
+            "SELECT count(*) FROM information_schema.columns WHERE table_schema='pos' AND table_name='electronic_journal_records' AND column_name='printable_sales_invoice_text' AND data_type='text' AND is_nullable='YES'"));
+
+        await using var dataSource = NpgsqlDataSource.Create(connectionString);
+        var repository = new PostgresElectronicJournalRepository(dataSource);
+        var query = new ElectronicJournalQuery(SiteId, IdentityId, "PHP");
+        var read = await repository.ReadAsync(query);
+        Assert.Equal(ElectronicJournalOutcome.Success, read.Outcome);
+        Assert.Equal(new[] { firstText, secondText }, read.Page!.Events.Select(value => value.PrintableSalesInvoiceText));
+        var integrity = await repository.VerifyIntegrityAsync(query);
+        Assert.Equal(ElectronicJournalOutcome.Success, integrity.Outcome);
+        Assert.True(integrity.Result!.IsValid);
+
+        var invoiceText = await new ElectronicJournalInvoiceTextService(
+            repository, new ElectronicJournalInvoiceTextRenderer(new CanonicalSalesInvoiceTextRenderer()))
+            .ReadAsync(query, createExport: true);
+        Assert.Equal(ElectronicJournalOutcome.Success, invoiceText.Outcome);
+        Assert.Equal(new[] { firstText, secondText }, invoiceText.Invoices!.Select(value => value.PrintableText));
+        Assert.Equal(firstText + "\r\n" + secondText, invoiceText.Export!.Text);
+        Assert.Equal(invoiceText.Export.Text, new System.Text.UTF8Encoding(false, true).GetString(invoiceText.Export.Bytes));
+        Assert.False(invoiceText.Export.Bytes.AsSpan().StartsWith(System.Text.Encoding.UTF8.Preamble));
+
+        await AssertPostgresFailureAsync(connectionString, """
+            ALTER TABLE pos.electronic_journal_records DISABLE TRIGGER trg_electronic_journal_records_immutable;
+            UPDATE pos.electronic_journal_records SET journal_context='{"printableSalesInvoiceText":"forbidden fallback"}'::jsonb
+            WHERE source_transition_ref='printable:1';
+            """, "23514");
+    }
+
+    [Fact]
+    public async Task HistoricalCanonicalNullPrintableTextRemainsReadableAndInvoiceExportFailsClosed()
+    {
+        var connectionString = Environment.GetEnvironmentVariable(ConnectionVariable);
+        if (string.IsNullOrWhiteSpace(connectionString)) return;
+
+        await RebuildAsync(connectionString);
+        await ExecuteFileAsync(connectionString, Path.Combine(FindRepositoryRoot(), "tests", "ExitPass.PosServer.Api.IntegrationTests", "Fixtures", "fiscal_x_reading_runtime_fixture.sql"));
+        var historical = PrintableRequest(FiscalDocumentId, "SI-00000001", "historical:null", ObservedAt, null);
+        await using (var connection = new NpgsqlConnection(connectionString))
+        {
+            await connection.OpenAsync();
+            await using var transaction = await connection.BeginTransactionAsync();
+            await PostgresElectronicJournalWriter.AppendAsync(connection, transaction, historical, default);
+            await transaction.CommitAsync();
+        }
+
+        Assert.Equal(1, await ScalarAsync<long>(connectionString,
+            "SELECT count(*) FROM pos.electronic_journal_records WHERE is_canonical AND printable_sales_invoice_text IS NULL AND journal_context IS NULL"));
+        await using var dataSource = NpgsqlDataSource.Create(connectionString);
+        var repository = new PostgresElectronicJournalRepository(dataSource);
+        var query = new ElectronicJournalQuery(SiteId, IdentityId, "PHP");
+        var read = await repository.ReadAsync(query);
+        Assert.Equal(ElectronicJournalOutcome.Success, read.Outcome);
+        Assert.Null(Assert.Single(read.Page!.Events).PrintableSalesInvoiceText);
+        var invoiceText = await new ElectronicJournalInvoiceTextService(
+            repository, new ElectronicJournalInvoiceTextRenderer(new CanonicalSalesInvoiceTextRenderer()))
+            .ReadAsync(query, createExport: true);
+        Assert.Equal(ElectronicJournalOutcome.IntegrityFailure, invoiceText.Outcome);
+        Assert.Null(invoiceText.Export);
+    }
+
+    [Fact]
+    public async Task ReportOnlyJournalEventRemainsValidWithoutPrintableInvoiceText()
+    {
+        var connectionString = Environment.GetEnvironmentVariable(ConnectionVariable);
+        if (string.IsNullOrWhiteSpace(connectionString)) return;
+
+        await RebuildAsync(connectionString);
+        await ExecuteFileAsync(connectionString, Path.Combine(FindRepositoryRoot(), "tests", "ExitPass.PosServer.Api.IntegrationTests", "Fixtures", "fiscal_x_reading_runtime_fixture.sql"));
+        await using var app = await StartApiAsync(connectionString);
+        using var client = CreateClient(app, ProductionKey, FiscalXReadingAuthorization.GeneratePermission);
+        using var response = await client.PostAsJsonAsync("/v1/fiscal-reports/x-readings/",
+            new GenerateFiscalXReadingRequest("report-only-null-printable", SiteId, IdentityId, ObservedAt));
+
+        Assert.Equal(HttpStatusCode.Created, response.StatusCode);
+        Assert.Equal(1, await ScalarAsync<long>(connectionString,
+            "SELECT count(*) FROM pos.electronic_journal_records WHERE is_canonical AND printable_sales_invoice_text IS NULL AND journal_context IS NULL"));
+    }
+
     private static async Task<byte[]> ProveReprintRuntimeAsync(
         string connectionString, WebApplication app, HttpClient reprintClient, HttpClient exportClient)
     {
@@ -437,6 +550,16 @@ public sealed class ElectronicJournalPostgresIntegrationTests
 
     private static RecordFiscalDocumentReprintRequest Reprint(string operationKey, string reasonCode) =>
         new(operationKey, SiteId, IdentityId, "PHP", reasonCode);
+
+    private static ElectronicJournalAppendRequest PrintableRequest(
+        Guid fiscalDocumentId, string fiscalDocumentNumber, string sourceReference,
+        DateTimeOffset effectiveAt, string? printableText) =>
+        new(SiteId, IdentityId, "PHP", ReportingPeriodId, "fiscal_document_committed", sourceReference, "v1",
+            effectiveAt, "proof", "proof", "proof-correlation",
+            new SortedDictionary<string, string?> { ["fiscal_document_number"] = fiscalDocumentNumber },
+            FiscalDocumentId: fiscalDocumentId, FiscalSequencePolicyId: SequencePolicyId,
+            BusinessDayDate: DateOnly.Parse("2026-08-03"), IdempotencyReference: sourceReference,
+            PrintableSalesInvoiceText: printableText);
 
     private static string Query(int pageSize = 100, string? cursor = null, long? through = null) =>
         $"/v1/electronic-journal/events?SitePosServerId={SiteId:D}&FiscalIdentityId={IdentityId:D}&CurrencyCode=PHP&PageSize={pageSize}" +

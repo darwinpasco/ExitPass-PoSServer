@@ -15,6 +15,7 @@ CREATE TABLE IF NOT EXISTS pos.electronic_journal_records (
     previous_journal_hash_ref text NULL,
     recorded_at timestamptz NOT NULL DEFAULT CURRENT_TIMESTAMP,
     journal_context jsonb NULL,
+    printable_sales_invoice_text text NULL,
     created_at timestamptz NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at timestamptz NOT NULL DEFAULT CURRENT_TIMESTAMP,
     CONSTRAINT pk_electronic_journal_records PRIMARY KEY (electronic_journal_record_id),
@@ -64,6 +65,7 @@ ALTER TABLE pos.electronic_journal_records
     ADD COLUMN IF NOT EXISTS previous_integrity_hash char(64) NULL,
     ADD COLUMN IF NOT EXISTS retention_policy_code_id uuid NULL,
     ADD COLUMN IF NOT EXISTS event_facts jsonb NULL,
+    ADD COLUMN IF NOT EXISTS printable_sales_invoice_text text NULL,
     ADD COLUMN IF NOT EXISTS is_canonical boolean NOT NULL DEFAULT false;
 
 DO $$
@@ -111,6 +113,7 @@ ALTER TABLE pos.electronic_journal_records
     DROP CONSTRAINT IF EXISTS ck_ej_records__retention_family,
     DROP CONSTRAINT IF EXISTS ck_ej_records__hashes,
     DROP CONSTRAINT IF EXISTS ck_ej_records__legacy_context,
+    DROP CONSTRAINT IF EXISTS ck_ej_records__printable_sales_invoice,
     DROP CONSTRAINT IF EXISTS ck_ej_records__source_binding;
 
 ALTER TABLE pos.electronic_journal_records
@@ -160,6 +163,13 @@ ALTER TABLE pos.electronic_journal_records
     ),
     ADD CONSTRAINT ck_ej_records__legacy_context CHECK (
         NOT is_canonical OR journal_context IS NULL
+    ),
+    ADD CONSTRAINT ck_ej_records__printable_sales_invoice CHECK (
+        printable_sales_invoice_text IS NULL OR (
+            is_canonical
+            AND journal_record_type_code_id = '89dd11fb-87d8-51fe-a042-ef8b2e2e7829'
+            AND char_length(printable_sales_invoice_text) BETWEEN 1 AND 131072
+        )
     ),
     ADD CONSTRAINT ck_ej_records__source_binding CHECK (
         NOT is_canonical OR CASE journal_record_type_code_id
@@ -228,6 +238,8 @@ COMMENT ON COLUMN pos.electronic_journal_records.previous_journal_hash_ref IS
     'Compatibility reference containing the prior canonical integrity hash for canonical records.';
 COMMENT ON COLUMN pos.electronic_journal_records.journal_context IS
     'Legacy posture metadata only; canonical records prohibit this ungoverned context field.';
+COMMENT ON COLUMN pos.electronic_journal_records.printable_sales_invoice_text IS
+    'Optional exact immutable printer-ready Sales Invoice text for canonical fiscal_document_committed events; historical absence remains null and is never reconstructed.';
 COMMENT ON COLUMN pos.electronic_journal_records.event_facts IS
     'Versioned, privacy-minimized fiscal facts. Raw requests, credentials, personal evidence, diagnostics, and unrestricted text are prohibited.';
 COMMENT ON COLUMN pos.electronic_journal_records.is_canonical IS

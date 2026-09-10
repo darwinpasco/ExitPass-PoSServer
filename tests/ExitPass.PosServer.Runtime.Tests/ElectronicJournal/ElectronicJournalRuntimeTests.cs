@@ -37,6 +37,30 @@ public sealed class ElectronicJournalRuntimeTests
     }
 
     [Fact]
+    public void StorageLocationDoesNotEnterSemanticOrIntegrityCanonicalText()
+    {
+        var request = Request(new Dictionary<string, string?> { ["fiscal_document_number"] = "SI-0001" }) with
+        {
+            EventType = "fiscal_document_committed",
+            FiscalDocumentId = Guid.Parse("81000000-0000-4000-8000-000000000004"),
+            PrintableSalesInvoiceText = "SALES INVOICE\r\nExact Ñ UTF-8 text\r\n"
+        };
+        var canonical = ElectronicJournalCanonicalizer.CanonicalSemanticText(request);
+        var semantic = ElectronicJournalCanonicalizer.ComputeSemanticHash(request);
+        var recorded = DateTimeOffset.Parse("2026-08-10T01:02:03Z");
+        var integrity = ElectronicJournalCanonicalizer.ComputeIntegrityHash(
+            request, "EJ-1", 1, recorded, semantic, ElectronicJournalContract.GenesisHash);
+
+        Assert.Contains($"printable_sales_invoice_text_sha256={ElectronicJournalCanonicalizer.Sha256(request.PrintableSalesInvoiceText!)}", canonical, StringComparison.Ordinal);
+        Assert.DoesNotContain("journal_context", canonical, StringComparison.Ordinal);
+        Assert.DoesNotContain("printable_sales_invoice_text=", canonical, StringComparison.Ordinal);
+        Assert.Equal(semantic, ElectronicJournalCanonicalizer.ComputeSemanticHash(request));
+        Assert.Equal(integrity, ElectronicJournalCanonicalizer.ComputeIntegrityHash(
+            request, "EJ-1", 1, recorded, semantic, ElectronicJournalContract.GenesisHash));
+        Assert.Equal("pos-server-electronic-journal-event-semantic:sha256:v1", ElectronicJournalContract.SemanticHashVersion);
+    }
+
+    [Fact]
     public void JsonAndCsvExportsAreByteIdenticalAcrossRendererInstances()
     {
         var page = new ElectronicJournalPage([Event()], null, 1, ElectronicJournalContract.ChronologyVersion);

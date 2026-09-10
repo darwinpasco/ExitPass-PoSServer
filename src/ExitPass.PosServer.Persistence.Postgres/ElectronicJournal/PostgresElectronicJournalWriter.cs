@@ -2,7 +2,6 @@ using System.Globalization;
 using ExitPass.PosServer.Runtime.ElectronicJournal;
 using Npgsql;
 using NpgsqlTypes;
-using System.Text.Json;
 
 namespace ExitPass.PosServer.Persistence.Postgres.ElectronicJournal;
 
@@ -97,7 +96,7 @@ public static class PostgresElectronicJournalWriter
             INSERT INTO pos.electronic_journal_records(
                 electronic_journal_record_id,site_pos_server_id,fiscal_document_id,fiscal_report_request_id,
                 journal_record_type_code_id,journal_record_status_code_id,business_day_date,journal_sequence_ref,
-                journal_hash_ref,previous_journal_hash_ref,recorded_at,journal_context,created_at,updated_at,
+                journal_hash_ref,previous_journal_hash_ref,recorded_at,journal_context,printable_sales_invoice_text,created_at,updated_at,
                 electronic_journal_stream_id,fiscal_identity_id,currency_code,fiscal_sequence_policy_id,
                 fiscal_reporting_period_id,x_z_report_id,bir_sales_summary_report_id,reprint_request_id,event_reference,
                 event_schema_version,stream_sequence_value,effective_at,actor_ref,service_identity_ref,
@@ -106,7 +105,7 @@ public static class PostgresElectronicJournalWriter
                 previous_integrity_hash,retention_policy_code_id,event_facts,is_canonical)
             VALUES(
                 @id,@site,@document,@request,@type,@status,@business_date,@sequence_ref,@hash,@previous_hash,
-                @recorded_at,@journal_context,@recorded_at,@recorded_at,@stream,@identity,@currency,@sequence_policy,
+                @recorded_at,@journal_context,@printable_text,@recorded_at,@recorded_at,@stream,@identity,@currency,@sequence_policy,
                 @period,@xz,@bir,@reprint,@event_ref,@event_schema,@sequence,@effective_at,@actor,@service,@correlation,
                 @source_ref,@source_version,@idempotency,@semantic_version,@semantic_hash,@integrity_version,
                 @hash,@previous_hash,@retention,@facts,true)
@@ -119,10 +118,8 @@ public static class PostgresElectronicJournalWriter
             insert.Parameters.AddWithValue("sequence_ref", sequence.ToString(CultureInfo.InvariantCulture));
             insert.Parameters.AddWithValue("hash", integrityHash); insert.Parameters.AddWithValue("previous_hash", previousHash);
             insert.Parameters.AddWithValue("recorded_at", recordedAt);
-            insert.Parameters.AddWithValue("journal_context", NpgsqlDbType.Jsonb,
-                request.PrintableSalesInvoiceText is null
-                    ? "{}"
-                    : JsonSerializer.Serialize(new { printableSalesInvoiceText = request.PrintableSalesInvoiceText, encoding = "utf-8" }));
+            insert.Parameters.AddWithValue("journal_context", NpgsqlDbType.Jsonb, DBNull.Value);
+            AddNullableText(insert, "printable_text", request.PrintableSalesInvoiceText);
             insert.Parameters.AddWithValue("stream", streamId);
             insert.Parameters.AddWithValue("identity", request.FiscalIdentityId); insert.Parameters.AddWithValue("currency", request.CurrencyCode.ToUpperInvariant());
             AddNullable(insert, "sequence_policy", request.FiscalSequencePolicyId); insert.Parameters.AddWithValue("period", request.FiscalReportingPeriodId);
@@ -209,9 +206,13 @@ public static class PostgresElectronicJournalWriter
                 ProhibitedFactKeyFragments.Any(fragment => pair.Key.Contains(fragment, StringComparison.OrdinalIgnoreCase)) ||
                 pair.Value is { Length: > 2048 } || pair.Value?.Any(character => character is '\r' or '\n') == true))
             throw new InvalidOperationException("Canonical Electronic Journal event facts violate the privacy-safe contract.");
-        if (r.PrintableSalesInvoiceText is { Length: > 131072 } ||
+        if (r.PrintableSalesInvoiceText is { Length: 0 } ||
+            r.PrintableSalesInvoiceText?.Length > ElectronicJournalContract.MaximumPrintableSalesInvoiceTextCharacters ||
             r.PrintableSalesInvoiceText?.IndexOf('\0') >= 0)
             throw new InvalidOperationException("Canonical Sales Invoice text exceeds the governed journal payload contract.");
+        if (r.PrintableSalesInvoiceText is not null &&
+            !string.Equals(r.EventType, "fiscal_document_committed", StringComparison.Ordinal))
+            throw new InvalidOperationException("Canonical Sales Invoice text is valid only for a committed fiscal document event.");
     }
 
     private static void AddNullable(NpgsqlCommand command, string name, Guid? value) =>

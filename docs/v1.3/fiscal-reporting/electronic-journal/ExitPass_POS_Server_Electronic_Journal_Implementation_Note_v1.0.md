@@ -43,6 +43,8 @@ Integrity verification starts at sequence 1 and validates every event through th
 
 `event_facts` is a versioned, privacy-minimized fiscal projection written only by internal authoritative repositories. It contains governed codes, references, counts, integer minor-unit amounts, fiscal numbers/ranges, and transition facts. It excludes request/response bodies, authorization material, credentials, personal evidence, raw statutory identifiers, provider secrets, stack traces, connection details, and arbitrary diagnostics. The legacy `journal_context` column must be null for canonical events.
 
+Exact printer-ready Sales Invoice text is stored only in nullable `printable_sales_invoice_text`. It is permitted only for canonical `fiscal_document_committed` events, remains byte-for-byte identical to the `CanonicalSalesInvoiceTextRenderer` value supplied to the writer, and is capped at 131,072 characters. It is not JSON, not an `event_facts` member, and not a generic context mechanism. Historical canonical events with no immutable persisted printable text remain null; readback and `.txt` export do not reconstruct or fall back to `journal_context` and fail closed when exact text is unavailable.
+
 Applied statutory journal facts preserve only aggregate entitlement/benefit classifications and amounts already committed on the fiscal document. POS Server does not adjudicate entitlement and the journal does not retain beneficiary identity or evidence.
 
 ## Readback and export
@@ -61,6 +63,8 @@ All routes require exact Site POS Server, fiscal identity, and currency scope. W
 Readback supports period, document reference/number, Z reference, event type, effective/recorded time, and correlation filters. Pages use a sequence keyset cursor containing the immutable high-water sequence. New appends cannot enter an in-progress traversal. Page size is 1-200, export is capped at 10,000 events, and paired time ranges are capped at 31 days.
 
 JSON and RFC-4180-style UTF-8 CSV exports are deterministic projections of the same immutable high-water page as readback. They return a deterministic filename, SHA-256 content hash, output identity, ETag, `private, no-store`, and `nosniff`. Export does not mutate fiscal state. Access evidence stores only safe scope, actor/service, correlation/support references, action/result, count, and timestamp.
+
+The Sales Invoice exact-text view and `.txt` export read `printable_sales_invoice_text` in stream chronology, deduplicate exact fiscal-document replay, and encode the persisted text as strict UTF-8 without normalization. Storage location is not a semantic field: canonical semantic text continues to bind `printable_sales_invoice_text_sha256`, and integrity chaining continues to bind that semantic hash and the prior integrity hash under the unchanged v1 profiles.
 
 ## Retention and recovery
 
