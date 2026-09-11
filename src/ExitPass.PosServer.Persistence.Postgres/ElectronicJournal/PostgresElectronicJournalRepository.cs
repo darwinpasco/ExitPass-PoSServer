@@ -65,7 +65,15 @@ public sealed class PostgresElectronicJournalRepository(NpgsqlDataSource dataSou
                 if (item.StreamSequence != expectedSequence || !string.Equals(item.PreviousIntegrityHash, previousHash, StringComparison.Ordinal))
                     return IntegrityFailure(events, item.StreamSequence, "chronology_gap", support);
                 var append = ToAppendRequest(item);
-                var semantic = ElectronicJournalCanonicalizer.ComputeSemanticHash(append);
+                string semantic;
+                try
+                {
+                    semantic = ElectronicJournalCanonicalizer.ComputeSemanticHash(append, item.SemanticHashVersion);
+                }
+                catch (UnsupportedElectronicJournalSemanticHashVersionException)
+                {
+                    return IntegrityFailure(events, item.StreamSequence, "unsupported_semantic_hash_version", support);
+                }
                 var integrity = ElectronicJournalCanonicalizer.ComputeIntegrityHash(
                     append, item.EventReference, item.StreamSequence, item.RecordedAt, semantic, previousHash);
                 if (!string.Equals(semantic, item.SemanticHash, StringComparison.Ordinal) ||

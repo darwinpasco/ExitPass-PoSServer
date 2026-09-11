@@ -103,6 +103,10 @@ public sealed class ElectronicJournalApiTests
         var root = document.RootElement;
         Assert.Equal("pos-server-electronic-journal-api:v1", root.GetProperty("contract_version").GetString());
         Assert.Equal(ElectronicJournalContract.EventSchemaVersion, root.GetProperty("event_schema_version").GetString());
+        Assert.Equal(ElectronicJournalContract.CurrentSemanticHashVersion, root.GetProperty("semantic_hash_version").GetString());
+        Assert.Equal(
+            new[] { ElectronicJournalContract.LegacySemanticHashVersion, ElectronicJournalContract.CurrentSemanticHashVersion },
+            root.GetProperty("supported_semantic_hash_versions").EnumerateArray().Select(value => value.GetString()));
         Assert.Equal(ElectronicJournalContract.MaximumPageSize, root.GetProperty("pagination").GetProperty("maximum_page_size").GetInt32());
         Assert.Equal(ElectronicJournalContract.MaximumExportEvents, root.GetProperty("pagination").GetProperty("maximum_export_events").GetInt32());
         Assert.Contains(root.GetProperty("routes").EnumerateArray(), route =>

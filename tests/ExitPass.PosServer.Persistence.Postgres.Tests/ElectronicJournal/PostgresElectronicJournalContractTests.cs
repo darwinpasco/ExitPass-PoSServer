@@ -49,6 +49,31 @@ public sealed class PostgresElectronicJournalContractTests
     }
 
     [Fact]
+    public void WriterCreatesV2AndReplaysUsingThePersistedSemanticVersion()
+    {
+        var writer = File.ReadAllText(Find("PostgresElectronicJournalWriter.cs"));
+        var reader = File.ReadAllText(Find("PostgresElectronicJournalRepository.cs"));
+
+        Assert.Contains("ElectronicJournalContract.CurrentSemanticHashVersion", writer, StringComparison.Ordinal);
+        Assert.Contains("SELECT event_reference,semantic_hash_version,semantic_hash", writer, StringComparison.Ordinal);
+        Assert.Contains("ComputeSemanticHash(request, existing.SemanticHashVersion)", writer, StringComparison.Ordinal);
+        Assert.Contains("ComputeSemanticHash(append, item.SemanticHashVersion)", reader, StringComparison.Ordinal);
+        Assert.Contains("unsupported_semantic_hash_version", reader, StringComparison.Ordinal);
+        Assert.DoesNotContain("UPDATE pos.electronic_journal_records", writer, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void CanonicalConstraintAllowsOnlyTheTwoSupportedSemanticProfiles()
+    {
+        var schema = File.ReadAllText(FindSchema("pos.electronic_journal_records.sql"));
+
+        Assert.Contains("semantic_hash_version IN (", schema, StringComparison.Ordinal);
+        Assert.Contains("pos-server-electronic-journal-event-semantic:sha256:v1", schema, StringComparison.Ordinal);
+        Assert.Contains("pos-server-electronic-journal-event-semantic:sha256:v2", schema, StringComparison.Ordinal);
+        Assert.DoesNotContain("semantic_hash_version IS NOT NULL", schema, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void WriterRejectsSensitiveAndUnboundedFactMaterial()
     {
         var source = File.ReadAllText(Find("PostgresElectronicJournalWriter.cs"));

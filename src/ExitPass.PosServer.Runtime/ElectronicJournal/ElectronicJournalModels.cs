@@ -3,7 +3,8 @@ namespace ExitPass.PosServer.Runtime.ElectronicJournal;
 public static class ElectronicJournalContract
 {
     public const string EventSchemaVersion = "pos-server-electronic-journal-event:v1";
-    public const string SemanticHashVersion = "pos-server-electronic-journal-event-semantic:sha256:v1";
+    public const string LegacySemanticHashVersion = "pos-server-electronic-journal-event-semantic:sha256:v1";
+    public const string CurrentSemanticHashVersion = "pos-server-electronic-journal-event-semantic:sha256:v2";
     public const string IntegrityHashVersion = "pos-server-electronic-journal-integrity:sha256:v1";
     public const string ChronologyVersion = "pos-server-electronic-journal-chronology:v1";
     public const string ExportVersion = "pos-server-electronic-journal-export:v1";

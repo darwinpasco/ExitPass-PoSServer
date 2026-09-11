@@ -1,7 +1,11 @@
 {
   "contract_version": "pos-server-electronic-journal-api:v1",
   "event_schema_version": "pos-server-electronic-journal-event:v1",
-  "semantic_hash_version": "pos-server-electronic-journal-event-semantic:sha256:v1",
+  "semantic_hash_version": "pos-server-electronic-journal-event-semantic:sha256:v2",
+  "supported_semantic_hash_versions": [
+    "pos-server-electronic-journal-event-semantic:sha256:v1",
+    "pos-server-electronic-journal-event-semantic:sha256:v2"
+  ],
   "integrity_hash_version": "pos-server-electronic-journal-integrity:sha256:v1",
   "chronology_version": "pos-server-electronic-journal-chronology:v1",
   "export_version": "pos-server-electronic-journal-export:v1",

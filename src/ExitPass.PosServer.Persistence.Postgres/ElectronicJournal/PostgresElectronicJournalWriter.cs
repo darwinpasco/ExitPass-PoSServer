@@ -24,14 +24,13 @@ public static class PostgresElectronicJournalWriter
     {
         Validate(request);
         var eventTypeId = await ResolveCodeAsync(connection, transaction, "electronic_journal_event_type", request.EventType, cancellationToken).ConfigureAwait(false);
-        var semanticHash = ElectronicJournalCanonicalizer.ComputeSemanticHash(request);
+        var semanticHash = ElectronicJournalCanonicalizer.ComputeSemanticHash(
+            request, ElectronicJournalContract.CurrentSemanticHashVersion);
 
         var existing = await ReadExistingAsync(connection, transaction, request, eventTypeId, cancellationToken).ConfigureAwait(false);
         if (existing is not null)
         {
-            if (!string.Equals(existing.Value.SemanticHash, semanticHash, StringComparison.Ordinal))
-                throw new ElectronicJournalSemanticConflictException();
-            return existing.Value.EventReference;
+            return VerifyExisting(request, existing.Value);
         }
 
         var candidateStreamId = Guid.NewGuid();
@@ -79,9 +78,7 @@ public static class PostgresElectronicJournalWriter
         existing = await ReadExistingAsync(connection, transaction, request, eventTypeId, cancellationToken).ConfigureAwait(false);
         if (existing is not null)
         {
-            if (!string.Equals(existing.Value.SemanticHash, semanticHash, StringComparison.Ordinal))
-                throw new ElectronicJournalSemanticConflictException();
-            return existing.Value.EventReference;
+            return VerifyExisting(request, existing.Value);
         }
 
         var sequence = checked(previousSequence + 1);
@@ -130,7 +127,7 @@ public static class PostgresElectronicJournalWriter
             insert.Parameters.AddWithValue("actor", request.ActorReference); insert.Parameters.AddWithValue("service", request.ServiceIdentityReference);
             insert.Parameters.AddWithValue("correlation", request.CorrelationReference); insert.Parameters.AddWithValue("source_ref", request.SourceTransitionReference);
             insert.Parameters.AddWithValue("source_version", request.SourceTransitionVersion); AddNullableText(insert, "idempotency", request.IdempotencyReference);
-            insert.Parameters.AddWithValue("semantic_version", ElectronicJournalContract.SemanticHashVersion); insert.Parameters.AddWithValue("semantic_hash", semanticHash);
+            insert.Parameters.AddWithValue("semantic_version", ElectronicJournalContract.CurrentSemanticHashVersion); insert.Parameters.AddWithValue("semantic_hash", semanticHash);
             insert.Parameters.AddWithValue("integrity_version", ElectronicJournalContract.IntegrityHashVersion); insert.Parameters.AddWithValue("retention", RetentionPolicyId);
             insert.Parameters.AddWithValue("facts", NpgsqlDbType.Jsonb, factsJson);
             await insert.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
@@ -149,11 +146,21 @@ public static class PostgresElectronicJournalWriter
         return eventReference;
     }
 
-    private static async Task<(string EventReference, string SemanticHash)?> ReadExistingAsync(
+    private static string VerifyExisting(
+        ElectronicJournalAppendRequest request,
+        (string EventReference, string SemanticHashVersion, string SemanticHash) existing)
+    {
+        var replaySemanticHash = ElectronicJournalCanonicalizer.ComputeSemanticHash(request, existing.SemanticHashVersion);
+        if (!string.Equals(existing.SemanticHash, replaySemanticHash, StringComparison.Ordinal))
+            throw new ElectronicJournalSemanticConflictException();
+        return existing.EventReference;
+    }
+
+    private static async Task<(string EventReference, string SemanticHashVersion, string SemanticHash)?> ReadExistingAsync(
         NpgsqlConnection c, NpgsqlTransaction t, ElectronicJournalAppendRequest request, Guid eventTypeId, CancellationToken ct)
     {
         await using var command = new NpgsqlCommand("""
-            SELECT event_reference,semantic_hash FROM pos.electronic_journal_records
+            SELECT event_reference,semantic_hash_version,semantic_hash FROM pos.electronic_journal_records
             WHERE is_canonical AND site_pos_server_id=@site AND fiscal_identity_id=@identity
               AND currency_code=@currency AND source_transition_ref=@source AND journal_record_type_code_id=@type
             """, c, t);
@@ -161,7 +168,7 @@ public static class PostgresElectronicJournalWriter
         command.Parameters.AddWithValue("currency", request.CurrencyCode.ToUpperInvariant()); command.Parameters.AddWithValue("source", request.SourceTransitionReference);
         command.Parameters.AddWithValue("type", eventTypeId);
         await using var reader = await command.ExecuteReaderAsync(ct).ConfigureAwait(false);
-        return await reader.ReadAsync(ct).ConfigureAwait(false) ? (reader.GetString(0), reader.GetString(1)) : null;
+        return await reader.ReadAsync(ct).ConfigureAwait(false) ? (reader.GetString(0), reader.GetString(1), reader.GetString(2)) : null;
     }
 
     private static async Task<Guid> ResolveCodeAsync(NpgsqlConnection c, NpgsqlTransaction t, string set, string code, CancellationToken ct)
