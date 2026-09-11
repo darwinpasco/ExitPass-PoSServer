@@ -1097,7 +1097,7 @@ INSERT INTO pos.fiscal_reporting_periods (
 INSERT INTO pos.fiscal_documents (
     fiscal_document_id, site_pos_server_id, fiscal_identity_id, currency_code,
     fiscal_reporting_period_id, fiscal_document_type_code_id, fiscal_document_status_code_id,
-    business_day_date, created_at, updated_at
+    completion_basis, completion_authority_ref, business_day_date, created_at, updated_at
 ) VALUES (
     '46000000-0000-4000-8000-000000000900',
     '46000000-0000-4000-8000-000000000301',
@@ -1105,6 +1105,7 @@ INSERT INTO pos.fiscal_documents (
     '46000000-0000-4000-8000-000000000530',
     '46000000-0000-4000-8000-000000000201',
     '46000000-0000-4000-8000-000000000202',
+    'ZERO_PAYABLE_STATUTORY_FINALITY', 'Z-007B-PROOF-ZERO-PAYABLE-FINALITY',
     '2026-08-02', '2026-08-02T12:00:00Z', '2026-08-02T12:00:00Z'
 );
 

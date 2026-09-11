@@ -11,11 +11,23 @@ The script validates repository SQL under `db/state` against:
 Repository SQL is the source of truth. Local database drift is reported only and must not be promoted into repository artifacts.
 
 `Invoke-PosPersistentStateReconciliation.ps1` is the guarded upgrade path for an existing
-non-production persistent IST database. It extracts the approved supplier column and constraint
-definitions directly from `db/state`, applies only missing additive columns, and then reconciles
-the affected constraints. It is not a migration-history mechanism and does not create a second
-schema source of truth. The script refuses production-like database names and stops when existing
-approved profiles or immutable snapshots would require fabricated supplier facts.
+non-production persistent IST database. It extracts the approved fiscal-completion, Electronic
+Journal printable-text and canonical-required constraints, and reporting-period assignment function/trigger definitions directly
+from `db/state`. It inventories first,
+refuses unprovable completion ancestry before mutation, adds completion columns nullable, derives
+ordinary paid history only from independently corroborated immutable payment-finality ancestry,
+requires zero unresolved rows, and then installs the canonical constraints in one transaction.
+Historical EJ printable text is never reconstructed, historical `semantic_hash_version` and hashes
+are never rewritten, and historical `journal_context` is never updated. The canonical-required
+constraint is definition-reconciled to accept exactly the immutable V1 and current V2 semantic
+profiles; Apply stops on any unsupported historical profile. The script is not a migration-history mechanism and does not create a second schema
+source of truth. It refuses production-like database names and stops when existing approved
+profiles, immutable snapshots, completion ancestry, or pre-existing EJ printable text require a
+separately governed decision.
+Apply also fails closed when inspection detects material schema drift outside the explicitly
+approved scope; that drift must be reviewed and authorized separately. Function reconciliation
+uses `CREATE OR REPLACE FUNCTION`, preserves its OID, owner, and security-definer posture, and
+replaces the reporting-period trigger only when its normalized canonical contract differs.
 
 Controlled-code JSON source under `db/reference-data/controlled-codes/source/` is the source of truth for controlled-code reference data. Generated controlled-code SQL under `db/reference-data/controlled-codes/generated/sql/` is validated only through the opt-in `ControlledCodeLoad` mode.
 
@@ -55,6 +67,108 @@ Inspect or reconcile an approved persistent IST database hosted by its PostgreSQ
 
 Back up the target before `-Mode Apply`. Rebuild and ControlledCodeLoad remain disposable-database
 operations and must not be used against the persistent IST database.
+
+The governed persistent-IST operator sequence is deliberately separate from ordinary rebuilds.
+Set `POS_IST_DB_PASSWORD` from the existing private environment; do not place it in repository
+files. These commands are a future runbook and are not authorization to execute Apply:
+
+The required order is: (1) backup/dump, (2) record SHA-256, (3) Inspect, (4) persist the
+protected before manifest, (5) separately authorized Apply, (6) Inspect again, (7) Inventory,
+(8) Drift, (9) function/trigger contract check, (10) V1/V2 constraint-definition check,
+(11) persist the protected after manifest, (12) compare every historical identity, semantic
+version/hash, integrity version/hash, prior hash, journal context, and printable-text value,
+(13) deploy/restart POS from the reviewed dev baseline, and (14) run readiness. No fiscal
+recovery POST is part of this runbook.
+
+```powershell
+$evidenceRoot = '.\db\validation\evidence\persistent-ist-schema-reconciliation\real-apply'
+$preflightEvidence = Join-Path $evidenceRoot '01-preflight'
+$applyEvidence = Join-Path $evidenceRoot '02-apply'
+$postEvidence = Join-Path $evidenceRoot '03-post-apply'
+New-Item -ItemType Directory -Force -Path $preflightEvidence,$applyEvidence,$postEvidence | Out-Null
+
+docker run --rm --network exitpass-ist-persistent `
+  -e "PGPASSWORD=$env:POS_IST_DB_PASSWORD" `
+  -v "$((Resolve-Path $evidenceRoot).Path):/evidence" `
+  postgres:16-alpine pg_dump `
+  -h exitpass-pos-ist-persistent-db -U exitpass_ist -d exitpass_pos_ist `
+  --format=custom --no-owner --no-privileges `
+  --file=/evidence/exitpass_pos_ist.pre-reconcile.dump
+Get-FileHash "$evidenceRoot\exitpass_pos_ist.pre-reconcile.dump" -Algorithm SHA256
+
+.\db\scripts\Invoke-PosPersistentStateReconciliation.ps1 `
+  -Mode Inspect -ContainerName exitpass-pos-ist-persistent-db `
+  -DatabaseName exitpass_pos_ist -DatabaseUser exitpass_ist -EvidenceDir $preflightEvidence
+$preflight = Get-Content (Join-Path $preflightEvidence 'pos-persistent-state-reconciliation.json') -Raw | ConvertFrom-Json
+[IO.File]::WriteAllText(
+  (Join-Path $preflightEvidence 'protected-before.json'),
+  ($preflight.before.protected_manifest | ConvertTo-Json -Depth 20),
+  [Text.UTF8Encoding]::new($false))
+
+# Execute only after a separate authorization confirms that Inspect contains exactly
+# the reviewed scoped drift and no unexpected object-inventory findings.
+.\db\scripts\Invoke-PosPersistentStateReconciliation.ps1 `
+  -Mode Apply -ContainerName exitpass-pos-ist-persistent-db `
+  -DatabaseName exitpass_pos_ist -DatabaseUser exitpass_ist -EvidenceDir $applyEvidence -Confirm:$false
+
+.\db\scripts\Invoke-PosPersistentStateReconciliation.ps1 `
+  -Mode Inspect -ContainerName exitpass-pos-ist-persistent-db `
+  -DatabaseName exitpass_pos_ist -DatabaseUser exitpass_ist -EvidenceDir $postEvidence
+
+$env:POSSERVER_DB_URL = "postgresql://exitpass_ist:$($env:POS_IST_DB_PASSWORD)@exitpass-pos-ist-persistent-db:5432/exitpass_pos_ist"
+.\db\scripts\Invoke-PosDbChecks.ps1 -Mode Inventory -UseDockerPsql `
+  -DockerNetwork exitpass-ist-persistent -ConnectionString $env:POSSERVER_DB_URL `
+  -DatabaseName exitpass_pos_ist -EvidenceDir (Join-Path $evidenceRoot '04-inventory')
+.\db\scripts\Invoke-PosDbChecks.ps1 -Mode Drift -UseDockerPsql `
+  -DockerNetwork exitpass-ist-persistent -ConnectionString $env:POSSERVER_DB_URL `
+  -DatabaseName exitpass_pos_ist -EvidenceDir (Join-Path $evidenceRoot '05-drift')
+
+$postApply = Get-Content (Join-Path $postEvidence 'pos-persistent-state-reconciliation.json') -Raw | ConvertFrom-Json
+if (-not $postApply.before.reporting_period_assignment.function_definition_aligned -or
+    -not $postApply.before.reporting_period_assignment.trigger_definition_aligned) {
+  throw 'Post-Apply reporting-period function or trigger is not canonical.'
+}
+if (-not $postApply.before.canonical_required_constraint.definition_aligned -or
+    $postApply.before.canonical_required_constraint.unsupported_rows -ne 0) {
+  throw 'Post-Apply EJ canonical-required constraint is not the exact V1/V2 contract.'
+}
+[IO.File]::WriteAllText(
+  (Join-Path $postEvidence 'protected-after.json'),
+  ($postApply.before.protected_manifest | ConvertTo-Json -Depth 20),
+  [Text.UTF8Encoding]::new($false))
+if (($preflight.before.table_row_counts | ConvertTo-Json -Compress) -cne
+    ($postApply.before.table_row_counts | ConvertTo-Json -Compress) -or
+    ($preflight.before.protected_manifest | ConvertTo-Json -Depth 20 -Compress) -cne
+    ($postApply.before.protected_manifest | ConvertTo-Json -Depth 20 -Compress)) {
+  throw 'Post-Apply protected manifest differs from the preflight manifest, including historical EJ semantic/integrity versions or hashes.'
+}
+```
+
+After every database and manifest check passes, stop only the POS application container and
+relaunch the current reviewed dev source with the repository launcher; do not stop, recreate, or
+reset the persistent database:
+
+```powershell
+docker stop --time 10 exitpass-pos-server-pitx-local
+.\scripts\Start-PosServerPitxLocal.ps1 -SmokeTest
+.\db\scripts\Test-PosPersistentIstFiscalIssuanceReadiness.ps1 -RequireReady
+```
+
+These commands stop after readiness verification. Terminal-cash recovery and all Central PMS
+state changes are separately governed and are not part of schema Apply.
+
+The Electronic Journal verifier dispatches by each persisted semantic profile. Historical rows
+remain immutable under `pos-server-electronic-journal-event-semantic:sha256:v1`; new writes use
+`pos-server-electronic-journal-event-semantic:sha256:v2`, whose semantic text includes
+`printable_sales_invoice_text_sha256=`. Before and after Apply, compare the protected manifest,
+including every historical `semantic_hash_version`, semantic hash, integrity version/hash,
+previous hash, journal context, and printable text. Never rewrite historical semantic or integrity
+hashes merely to make verification pass.
+
+Rollback posture is backup restore into a separately named database/container followed by an
+explicit cutover decision. The reconciliation does not provide reverse DDL because dropping
+completion/EJ columns after new writes could destroy canonical facts. Never reset sequences,
+renumber documents, recreate reporting periods, or reconstruct EJ history as rollback.
 
 Persistent PITX fiscal issuance configuration remains separate from schema reconciliation:
 
