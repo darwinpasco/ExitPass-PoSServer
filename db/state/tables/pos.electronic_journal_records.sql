@@ -132,7 +132,10 @@ ALTER TABLE pos.electronic_journal_records
             AND correlation_ref IS NOT NULL AND btrim(correlation_ref) <> ''
             AND source_transition_ref IS NOT NULL AND btrim(source_transition_ref) <> ''
             AND source_transition_version IS NOT NULL AND btrim(source_transition_version) <> ''
-            AND semantic_hash_version = 'pos-server-electronic-journal-event-semantic:sha256:v1'
+            AND semantic_hash_version IN (
+                'pos-server-electronic-journal-event-semantic:sha256:v1',
+                'pos-server-electronic-journal-event-semantic:sha256:v2'
+            )
             AND integrity_hash_version = 'pos-server-electronic-journal-integrity:sha256:v1'
             AND event_facts IS NOT NULL AND jsonb_typeof(event_facts) = 'object'
             AND retention_policy_code_id IS NOT NULL

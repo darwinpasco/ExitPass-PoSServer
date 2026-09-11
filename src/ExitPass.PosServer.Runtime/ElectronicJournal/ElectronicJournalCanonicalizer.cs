@@ -7,8 +7,8 @@ namespace ExitPass.PosServer.Runtime.ElectronicJournal;
 
 public static class ElectronicJournalCanonicalizer
 {
-    public static string ComputeSemanticHash(ElectronicJournalAppendRequest request) =>
-        Sha256(CanonicalSemanticText(request));
+    public static string ComputeSemanticHash(ElectronicJournalAppendRequest request, string semanticHashVersion) =>
+        Sha256(CanonicalSemanticText(request, semanticHashVersion));
 
     public static string ComputeIntegrityHash(
         ElectronicJournalAppendRequest request,
@@ -32,10 +32,11 @@ public static class ElectronicJournalCanonicalizer
             string.Empty
         }));
 
-    public static string CanonicalSemanticText(ElectronicJournalAppendRequest request) =>
-        string.Join('\n', new[]
+    public static string CanonicalSemanticText(ElectronicJournalAppendRequest request, string semanticHashVersion)
+    {
+        var lines = new List<string>
         {
-            $"profile={ElectronicJournalContract.SemanticHashVersion}",
+            $"profile={semanticHashVersion}",
             $"event_schema={ElectronicJournalContract.EventSchemaVersion}",
             $"site_pos_server_id={request.SitePosServerId:D}",
             $"fiscal_identity_id={request.FiscalIdentityId:D}",
@@ -53,10 +54,23 @@ public static class ElectronicJournalCanonicalizer
             $"fiscal_sequence_policy_id={GuidText(request.FiscalSequencePolicyId)}",
             $"business_day_date={request.BusinessDayDate?.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture) ?? string.Empty}",
             $"idempotency_ref={request.IdempotencyReference ?? string.Empty}",
-            $"printable_sales_invoice_text_sha256={(request.PrintableSalesInvoiceText is null ? string.Empty : Sha256(request.PrintableSalesInvoiceText))}",
-            $"facts={CanonicalFactsJson(request.Facts)}",
-            string.Empty
-        });
+        };
+
+        switch (semanticHashVersion)
+        {
+            case ElectronicJournalContract.LegacySemanticHashVersion:
+                break;
+            case ElectronicJournalContract.CurrentSemanticHashVersion:
+                lines.Add($"printable_sales_invoice_text_sha256={(request.PrintableSalesInvoiceText is null ? string.Empty : Sha256(request.PrintableSalesInvoiceText))}");
+                break;
+            default:
+                throw new UnsupportedElectronicJournalSemanticHashVersionException(semanticHashVersion);
+        }
+
+        lines.Add($"facts={CanonicalFactsJson(request.Facts)}");
+        lines.Add(string.Empty);
+        return string.Join('\n', lines);
+    }
 
     public static string CanonicalFactsJson(IReadOnlyDictionary<string, string?> facts)
     {
@@ -80,4 +94,10 @@ public static class ElectronicJournalCanonicalizer
     private static string GuidText(Guid? value) => value?.ToString("D") ?? string.Empty;
     private static string Utc(DateTimeOffset value) =>
         value.ToUniversalTime().ToString("yyyy-MM-dd'T'HH:mm:ss.fffffff'Z'", CultureInfo.InvariantCulture);
+}
+
+public sealed class UnsupportedElectronicJournalSemanticHashVersionException : InvalidOperationException
+{
+    public UnsupportedElectronicJournalSemanticHashVersionException(string? semanticHashVersion)
+        : base($"Unsupported Electronic Journal semantic hash version: {semanticHashVersion ?? "<null>"}.") { }
 }

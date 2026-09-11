@@ -19,7 +19,7 @@ Implemented atomic source hooks are:
 - committed Z Reading, period close, Z/reset/GTA facts, and state version;
 - committed BIR sales summary bound to its governing Z Reading.
 
-Exact source replay returns the source result and creates no new event. The writer also checks `(scope, source_transition_ref, event_type)` and returns the existing event only when its canonical semantic hash matches. Changed semantics throw a terminal journal conflict and the transaction rolls back.
+Exact source replay returns the source result and creates no new event. The writer also checks `(scope, source_transition_ref, event_type)`, reads the existing event's persisted semantic profile, and returns that event only when the request recomputes its stored semantic hash under that profile. This preserves immutable v1 history without adding printable text retroactively. Changed semantics throw a terminal journal conflict and the transaction rolls back; unknown profiles fail closed.
 
 The reprint correction uses the existing `pos.reprint_requests` and `pos.reprint_output_refs` objects. Legacy rows remain `is_canonical=false`. New canonical rows are written only by `PostgresFiscalDocumentReprintRepository.RecordAsync`; one document-row lock serializes copy allocation. A deferred source constraint requires the matching event at commit, while the event has a composite FK to the governing reprint and document. Failure before event append, during append, or during output persistence rolls back every source and stream-head write.
 
@@ -28,16 +28,17 @@ The reprint correction uses the existing `pos.reprint_requests` and `pos.reprint
 Contract profiles:
 
 - event: `pos-server-electronic-journal-event:v1`
-- semantic hash: `pos-server-electronic-journal-event-semantic:sha256:v1`
+- legacy semantic hash (read/verify/replay only): `pos-server-electronic-journal-event-semantic:sha256:v1`
+- current semantic hash (all new writes): `pos-server-electronic-journal-event-semantic:sha256:v2`
 - integrity hash: `pos-server-electronic-journal-integrity:sha256:v1`
 - chronology: `pos-server-electronic-journal-chronology:v1`
 - export: `pos-server-electronic-journal-export:v1`
 
 The stream-head row is created once per exact scope and locked `FOR UPDATE`. The next positive sequence and previous hash are read under that lock. Event insertion and the compare-and-set stream-head update occur in the same source transaction. A unique stream-sequence index and unique source-transition/event-type index provide the final database guard.
 
-Canonical semantic input uses ordinal key ordering, invariant integer/date formatting, UTC timestamps, explicit null markers, and length-prefixed values. The integrity hash binds the semantic hash, event reference, sequence, durable recorded timestamp, previous integrity hash, actor, service identity, correlation reference, and retention classification. Hashing does not depend on JSON property order, locale, local timezone, or default runtime serialization.
+Canonical semantic input uses ordinal fact-key ordering, invariant integer/date formatting, UTC timestamps, and explicit empty markers. Legacy v1 ends with `idempotency_ref` followed directly by `facts` and omits the printable-text digest line entirely. Current v2 inserts `printable_sales_invoice_text_sha256=<lowercase SHA-256 or empty>` before `facts`, including for report events with no printable text. The integrity hash binds the semantic hash, event reference, sequence, durable recorded timestamp, previous integrity hash, actor, service identity, correlation reference, and retention classification. Hashing does not depend on JSON property order, locale, local timezone, or default runtime serialization.
 
-Integrity verification starts at sequence 1 and validates every event through the requested high-water sequence. It fails closed for sequence gaps, reordering, changed facts, changed attribution, a broken previous-hash link, or a stream-head mismatch. Time-filtered partial-chain verification is intentionally rejected.
+Integrity verification starts at sequence 1, dispatches semantic recomputation from each event's persisted `semantic_hash_version`, and validates every event through the requested high-water sequence. It fails closed for unknown semantic profiles, sequence gaps, reordering, changed facts, changed attribution, a broken previous-hash link, or a stream-head mismatch. Time-filtered partial-chain verification is intentionally rejected.
 
 ## Event facts and privacy
 
@@ -64,7 +65,7 @@ Readback supports period, document reference/number, Z reference, event type, ef
 
 JSON and RFC-4180-style UTF-8 CSV exports are deterministic projections of the same immutable high-water page as readback. They return a deterministic filename, SHA-256 content hash, output identity, ETag, `private, no-store`, and `nosniff`. Export does not mutate fiscal state. Access evidence stores only safe scope, actor/service, correlation/support references, action/result, count, and timestamp.
 
-The Sales Invoice exact-text view and `.txt` export read `printable_sales_invoice_text` in stream chronology, deduplicate exact fiscal-document replay, and encode the persisted text as strict UTF-8 without normalization. Storage location is not a semantic field: canonical semantic text continues to bind `printable_sales_invoice_text_sha256`, and integrity chaining continues to bind that semantic hash and the prior integrity hash under the unchanged v1 profiles.
+The Sales Invoice exact-text view and `.txt` export read `printable_sales_invoice_text` in stream chronology, deduplicate exact fiscal-document replay, and encode the persisted text as strict UTF-8 without normalization. Storage location is not a semantic field: new v2 canonical semantic text binds `printable_sales_invoice_text_sha256`, while historical v1 canonical text omits that line. Integrity chaining continues to bind the selected semantic hash and the prior integrity hash under the unchanged integrity v1 profile.
 
 ## Retention and recovery
 

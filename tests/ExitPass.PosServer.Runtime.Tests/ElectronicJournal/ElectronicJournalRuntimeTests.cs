@@ -17,8 +17,8 @@ public sealed class ElectronicJournalRuntimeTests
         var reordered = Request(new Dictionary<string, string?> { ["a"] = "1", ["z"] = "2" });
         var changed = Request(new Dictionary<string, string?> { ["a"] = "1", ["z"] = "3" });
 
-        Assert.Equal(ElectronicJournalCanonicalizer.ComputeSemanticHash(first), ElectronicJournalCanonicalizer.ComputeSemanticHash(reordered));
-        Assert.NotEqual(ElectronicJournalCanonicalizer.ComputeSemanticHash(first), ElectronicJournalCanonicalizer.ComputeSemanticHash(changed));
+        Assert.Equal(CurrentHash(first), CurrentHash(reordered));
+        Assert.NotEqual(CurrentHash(first), CurrentHash(changed));
         Assert.Equal("{\"a\":\"1\",\"z\":\"2\"}", ElectronicJournalCanonicalizer.CanonicalFactsJson(first.Facts));
     }
 
@@ -26,7 +26,7 @@ public sealed class ElectronicJournalRuntimeTests
     public void IntegrityHashBindsChronologyAndAttribution()
     {
         var request = Request(new Dictionary<string, string?> { ["amount_minor_units"] = "100" });
-        var semantic = ElectronicJournalCanonicalizer.ComputeSemanticHash(request);
+        var semantic = CurrentHash(request);
         var recorded = DateTimeOffset.Parse("2026-08-10T01:02:03Z");
         var hash = ElectronicJournalCanonicalizer.ComputeIntegrityHash(request, "EJ-1", 1, recorded, semantic, ElectronicJournalContract.GenesisHash);
         var changedActor = ElectronicJournalCanonicalizer.ComputeIntegrityHash(request with { ActorReference = "different" }, "EJ-1", 1, recorded, semantic, ElectronicJournalContract.GenesisHash);
@@ -45,8 +45,9 @@ public sealed class ElectronicJournalRuntimeTests
             FiscalDocumentId = Guid.Parse("81000000-0000-4000-8000-000000000004"),
             PrintableSalesInvoiceText = "SALES INVOICE\r\nExact Ñ UTF-8 text\r\n"
         };
-        var canonical = ElectronicJournalCanonicalizer.CanonicalSemanticText(request);
-        var semantic = ElectronicJournalCanonicalizer.ComputeSemanticHash(request);
+        var canonical = ElectronicJournalCanonicalizer.CanonicalSemanticText(
+            request, ElectronicJournalContract.CurrentSemanticHashVersion);
+        var semantic = CurrentHash(request);
         var recorded = DateTimeOffset.Parse("2026-08-10T01:02:03Z");
         var integrity = ElectronicJournalCanonicalizer.ComputeIntegrityHash(
             request, "EJ-1", 1, recorded, semantic, ElectronicJournalContract.GenesisHash);
@@ -54,10 +55,11 @@ public sealed class ElectronicJournalRuntimeTests
         Assert.Contains($"printable_sales_invoice_text_sha256={ElectronicJournalCanonicalizer.Sha256(request.PrintableSalesInvoiceText!)}", canonical, StringComparison.Ordinal);
         Assert.DoesNotContain("journal_context", canonical, StringComparison.Ordinal);
         Assert.DoesNotContain("printable_sales_invoice_text=", canonical, StringComparison.Ordinal);
-        Assert.Equal(semantic, ElectronicJournalCanonicalizer.ComputeSemanticHash(request));
+        Assert.Equal(semantic, CurrentHash(request));
         Assert.Equal(integrity, ElectronicJournalCanonicalizer.ComputeIntegrityHash(
             request, "EJ-1", 1, recorded, semantic, ElectronicJournalContract.GenesisHash));
-        Assert.Equal("pos-server-electronic-journal-event-semantic:sha256:v1", ElectronicJournalContract.SemanticHashVersion);
+        Assert.Equal("pos-server-electronic-journal-event-semantic:sha256:v1", ElectronicJournalContract.LegacySemanticHashVersion);
+        Assert.Equal("pos-server-electronic-journal-event-semantic:sha256:v2", ElectronicJournalContract.CurrentSemanticHashVersion);
     }
 
     [Fact]
@@ -104,14 +106,17 @@ public sealed class ElectronicJournalRuntimeTests
     private static ElectronicJournalEvent Event()
     {
         var request = Request(new SortedDictionary<string, string?> { ["amount_minor_units"] = "100" });
-        var semantic = ElectronicJournalCanonicalizer.ComputeSemanticHash(request);
+        var semantic = CurrentHash(request);
         var recorded = DateTimeOffset.Parse("2026-08-10T01:00:01Z");
         var hash = ElectronicJournalCanonicalizer.ComputeIntegrityHash(request, "EJ-1", 1, recorded, semantic, ElectronicJournalContract.GenesisHash);
         return new("EJ-1", request.EventType, ElectronicJournalContract.EventSchemaVersion, Site, Identity, "PHP", Period,
             null, null, null, null, null, request.BusinessDayDate, 1, request.EffectiveAt, recorded, request.ActorReference,
             request.ServiceIdentityReference, request.CorrelationReference, request.SourceTransitionReference,
-            request.SourceTransitionVersion, request.IdempotencyReference, ElectronicJournalContract.SemanticHashVersion,
+            request.SourceTransitionVersion, request.IdempotencyReference, ElectronicJournalContract.CurrentSemanticHashVersion,
             semantic, ElectronicJournalContract.IntegrityHashVersion, ElectronicJournalContract.GenesisHash, hash,
             "fiscal_reconstruction_hold", request.Facts);
     }
+
+    private static string CurrentHash(ElectronicJournalAppendRequest request) =>
+        ElectronicJournalCanonicalizer.ComputeSemanticHash(request, ElectronicJournalContract.CurrentSemanticHashVersion);
 }

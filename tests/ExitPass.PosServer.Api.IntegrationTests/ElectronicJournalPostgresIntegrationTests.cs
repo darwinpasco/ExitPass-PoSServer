@@ -272,6 +272,85 @@ public sealed class ElectronicJournalPostgresIntegrationTests
         Assert.Equal(HttpStatusCode.Created, response.StatusCode);
         Assert.Equal(1, await ScalarAsync<long>(connectionString,
             "SELECT count(*) FROM pos.electronic_journal_records WHERE is_canonical AND printable_sales_invoice_text IS NULL AND journal_context IS NULL"));
+        Assert.Equal(ElectronicJournalContract.CurrentSemanticHashVersion, await ScalarAsync<string>(connectionString,
+            "SELECT semantic_hash_version FROM pos.electronic_journal_records WHERE is_canonical"));
+    }
+
+    [Fact]
+    public async Task MixedV1V2StreamReplaysByStoredProfileAndConstraintRejectsUnknownVersion()
+    {
+        var connectionString = Environment.GetEnvironmentVariable(ConnectionVariable);
+        if (string.IsNullOrWhiteSpace(connectionString)) return;
+
+        await RebuildAsync(connectionString);
+        await ExecuteFileAsync(connectionString, Path.Combine(FindRepositoryRoot(), "tests", "ExitPass.PosServer.Api.IntegrationTests", "Fixtures", "fiscal_x_reading_runtime_fixture.sql"));
+        var historical = PrintableRequest(FiscalDocumentId, "SI-00000001", "historical:v1", ObservedAt, null);
+        var historicalReference = await ImportHistoricalV1Async(connectionString, historical);
+
+        var replayWithUnpersistedText = historical with { PrintableSalesInvoiceText = "must not be added to historical v1" };
+        await using (var connection = new NpgsqlConnection(connectionString))
+        {
+            await connection.OpenAsync();
+            await using var transaction = await connection.BeginTransactionAsync();
+            Assert.Equal(historicalReference, await PostgresElectronicJournalWriter.AppendAsync(
+                connection, transaction, replayWithUnpersistedText, default));
+            await transaction.CommitAsync();
+        }
+        Assert.Equal(1, await CanonicalEventCountAsync(connectionString));
+        Assert.Equal(0, await ScalarAsync<long>(connectionString,
+            "SELECT count(printable_sales_invoice_text) FROM pos.electronic_journal_records WHERE stream_sequence_value=1"));
+        Assert.Equal(ElectronicJournalContract.LegacySemanticHashVersion, await ScalarAsync<string>(connectionString,
+            "SELECT semantic_hash_version FROM pos.electronic_journal_records WHERE stream_sequence_value=1"));
+
+        var current = PrintableRequest(Guid.Parse("73000000-0000-4000-8000-000000000302"),
+            "SI-00000002", "current:v2", ObservedAt.AddHours(1), "SALES INVOICE\r\nExact V2 text\r\n");
+        string currentReference;
+        await using (var connection = new NpgsqlConnection(connectionString))
+        {
+            await connection.OpenAsync();
+            await using var transaction = await connection.BeginTransactionAsync();
+            currentReference = await PostgresElectronicJournalWriter.AppendAsync(connection, transaction, current, default);
+            Assert.Equal(currentReference, await PostgresElectronicJournalWriter.AppendAsync(connection, transaction, current, default));
+            await transaction.CommitAsync();
+        }
+        Assert.Equal(ElectronicJournalContract.CurrentSemanticHashVersion, await ScalarAsync<string>(connectionString,
+            "SELECT semantic_hash_version FROM pos.electronic_journal_records WHERE stream_sequence_value=2"));
+
+        await using (var connection = new NpgsqlConnection(connectionString))
+        {
+            await connection.OpenAsync();
+            await using var transaction = await connection.BeginTransactionAsync();
+            await Assert.ThrowsAsync<ElectronicJournalSemanticConflictException>(() =>
+                PostgresElectronicJournalWriter.AppendAsync(connection, transaction,
+                    current with { PrintableSalesInvoiceText = "changed exact text" }, default));
+            await transaction.RollbackAsync();
+        }
+        Assert.Equal(2, await CanonicalEventCountAsync(connectionString));
+        Assert.Equal(2, await ScalarAsync<long>(connectionString,
+            "SELECT last_sequence_value FROM pos.electronic_journal_streams"));
+
+        await using var dataSource = NpgsqlDataSource.Create(connectionString);
+        var repository = new PostgresElectronicJournalRepository(dataSource);
+        var integrity = await repository.VerifyIntegrityAsync(new ElectronicJournalQuery(SiteId, IdentityId, "PHP"));
+        Assert.Equal(ElectronicJournalOutcome.Success, integrity.Outcome);
+        Assert.Equal(2, integrity.Result?.VerifiedEventCount);
+        Assert.Equal(await ScalarAsync<string>(connectionString,
+                "SELECT integrity_hash FROM pos.electronic_journal_records WHERE stream_sequence_value=2"),
+            await ScalarAsync<string>(connectionString, "SELECT last_event_hash FROM pos.electronic_journal_streams"));
+
+        await AssertPostgresFailureAsync(connectionString, """
+            INSERT INTO pos.electronic_journal_records
+            SELECT gen_random_uuid(),site_pos_server_id,fiscal_document_id,fiscal_report_request_id,
+              journal_record_type_code_id,journal_record_status_code_id,business_day_date,'999',
+              journal_hash_ref,previous_journal_hash_ref,recorded_at,journal_context,printable_sales_invoice_text,
+              created_at,updated_at,electronic_journal_stream_id,fiscal_identity_id,currency_code,
+              fiscal_sequence_policy_id,fiscal_reporting_period_id,x_z_report_id,bir_sales_summary_report_id,
+              reprint_request_id,'EJ-UNKNOWN-SEMANTIC-VERSION',event_schema_version,999,effective_at,actor_ref,
+              service_identity_ref,correlation_ref,'unknown:semantic-version',source_transition_version,
+              'unknown:semantic-version','pos-server-electronic-journal-event-semantic:sha256:v999',semantic_hash,
+              integrity_hash_version,integrity_hash,previous_integrity_hash,retention_policy_code_id,event_facts,true
+            FROM pos.electronic_journal_records WHERE stream_sequence_value=1
+            """, "23514");
     }
 
     private static async Task<byte[]> ProveReprintRuntimeAsync(
@@ -560,6 +639,85 @@ public sealed class ElectronicJournalPostgresIntegrationTests
             FiscalDocumentId: fiscalDocumentId, FiscalSequencePolicyId: SequencePolicyId,
             BusinessDayDate: DateOnly.Parse("2026-08-03"), IdempotencyReference: sourceReference,
             PrintableSalesInvoiceText: printableText);
+
+    private static async Task<string> ImportHistoricalV1Async(
+        string connectionString, ElectronicJournalAppendRequest request)
+    {
+        var streamId = Guid.Parse("73000000-0000-4000-8000-000000000901");
+        var eventReference = $"EJ-{streamId:N}-00000000000000000001".ToUpperInvariant();
+        var recordedAt = request.EffectiveAt.AddSeconds(1);
+        var semanticHash = ElectronicJournalCanonicalizer.ComputeSemanticHash(
+            request, ElectronicJournalContract.LegacySemanticHashVersion);
+        var integrityHash = ElectronicJournalCanonicalizer.ComputeIntegrityHash(
+            request, eventReference, 1, recordedAt, semanticHash, ElectronicJournalContract.GenesisHash);
+
+        await using var connection = new NpgsqlConnection(connectionString);
+        await connection.OpenAsync();
+        await using var transaction = await connection.BeginTransactionAsync();
+        await using (var stream = new NpgsqlCommand("""
+            INSERT INTO pos.electronic_journal_streams(
+              electronic_journal_stream_id,site_pos_server_id,fiscal_identity_id,currency_code,
+              retention_policy_code_id,chronology_version,integrity_hash_version,last_sequence_value,
+              last_event_hash,created_at,updated_at)
+            VALUES(@stream,@site,@identity,'PHP','bf711168-63d1-539e-9e8f-6de908978b3e',
+              @chronology,@integrity_version,1,@integrity_hash,@recorded_at,@recorded_at)
+            """, connection, transaction))
+        {
+            stream.Parameters.AddWithValue("stream", streamId);
+            stream.Parameters.AddWithValue("site", request.SitePosServerId);
+            stream.Parameters.AddWithValue("identity", request.FiscalIdentityId);
+            stream.Parameters.AddWithValue("chronology", ElectronicJournalContract.ChronologyVersion);
+            stream.Parameters.AddWithValue("integrity_version", ElectronicJournalContract.IntegrityHashVersion);
+            stream.Parameters.AddWithValue("integrity_hash", integrityHash);
+            stream.Parameters.AddWithValue("recorded_at", recordedAt);
+            await stream.ExecuteNonQueryAsync();
+        }
+        await using (var record = new NpgsqlCommand("""
+            INSERT INTO pos.electronic_journal_records(
+              electronic_journal_record_id,site_pos_server_id,fiscal_document_id,journal_record_type_code_id,
+              journal_record_status_code_id,business_day_date,journal_sequence_ref,journal_hash_ref,
+              previous_journal_hash_ref,recorded_at,created_at,updated_at,electronic_journal_stream_id,
+              fiscal_identity_id,currency_code,fiscal_sequence_policy_id,fiscal_reporting_period_id,
+              event_reference,event_schema_version,stream_sequence_value,effective_at,actor_ref,
+              service_identity_ref,correlation_ref,source_transition_ref,source_transition_version,
+              idempotency_ref,semantic_hash_version,semantic_hash,integrity_hash_version,integrity_hash,
+              previous_integrity_hash,retention_policy_code_id,event_facts,is_canonical)
+            VALUES(gen_random_uuid(),@site,@document,'89dd11fb-87d8-51fe-a042-ef8b2e2e7829',
+              '07022b0a-3ef9-5f82-880a-d27a569f5e7b',@business_date,'1',@integrity_hash,@genesis,
+              @recorded_at,@recorded_at,@recorded_at,@stream,@identity,'PHP',@sequence_policy,@period,
+              @event_reference,@event_schema,1,@effective_at,@actor,@service,@correlation,@source_ref,
+              @source_version,@idempotency,@semantic_version,@semantic_hash,@integrity_version,
+              @integrity_hash,@genesis,'bf711168-63d1-539e-9e8f-6de908978b3e',@facts::jsonb,true)
+            """, connection, transaction))
+        {
+            record.Parameters.AddWithValue("site", request.SitePosServerId);
+            record.Parameters.AddWithValue("document", request.FiscalDocumentId!.Value);
+            record.Parameters.AddWithValue("business_date", request.BusinessDayDate!.Value);
+            record.Parameters.AddWithValue("integrity_hash", integrityHash);
+            record.Parameters.AddWithValue("genesis", ElectronicJournalContract.GenesisHash);
+            record.Parameters.AddWithValue("recorded_at", recordedAt);
+            record.Parameters.AddWithValue("stream", streamId);
+            record.Parameters.AddWithValue("identity", request.FiscalIdentityId);
+            record.Parameters.AddWithValue("sequence_policy", request.FiscalSequencePolicyId!.Value);
+            record.Parameters.AddWithValue("period", request.FiscalReportingPeriodId);
+            record.Parameters.AddWithValue("event_reference", eventReference);
+            record.Parameters.AddWithValue("event_schema", ElectronicJournalContract.EventSchemaVersion);
+            record.Parameters.AddWithValue("effective_at", request.EffectiveAt);
+            record.Parameters.AddWithValue("actor", request.ActorReference);
+            record.Parameters.AddWithValue("service", request.ServiceIdentityReference);
+            record.Parameters.AddWithValue("correlation", request.CorrelationReference);
+            record.Parameters.AddWithValue("source_ref", request.SourceTransitionReference);
+            record.Parameters.AddWithValue("source_version", request.SourceTransitionVersion);
+            record.Parameters.AddWithValue("idempotency", request.IdempotencyReference!);
+            record.Parameters.AddWithValue("semantic_version", ElectronicJournalContract.LegacySemanticHashVersion);
+            record.Parameters.AddWithValue("semantic_hash", semanticHash);
+            record.Parameters.AddWithValue("integrity_version", ElectronicJournalContract.IntegrityHashVersion);
+            record.Parameters.AddWithValue("facts", ElectronicJournalCanonicalizer.CanonicalFactsJson(request.Facts));
+            await record.ExecuteNonQueryAsync();
+        }
+        await transaction.CommitAsync();
+        return eventReference;
+    }
 
     private static string Query(int pageSize = 100, string? cursor = null, long? through = null) =>
         $"/v1/electronic-journal/events?SitePosServerId={SiteId:D}&FiscalIdentityId={IdentityId:D}&CurrencyCode=PHP&PageSize={pageSize}" +

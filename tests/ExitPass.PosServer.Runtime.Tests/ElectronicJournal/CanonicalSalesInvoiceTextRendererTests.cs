@@ -143,14 +143,15 @@ public sealed class CanonicalSalesInvoiceTextRendererTests
             invoice.FiscalDocumentId,
             BusinessDayDate: invoice.BusinessDayDate,
             PrintableSalesInvoiceText: null);
-        var semantic = ElectronicJournalCanonicalizer.ComputeSemanticHash(append);
+        var semantic = ElectronicJournalCanonicalizer.ComputeSemanticHash(
+            append, ElectronicJournalContract.LegacySemanticHashVersion);
         var historical = new ElectronicJournalEvent(
             "EJ-HISTORICAL-1", append.EventType, ElectronicJournalContract.EventSchemaVersion,
             append.SitePosServerId, append.FiscalIdentityId, append.CurrencyCode, append.FiscalReportingPeriodId,
             append.FiscalDocumentId, null, null, null, null, append.BusinessDayDate, 1, append.EffectiveAt,
             append.EffectiveAt.AddSeconds(1), append.ActorReference, append.ServiceIdentityReference,
             append.CorrelationReference, append.SourceTransitionReference, append.SourceTransitionVersion,
-            null, ElectronicJournalContract.SemanticHashVersion, semantic, ElectronicJournalContract.IntegrityHashVersion,
+            null, ElectronicJournalContract.LegacySemanticHashVersion, semantic, ElectronicJournalContract.IntegrityHashVersion,
             ElectronicJournalContract.GenesisHash, new string('a', 64), "fiscal_reconstruction_hold", append.Facts,
             PrintableSalesInvoiceText: null);
         var repository = new HistoricalRepository(historical);
