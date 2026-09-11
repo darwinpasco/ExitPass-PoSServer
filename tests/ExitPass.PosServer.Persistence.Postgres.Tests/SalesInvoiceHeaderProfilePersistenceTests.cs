@@ -7,20 +7,68 @@ namespace ExitPass.PosServer.Persistence.Postgres.Tests;
 public sealed class SalesInvoiceHeaderProfilePersistenceTests
 {
     [Fact]
-    public void PersistentDatabaseReconciliationUsesCanonicalStateWithoutFabricatingHistoricalValues()
+    public void PersistentDatabaseReconciliationLimitsMutationsToApprovedCanonicalSources()
     {
         var reconciliation = File.ReadAllText(FindDatabaseScriptPath("Invoke-PosPersistentStateReconciliation.ps1"));
 
-        Assert.Contains("db\\state\\tables\\pos.sales_invoice_header_profiles.sql", reconciliation, StringComparison.OrdinalIgnoreCase);
-        Assert.Contains("db\\state\\tables\\pos.fiscal_document_header_snapshots.sql", reconciliation, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("db\\state\\tables\\pos.fiscal_documents.sql", reconciliation, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("db\\state\\tables\\pos.electronic_journal_records.sql", reconciliation, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("db\\state\\tables\\pos.fiscal_document_reporting_period_assignment.sql", reconciliation, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("Get-StateColumnDefinition", reconciliation, StringComparison.Ordinal);
         Assert.Contains("Get-StateConstraintDefinition", reconciliation, StringComparison.Ordinal);
+        Assert.Contains("Get-StateFunctionDefinition", reconciliation, StringComparison.Ordinal);
+        Assert.Contains("Get-StateFunctionComment", reconciliation, StringComparison.Ordinal);
+        Assert.Contains("Get-StateTriggerDefinition", reconciliation, StringComparison.Ordinal);
+        Assert.Contains("function_definition_aligned", reconciliation, StringComparison.Ordinal);
+        Assert.Contains("trigger_definition_aligned", reconciliation, StringComparison.Ordinal);
+        Assert.Contains("apply_would_replace_function", reconciliation, StringComparison.Ordinal);
+        Assert.Contains("apply_would_replace_trigger", reconciliation, StringComparison.Ordinal);
         Assert.Contains("ADD COLUMN IF NOT EXISTS", reconciliation, StringComparison.OrdinalIgnoreCase);
-        Assert.Contains("historical snapshot rows lack authoritative supplier identity", reconciliation, StringComparison.OrdinalIgnoreCase);
-        Assert.Contains("approved profile rows lack authoritative supplier identity", reconciliation, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("SET NOT NULL", reconciliation, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("UPDATE pos.fiscal_document_header_snapshots", reconciliation, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("UPDATE pos.sales_invoice_header_profiles", reconciliation, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("ALTER TABLE pos.sales_invoice_header_profiles", reconciliation, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("ALTER TABLE pos.fiscal_document_header_snapshots", reconciliation, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void PersistentDatabaseReconciliationUsesProvenCompletionAncestryAndNeverReconstructsEjText()
+    {
+        var reconciliation = File.ReadAllText(FindDatabaseScriptPath("Invoke-PosPersistentStateReconciliation.ps1"));
+
+        Assert.Contains("db\\state\\tables\\pos.fiscal_documents.sql", reconciliation, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("db\\state\\tables\\pos.electronic_journal_records.sql", reconciliation, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("BLOCKED_NONDETERMINISTIC_COMPLETION_ANCESTRY_BACKFILL", reconciliation, StringComparison.Ordinal);
+        Assert.Contains("BLOCKED_UNEXPECTED_DATABASE_INVENTORY_DRIFT", reconciliation, StringComparison.Ordinal);
+        Assert.Contains("payment_finality_ref = d.document_context ->> 'upstream_finality_ref'", reconciliation, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("completion_authority_ref = COALESCE(completion_authority_ref, payment_finality_ref)", reconciliation, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("ALTER COLUMN completion_basis SET NOT NULL", reconciliation, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("ck_fiscal_documents__completion_basis", reconciliation, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("ck_fiscal_documents__completion_ancestry", reconciliation, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("ck_ej_records__printable_sales_invoice", reconciliation, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("ck_ej_records__canonical_required", reconciliation, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("BLOCKED_UNSUPPORTED_HISTORICAL_EJ_SEMANTIC_VERSION", reconciliation, StringComparison.Ordinal);
+        Assert.Contains("DROP CONSTRAINT $(Quote-Identifier $canonicalRequiredConstraint)", reconciliation, StringComparison.Ordinal);
+        Assert.Contains("pos-server-electronic-journal-event-semantic:sha256:v1", reconciliation, StringComparison.Ordinal);
+        Assert.Contains("pos-server-electronic-journal-event-semantic:sha256:v2", reconciliation, StringComparison.Ordinal);
+        Assert.Contains("'semantic_hash_version', semantic_hash_version", reconciliation, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("'printable_sales_invoice_text', to_jsonb(e)", reconciliation, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("printable_sales_invoice_text IS NOT NULL", reconciliation, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("UPDATE pos.electronic_journal_records", reconciliation, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("DROP TABLE", reconciliation, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("DELETE FROM", reconciliation, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void PersistentDatabaseReconciliationRejectsUnapprovedObjectInventoryDrift()
+    {
+        var reconciliation = File.ReadAllText(FindDatabaseScriptPath("Invoke-PosPersistentStateReconciliation.ps1"));
+
+        Assert.Contains("db\\validation\\pos_expected_inventory.json", reconciliation, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("Get-DatabaseObjectInventoryDrift", reconciliation, StringComparison.Ordinal);
+        Assert.Contains("missing unexpected", reconciliation, StringComparison.Ordinal);
+        Assert.Contains("extra unexpected", reconciliation, StringComparison.Ordinal);
+        Assert.Contains("BLOCKED_UNEXPECTED_DATABASE_INVENTORY_DRIFT", reconciliation, StringComparison.Ordinal);
     }
 
     [Fact]
