@@ -74,6 +74,10 @@ public sealed class FiscalReportOutputApiTests
             record.FiscalReportReference, "csv", null, service, new(), new(), context, NullLogger<FiscalReportOutputAudit>.Instance));
         var export2 = await ExecuteAsync(context => FiscalReportOutputEndpoint.GetXExportAsync(
             record.FiscalReportReference, "csv", null, service, new(), new(), context, NullLogger<FiscalReportOutputAudit>.Instance));
+        var pdf1 = await ExecuteAsync(context => FiscalReportOutputEndpoint.GetXExportAsync(
+            record.FiscalReportReference, "pdf", null, service, new(), new(), context, NullLogger<FiscalReportOutputAudit>.Instance));
+        var pdf2 = await ExecuteAsync(context => FiscalReportOutputEndpoint.GetXExportAsync(
+            record.FiscalReportReference, "pdf", "57mm", service, new(), new(), context, NullLogger<FiscalReportOutputAudit>.Instance));
 
         Assert.Equal(StatusCodes.Status200OK, presentation.StatusCode);
         Assert.Equal("application/json; charset=utf-8", presentation.ContentType);
@@ -84,6 +88,10 @@ public sealed class FiscalReportOutputApiTests
         Assert.Equal(export1.Headers.ETag, export2.Headers.ETag);
         Assert.Equal("text/csv; charset=utf-8", export1.ContentType);
         Assert.Contains("attachment; filename=", export1.Headers.ContentDisposition.ToString(), StringComparison.Ordinal);
+        Assert.Equal(pdf1.Body, pdf2.Body);
+        Assert.Equal("application/pdf", pdf1.ContentType);
+        Assert.Contains(".pdf", pdf1.Headers.ContentDisposition.ToString(), StringComparison.OrdinalIgnoreCase);
+        Assert.StartsWith("%PDF-1.4", Encoding.ASCII.GetString(pdf1.Body), StringComparison.Ordinal);
         Assert.DoesNotContain("beneficiary", Encoding.UTF8.GetString(presentation.Body), StringComparison.OrdinalIgnoreCase);
     }
 
@@ -113,7 +121,7 @@ public sealed class FiscalReportOutputApiTests
         var unavailable = new FiscalXReadingService(new XRepository(new(FiscalXReadingOutcome.PersistenceFailure)));
 
         var unsupported = await ExecuteAsync(context => FiscalReportOutputEndpoint.GetXExportAsync(
-            valid.FiscalReportReference, "pdf", null, service, new(), new(), context, NullLogger<FiscalReportOutputAudit>.Instance));
+            valid.FiscalReportReference, "text", null, service, new(), new(), context, NullLogger<FiscalReportOutputAudit>.Instance));
         var invalid = await ExecuteAsync(context => FiscalReportOutputEndpoint.GetXPresentationAsync(
             valid.FiscalReportReference, malformed, new(), new(), context, NullLogger<FiscalReportOutputAudit>.Instance));
         var failed = await ExecuteAsync(context => FiscalReportOutputEndpoint.GetXPresentationAsync(
@@ -133,11 +141,15 @@ public sealed class FiscalReportOutputApiTests
         var service = new FiscalZReadingService(new ZRepository(new(FiscalZReadingOutcome.Replayed, record)));
         var allowed = await ExecuteAsync(context => FiscalReportOutputEndpoint.GetZPresentationAsync(
             record.FiscalReportReference, service, new(), new(), context, NullLogger<FiscalReportOutputAudit>.Instance));
+        var pdf = await ExecuteAsync(context => FiscalReportOutputEndpoint.GetZExportAsync(
+            record.FiscalReportReference, "pdf", null, service, new(), new(), context, NullLogger<FiscalReportOutputAudit>.Instance));
         var denied = await ExecuteAsync(context => FiscalReportOutputEndpoint.GetZPresentationAsync(
             record.FiscalReportReference, service, new(), new(), context, NullLogger<FiscalReportOutputAudit>.Instance), currency: "USD");
 
         Assert.Equal(StatusCodes.Status200OK, allowed.StatusCode);
         Assert.Contains("resultingZCounterValue\":12", Encoding.UTF8.GetString(allowed.Body), StringComparison.Ordinal);
+        Assert.Equal("application/pdf", pdf.ContentType);
+        Assert.Contains(".pdf", pdf.Headers.ContentDisposition.ToString(), StringComparison.OrdinalIgnoreCase);
         Assert.Equal(StatusCodes.Status404NotFound, denied.StatusCode);
     }
 

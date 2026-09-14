@@ -1,5 +1,6 @@
 using System.Globalization;
 using System.Text;
+using ExitPass.PosServer.Runtime.FiscalDocuments;
 
 namespace ExitPass.PosServer.Runtime.ElectronicJournal;
 
@@ -10,72 +11,104 @@ namespace ExitPass.PosServer.Runtime.ElectronicJournal;
 public sealed class CanonicalSalesInvoiceTextRenderer
 {
     private const string Separator = "------------------------------------------------";
+    private const int ReceiptWidth = 48;
 
     public CanonicalSalesInvoiceTextOutput Render(CanonicalSalesInvoiceText invoice)
     {
         ArgumentNullException.ThrowIfNull(invoice);
         var currency = RequireCurrency(invoice.CurrencyCode);
-        var lines = new List<string>
-        {
-            Center("SALES INVOICE"),
-            Center(invoice.RegisteredBusinessName),
-            Center(invoice.RegisteredBusinessAddress),
-            $"TIN                : {invoice.SupplierTin}",
-            $"POS Serial No.     : {invoice.PosSerialNumber}",
-            $"MIN                : {invoice.MachineIdentificationNumber}",
-            $"PTU No.            : {invoice.PtuNumber}",
-            $"BIR Accreditation  : {invoice.BirAccreditationNumber}",
-            $"Parking Location   : {invoice.Presentation?.ParkingLocation ?? string.Empty}",
-            $"Terminal           : {invoice.Presentation?.TerminalIdentity ?? string.Empty}",
-            Separator,
-            $"SI No.             : {invoice.FiscalDocumentNumber}",
-            $"Business Date      : {invoice.BusinessDayDate:yyyy-MM-dd}",
-            $"Issued At          : {invoice.IssuedAt.ToUniversalTime():yyyy-MM-dd HH:mm:ss} UTC",
-            Separator
-        };
+        var lines = new List<string>();
+        AddCentered(lines, invoice.RegisteredBusinessName);
+        AddCentered(lines, invoice.RegisteredBusinessAddress);
+        lines.Add(string.Empty);
+        AddValue(lines, "VAT REG TIN", invoice.SupplierTin);
+        AddValue(lines, "MIN", invoice.MachineIdentificationNumber);
+        AddValue(lines, "S/N", invoice.PosSerialNumber);
+        AddValue(lines, "Branch / Site", invoice.Presentation?.BranchOrSite);
+        AddValue(lines, "Parking Location", invoice.Presentation?.ParkingLocation);
 
-        AppendParkingDetails(lines, invoice.Presentation);
+        AddSection(lines, "SALES INVOICE");
+        AddCentered(lines, RequireCopyLabel(invoice.CopyLabel));
+        lines.Add(string.Empty);
+        AddValue(lines, "SI No", invoice.FiscalDocumentNumber);
+        AddValue(lines, "Issued Date", PhtTimestamp(invoice.IssuedAt));
+        AddValue(lines, "Business Date", invoice.BusinessDayDate.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture));
 
-        lines.Add("Customer Information");
-        lines.Add($"Customer Name      : {invoice.Customer.Name ?? string.Empty}");
-        lines.Add($"Address            : {invoice.Customer.Address ?? string.Empty}");
-        lines.Add($"TIN                : {invoice.Customer.Tin ?? string.Empty}");
-        lines.Add($"Business Style     : {invoice.Customer.BusinessStyle ?? string.Empty}");
+        AddSection(lines, "PARKING DETAILS");
+        AddValue(lines, "Ticket Number", invoice.Presentation?.TicketNumber);
+        AddValue(lines, "Plate Number", invoice.Presentation?.PlateNumber);
+        AddValue(lines, "Entry Time", invoice.Presentation?.EntryTimeText);
+        lines.Add(string.Empty);
+        AddValue(lines, "Payment", invoice.Presentation?.PaymentTimeText);
+        AddValue(lines, "Duration", invoice.Presentation?.DurationText);
 
-        if (!string.IsNullOrWhiteSpace(invoice.Customer.StatutoryIdLabel) ||
-            !string.IsNullOrWhiteSpace(invoice.Customer.StatutoryIdNumber))
-        {
-            lines.Add($"{(invoice.Customer.StatutoryIdLabel ?? "OSCA ID No. / PWD ID No.").PadRight(19)}: {invoice.Customer.StatutoryIdNumber ?? string.Empty}");
-        }
-
-        if (invoice.Customer.ShowSignatureLine)
-        {
-            lines.Add("Customer Signature : ____________________");
-        }
-
-        lines.Add(Separator);
-        lines.Add("Qty  Description                         Amount");
+        AddSection(lines, "ITEMS");
+        lines.Add("# Description      Qty        Unit       Amount");
         foreach (var item in invoice.Lines.OrderBy(item => item.Sequence))
+            AddItem(lines, item, currency);
+        lines.Add(string.Empty);
+        AddValue(lines, "Subtotal", Money(invoice.Presentation?.SubtotalAmountMinorUnits ?? invoice.TotalAmountMinorUnits, currency));
+
+        AddSection(lines, "DISCOUNTS");
+        var discounts = invoice.Presentation?.Discounts ?? [];
+        if (discounts.Count == 0)
         {
-            lines.Add($"{item.Quantity,3:0.##}  {Truncate(item.Description, 30),-30} {Money(item.AmountMinorUnits, currency),13}");
+            AddValue(lines, "Discount Reason", "NONE");
+            AddValue(lines, "Discount Amount", Money(0, currency));
+        }
+        else
+        {
+            foreach (var discount in discounts)
+            {
+                AddValue(lines, "Discount Reason", discount.Label);
+                AddValue(lines, "Discount Amount", $"-{Money(discount.AmountMinorUnits, currency)}");
+            }
         }
 
-        lines.Add(Separator);
-        lines.Add($"Subtotal           : {Money(invoice.Presentation?.SubtotalAmountMinorUnits ?? invoice.TotalAmountMinorUnits, currency)}");
-        foreach (var discount in invoice.Presentation?.Discounts ?? [])
-            lines.Add($"{Truncate(discount.Label, 18).PadRight(19)}: -{Money(discount.AmountMinorUnits, currency)}");
-        lines.Add($"VATable Sales      : {Money(invoice.VatableSalesMinorUnits, currency)}");
-        lines.Add($"VAT Amount         : {Money(invoice.VatAmountMinorUnits, currency)}");
-        lines.Add($"VAT Exempt Sales   : {Money(invoice.VatExemptSalesMinorUnits, currency)}");
-        lines.Add($"Zero Rated Sales   : {Money(invoice.ZeroRatedSalesMinorUnits, currency)}");
-        lines.Add($"TOTAL              : {Money(invoice.TotalAmountMinorUnits, currency)}");
-        lines.Add(Separator);
+        AddSection(lines, "VAT BREAKDOWN");
+        AddValue(lines, "VATable Sales", Money(invoice.VatableSalesMinorUnits, currency));
+        AddValue(lines, "VAT Amount", Money(invoice.VatAmountMinorUnits, currency));
+        AddValue(lines, "VAT Exempt Sales", Money(invoice.VatExemptSalesMinorUnits, currency));
+        AddValue(lines, "Zero Rated Sales", Money(invoice.ZeroRatedSalesMinorUnits, currency));
+
+        AddSection(lines, "PAYMENT DETAILS");
+        lines.Add("Type       Provider                      Amount");
         AppendPaymentDetails(lines, invoice.Presentation, currency, invoice.TotalAmountMinorUnits);
-        if (!string.IsNullOrWhiteSpace(invoice.Presentation?.DeclarationText))
-            lines.Add(invoice.Presentation.DeclarationText.Trim());
-        lines.Add($"Print / Issued At  : {(invoice.Presentation?.PresentationTimestamp ?? invoice.IssuedAt).ToUniversalTime():yyyy-MM-dd HH:mm:ss} UTC");
+
         lines.Add(Separator);
-        if (!string.IsNullOrWhiteSpace(invoice.FooterText)) lines.Add(invoice.FooterText.Trim());
+        AddCentered(lines, invoice.Presentation?.DeclarationText ?? string.Empty);
+        lines.Add(string.Empty);
+        AddValue(lines, "Print Date", PhtTimestamp(invoice.Presentation?.PresentationTimestamp ?? invoice.IssuedAt));
+
+        if (HasCustomer(invoice.Customer))
+        {
+            AddSection(lines, "Customer Information");
+            AddValue(lines, "NAME", invoice.Customer.Name);
+            AddValue(lines, "ADDRESS", invoice.Customer.Address);
+            AddValue(lines, "TIN", invoice.Customer.Tin);
+            AddValue(lines, "BUS. STYLE", invoice.Customer.BusinessStyle);
+            if (!string.IsNullOrWhiteSpace(invoice.Customer.StatutoryIdLabel) ||
+                !string.IsNullOrWhiteSpace(invoice.Customer.StatutoryIdNumber))
+                AddValue(lines, invoice.Customer.StatutoryIdLabel ?? "OSCA ID No. / PWD ID No.", invoice.Customer.StatutoryIdNumber);
+            if (invoice.Customer.ShowSignatureLine) lines.Add("Customer Sign : __________________________");
+        }
+
+        AddSection(lines, "POS SOFTWARE SUPPLIER / DEVELOPER");
+        if (invoice.Supplier is { } supplier)
+        {
+            AddCentered(lines, supplier.RegisteredName);
+            AddCentered(lines, supplier.Address);
+            lines.Add(string.Empty);
+            AddValue(lines, "TIN", supplier.Tin);
+            AddValue(lines, "ACCR. NO.", supplier.AccreditationNumber);
+            AddValue(lines, "DATE ISSUED", supplier.AccreditationIssuedDate.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture));
+            AddValue(lines, "PTU", supplier.PtuNumber);
+            AddValue(lines, "PTU Date", supplier.PtuIssuedDate.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture));
+        }
+        if (!string.IsNullOrWhiteSpace(invoice.FooterText)) AddCentered(lines, invoice.FooterText.Trim());
+        AddCentered(lines, "THANK YOU FOR CHOOSING OUR SERVICE");
+        lines.Add(string.Empty);
+        AddCentered(lines, "===== NOTHING FOLLOWS =====");
 
         var text = string.Join("\r\n", lines) + "\r\n";
         return new(text, Encoding.UTF8.GetBytes(text));
@@ -84,43 +117,95 @@ public sealed class CanonicalSalesInvoiceTextRenderer
     private static string Money(long minorUnits, string currency) =>
         $"{currency} {(minorUnits / 100m).ToString("N2", CultureInfo.InvariantCulture)}";
 
-    private static string Center(string value) =>
-        value.Length >= 48 ? value : value.PadLeft(value.Length + ((48 - value.Length) / 2));
-
-    private static string Truncate(string value, int length) => value.Length <= length ? value : value[..length];
-
-    private static void AppendParkingDetails(List<string> lines, CanonicalSalesInvoicePresentation? presentation)
+    private static void AddSection(List<string> lines, string title)
     {
-        if (presentation is null) return;
-        var details = new (string Label, string? Value)[]
-        {
-            ("Parking Ref", presentation.ParkingReference),
-            ("Ticket No.", presentation.TicketNumber),
-            ("Plate No.", presentation.PlateNumber),
-            ("Entry Time", presentation.EntryTimeText),
-            ("Payment Time", presentation.PaymentTimeText),
-            ("Duration", presentation.DurationText)
-        };
-        if (!details.Any(value => !string.IsNullOrWhiteSpace(value.Value))) return;
-        lines.Add("Parking Details");
-        foreach (var detail in details.Where(value => !string.IsNullOrWhiteSpace(value.Value)))
-            lines.Add($"{detail.Label.PadRight(19)}: {detail.Value}");
+        lines.Add(Separator);
+        AddCentered(lines, title);
         lines.Add(Separator);
     }
 
     private static void AppendPaymentDetails(List<string> lines, CanonicalSalesInvoicePresentation? presentation, string currency, long total)
     {
-        if (presentation is null) return;
-        lines.Add("Payment Details");
-        foreach (var tender in presentation.Tenders)
-            lines.Add($"{Truncate(tender.Label, 18).PadRight(19)}: {Money(tender.AmountMinorUnits, currency)}");
-        lines.Add($"Total Paid         : {Money(presentation.TotalPaidMinorUnits ?? total, currency)}");
-        if (presentation.TenderedAmountMinorUnits.HasValue)
-            lines.Add($"Tendered           : {Money(presentation.TenderedAmountMinorUnits.Value, currency)}");
-        if (presentation.ChangeAmountMinorUnits.HasValue)
-            lines.Add($"Change             : {Money(presentation.ChangeAmountMinorUnits.Value, currency)}");
-        lines.Add(Separator);
+        foreach (var tender in presentation?.Tenders ?? []) AddTender(lines, tender, currency);
+        AddValue(lines, "Total Paid", Money(presentation?.TotalPaidMinorUnits ?? total, currency));
+        if (presentation?.TenderedAmountMinorUnits is { } tendered) AddValue(lines, "Tendered", Money(tendered, currency));
+        if (presentation?.ChangeAmountMinorUnits is { } change) AddValue(lines, "Change", Money(change, currency));
     }
+
+    private static void AddItem(List<string> lines, CanonicalSalesInvoiceLine item, string currency)
+    {
+        var descriptions = Wrap(item.Description, 14).ToArray();
+        var row = $"{item.Sequence,2} {descriptions[0],-14} {item.Quantity,4:0.##} {Money(item.UnitAmountMinorUnits, currency),11} {Money(item.AmountMinorUnits, currency),12}";
+        if (row.Length <= ReceiptWidth)
+        {
+            lines.Add(row);
+        }
+        else
+        {
+            AddValue(lines, $"{item.Sequence} {descriptions[0]}", Money(item.AmountMinorUnits, currency));
+            AddValue(lines, "Qty / Unit", $"{item.Quantity:0.##} / {Money(item.UnitAmountMinorUnits, currency)}");
+        }
+        foreach (var description in descriptions.Skip(1)) lines.Add($"   {description}");
+    }
+
+    private static void AddTender(List<string> lines, CanonicalSalesInvoiceTender tender, string currency)
+    {
+        var providers = Wrap(tender.Provider ?? string.Empty, 18).ToArray();
+        var amount = Money(tender.AmountMinorUnits, currency);
+        if (tender.Label.Length <= 10 && amount.Length <= 16)
+        {
+            lines.Add($"{tender.Label,-10} {providers[0],-18} {amount,16}");
+            foreach (var provider in providers.Skip(1)) lines.Add($"           {provider}");
+            return;
+        }
+
+        AddValue(lines, "Type", tender.Label);
+        AddValue(lines, "Provider", tender.Provider);
+        AddValue(lines, "Amount", amount);
+    }
+
+    private static void AddValue(List<string> lines, string label, string? value)
+    {
+        var resolved = value ?? string.Empty;
+        if (label.Length + resolved.Length + 1 <= ReceiptWidth)
+        {
+            lines.Add(label + new string(' ', ReceiptWidth - label.Length - resolved.Length) + resolved);
+            return;
+        }
+        lines.Add(label);
+        foreach (var line in Wrap(resolved, ReceiptWidth)) lines.Add(line);
+    }
+
+    private static void AddCentered(List<string> lines, string value)
+    {
+        foreach (var line in Wrap(value, ReceiptWidth))
+            lines.Add(line.Length >= ReceiptWidth ? line : line.PadLeft(line.Length + ((ReceiptWidth - line.Length) / 2)));
+    }
+
+    private static IEnumerable<string> Wrap(string value, int width)
+    {
+        var remaining = value.Trim();
+        if (remaining.Length == 0) { yield return string.Empty; yield break; }
+        while (remaining.Length > width)
+        {
+            var split = remaining.LastIndexOf(' ', width - 1, width);
+            if (split <= 0) split = width;
+            yield return remaining[..split].TrimEnd();
+            remaining = remaining[split..].TrimStart();
+        }
+        yield return remaining;
+    }
+
+    private static bool HasCustomer(CanonicalSalesInvoiceCustomer customer) =>
+        customer.ShowSignatureLine || new[] { customer.Name, customer.Address, customer.Tin, customer.BusinessStyle,
+            customer.StatutoryIdLabel, customer.StatutoryIdNumber }.Any(value => !string.IsNullOrWhiteSpace(value));
+
+    private static string PhtTimestamp(DateTimeOffset value) =>
+        value.ToOffset(TimeSpan.FromHours(8)).ToString("yyyy-MM-dd HH:mm:ss 'PHT'", CultureInfo.InvariantCulture);
+
+    private static string RequireCopyLabel(string value) => value is "ORIGINAL" or "REPRINT"
+        ? value
+        : throw new ArgumentException("Sales Invoice copy label must be ORIGINAL or REPRINT.", nameof(value));
 
     private static string RequireCurrency(string value)
     {
@@ -142,6 +227,19 @@ public sealed class SalesInvoicePrinterPayloadRenderer(CanonicalSalesInvoiceText
 {
     public CanonicalSalesInvoiceTextOutput RenderVisibleText(CanonicalSalesInvoiceText invoice) =>
         canonicalRenderer.Render(invoice);
+
+    public CanonicalSalesInvoiceTextOutput RenderReprintVisibleText(
+        CanonicalSalesInvoiceText invoice,
+        FiscalDocumentReprintRecord reprint)
+    {
+        ArgumentNullException.ThrowIfNull(reprint);
+        if (reprint.FiscalDocumentId != invoice.FiscalDocumentId ||
+            !string.Equals(reprint.FiscalDocumentNumber, invoice.FiscalDocumentNumber, StringComparison.Ordinal) ||
+            !string.Equals(reprint.ReprintStatus, "committed", StringComparison.Ordinal) ||
+            !reprint.ReprintLabelApplied)
+            throw new InvalidOperationException("A committed matching governed reprint record is required.");
+        return canonicalRenderer.Render(invoice with { CopyLabel = "REPRINT" });
+    }
 }
 
 public sealed record CanonicalSalesInvoiceCustomer(
@@ -157,14 +255,16 @@ public sealed record CanonicalSalesInvoiceLine(
     int Sequence,
     string Description,
     decimal Quantity,
+    long UnitAmountMinorUnits,
     long AmountMinorUnits,
     string CurrencyCode);
 
 public sealed record CanonicalSalesInvoiceDiscount(string Label, long AmountMinorUnits);
 
-public sealed record CanonicalSalesInvoiceTender(string Label, long AmountMinorUnits);
+public sealed record CanonicalSalesInvoiceTender(string Label, string? Provider, long AmountMinorUnits);
 
 public sealed record CanonicalSalesInvoicePresentation(
+    string? BranchOrSite,
     string? ParkingLocation,
     string? TerminalIdentity,
     string? ParkingReference,
@@ -181,6 +281,15 @@ public sealed record CanonicalSalesInvoicePresentation(
     long? ChangeAmountMinorUnits,
     string? DeclarationText,
     DateTimeOffset PresentationTimestamp);
+
+public sealed record CanonicalSalesInvoiceSupplier(
+    string RegisteredName,
+    string Address,
+    string Tin,
+    string AccreditationNumber,
+    DateOnly AccreditationIssuedDate,
+    string PtuNumber,
+    DateOnly PtuIssuedDate);
 
 public sealed record CanonicalSalesInvoiceText(
     Guid FiscalDocumentId,
@@ -203,7 +312,9 @@ public sealed record CanonicalSalesInvoiceText(
     long TotalAmountMinorUnits,
     string CurrencyCode,
     string? FooterText,
-    CanonicalSalesInvoicePresentation? Presentation = null);
+    CanonicalSalesInvoicePresentation? Presentation = null,
+    CanonicalSalesInvoiceSupplier? Supplier = null,
+    string CopyLabel = "ORIGINAL");
 
 public sealed record ElectronicJournalInvoiceTextExport(
     string ContentType,
