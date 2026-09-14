@@ -171,14 +171,12 @@ public sealed class PostgresFiscalXReadingRepository(
             FROM pos.fiscal_reporting_periods p
             JOIN pos.controlled_codes status ON status.controlled_code_id = p.period_status_code_id
             JOIN pos.controlled_code_sets status_set ON status_set.controlled_code_set_id = status.controlled_code_set_id
-            JOIN pos.site_pos_servers site ON site.site_pos_server_id = p.site_pos_server_id
             JOIN pos.fiscal_reporting_contract_versions contract ON contract.fiscal_reporting_contract_version_id = p.fiscal_reporting_contract_version_id
             WHERE p.site_pos_server_id = @site_pos_server_id
               AND p.fiscal_identity_id = @fiscal_identity_id
               AND status_set.code_set_key = 'fiscal_reporting_period_status' AND status.code_key = 'open'
               AND p.period_start_at <= @observed_at
-              AND p.reporting_timezone_name = site.reporting_timezone_name
-              AND p.business_day_cutoff_local_time = site.business_day_cutoff_local_time
+              AND @observed_at < p.period_end_at
               AND contract.contract_key = 'pos-server-fiscal-reporting' AND contract.contract_version = 'v1'
               AND contract.semantic_hash_version = @semantic_hash_version AND contract.is_active
             ORDER BY p.period_sequence DESC

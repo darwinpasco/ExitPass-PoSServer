@@ -35,8 +35,10 @@ catch [TimeZoneNotFoundException] {
     $timezone = [TimeZoneInfo]::FindSystemTimeZoneById('Singapore Standard Time')
 }
 $localAt = [TimeZoneInfo]::ConvertTime($At, $timezone)
-$businessDateText = $localAt.Date.ToString('yyyy-MM-dd', [Globalization.CultureInfo]::InvariantCulture)
-$startLocal = [DateTime]::SpecifyKind($localAt.Date, [DateTimeKind]::Unspecified)
+$cutoff = [TimeSpan]::FromHours(7)
+$businessDate = if ($localAt.TimeOfDay -lt $cutoff) { $localAt.Date.AddDays(-1) } else { $localAt.Date }
+$businessDateText = $businessDate.ToString('yyyy-MM-dd', [Globalization.CultureInfo]::InvariantCulture)
+$startLocal = [DateTime]::SpecifyKind($businessDate.Add($cutoff), [DateTimeKind]::Unspecified)
 $endLocal = $startLocal.AddDays(1)
 $startAt = [TimeZoneInfo]::ConvertTimeToUtc($startLocal, $timezone)
 $endAt = [TimeZoneInfo]::ConvertTimeToUtc($endLocal, $timezone)
@@ -64,6 +66,19 @@ SELECT json_build_object(
       AND period_status_code_id='1a6f7021-bc84-5c01-afaa-c5d6685633c8'
       AND '$atUtc'::timestamptz>=period_start_at
       AND '$atUtc'::timestamptz<period_end_at),
+  'matching_current_open_period_count', (
+    SELECT count(*) FROM pos.fiscal_reporting_periods
+    WHERE site_pos_server_id='$sitePosServerId'
+      AND fiscal_identity_id='$fiscalIdentityId'
+      AND currency_code='PHP'
+      AND period_status_code_id='1a6f7021-bc84-5c01-afaa-c5d6685633c8'
+      AND '$atUtc'::timestamptz>=period_start_at
+      AND '$atUtc'::timestamptz<period_end_at
+      AND reporting_timezone_name='Asia/Manila'
+      AND business_day_cutoff_local_time='07:00:00'::time
+      AND business_day_date='$businessDateText'::date
+      AND period_start_at='$startUtc'::timestamptz
+      AND period_end_at='$endUtc'::timestamptz),
   'overlap_count', (
     SELECT count(*) FROM pos.fiscal_reporting_periods
     WHERE site_pos_server_id='$sitePosServerId'
@@ -85,6 +100,12 @@ function Get-PeriodFacts {
 }
 
 $before = Get-PeriodFacts
+if ($before.current_open_period_count -gt 1) {
+    throw 'Multiple current OPEN PITX fiscal reporting periods are not allowed.'
+}
+if ($before.current_open_period_count -ne $before.matching_current_open_period_count) {
+    throw 'Existing PITX OPEN fiscal reporting period uses a different business-day boundary. Controlled non-production reseed or governed cutoff transition is required.'
+}
 $result = [ordered]@{
     mode = $Mode
     database = $DatabaseName
@@ -96,7 +117,7 @@ $result = [ordered]@{
     period_start_at = $startUtc
     period_end_at = $endUtc
     reporting_timezone_name = 'Asia/Manila'
-    business_day_cutoff_local_time = '00:00:00'
+    business_day_cutoff_local_time = '07:00:00'
     before = $before
     status = 'INSPECTED'
 }
@@ -134,6 +155,22 @@ BEGIN
         AND '$atUtc'::timestamptz<period_end_at) > 1 THEN
     RAISE EXCEPTION 'Multiple current OPEN PITX fiscal reporting periods are not allowed';
   END IF;
+  IF EXISTS (
+      SELECT 1 FROM pos.fiscal_reporting_periods
+      WHERE site_pos_server_id='$sitePosServerId'
+        AND fiscal_identity_id='$fiscalIdentityId'
+        AND currency_code='PHP'
+        AND period_status_code_id='1a6f7021-bc84-5c01-afaa-c5d6685633c8'
+        AND '$atUtc'::timestamptz>=period_start_at
+        AND '$atUtc'::timestamptz<period_end_at
+        AND NOT (
+          reporting_timezone_name='Asia/Manila'
+          AND business_day_cutoff_local_time='07:00:00'::time
+          AND business_day_date='$businessDateText'::date
+          AND period_start_at='$startUtc'::timestamptz
+          AND period_end_at='$endUtc'::timestamptz)) THEN
+    RAISE EXCEPTION 'Existing PITX OPEN fiscal reporting period uses a different business-day boundary. Controlled non-production reseed or governed cutoff transition is required';
+  END IF;
 END
 `$`$;
 
@@ -145,7 +182,7 @@ INSERT INTO pos.fiscal_reporting_periods(
   expected_prior_period_id,opened_at,created_by_ref,updated_by_ref)
 SELECT '$periodId','$contractId','$sitePosServerId','$fiscalIdentityId',
   '1a6f7021-bc84-5c01-afaa-c5d6685633c8','$businessDateText',
-  '$startUtc','$endUtc','Asia/Manila','00:00:00','PHP',
+  '$startUtc','$endUtc','Asia/Manila','07:00:00','PHP',
   COALESCE((SELECT max(period_sequence)+1 FROM pos.fiscal_reporting_periods WHERE site_pos_server_id='$sitePosServerId'),1),
   (SELECT fiscal_reporting_period_id FROM pos.fiscal_reporting_periods
    WHERE site_pos_server_id='$sitePosServerId'
@@ -177,7 +214,12 @@ BEGIN
         AND currency_code='PHP'
         AND period_status_code_id='1a6f7021-bc84-5c01-afaa-c5d6685633c8'
         AND '$atUtc'::timestamptz>=period_start_at
-        AND '$atUtc'::timestamptz<period_end_at) <> 1 THEN
+        AND '$atUtc'::timestamptz<period_end_at
+        AND reporting_timezone_name='Asia/Manila'
+        AND business_day_cutoff_local_time='07:00:00'::time
+        AND business_day_date='$businessDateText'::date
+        AND period_start_at='$startUtc'::timestamptz
+        AND period_end_at='$endUtc'::timestamptz) <> 1 THEN
     RAISE EXCEPTION 'Exactly one current OPEN PITX fiscal reporting period is required; overlap or missing period detected';
   END IF;
 END
@@ -186,13 +228,13 @@ COMMIT;
 "@
 [void](Invoke-PosPersistentIstPsql $applySql $ContainerName $DatabaseName $DatabaseUser)
 $after = Get-PeriodFacts
-if ($after.current_open_period_count -ne 1) { throw 'Current PITX OPEN reporting period did not resolve exactly once.' }
+if ($after.matching_current_open_period_count -ne 1) { throw 'Current PITX OPEN reporting period did not match the approved business-day boundary exactly once.' }
 if ($before.fiscal_document_count -ne $after.fiscal_document_count -or
     $before.electronic_journal_count -ne $after.electronic_journal_count -or
     $before.closed_period_count -ne $after.closed_period_count) {
     throw 'Reporting-period ensure changed protected fiscal history.'
 }
 $result.after = $after
-$result.status = if ($before.current_open_period_count -eq 1) { 'REUSED' } else { 'CREATED' }
+$result.status = if ($before.matching_current_open_period_count -eq 1) { 'REUSED' } else { 'CREATED' }
 Write-PosPersistentIstEvidence $result $EvidenceDir 'pos-persistent-ist-fiscal-reporting-period.json'
 $result | ConvertTo-Json -Depth 10

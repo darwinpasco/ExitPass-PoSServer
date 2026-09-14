@@ -10,6 +10,7 @@ public static class PostgresFiscalCloseBoundaryCoordinator
 {
     public const string LockIdentityVersion = "z-close-boundary:v1";
     private const int LockTimeoutMilliseconds = 5000;
+    private const string PeriodRolloverActor = "pos-server:fiscal-period-rollover";
 
     public static long DeriveAdvisoryKey(Guid sitePosServerId, Guid fiscalIdentityId, string currencyCode)
     {
@@ -77,6 +78,94 @@ public static class PostgresFiscalCloseBoundaryCoordinator
         DateOnly? businessDayDate,
         CancellationToken cancellationToken)
     {
+        var periods = await ReadMatchingPeriodsAsync(
+            connection,
+            transaction,
+            sitePosServerId,
+            fiscalIdentityId,
+            currencyCode,
+            businessDayDate,
+            cancellationToken).ConfigureAwait(false);
+
+        if (periods.Count == 0 && businessDayDate is null)
+        {
+            await EnsureCurrentOpenPeriodAsync(
+                connection,
+                transaction,
+                sitePosServerId,
+                fiscalIdentityId,
+                currencyCode,
+                cancellationToken).ConfigureAwait(false);
+            periods = await ReadMatchingPeriodsAsync(
+                connection,
+                transaction,
+                sitePosServerId,
+                fiscalIdentityId,
+                currencyCode,
+                businessDayDate,
+                cancellationToken).ConfigureAwait(false);
+        }
+
+        if (periods.Count == 0)
+        {
+            throw new FiscalCloseBoundaryException(
+                FiscalCloseBoundaryErrorCode.ReportingPeriodUnavailable,
+                businessDayDate is null
+                    ? "A governed OPEN fiscal reporting period is unavailable for this scope."
+                    : "A governed fiscal reporting period is unavailable for the immutable business date.");
+        }
+
+        if (periods.Count > 1)
+        {
+            throw new FiscalCloseBoundaryException(
+                FiscalCloseBoundaryErrorCode.ReportingPeriodAmbiguous,
+                businessDayDate is null
+                    ? "Multiple governed OPEN fiscal reporting periods match this scope."
+                    : "Multiple governed fiscal reporting periods match the immutable business date.");
+        }
+
+        if (periods[0].Status != Guid.Parse("1a6f7021-bc84-5c01-afaa-c5d6685633c8"))
+        {
+            throw new FiscalCloseBoundaryException(
+                FiscalCloseBoundaryErrorCode.ReportingPeriodClosed,
+                "The canonical fiscal reporting period for the immutable business date is not OPEN.");
+        }
+
+        return periods[0].Assignment;
+    }
+
+    public static (DateOnly BusinessDayDate, DateTimeOffset PeriodStartAt, DateTimeOffset PeriodEndAt) ResolveBusinessDayWindow(
+        DateTimeOffset fiscalTimestamp,
+        string reportingTimezoneName,
+        TimeOnly businessDayCutoffLocalTime)
+    {
+        if (string.IsNullOrWhiteSpace(reportingTimezoneName))
+        {
+            throw new ArgumentException("Reporting timezone is required.", nameof(reportingTimezoneName));
+        }
+
+        var timezone = TimeZoneInfo.FindSystemTimeZoneById(reportingTimezoneName);
+        var localTimestamp = TimeZoneInfo.ConvertTime(fiscalTimestamp, timezone);
+        var localDate = DateOnly.FromDateTime(localTimestamp.DateTime);
+        var businessDayDate = TimeOnly.FromDateTime(localTimestamp.DateTime) < businessDayCutoffLocalTime
+            ? localDate.AddDays(-1)
+            : localDate;
+        var startLocal = businessDayDate.ToDateTime(businessDayCutoffLocalTime, DateTimeKind.Unspecified);
+        var endLocal = businessDayDate.AddDays(1).ToDateTime(businessDayCutoffLocalTime, DateTimeKind.Unspecified);
+        var startAt = new DateTimeOffset(TimeZoneInfo.ConvertTimeToUtc(startLocal, timezone), TimeSpan.Zero);
+        var endAt = new DateTimeOffset(TimeZoneInfo.ConvertTimeToUtc(endLocal, timezone), TimeSpan.Zero);
+        return (businessDayDate, startAt, endAt);
+    }
+
+    private static async Task<List<(FiscalReportingPeriodAssignment Assignment, Guid Status)>> ReadMatchingPeriodsAsync(
+        NpgsqlConnection connection,
+        NpgsqlTransaction transaction,
+        Guid sitePosServerId,
+        Guid fiscalIdentityId,
+        string currencyCode,
+        DateOnly? businessDayDate,
+        CancellationToken cancellationToken)
+    {
         const string sql = """
             SELECT period.fiscal_reporting_period_id,
                    period.fiscal_reporting_contract_version_id,
@@ -123,34 +212,120 @@ public static class PostgresFiscalCloseBoundaryCoordinator
                 reader.IsDBNull(6) ? null : reader.GetGuid(6), reader.GetFieldValue<DateTimeOffset>(7)),
                 reader.GetGuid(8)));
         }
+        return periods;
+    }
 
-        if (periods.Count == 0)
+    private static async Task EnsureCurrentOpenPeriodAsync(
+        NpgsqlConnection connection,
+        NpgsqlTransaction transaction,
+        Guid sitePosServerId,
+        Guid fiscalIdentityId,
+        string currencyCode,
+        CancellationToken cancellationToken)
+    {
+        const string configurationSql = """
+            SELECT site.reporting_timezone_name,
+                   site.business_day_cutoff_local_time,
+                   transaction_timestamp(),
+                   (
+                       SELECT contract.fiscal_reporting_contract_version_id
+                       FROM pos.fiscal_reporting_contract_versions contract
+                       WHERE contract.contract_key = 'pos-server-fiscal-reporting'
+                         AND contract.contract_version = 'v1'
+                         AND contract.is_active
+                         AND contract.effective_from <= transaction_timestamp()
+                         AND (contract.effective_to IS NULL OR contract.effective_to > transaction_timestamp())
+                   )
+            FROM pos.site_pos_servers site
+            WHERE site.site_pos_server_id = @site
+              AND site.is_active
+            FOR UPDATE OF site;
+            """;
+        await using var configurationCommand = new NpgsqlCommand(configurationSql, connection, transaction);
+        configurationCommand.Parameters.AddWithValue("site", sitePosServerId);
+        await using var reader = await configurationCommand.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
+        if (!await reader.ReadAsync(cancellationToken).ConfigureAwait(false) ||
+            reader.IsDBNull(0) || reader.IsDBNull(1) || reader.IsDBNull(3))
         {
             throw new FiscalCloseBoundaryException(
                 FiscalCloseBoundaryErrorCode.ReportingPeriodUnavailable,
-                businessDayDate is null
-                    ? "A governed OPEN fiscal reporting period is unavailable for this scope."
-                    : "A governed fiscal reporting period is unavailable for the immutable business date.");
+                "Site POS Server reporting timezone, cutoff, and reporting contract are required for period rollover.");
         }
 
-        if (periods.Count > 1)
+        var reportingTimezoneName = reader.GetString(0);
+        var businessDayCutoffLocalTime = reader.GetFieldValue<TimeOnly>(1);
+        var fiscalTimestamp = reader.GetFieldValue<DateTimeOffset>(2);
+        var contractVersionId = reader.GetGuid(3);
+        await reader.CloseAsync().ConfigureAwait(false);
+
+        (DateOnly BusinessDayDate, DateTimeOffset PeriodStartAt, DateTimeOffset PeriodEndAt) window;
+        try
         {
-            throw new FiscalCloseBoundaryException(
-                FiscalCloseBoundaryErrorCode.ReportingPeriodAmbiguous,
-                businessDayDate is null
-                    ? "Multiple governed OPEN fiscal reporting periods match this scope."
-                    : "Multiple governed fiscal reporting periods match the immutable business date.");
+            window = ResolveBusinessDayWindow(fiscalTimestamp, reportingTimezoneName, businessDayCutoffLocalTime);
         }
-
-        if (periods[0].Status != Guid.Parse("1a6f7021-bc84-5c01-afaa-c5d6685633c8"))
+        catch (TimeZoneNotFoundException exception)
         {
-            throw new FiscalCloseBoundaryException(
-                FiscalCloseBoundaryErrorCode.ReportingPeriodClosed,
-                "The canonical fiscal reporting period for the immutable business date is not OPEN.");
+            throw InvalidReportingTimezone(exception);
+        }
+        catch (InvalidTimeZoneException exception)
+        {
+            throw InvalidReportingTimezone(exception);
         }
 
-        return periods[0].Assignment;
+        const string insertSql = """
+            INSERT INTO pos.fiscal_reporting_periods(
+                fiscal_reporting_period_id, fiscal_reporting_contract_version_id,
+                site_pos_server_id, fiscal_identity_id, period_status_code_id, business_day_date,
+                period_start_at, period_end_at, reporting_timezone_name,
+                business_day_cutoff_local_time, currency_code, period_sequence,
+                expected_prior_period_id, opened_at, created_by_ref, updated_by_ref)
+            SELECT @period, @contract, @site, @identity,
+                   '1a6f7021-bc84-5c01-afaa-c5d6685633c8', @business_day_date,
+                   @period_start_at, @period_end_at, @timezone, @cutoff, @currency,
+                   COALESCE((SELECT max(period_sequence) + 1
+                             FROM pos.fiscal_reporting_periods
+                             WHERE site_pos_server_id = @site), 1),
+                   (SELECT fiscal_reporting_period_id
+                    FROM pos.fiscal_reporting_periods
+                    WHERE site_pos_server_id = @site
+                      AND fiscal_identity_id = @identity
+                      AND currency_code = @currency
+                      AND period_end_at <= @period_start_at
+                    ORDER BY period_end_at DESC, period_sequence DESC
+                    LIMIT 1),
+                   @opened_at, @actor, @actor
+            WHERE NOT EXISTS (
+                SELECT 1
+                FROM pos.fiscal_reporting_periods
+                WHERE site_pos_server_id = @site
+                  AND fiscal_identity_id = @identity
+                  AND currency_code = @currency
+                  AND tstzrange(period_start_at, period_end_at, '[)') &&
+                      tstzrange(@period_start_at, @period_end_at, '[)'))
+            ON CONFLICT (site_pos_server_id, fiscal_identity_id, period_start_at, period_end_at, currency_code)
+            DO NOTHING;
+            """;
+        await using var insertCommand = new NpgsqlCommand(insertSql, connection, transaction);
+        insertCommand.Parameters.AddWithValue("period", Guid.NewGuid());
+        insertCommand.Parameters.AddWithValue("contract", contractVersionId);
+        insertCommand.Parameters.AddWithValue("site", sitePosServerId);
+        insertCommand.Parameters.AddWithValue("identity", fiscalIdentityId);
+        insertCommand.Parameters.AddWithValue("business_day_date", window.BusinessDayDate);
+        insertCommand.Parameters.AddWithValue("period_start_at", window.PeriodStartAt);
+        insertCommand.Parameters.AddWithValue("period_end_at", window.PeriodEndAt);
+        insertCommand.Parameters.AddWithValue("timezone", reportingTimezoneName);
+        insertCommand.Parameters.AddWithValue("cutoff", businessDayCutoffLocalTime);
+        insertCommand.Parameters.AddWithValue("currency", currencyCode);
+        insertCommand.Parameters.AddWithValue("opened_at", fiscalTimestamp);
+        insertCommand.Parameters.AddWithValue("actor", PeriodRolloverActor);
+        await insertCommand.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
     }
+
+    private static FiscalCloseBoundaryException InvalidReportingTimezone(Exception innerException) =>
+        new(
+            FiscalCloseBoundaryErrorCode.ReportingPeriodUnavailable,
+            "Site POS Server reporting timezone is invalid for period rollover.",
+            innerException);
 
     public static async Task LockAndValidateAssignedPeriodAsync(
         NpgsqlConnection connection,
