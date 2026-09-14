@@ -80,6 +80,20 @@ public sealed class PostgresFiscalCloseBoundaryFoundationTests
     }
 
     [Fact]
+    public void HistorySelectsTheCurrentXPeriodAndOldestEndedZPeriodWithoutOpenPeriodAmbiguity()
+    {
+        var source = File.ReadAllText(FindSource("src", "ExitPass.PosServer.Persistence.Postgres", "FiscalReports", "PostgresFiscalReportingHistoryRepository.cs"));
+
+        Assert.Contains("p.period_start_at <= transaction_timestamp()", source, StringComparison.Ordinal);
+        Assert.Contains("transaction_timestamp() < p.period_end_at", source, StringComparison.Ordinal);
+        Assert.Contains("p.period_end_at <= transaction_timestamp()", source, StringComparison.Ordinal);
+        Assert.Contains("CASE WHEN @report_kind='Z' THEN p.period_sequence END ASC", source, StringComparison.Ordinal);
+        Assert.Contains("LIMIT 1", source, StringComparison.Ordinal);
+        Assert.DoesNotContain("fiscal_reporting_period_ambiguous", source, StringComparison.Ordinal);
+        Assert.Contains("kind.code_key IN ('x_reading','z_reading')", source, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void CanonicalStateRepositoryUsesReadCommittedTransactionLockAndImmutableEvidence()
     {
         var repository = File.ReadAllText(FindSource("src", "ExitPass.PosServer.Persistence.Postgres", "FiscalReports", "PostgresFiscalZCloseStateRepository.cs"));

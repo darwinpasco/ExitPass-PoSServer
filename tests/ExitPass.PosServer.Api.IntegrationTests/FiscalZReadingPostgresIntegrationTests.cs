@@ -179,6 +179,113 @@ public sealed class FiscalZReadingPostgresIntegrationTests
             $"SELECT count(*) FROM pos.x_z_reports WHERE fiscal_reporting_period_id='{currentPeriodId:D}' AND report_kind_code_id='1c628bc2-49c3-53e8-ae83-2082bcf28467'"));
     }
 
+    [Fact]
+    public async Task HistorySeparatesCurrentXPeriodFromOldestEndedZCloseCandidate()
+    {
+        var connectionString = Environment.GetEnvironmentVariable(ConnectionVariable);
+        if (string.IsNullOrWhiteSpace(connectionString)) return;
+
+        var secondPeriodId = Guid.Parse("73000000-0000-4000-8000-000000000020");
+        var thirdPeriodId = Guid.Parse("73000000-0000-4000-8000-000000000021");
+        var currentPeriodId = Guid.Parse("73000000-0000-4000-8000-000000000022");
+        await RebuildAsync(connectionString);
+        await ExecuteFileAsync(connectionString, Path.Combine(FindRepositoryRoot(), "tests", "ExitPass.PosServer.Api.IntegrationTests", "Fixtures", "fiscal_x_reading_runtime_fixture.sql"));
+        await ExecuteAsync(connectionString, $"INSERT INTO pos.site_pos_server_fiscal_identity_history(site_pos_server_fiscal_identity_history_id,site_pos_server_id,fiscal_identity_id,effective_start_at,assignment_reason_text) VALUES('73000000-0000-4000-8000-000000000090','{SiteId:D}','{IdentityId:D}','2026-01-01T00:00:00Z','Synthetic history selection scope')");
+
+        await using var app = await StartApiAsync(connectionString);
+        using var client = CreateClient(app);
+        Authorize(client);
+
+        using var xResponse = await client.PostAsJsonAsync(
+            "/v1/fiscal-reports/x-readings/",
+            new GenerateFiscalXReadingRequest("history-selection-x", SiteId, IdentityId, DateTimeOffset.Parse("2026-08-03T12:00:00Z")));
+        var xBody = await xResponse.Content.ReadFromJsonAsync<FiscalXReadingApiResponse>();
+        Assert.Equal(HttpStatusCode.Created, xResponse.StatusCode);
+        Assert.NotNull(xBody?.XReading);
+
+        using var initializedResponse = await client.PostAsJsonAsync(
+            "/v1/admin/fiscal-z-close-states/initialize",
+            new InitializeFiscalZCloseStateRequest("history-selection-state", SiteId, IdentityId, "PHP", "approved_new_scope_zero", 0, 0, 0, "approved-history-selection"));
+        Assert.True(initializedResponse.IsSuccessStatusCode, await initializedResponse.Content.ReadAsStringAsync());
+
+        using var firstZResponse = await client.PostAsJsonAsync(
+            "/v1/fiscal-reports/z-readings/",
+            new CloseFiscalZReadingRequest("history-selection-first-z", SiteId, IdentityId, "PHP", PeriodId, 1));
+        var firstZBody = await firstZResponse.Content.ReadFromJsonAsync<FiscalZReadingApiResponse>();
+        Assert.Equal(HttpStatusCode.Created, firstZResponse.StatusCode);
+        Assert.NotNull(firstZBody?.ZReading);
+
+        await ExecuteAsync(connectionString, $"""
+            INSERT INTO pos.fiscal_reporting_periods(
+                fiscal_reporting_period_id,fiscal_reporting_contract_version_id,site_pos_server_id,fiscal_identity_id,
+                period_status_code_id,business_day_date,period_start_at,period_end_at,reporting_timezone_name,
+                business_day_cutoff_local_time,currency_code,period_sequence,expected_prior_period_id,opened_at,
+                created_by_ref,updated_by_ref)
+            VALUES
+                ('{secondPeriodId:D}','f6766f48-62f0-513f-b9eb-e61c2f3e8c66','{SiteId:D}','{IdentityId:D}',
+                 '1a6f7021-bc84-5c01-afaa-c5d6685633c8',current_date-3,transaction_timestamp()-interval '3 days',
+                 transaction_timestamp()-interval '2 days','Asia/Manila','07:00:00','PHP',2,'{PeriodId:D}',
+                 transaction_timestamp()-interval '3 days','history-selection','history-selection'),
+                ('{thirdPeriodId:D}','f6766f48-62f0-513f-b9eb-e61c2f3e8c66','{SiteId:D}','{IdentityId:D}',
+                 '1a6f7021-bc84-5c01-afaa-c5d6685633c8',current_date-2,transaction_timestamp()-interval '2 days',
+                 transaction_timestamp()-interval '1 day','Asia/Manila','07:00:00','PHP',3,'{secondPeriodId:D}',
+                 transaction_timestamp()-interval '2 days','history-selection','history-selection'),
+                ('{currentPeriodId:D}','f6766f48-62f0-513f-b9eb-e61c2f3e8c66','{SiteId:D}','{IdentityId:D}',
+                 '1a6f7021-bc84-5c01-afaa-c5d6685633c8',current_date,transaction_timestamp()-interval '1 hour',
+                 transaction_timestamp()+interval '1 hour','Asia/Manila','07:00:00','PHP',4,'{thirdPeriodId:D}',
+                 transaction_timestamp()-interval '1 hour','history-selection','history-selection');
+            """);
+
+        var historyQuery = $"?sitePosServerId={SiteId:D}&fiscalIdentityId={IdentityId:D}&currencyCode=PHP";
+        using var xHistoryResponse = await client.GetAsync($"/v1/fiscal-reports/x-readings/history{historyQuery}");
+        using var zHistoryResponse = await client.GetAsync($"/v1/fiscal-reports/z-readings/history{historyQuery}");
+        var xHistoryText = await xHistoryResponse.Content.ReadAsStringAsync();
+        var zHistoryText = await zHistoryResponse.Content.ReadAsStringAsync();
+        Assert.True(xHistoryResponse.IsSuccessStatusCode, xHistoryText);
+        Assert.True(zHistoryResponse.IsSuccessStatusCode, zHistoryText);
+
+        using var xHistory = System.Text.Json.JsonDocument.Parse(xHistoryText);
+        using var zHistory = System.Text.Json.JsonDocument.Parse(zHistoryText);
+        Assert.Equal(currentPeriodId, xHistory.RootElement.GetProperty("currentPeriod").GetProperty("fiscalReportingPeriodId").GetGuid());
+        Assert.Equal(secondPeriodId, zHistory.RootElement.GetProperty("currentPeriod").GetProperty("fiscalReportingPeriodId").GetGuid());
+        Assert.Contains(xHistory.RootElement.GetProperty("readings").EnumerateArray(), row =>
+            row.GetProperty("reportReference").GetString() == xBody!.XReading!.FiscalReportReference);
+        Assert.Contains(zHistory.RootElement.GetProperty("readings").EnumerateArray(), row =>
+            row.GetProperty("reportReference").GetString() == firstZBody!.ZReading!.FiscalReportReference);
+
+        using var earlyCurrentResponse = await client.PostAsJsonAsync(
+            "/v1/fiscal-reports/z-readings/",
+            new CloseFiscalZReadingRequest("history-selection-current-too-early", SiteId, IdentityId, "PHP", currentPeriodId, 2));
+        Assert.Equal(HttpStatusCode.Conflict, earlyCurrentResponse.StatusCode);
+        Assert.Contains("fiscal_reporting_period_not_ended", await earlyCurrentResponse.Content.ReadAsStringAsync(), StringComparison.Ordinal);
+
+        using var skippedPeriodResponse = await client.PostAsJsonAsync(
+            "/v1/fiscal-reports/z-readings/",
+            new CloseFiscalZReadingRequest("history-selection-skip-ended-period", SiteId, IdentityId, "PHP", thirdPeriodId, 2));
+        Assert.Equal(HttpStatusCode.Conflict, skippedPeriodResponse.StatusCode);
+        Assert.Contains("fiscal_z_prior_period_unresolved", await skippedPeriodResponse.Content.ReadAsStringAsync(), StringComparison.Ordinal);
+
+        using var oldestEndedResponse = await client.PostAsJsonAsync(
+            "/v1/fiscal-reports/z-readings/",
+            new CloseFiscalZReadingRequest("history-selection-oldest-ended", SiteId, IdentityId, "PHP", secondPeriodId, 2));
+        Assert.Equal(HttpStatusCode.Created, oldestEndedResponse.StatusCode);
+        Assert.Equal("open", await ScalarAsync<string>(connectionString,
+            $"SELECT c.code_key FROM pos.fiscal_reporting_periods p JOIN pos.controlled_codes c ON c.controlled_code_id=p.period_status_code_id WHERE p.fiscal_reporting_period_id='{thirdPeriodId:D}'"));
+        Assert.Equal("open", await ScalarAsync<string>(connectionString,
+            $"SELECT c.code_key FROM pos.fiscal_reporting_periods p JOIN pos.controlled_codes c ON c.controlled_code_id=p.period_status_code_id WHERE p.fiscal_reporting_period_id='{currentPeriodId:D}'"));
+
+        using var nextEndedResponse = await client.PostAsJsonAsync(
+            "/v1/fiscal-reports/z-readings/",
+            new CloseFiscalZReadingRequest("history-selection-next-ended", SiteId, IdentityId, "PHP", thirdPeriodId, 3));
+        Assert.Equal(HttpStatusCode.Created, nextEndedResponse.StatusCode);
+
+        using var noCandidateResponse = await client.GetAsync($"/v1/fiscal-reports/z-readings/history{historyQuery}");
+        var noCandidateText = await noCandidateResponse.Content.ReadAsStringAsync();
+        Assert.True(noCandidateResponse.IsSuccessStatusCode, noCandidateText);
+        using var noCandidate = System.Text.Json.JsonDocument.Parse(noCandidateText);
+        Assert.Equal(System.Text.Json.JsonValueKind.Null, noCandidate.RootElement.GetProperty("currentPeriod").ValueKind);
+    }
+
     private static async Task ProveCompetingCloseAsync(string connectionString, HttpClient client)
     {
         const string sql = """
@@ -267,9 +374,10 @@ public sealed class FiscalZReadingPostgresIntegrationTests
         {
             ["ConnectionStrings:PosServer"]=connectionString,["PosServer:Admin:ApiKeys:0:Principal"]="z-proof-service",["PosServer:Admin:ApiKeys:0:Key"]="synthetic-z-proof-key",
             ["PosServer:Admin:ApiKeys:0:Permissions:0"]=FiscalZCloseStateInitializationAuthorization.Permission,["PosServer:Admin:ApiKeys:0:Permissions:1"]=FiscalZReadingAuthorization.ClosePermission,["PosServer:Admin:ApiKeys:0:Permissions:2"]=FiscalZReadingAuthorization.ReadPermission,
+            ["PosServer:Admin:ApiKeys:0:Permissions:3"]=FiscalXReadingAuthorization.GeneratePermission,["PosServer:Admin:ApiKeys:0:Permissions:4"]=FiscalXReadingAuthorization.ReadPermission,
             ["PosServer:Admin:ApiKeys:0:SitePosServerIds:0"]=SiteId.ToString("D"),["PosServer:Admin:ApiKeys:0:FiscalIdentityIds:0"]=IdentityId.ToString("D"),["PosServer:Admin:ApiKeys:0:CurrencyCodes:0"]="PHP"
         });
-        builder.Services.AddPosServerFiscalDocumentApi(builder.Configuration);var app=builder.Build();app.UseAuthentication();app.UseAuthorization();app.MapFiscalZCloseStateInitializationEndpoints();app.MapFiscalZReadingEndpoints();await app.StartAsync();return app;
+        builder.Services.AddPosServerFiscalDocumentApi(builder.Configuration);var app=builder.Build();app.UseAuthentication();app.UseAuthorization();app.MapFiscalZCloseStateInitializationEndpoints();app.MapFiscalXReadingEndpoints();app.MapFiscalZReadingEndpoints();await app.StartAsync();return app;
     }
 
     private static HttpClient CreateClient(WebApplication app){var address=app.Services.GetRequiredService<IServer>().Features.Get<IServerAddressesFeature>()!.Addresses.Single();return new(){BaseAddress=new(address)};}

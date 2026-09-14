@@ -6,15 +6,14 @@ namespace ExitPass.PosServer.Persistence.Postgres.FiscalReports;
 
 public sealed class PostgresFiscalReportingHistoryRepository(NpgsqlDataSource dataSource) : IFiscalReportingHistoryRepository
 {
-    public async Task<FiscalReportingHistorySnapshot> ReadAsync(Guid sitePosServerId, Guid fiscalIdentityId, string currencyCode, int limit, CancellationToken cancellationToken = default)
+    public async Task<FiscalReportingHistorySnapshot> ReadAsync(Guid sitePosServerId, Guid fiscalIdentityId, string currencyCode, string reportKind, int limit, CancellationToken cancellationToken = default)
     {
         try
         {
             await using var connection = await dataSource.OpenConnectionAsync(cancellationToken).ConfigureAwait(false);
-            var periods = await ReadOpenPeriodsAsync(connection, sitePosServerId, fiscalIdentityId, currencyCode, cancellationToken).ConfigureAwait(false);
-            if (periods.Count > 1) return new(null, [], [], "fiscal_reporting_period_ambiguous", "More than one OPEN fiscal reporting period exists for the requested scope.");
+            var period = await ReadCurrentPeriodAsync(connection, sitePosServerId, fiscalIdentityId, currencyCode, reportKind, cancellationToken).ConfigureAwait(false);
             var readings = await ReadHistoryAsync(connection, sitePosServerId, fiscalIdentityId, currencyCode, limit, cancellationToken).ConfigureAwait(false);
-            return new(periods.SingleOrDefault(), readings.Where(value => value.ReportKind == "X_READING").ToArray(), readings.Where(value => value.ReportKind == "Z_READING").ToArray(), "fiscal_reporting_history_read");
+            return new(period, readings.Where(value => value.ReportKind == "X_READING").ToArray(), readings.Where(value => value.ReportKind == "Z_READING").ToArray(), "fiscal_reporting_history_read");
         }
         catch (NpgsqlException)
         {
@@ -22,7 +21,7 @@ public sealed class PostgresFiscalReportingHistoryRepository(NpgsqlDataSource da
         }
     }
 
-    private static async Task<List<FiscalReportingPeriodSnapshot>> ReadOpenPeriodsAsync(NpgsqlConnection connection, Guid site, Guid identity, string currency, CancellationToken ct)
+    private static async Task<FiscalReportingPeriodSnapshot?> ReadCurrentPeriodAsync(NpgsqlConnection connection, Guid site, Guid identity, string currency, string reportKind, CancellationToken ct)
     {
         const string sql = """
             SELECT p.fiscal_reporting_period_id,p.site_pos_server_id,p.fiscal_identity_id,p.business_day_date,
@@ -32,15 +31,19 @@ public sealed class PostgresFiscalReportingHistoryRepository(NpgsqlDataSource da
             LEFT JOIN pos.fiscal_z_close_states state ON state.site_pos_server_id=p.site_pos_server_id
                  AND state.fiscal_identity_id=p.fiscal_identity_id AND state.currency_code=p.currency_code
             WHERE p.site_pos_server_id=@site AND p.fiscal_identity_id=@identity AND p.currency_code=@currency
-              AND status.code_key='open' ORDER BY p.period_sequence DESC LIMIT 2;
+              AND status.code_key='open'
+              AND ((@report_kind='X' AND p.period_start_at <= transaction_timestamp() AND transaction_timestamp() < p.period_end_at)
+                OR (@report_kind='Z' AND p.period_end_at <= transaction_timestamp()))
+            ORDER BY CASE WHEN @report_kind='Z' THEN p.period_sequence END ASC,
+                     CASE WHEN @report_kind='X' THEN p.period_sequence END DESC
+            LIMIT 1;
             """;
         await using var command = new NpgsqlCommand(sql, connection);
-        command.Parameters.AddWithValue("site", site); command.Parameters.AddWithValue("identity", identity); command.Parameters.AddWithValue("currency", currency);
+        command.Parameters.AddWithValue("site", site); command.Parameters.AddWithValue("identity", identity); command.Parameters.AddWithValue("currency", currency); command.Parameters.AddWithValue("report_kind", reportKind);
         await using var reader = await command.ExecuteReaderAsync(ct).ConfigureAwait(false);
-        var result = new List<FiscalReportingPeriodSnapshot>();
-        while (await reader.ReadAsync(ct).ConfigureAwait(false))
-            result.Add(new(reader.GetGuid(0),reader.GetGuid(1),reader.GetGuid(2),reader.GetFieldValue<DateOnly>(3),reader.GetFieldValue<DateTimeOffset>(4),reader.GetFieldValue<DateTimeOffset>(5),reader.GetString(6),reader.GetInt64(7),reader.GetString(8).ToUpperInvariant(),reader.GetInt64(9)));
-        return result;
+        return await reader.ReadAsync(ct).ConfigureAwait(false)
+            ? new(reader.GetGuid(0),reader.GetGuid(1),reader.GetGuid(2),reader.GetFieldValue<DateOnly>(3),reader.GetFieldValue<DateTimeOffset>(4),reader.GetFieldValue<DateTimeOffset>(5),reader.GetString(6),reader.GetInt64(7),reader.GetString(8).ToUpperInvariant(),reader.GetInt64(9))
+            : null;
     }
 
     private static async Task<List<FiscalReadingHistoryItem>> ReadHistoryAsync(NpgsqlConnection connection, Guid site, Guid identity, string currency, int limit, CancellationToken ct)
