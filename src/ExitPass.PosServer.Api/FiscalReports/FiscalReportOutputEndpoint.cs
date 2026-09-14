@@ -179,11 +179,14 @@ public static class FiscalReportOutputEndpoint
             error = ("fiscal_report_export_format_unsupported", "The requested fiscal report export format is not supported.");
             return false;
         }
-        if (outputFormat == FiscalReportOutputFormat.Text && !FiscalReportOutputRenderer.TryParseWidthProfile(width, out profile))
+        var requestedWidth = width?.Trim().ToLowerInvariant();
+        if (outputFormat == FiscalReportOutputFormat.Pdf &&
+            requestedWidth is not null and not "" and not "57mm" and not "narrow")
         {
             error = ("fiscal_report_print_width_unsupported", "The requested fiscal report print width profile is not supported.");
             return false;
         }
+        if (outputFormat == FiscalReportOutputFormat.Pdf) profile = FiscalReportPrintWidthProfile.Narrow;
         return true;
     }
 

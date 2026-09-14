@@ -6,7 +6,7 @@ public static class FiscalReportPresentationContract
     public const string ZPresentationVersion = "fiscal-z-reading-presentation-json-v1";
     public const string JsonExportVersion = "fiscal-x-z-reading-export-json-v1";
     public const string CsvExportVersion = "fiscal-x-z-reading-export-csv-v1";
-    public const string PrintVersion = "fiscal-x-z-reading-print-text-v2";
+    public const string PdfExportVersion = "fiscal-x-z-reading-receipt-pdf-v1";
     public const string OutputIdentityVersion = "fiscal-report-output:sha256:v1";
 }
 
@@ -130,7 +130,7 @@ public enum FiscalReportOutputFormat
     PresentationJson,
     Json,
     Csv,
-    Text
+    Pdf
 }
 
 public enum FiscalReportPrintWidthProfile

@@ -1,5 +1,6 @@
 using System.Text;
 using ExitPass.PosServer.Runtime.ElectronicJournal;
+using ExitPass.PosServer.Runtime.FiscalDocuments;
 using Xunit;
 
 namespace ExitPass.PosServer.Runtime.Tests.ElectronicJournal;
@@ -24,21 +25,29 @@ public sealed class CanonicalSalesInvoiceTextRendererTests
     }
 
     [Fact]
-    public void RendererCoversRecoveredReferenceSampleStructureAndCurrentApprovedLabels()
+    public void RendererMatchesApprovedSalesInvoiceReceiptStructureAndLabels()
     {
         var text = new CanonicalSalesInvoiceTextRenderer().Render(Invoice()).Text;
         var requiredStructure = new[]
         {
-            "SALES INVOICE", "ExitPass Parking Corporation", "TIN", "POS Serial No.", "MIN", "PTU No.",
-            "BIR Accreditation", "Parking Location", "Terminal", "SI No.", "Issued At", "Parking Details",
-            "Parking Ref", "Ticket No.", "Plate No.", "Entry Time", "Payment Time", "Duration",
-            "Qty  Description", "Subtotal", "Senior Discount", "VATable Sales", "VAT Amount",
-            "VAT Exempt Sales", "Zero Rated Sales", "Payment Details", "CASH", "Total Paid",
-            "Sales Invoice declaration", "Print / Issued At", "Customer Information", "Software Supplier"
+            "ExitPass Parking Corporation", "VAT REG TIN", "MIN", "S/N", "Branch / Site", "Parking Location",
+            "SALES INVOICE", "ORIGINAL", "SI No", "Issued Date", "PARKING DETAILS", "Ticket Number",
+            "Plate Number", "Entry Time", "Payment", "Duration", "ITEMS", "Description", "Subtotal",
+            "DISCOUNTS", "Discount Reason", "Discount Amount", "VAT BREAKDOWN", "VATable Sales", "VAT Amount",
+            "VAT Exempt Sales", "Zero Rated Sales", "PAYMENT DETAILS", "GCASH", "PayMongo", "Total Paid",
+            "THIS SERVES AS YOUR SALES INVOICE", "Print Date", "Customer Information",
+            "POS SOFTWARE SUPPLIER / DEVELOPER", "THANK YOU FOR CHOOSING OUR SERVICE", "NOTHING FOLLOWS"
         };
 
-        foreach (var value in requiredStructure) Assert.Contains(value, text, StringComparison.Ordinal);
+        var prior = -1;
+        foreach (var value in requiredStructure)
+        {
+            var index = text.IndexOf(value, prior + 1, StringComparison.Ordinal);
+            Assert.True(index > prior, $"Expected '{value}' after the prior canonical field.");
+            prior = index;
+        }
         Assert.True(Count(text, "------------------------------------------------") >= 6);
+        Assert.All(text.Split("\r\n", StringSplitOptions.RemoveEmptyEntries), line => Assert.True(line.Length <= 48, line));
     }
 
     [Fact]
@@ -47,16 +56,25 @@ public sealed class CanonicalSalesInvoiceTextRendererTests
         var text = new CanonicalSalesInvoiceTextRenderer().Render(Invoice()).Text;
         var required = new[]
         {
-            "Customer Name      : Juan Dela Cruz",
-            "Address            : 123 Sample Street",
-            "TIN                : 123-456-789-000",
-            "Business Style     : Retail",
-            "OSCA ID No.        : OSCA-0001",
-            "Customer Signature : ____________________",
-            "VATable Sales      : PHP 100.00",
-            "VAT Amount         : PHP 12.00",
-            "VAT Exempt Sales   : PHP 0.00",
-            "Zero Rated Sales   : PHP 0.00"
+            "VATable Sales",
+            "PHP 100.00",
+            "VAT Amount",
+            "PHP 12.00",
+            "VAT Exempt Sales",
+            "PHP 0.00",
+            "Zero Rated Sales",
+            "Customer Information",
+            "NAME",
+            "Juan Dela Cruz",
+            "ADDRESS",
+            "123 Sample Street",
+            "TIN",
+            "123-456-789-000",
+            "BUS. STYLE",
+            "Retail",
+            "OSCA ID No.",
+            "OSCA-0001",
+            "Customer Sign : __________________________"
         };
 
         var prior = -1;
@@ -66,6 +84,30 @@ public sealed class CanonicalSalesInvoiceTextRendererTests
             Assert.True(index > prior, $"Expected '{value}' after the prior canonical field.");
             prior = index;
         }
+    }
+
+    [Fact]
+    public void OriginalAndGovernedReprintLabelsRemainDistinct()
+    {
+        var invoice = Invoice();
+        var renderer = new SalesInvoicePrinterPayloadRenderer(new CanonicalSalesInvoiceTextRenderer());
+        var original = renderer.RenderVisibleText(invoice).Text;
+        var reprintRecord = new FiscalDocumentReprintRecord(
+            Guid.Parse("aaaaaaaa-0000-4000-8000-000000000101"), "REPRINT-0001", invoice.FiscalDocumentId,
+            invoice.FiscalDocumentNumber, 1, Guid.Parse("aaaaaaaa-0000-4000-8000-000000000102"),
+            Guid.Parse("aaaaaaaa-0000-4000-8000-000000000103"), "PHP",
+            Guid.Parse("aaaaaaaa-0000-4000-8000-000000000104"), Guid.Parse("aaaaaaaa-0000-4000-8000-000000000105"),
+            invoice.BusinessDayDate, 1, "fiscal_document_copy", "committed", "customer_request", "output-001",
+            "print", true, invoice.IssuedAt, invoice.IssuedAt, "operator", "pos-server", "correlation", "operation",
+            "EJ-REPRINT-001");
+        var reprint = renderer.RenderReprintVisibleText(invoice, reprintRecord).Text;
+
+        Assert.Contains("ORIGINAL", original, StringComparison.Ordinal);
+        Assert.DoesNotContain("REPRINT", original, StringComparison.Ordinal);
+        Assert.Contains("REPRINT", reprint, StringComparison.Ordinal);
+        Assert.DoesNotContain("ORIGINAL", reprint, StringComparison.Ordinal);
+        Assert.Throws<InvalidOperationException>(() =>
+            renderer.RenderReprintVisibleText(invoice, reprintRecord with { ReprintLabelApplied = false }));
     }
 
     [Fact]
@@ -84,7 +126,7 @@ public sealed class CanonicalSalesInvoiceTextRendererTests
         Assert.Equal(first.Bytes, second.Bytes);
         Assert.True(first.Text.IndexOf("SI-00000001", StringComparison.Ordinal) < first.Text.IndexOf("SI-00000002", StringComparison.Ordinal));
         Assert.Equal(1, Count(first.Text, "SI-00000001"));
-        Assert.Equal(2, Count(first.Text, "SALES INVOICE"));
+        Assert.Equal(2, CountLines(first.Text, "SALES INVOICE"));
         Assert.Contains("\r\n\r\n", first.Text, StringComparison.Ordinal);
     }
 
@@ -117,7 +159,7 @@ public sealed class CanonicalSalesInvoiceTextRendererTests
         var expected = Encoding.UTF8.GetBytes(firstPrint.Text + "\r\n" + secondPrint.Text);
         Assert.Equal(expected, File.ReadAllBytes(evidencePath));
         Assert.Equal(firstPrint.Text + "\r\n" + secondPrint.Text, strictUtf8.GetString(File.ReadAllBytes(evidencePath)));
-        Assert.Equal(2, Count(journal.Text, "SALES INVOICE"));
+        Assert.Equal(2, CountLines(journal.Text, "SALES INVOICE"));
         Assert.Equal(1, Count(journal.Text, "SI-00000001"));
         Assert.Equal(1, Count(journal.Text, "SI-00000002"));
         Assert.False(File.ReadAllBytes(evidencePath).AsSpan().StartsWith(Encoding.UTF8.Preamble));
@@ -181,15 +223,16 @@ public sealed class CanonicalSalesInvoiceTextRendererTests
         "PTU-001",
         "BIR-ACC-001",
         new("Juan Dela Cruz", "123 Sample Street", "123-456-789-000", "Retail", "OSCA ID No.", "OSCA-0001", true),
-        [new(1, "Parking fee", 1m, 11200, "PHP")],
+        [new(1, "Parking fee - regular parking", 1m, 11200, 11200, "PHP")],
         10000,
         1200,
         0,
         0,
         11200,
         "PHP",
-        "Thank you for parking with us.\r\nSoftware Supplier  : ExitPass Software Inc.\r\nBIR Accreditation  : BIR-ACC-001\r\nPTU No.            : PTU-001",
+        "Customer service: support@example.test",
         new(
+            "PITX",
             "PITX Parking Facility",
             "TERMINAL-01",
             "PARKING-SESSION-001",
@@ -200,15 +243,26 @@ public sealed class CanonicalSalesInvoiceTextRendererTests
             "01:00:00",
             12000,
             [new("Senior Discount", 800)],
-            [new("CASH", 11200)],
+            [new("GCASH", "PayMongo", 11200)],
             11200,
             12000,
             800,
-            "This document serves as the official Sales Invoice declaration.",
-            DateTimeOffset.Parse("2026-09-10T01:00:00Z")));
+            "THIS SERVES AS YOUR SALES INVOICE",
+            DateTimeOffset.Parse("2026-09-10T01:00:00Z")),
+        new(
+            "ExitPass Software Inc.",
+            "Supplier Address, Philippines",
+            "987-654-321-000",
+            "BIR-ACC-001",
+            new DateOnly(2026, 1, 15),
+            "PTU-001",
+            new DateOnly(2026, 2, 10)));
 
     private static int Count(string text, string value) =>
         (text.Length - text.Replace(value, string.Empty, StringComparison.Ordinal).Length) / value.Length;
+
+    private static int CountLines(string text, string value) =>
+        text.Split("\r\n", StringSplitOptions.None).Count(line => line.Trim().Equals(value, StringComparison.Ordinal));
 
     private sealed class HistoricalRepository(ElectronicJournalEvent historical) : IElectronicJournalRepository
     {

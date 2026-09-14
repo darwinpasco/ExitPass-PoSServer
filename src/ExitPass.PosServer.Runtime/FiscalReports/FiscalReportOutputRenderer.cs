@@ -8,6 +8,8 @@ namespace ExitPass.PosServer.Runtime.FiscalReports;
 
 public sealed class FiscalReportOutputRenderer
 {
+    public const double PdfPageWidthPoints = 161.5748;
+
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web)
     {
         Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping,
@@ -43,7 +45,7 @@ public sealed class FiscalReportOutputRenderer
         {
             FiscalReportOutputFormat.Json => CreateJsonExport(presentation),
             FiscalReportOutputFormat.Csv => CreateCsvExport(presentation),
-            FiscalReportOutputFormat.Text => CreateTextExport(presentation, widthProfile),
+            FiscalReportOutputFormat.Pdf => CreatePdfExport(presentation),
             _ => throw new ArgumentOutOfRangeException(nameof(format), "Presentation JSON uses the dedicated presentation route.")
         };
     }
@@ -54,10 +56,10 @@ public sealed class FiscalReportOutputRenderer
         {
             "json" => FiscalReportOutputFormat.Json,
             "csv" => FiscalReportOutputFormat.Csv,
-            "text" or "txt" => FiscalReportOutputFormat.Text,
+            "pdf" => FiscalReportOutputFormat.Pdf,
             _ => FiscalReportOutputFormat.PresentationJson
         };
-        return value?.Trim().ToLowerInvariant() is "json" or "csv" or "text" or "txt";
+        return value?.Trim().ToLowerInvariant() is "json" or "csv" or "pdf";
     }
 
     public static bool TryParseWidthProfile(string? value, out FiscalReportPrintWidthProfile profile)
@@ -124,20 +126,18 @@ public sealed class FiscalReportOutputRenderer
             content);
     }
 
-    private static FiscalReportOutputArtifact CreateTextExport(
-        FiscalReportPresentationModel presentation,
-        FiscalReportPrintWidthProfile widthProfile)
+    private static FiscalReportOutputArtifact CreatePdfExport(FiscalReportPresentationModel presentation)
     {
-        var profile = widthProfile.ToString().ToLowerInvariant();
-        var identity = ComputeOutputIdentity(presentation, $"text:{profile}");
-        var content = Encoding.UTF8.GetBytes(BuildText(presentation, widthProfile, identity));
+        var identity = ComputeOutputIdentity(presentation, "pdf:57mm");
+        var receipt = BuildText(presentation, FiscalReportPrintWidthProfile.Narrow, identity);
+        var content = BuildPdf(receipt);
         return Artifact(
-            FiscalReportOutputFormat.Text,
-            FiscalReportPresentationContract.PrintVersion,
+            FiscalReportOutputFormat.Pdf,
+            FiscalReportPresentationContract.PdfExportVersion,
             identity,
-            "text/plain; charset=utf-8",
-            FileName(presentation, $"{profile}.txt"),
-            "inline",
+            "application/pdf",
+            FileName(presentation, "57mm.pdf"),
+            "attachment",
             content);
     }
 
@@ -270,7 +270,7 @@ public sealed class FiscalReportOutputRenderer
         AddValue(lines, "Period End", PhtTimestamp(presentation.PeriodEndAt), width);
         AddValue(lines, "Generated", PhtTimestamp(presentation.GeneratedAt), width);
         AddValue(lines, "Output Identity", outputIdentity, width);
-        AddValue(lines, "Print Contract", FiscalReportPresentationContract.PrintVersion, width);
+        AddValue(lines, "Print Contract", FiscalReportPresentationContract.PdfExportVersion, width);
 
         var beginningInvoice = BeginningInvoice(presentation.FiscalNumberRanges);
         var endingInvoice = EndingInvoice(presentation.FiscalNumberRanges);
@@ -435,6 +435,66 @@ public sealed class FiscalReportOutputRenderer
         AddValue(lines, "Service charges", FormatAmount(amounts.ServiceChargeAmountMinorUnits, currency), width);
     }
 
+    private static byte[] BuildPdf(string receipt)
+    {
+        const double marginPoints = 5.6693;
+        const double fontSizePoints = 6.5;
+        const double lineHeightPoints = 8.25;
+        var lines = receipt.Split('\n', StringSplitOptions.None);
+        if (lines.Length > 0 && lines[^1].Length == 0) lines = lines[..^1];
+        var pageHeight = Math.Max(36d, (marginPoints * 2d) + (lines.Length * lineHeightPoints));
+        var content = new StringBuilder()
+            .Append("BT\n/F1 ").Append(PdfNumber(fontSizePoints)).Append(" Tf\n")
+            .Append(PdfNumber(lineHeightPoints)).Append(" TL\n")
+            .Append("1 0 0 1 ").Append(PdfNumber(marginPoints)).Append(' ')
+            .Append(PdfNumber(pageHeight - marginPoints - fontSizePoints)).Append(" Tm\n");
+        foreach (var line in lines)
+            content.Append('(').Append(PdfText(line)).Append(") Tj\nT*\n");
+        content.Append("ET\n");
+
+        var streamContent = content.ToString();
+        var objects = new[]
+        {
+            "<< /Type /Catalog /Pages 2 0 R >>",
+            "<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
+            $"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 {PdfNumber(PdfPageWidthPoints)} {PdfNumber(pageHeight)}] /Resources << /Font << /F1 4 0 R >> >> /Contents 5 0 R >>",
+            "<< /Type /Font /Subtype /Type1 /BaseFont /Courier /Encoding /WinAnsiEncoding >>",
+            $"<< /Length {Encoding.ASCII.GetByteCount(streamContent)} >>\nstream\n{streamContent}endstream"
+        };
+
+        using var output = new MemoryStream();
+        WritePdf(output, "%PDF-1.4\n");
+        var offsets = new List<long> { 0 };
+        for (var index = 0; index < objects.Length; index++)
+        {
+            offsets.Add(output.Position);
+            WritePdf(output, $"{index + 1} 0 obj\n{objects[index]}\nendobj\n");
+        }
+
+        var xref = output.Position;
+        WritePdf(output, $"xref\n0 {objects.Length + 1}\n0000000000 65535 f \n");
+        foreach (var offset in offsets.Skip(1))
+            WritePdf(output, $"{offset:0000000000} 00000 n \n");
+        WritePdf(output, $"trailer\n<< /Size {objects.Length + 1} /Root 1 0 R >>\nstartxref\n{xref}\n%%EOF\n");
+        return output.ToArray();
+    }
+
+    private static string PdfText(string value)
+    {
+        var output = new StringBuilder(value.Length);
+        foreach (var character in value)
+        {
+            if (character is '\\' or '(' or ')') output.Append('\\');
+            output.Append(character is >= ' ' and <= '~' ? character : '?');
+        }
+        return output.ToString();
+    }
+
+    private static string PdfNumber(double value) => value.ToString("0.####", CultureInfo.InvariantCulture);
+
+    private static void WritePdf(Stream output, string value) =>
+        output.Write(Encoding.ASCII.GetBytes(value));
+
     private static string FileName(FiscalReportPresentationModel presentation, string suffix)
     {
         var kind = presentation.ReportKind == FiscalXReadingContract.ReportKind ? "x-reading" : "z-reading";
@@ -475,6 +535,13 @@ public sealed class FiscalReportOutputRenderer
         if (prefix.Length + value.Length <= width)
         {
             lines.Add(prefix + new string(' ', width - prefix.Length - value.Length) + value);
+            return;
+        }
+
+        if (value.Length <= width)
+        {
+            lines.Add(label + ":");
+            lines.Add(new string(' ', width - value.Length) + value);
             return;
         }
 

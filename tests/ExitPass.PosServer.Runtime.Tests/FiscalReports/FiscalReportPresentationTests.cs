@@ -1,5 +1,6 @@
 using System.Text;
 using System.Text.Json;
+using System.Text.RegularExpressions;
 using ExitPass.PosServer.Runtime.FiscalReports;
 using Xunit;
 
@@ -58,7 +59,7 @@ public sealed class FiscalReportPresentationTests
     }
 
     [Fact]
-    public void JsonCsvAndTextOutputsAreDeterministicVersionedAndHashBound()
+    public void JsonCsvAndPdfOutputsAreDeterministicVersionedAndHashBound()
     {
         var presentation = new FiscalReportPresentationService().Present(ZRecord()).Presentation!;
         var renderer = new FiscalReportOutputRenderer();
@@ -68,24 +69,26 @@ public sealed class FiscalReportPresentationTests
         var json2 = renderer.CreateExport(presentation, FiscalReportOutputFormat.Json);
         var csv1 = renderer.CreateExport(presentation, FiscalReportOutputFormat.Csv);
         var csv2 = renderer.CreateExport(presentation, FiscalReportOutputFormat.Csv);
-        var text1 = renderer.CreateExport(presentation, FiscalReportOutputFormat.Text, FiscalReportPrintWidthProfile.Standard);
-        var text2 = renderer.CreateExport(presentation, FiscalReportOutputFormat.Text, FiscalReportPrintWidthProfile.Standard);
+        var pdf1 = renderer.CreateExport(presentation, FiscalReportOutputFormat.Pdf);
+        var pdf2 = renderer.CreateExport(presentation, FiscalReportOutputFormat.Pdf);
 
         Assert.Equal(json1.Content, json2.Content);
         Assert.Equal(csv1.Content, csv2.Content);
-        Assert.Equal(text1.Content, text2.Content);
+        Assert.Equal(pdf1.Content, pdf2.Content);
         Assert.Equal(json1.OutputIdentity, json2.OutputIdentity);
         Assert.NotEqual(json1.OutputIdentity, csv1.OutputIdentity);
-        Assert.NotEqual(csv1.OutputIdentity, text1.OutputIdentity);
+        Assert.NotEqual(csv1.OutputIdentity, pdf1.OutputIdentity);
         Assert.NotEqual(presentationJson.OutputIdentity, json1.OutputIdentity);
         Assert.StartsWith("fiscal-report-output:sha256:v1:", json1.OutputIdentity, StringComparison.Ordinal);
         Assert.Equal("application/json; charset=utf-8", presentationJson.ContentType);
         Assert.Equal("application/json; charset=utf-8", json1.ContentType);
         Assert.Equal("text/csv; charset=utf-8", csv1.ContentType);
-        Assert.Equal("text/plain; charset=utf-8", text1.ContentType);
+        Assert.Equal("application/pdf", pdf1.ContentType);
+        Assert.EndsWith(".pdf", pdf1.FileName, StringComparison.Ordinal);
+        Assert.Contains("attachment", pdf1.ContentDisposition, StringComparison.Ordinal);
         Assert.Contains("section,key,classification,count,amount_minor_units,currency,value\n", Encoding.UTF8.GetString(csv1.Content), StringComparison.Ordinal);
-        Assert.Contains("Z READING REPORT", Encoding.UTF8.GetString(text1.Content), StringComparison.Ordinal);
-        Assert.DoesNotContain("REPRINT", Encoding.UTF8.GetString(text1.Content), StringComparison.Ordinal);
+        Assert.Contains("Z READING REPORT", PdfText(pdf1.Content), StringComparison.Ordinal);
+        Assert.DoesNotContain("REPRINT", PdfText(pdf1.Content), StringComparison.Ordinal);
     }
 
     [Fact]
@@ -160,8 +163,8 @@ public sealed class FiscalReportPresentationTests
 
         var aggregateOnly = XRecord() with { Tenders = [new("digital_wallet", 2, 10_000, "PHP")] };
         var aggregateText = Text(renderer, service.Present(aggregateOnly).Presentation!);
-        Assert.Contains("SOURCE CATEGORY NOT", aggregateText, StringComparison.Ordinal);
-        Assert.Contains("DISTINGUISHABLE", aggregateText, StringComparison.Ordinal);
+        Assert.Contains("SOURCE CATEGORY", aggregateText, StringComparison.Ordinal);
+        Assert.Contains("NOT DISTINGUISHABLE", aggregateText, StringComparison.Ordinal);
         Assert.Contains("QRPH         0", aggregateText, StringComparison.Ordinal);
         Assert.Contains("GCASH        0", aggregateText, StringComparison.Ordinal);
         Assert.Contains("MAYA         0", aggregateText, StringComparison.Ordinal);
@@ -170,19 +173,23 @@ public sealed class FiscalReportPresentationTests
         Assert.DoesNotContain("BANK TRANSFER", aggregateText, StringComparison.Ordinal);
     }
 
-    [Theory]
-    [InlineData(FiscalReportPrintWidthProfile.Narrow, 32)]
-    [InlineData(FiscalReportPrintWidthProfile.Standard, 48)]
-    [InlineData(FiscalReportPrintWidthProfile.Office, 80)]
-    public void PrintProfilesWrapWithoutTruncatingSafeReferences(FiscalReportPrintWidthProfile profile, int expectedWidth)
+    [Fact]
+    public void PdfUsesExact57MmWidthAndReceiptLinesDoNotOverflow()
     {
         var record = XRecord() with { FiscalReportReference = "X-VERY-LONG-AUTHORITATIVE-REFERENCE-1234567890" };
         var presentation = new FiscalReportPresentationService().Present(record).Presentation!;
-        var artifact = new FiscalReportOutputRenderer().CreateExport(presentation, FiscalReportOutputFormat.Text, profile);
-        var text = Encoding.UTF8.GetString(artifact.Content);
+        var artifact = new FiscalReportOutputRenderer().CreateExport(presentation, FiscalReportOutputFormat.Pdf);
+        var pdf = Encoding.ASCII.GetString(artifact.Content);
+        var text = PdfText(artifact.Content);
 
-        Assert.Equal(expectedWidth, FiscalReportOutputRenderer.Width(profile));
-        Assert.All(text.Split('\n', StringSplitOptions.RemoveEmptyEntries), line => Assert.True(line.Length <= expectedWidth, line));
+        Assert.StartsWith("%PDF-1.4", pdf, StringComparison.Ordinal);
+        var mediaBox = Regex.Match(pdf, @"/MediaBox \[0 0 (?<width>[0-9.]+) (?<height>[0-9.]+)\]");
+        Assert.True(mediaBox.Success);
+        Assert.Equal(FiscalReportOutputRenderer.PdfPageWidthPoints,
+            double.Parse(mediaBox.Groups["width"].Value, System.Globalization.CultureInfo.InvariantCulture), 4);
+        Assert.Equal(57d, FiscalReportOutputRenderer.PdfPageWidthPoints * 25.4d / 72d, 3);
+        Assert.True(double.Parse(mediaBox.Groups["height"].Value, System.Globalization.CultureInfo.InvariantCulture) > 36d);
+        Assert.All(text.Split('\n', StringSplitOptions.RemoveEmptyEntries), line => Assert.True(line.Length <= 32, line));
         Assert.Contains(
             "X-VERY-LONG-AUTHORITATIVE-REFERENCE-1234567890",
             text.Replace("\n", string.Empty, StringComparison.Ordinal),
@@ -196,17 +203,21 @@ public sealed class FiscalReportPresentationTests
         Assert.Equal("PHP 0.00", FiscalReportOutputRenderer.FormatAmount(0, "PHP"));
         Assert.Equal("PHP -12.34", FiscalReportOutputRenderer.FormatAmount(-1_234, "PHP"));
         Assert.Equal("USD 12.34", FiscalReportOutputRenderer.FormatAmount(1_234, "USD"));
-        Assert.True(FiscalReportOutputRenderer.TryParseWidthProfile("58mm", out var narrow));
-        Assert.Equal(FiscalReportPrintWidthProfile.Narrow, narrow);
-        Assert.False(FiscalReportOutputRenderer.TryParseWidthProfile("unknown", out _));
-        Assert.False(FiscalReportOutputRenderer.TryParseFormat("pdf", out _));
+        Assert.True(FiscalReportOutputRenderer.TryParseFormat("pdf", out var pdf));
+        Assert.Equal(FiscalReportOutputFormat.Pdf, pdf);
+        Assert.False(FiscalReportOutputRenderer.TryParseFormat("text", out _));
+        Assert.False(FiscalReportOutputRenderer.TryParseFormat("txt", out _));
     }
 
     private static string Text(FiscalReportOutputRenderer renderer, FiscalReportPresentationModel presentation) =>
-        Encoding.UTF8.GetString(renderer.CreateExport(
-            presentation,
-            FiscalReportOutputFormat.Text,
-            FiscalReportPrintWidthProfile.Standard).Content);
+        PdfText(renderer.CreateExport(presentation, FiscalReportOutputFormat.Pdf).Content);
+
+    private static string PdfText(byte[] bytes)
+    {
+        var pdf = Encoding.ASCII.GetString(bytes);
+        return string.Join('\n', Regex.Matches(pdf, @"\((?<text>(?:\\.|[^\\)])*)\) Tj")
+            .Select(match => Regex.Unescape(match.Groups["text"].Value)));
+    }
 
     private static void AssertInOrder(string text, params string[] values)
     {

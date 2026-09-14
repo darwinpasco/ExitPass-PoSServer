@@ -43,8 +43,7 @@ public sealed class FiscalReportOutputPostgresIntegrationTests
         var xBeforeClose = await ReadAllAsync(client, "x-readings", xReference);
         Assert.Contains("\"title\":\"X READING REPORT\"", xBeforeClose.Presentation.Text, StringComparison.Ordinal);
         Assert.Contains("INTERIM_READ_ONLY", xBeforeClose.Presentation.Text, StringComparison.Ordinal);
-        Assert.Contains("X READING", xBeforeClose.Text.Text, StringComparison.Ordinal);
-        Assert.DoesNotContain("Z READING", xBeforeClose.Text.Text, StringComparison.Ordinal);
+        Assert.StartsWith("%PDF-1.4", xBeforeClose.Pdf.Text, StringComparison.Ordinal);
         AssertOutputHeaders(xBeforeClose);
 
         var initialized = await client.PostAsJsonAsync("/v1/admin/fiscal-z-close-states/initialize",
@@ -67,8 +66,7 @@ public sealed class FiscalReportOutputPostgresIntegrationTests
         Assert.Contains("\"resultingZCounterValue\":1", zOutputs.Presentation.Text, StringComparison.Ordinal);
         Assert.Contains("\"resultingResetCounterValue\":0", zOutputs.Presentation.Text, StringComparison.Ordinal);
         Assert.Contains("\"resultingGrandTotalAmountMinorUnits\":16571", zOutputs.Presentation.Text, StringComparison.Ordinal);
-        Assert.Contains("Z READING", zOutputs.Text.Text, StringComparison.Ordinal);
-        Assert.DoesNotContain("X READING", zOutputs.Text.Text, StringComparison.Ordinal);
+        Assert.StartsWith("%PDF-1.4", zOutputs.Pdf.Text, StringComparison.Ordinal);
         AssertOutputHeaders(zOutputs);
 
         using (var replay = await client.GetAsync($"/v1/fiscal-reports/z-readings/{zReference}/exports/json"))
@@ -80,7 +78,7 @@ public sealed class FiscalReportOutputPostgresIntegrationTests
         using var readOnlyClient = Client(app, "synthetic-read-only-key");
         using var forbidden = await readOnlyClient.GetAsync($"/v1/fiscal-reports/x-readings/{xReference}/exports/json");
         Assert.Equal(HttpStatusCode.Forbidden, forbidden.StatusCode);
-        using var unsupported = await client.GetAsync($"/v1/fiscal-reports/x-readings/{xReference}/exports/pdf");
+        using var unsupported = await client.GetAsync($"/v1/fiscal-reports/x-readings/{xReference}/exports/text");
         Assert.Equal(HttpStatusCode.BadRequest, unsupported.StatusCode);
 
         await using (var restarted = await StartApiAsync(connectionString))
@@ -107,9 +105,7 @@ public sealed class FiscalReportOutputPostgresIntegrationTests
             await CaptureAsync(client, $"{root}/presentation"),
             await CaptureAsync(client, $"{root}/exports/json"),
             await CaptureAsync(client, $"{root}/exports/csv"),
-            await CaptureAsync(client, $"{root}/exports/text?width=narrow"),
-            await CaptureAsync(client, $"{root}/exports/text?width=standard"),
-            await CaptureAsync(client, $"{root}/exports/text?width=office"));
+            await CaptureAsync(client, $"{root}/exports/pdf"));
     }
 
     private static async Task<Artifact> CaptureAsync(HttpClient client, string path)
@@ -127,9 +123,11 @@ public sealed class FiscalReportOutputPostgresIntegrationTests
         Assert.Equal("application/json; charset=utf-8", outputs.Presentation.ContentType);
         Assert.Equal("application/json; charset=utf-8", outputs.Json.ContentType);
         Assert.Equal("text/csv; charset=utf-8", outputs.Csv.ContentType);
-        Assert.Equal("text/plain; charset=utf-8", outputs.Text.ContentType);
+        Assert.Equal("application/pdf", outputs.Pdf.ContentType);
         Assert.Contains("attachment", outputs.Json.ContentDisposition, StringComparison.Ordinal);
         Assert.Contains("attachment", outputs.Csv.ContentDisposition, StringComparison.Ordinal);
+        Assert.Contains("attachment", outputs.Pdf.ContentDisposition, StringComparison.Ordinal);
+        Assert.Contains(".pdf", outputs.Pdf.ContentDisposition, StringComparison.OrdinalIgnoreCase);
         foreach (var artifact in outputs.All)
         {
             Assert.Contains("private", artifact.CacheControl, StringComparison.Ordinal);
@@ -253,9 +251,9 @@ public sealed class FiscalReportOutputPostgresIntegrationTests
         public string Text => System.Text.Encoding.UTF8.GetString(Bytes);
     }
 
-    private sealed record OutputSet(Artifact Presentation, Artifact Json, Artifact Csv, Artifact Narrow, Artifact Text, Artifact Office)
+    private sealed record OutputSet(Artifact Presentation, Artifact Json, Artifact Csv, Artifact Pdf)
     {
-        public IReadOnlyList<Artifact> All => [Presentation, Json, Csv, Narrow, Text, Office];
+        public IReadOnlyList<Artifact> All => [Presentation, Json, Csv, Pdf];
         public IEnumerable<string> AllText => All.Select(value => value.Text);
     }
 }

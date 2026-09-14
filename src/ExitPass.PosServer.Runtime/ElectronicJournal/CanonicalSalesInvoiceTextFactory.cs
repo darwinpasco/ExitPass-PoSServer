@@ -70,17 +70,8 @@ public sealed class CanonicalSalesInvoiceTextFactory
         var total = statutory?.FinalPayableAmountMinorUnits ?? source.Lines.Sum(line => line.NetAmountMinorUnits);
         var context = ReadContext(source.DocumentContextJson);
         var customer = ReadCustomer(context, statutory, source.Discounts, source.InvoiceCustomerInformation);
-        var footer = string.Join("\r\n", new[]
-        {
-            header.CustomerServiceFooter,
-            $"Software Supplier  : {header.SupplierDeveloperRegisteredName}",
-            $"Supplier Address   : {header.SupplierDeveloperAddress}",
-            $"Supplier TIN       : {header.SupplierDeveloperTin}",
-            $"BIR Accreditation  : {header.BirAccreditationNumber}",
-            $"PTU No.            : {header.PtuNumber}"
-        }
-            .Where(value => !string.IsNullOrWhiteSpace(value)));
         var presentation = new CanonicalSalesInvoicePresentation(
+            Value(context, "branch_site", "branchSite", "site_name", "siteName"),
             Value(context, "parking_location", "parkingLocation") ?? header.ParkingLocationDisplay,
             Value(context, "terminal_id", "terminalId", "runtime_terminal_ref") ?? header.TerminalId ?? source.ChannelTerminalId?.ToString("D"),
             source.CentralPmsParkingSessionRef,
@@ -90,11 +81,12 @@ public sealed class CanonicalSalesInvoiceTextFactory
             Value(context, "payment_time", "paymentTime", "paid_at", "paidAt"),
             Value(context, "duration", "durationText", "parking_duration"),
             source.Lines.Sum(line => line.GrossAmountMinorUnits),
-            source.Discounts.Select((discount, index) => new CanonicalSalesInvoiceDiscount(
-                statutory?.EntitlementType is { Length: > 0 } entitlement ? $"{entitlement} Discount" : $"Discount {index + 1}",
+            source.Discounts.Select(discount => new CanonicalSalesInvoiceDiscount(
+                statutory?.EntitlementType is { Length: > 0 } entitlement ? $"{entitlement} Discount" : "NOT RECORDED",
                 discount.DiscountAmountMinorUnits)).ToArray(),
             source.Tenders.Select(tender => new CanonicalSalesInvoiceTender(
-                tender.TenderTypeCodeKey ?? tender.ProviderRef ?? "Tender",
+                (tender.TenderTypeCodeKey ?? Value(context, "payment_method", "paymentMethod") ?? "NOT RECORDED").ToUpperInvariant(),
+                tender.ProviderRef,
                 tender.AmountMinorUnits)).ToArray(),
             source.Tenders.Count == 0 ? total : source.Tenders.Sum(tender => tender.AmountMinorUnits),
             LongValue(context, "tendered_amount_minor_units", "tenderedAmountMinorUnits"),
@@ -116,7 +108,8 @@ public sealed class CanonicalSalesInvoiceTextFactory
             header.BirAccreditationNumber,
             customer,
             source.Lines.OrderBy(line => line.LineSequence)
-                .Select(line => new CanonicalSalesInvoiceLine(line.LineSequence, line.Description, line.Quantity, line.NetAmountMinorUnits, line.CurrencyCode))
+                .Select(line => new CanonicalSalesInvoiceLine(line.LineSequence, line.Description, line.Quantity,
+                    line.UnitAmountMinorUnits, line.NetAmountMinorUnits, line.CurrencyCode))
                 .ToArray(),
             vatable,
             vatAmount,
@@ -124,8 +117,16 @@ public sealed class CanonicalSalesInvoiceTextFactory
             zeroRated,
             total,
             currency,
-            footer,
-            presentation);
+            header.CustomerServiceFooter,
+            presentation,
+            new CanonicalSalesInvoiceSupplier(
+                header.SupplierDeveloperRegisteredName,
+                header.SupplierDeveloperAddress,
+                header.SupplierDeveloperTin,
+                header.BirAccreditationNumber,
+                header.BirAccreditationIssuedDate,
+                header.PtuNumber,
+                header.PtuIssuedDate));
     }
 
     private static CanonicalSalesInvoiceCustomer ReadCustomer(
