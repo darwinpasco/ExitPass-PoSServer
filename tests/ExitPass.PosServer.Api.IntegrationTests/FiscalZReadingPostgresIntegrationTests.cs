@@ -129,6 +129,56 @@ public sealed class FiscalZReadingPostgresIntegrationTests
         await ProvePersistenceFailureRollsBackAsync(connectionString, client);
     }
 
+    [Fact]
+    public async Task ManualZClosesCompletedPriorPeriodWithoutClosingCurrentPeriod()
+    {
+        var connectionString = Environment.GetEnvironmentVariable(ConnectionVariable);
+        if (string.IsNullOrWhiteSpace(connectionString)) return;
+
+        var currentPeriodId = Guid.Parse("73000000-0000-4000-8000-000000000019");
+        await RebuildAsync(connectionString);
+        await ExecuteFileAsync(connectionString, Path.Combine(FindRepositoryRoot(), "tests", "ExitPass.PosServer.Api.IntegrationTests", "Fixtures", "fiscal_x_reading_runtime_fixture.sql"));
+        await ExecuteAsync(connectionString, $"""
+            INSERT INTO pos.site_pos_server_fiscal_identity_history(
+                site_pos_server_fiscal_identity_history_id,site_pos_server_id,fiscal_identity_id,effective_start_at,assignment_reason_text)
+            VALUES('73000000-0000-4000-8000-000000000090','{SiteId:D}','{IdentityId:D}','2026-01-01T00:00:00Z','Synthetic manual Z proof scope');
+            INSERT INTO pos.fiscal_reporting_periods(
+                fiscal_reporting_period_id,fiscal_reporting_contract_version_id,site_pos_server_id,fiscal_identity_id,
+                period_status_code_id,business_day_date,period_start_at,period_end_at,reporting_timezone_name,
+                business_day_cutoff_local_time,currency_code,period_sequence,expected_prior_period_id,opened_at,
+                created_by_ref,updated_by_ref)
+            VALUES('{currentPeriodId:D}','f6766f48-62f0-513f-b9eb-e61c2f3e8c66','{SiteId:D}','{IdentityId:D}',
+                '1a6f7021-bc84-5c01-afaa-c5d6685633c8',current_date,transaction_timestamp()-interval '1 hour',
+                transaction_timestamp()+interval '1 hour','Asia/Manila','07:00:00','PHP',2,'{PeriodId:D}',
+                transaction_timestamp()-interval '1 hour','manual-z-proof','manual-z-proof');
+            """);
+
+        await using var app = await StartApiAsync(connectionString);
+        using var client = CreateClient(app);
+        Authorize(client);
+        using var initializedResponse = await client.PostAsJsonAsync(
+            "/v1/admin/fiscal-z-close-states/initialize",
+            new InitializeFiscalZCloseStateRequest("manual-z-state-initialize", SiteId, IdentityId, "PHP", "approved_new_scope_zero", 0, 0, 0, "approved-manual-z-proof"));
+        Assert.True(initializedResponse.IsSuccessStatusCode, await initializedResponse.Content.ReadAsStringAsync());
+
+        using var earlyResponse = await client.PostAsJsonAsync(
+            "/v1/fiscal-reports/z-readings/",
+            new CloseFiscalZReadingRequest("manual-z-too-early", SiteId, IdentityId, "PHP", currentPeriodId, 1));
+        Assert.Equal(HttpStatusCode.Conflict, earlyResponse.StatusCode);
+        Assert.Contains("fiscal_reporting_period_not_ended", await earlyResponse.Content.ReadAsStringAsync(), StringComparison.Ordinal);
+
+        using var priorResponse = await client.PostAsJsonAsync(
+            "/v1/fiscal-reports/z-readings/",
+            new CloseFiscalZReadingRequest("manual-z-prior", SiteId, IdentityId, "PHP", PeriodId, 1));
+        Assert.Equal(HttpStatusCode.Created, priorResponse.StatusCode);
+        Assert.Equal("closed", await ScalarAsync<string>(connectionString,
+            $"SELECT c.code_key FROM pos.fiscal_reporting_periods p JOIN pos.controlled_codes c ON c.controlled_code_id=p.period_status_code_id WHERE p.fiscal_reporting_period_id='{PeriodId:D}'"));
+        Assert.Equal("open", await ScalarAsync<string>(connectionString,
+            $"SELECT c.code_key FROM pos.fiscal_reporting_periods p JOIN pos.controlled_codes c ON c.controlled_code_id=p.period_status_code_id WHERE p.fiscal_reporting_period_id='{currentPeriodId:D}'"));
+        Assert.Equal(0L, await ScalarAsync<long>(connectionString,
+            $"SELECT count(*) FROM pos.x_z_reports WHERE fiscal_reporting_period_id='{currentPeriodId:D}' AND report_kind_code_id='1c628bc2-49c3-53e8-ae83-2082bcf28467'"));
+    }
+
     private static async Task ProveCompetingCloseAsync(string connectionString, HttpClient client)
     {
         const string sql = """

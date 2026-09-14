@@ -41,14 +41,67 @@ public sealed class PersistentIstFiscalIssuanceReadinessTests
         var source = ReadScript("Ensure-PosPersistentIstFiscalReportingPeriod.ps1");
 
         Assert.Contains("Asia/Manila", source);
-        Assert.Contains("00:00:00", source);
+        Assert.Contains("07:00:00", source);
+        Assert.Contains("[TimeSpan]::FromHours(7)", source);
+        Assert.Contains("$localAt.TimeOfDay -lt $cutoff", source);
         Assert.Contains("tstzrange(period_start_at,period_end_at,'[)')", source, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("Multiple current OPEN PITX fiscal reporting periods", source);
         Assert.Contains("Exactly one current OPEN PITX fiscal reporting period", source);
+        Assert.Contains("matching_current_open_period_count", source);
         Assert.Contains("expected_prior_period_id", source);
         Assert.Contains("max(period_sequence)+1", source, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("UPDATE pos.fiscal_reporting_periods", source, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("DELETE FROM pos.fiscal_reporting_periods", source, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void ReportingPeriodEnsureReusesOnlyAnExactPitxBoundaryMatch()
+    {
+        var source = ReadScript("Ensure-PosPersistentIstFiscalReportingPeriod.ps1");
+
+        Assert.Contains("reporting_timezone_name='Asia/Manila'", source, StringComparison.Ordinal);
+        Assert.Contains("business_day_cutoff_local_time='07:00:00'::time", source, StringComparison.Ordinal);
+        Assert.Contains("business_day_date='$businessDateText'::date", source, StringComparison.Ordinal);
+        Assert.Contains("period_start_at='$startUtc'::timestamptz", source, StringComparison.Ordinal);
+        Assert.Contains("period_end_at='$endUtc'::timestamptz", source, StringComparison.Ordinal);
+        Assert.Contains("$before.matching_current_open_period_count -eq 1", source, StringComparison.Ordinal);
+        Assert.Contains("'REUSED'", source, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void ReportingPeriodEnsureRejectsMismatchedContainingPeriodWithoutFiscalMutation()
+    {
+        var source = ReadScript("Ensure-PosPersistentIstFiscalReportingPeriod.ps1");
+
+        Assert.Contains("$before.current_open_period_count -ne $before.matching_current_open_period_count", source, StringComparison.Ordinal);
+        Assert.Contains("Existing PITX OPEN fiscal reporting period uses a different business-day boundary", source, StringComparison.Ordinal);
+        Assert.Contains("AND NOT (", source, StringComparison.Ordinal);
+        Assert.Contains("before.fiscal_document_count -ne $after.fiscal_document_count", source, StringComparison.Ordinal);
+        Assert.Contains("before.electronic_journal_count -ne $after.electronic_journal_count", source, StringComparison.Ordinal);
+        Assert.DoesNotContain("UPDATE pos.fiscal_reporting_periods", source, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("DELETE FROM pos.fiscal_reporting_periods", source, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void ReportingPeriodEnsureCreatesMissingExactPitxBoundaryWhenNoOverlapExists()
+    {
+        var source = ReadScript("Ensure-PosPersistentIstFiscalReportingPeriod.ps1");
+
+        Assert.Contains("INSERT INTO pos.fiscal_reporting_periods", source, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("tstzrange(period_start_at,period_end_at,'[)') && tstzrange('$startUtc','$endUtc','[)')", source, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("$after.matching_current_open_period_count -ne 1", source, StringComparison.Ordinal);
+        Assert.Contains("$before.matching_current_open_period_count -eq 1", source, StringComparison.Ordinal);
+        Assert.Contains("'CREATED'", source, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void PitxOperationalConfigurationUsesApprovedTimezoneAndCutoff()
+    {
+        var source = ReadScript("Set-PosPersistentIstFiscalOperationalConfiguration.ps1");
+
+        Assert.Contains("reporting_timezone_name='Asia/Manila'", source, StringComparison.Ordinal);
+        Assert.Contains("business_day_cutoff_local_time='07:00:00'", source, StringComparison.Ordinal);
+        Assert.DoesNotContain("business_day_cutoff_local_time=COALESCE", source, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]

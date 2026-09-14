@@ -18,6 +18,7 @@ public sealed class FiscalXReadingPostgresIntegrationTests
     private const string ConnectionVariable = "POSSERVER_X_READING_TEST_DB_URL";
     private static readonly Guid SiteId = Guid.Parse("73000000-0000-4000-8000-000000000001");
     private static readonly Guid IdentityId = Guid.Parse("73000000-0000-4000-8000-000000000002");
+    private static readonly Guid CurrentPeriodId = Guid.Parse("73000000-0000-4000-8000-000000000019");
     private static readonly DateTimeOffset ObservedAt = DateTimeOffset.Parse("2026-08-03T12:00:00Z");
 
     [Fact]
@@ -105,6 +106,56 @@ public sealed class FiscalXReadingPostgresIntegrationTests
         Assert.Equal(0, await ScalarAsync<long>(connectionString, "SELECT count(*) FROM pos.fiscal_report_requests WHERE operation_idempotency_key='x-proof-rejected'"));
 
         await AssertImmutableAsync(connectionString, created.XReading.FiscalReportId);
+    }
+
+    [Fact]
+    public async Task XReadingAtCutoffSelectsCurrentPeriodWhenPriorPeriodAwaitsManualZ()
+    {
+        var connectionString = Environment.GetEnvironmentVariable(ConnectionVariable);
+        if (string.IsNullOrWhiteSpace(connectionString)) return;
+
+        await RebuildAsync(connectionString);
+        await ExecuteFileAsync(connectionString, Path.Combine(FindRepositoryRoot(), "tests", "ExitPass.PosServer.Api.IntegrationTests", "Fixtures", "fiscal_x_reading_runtime_fixture.sql"));
+        await ExecuteAsync(connectionString, $"""
+            UPDATE pos.site_pos_servers
+            SET reporting_timezone_name='Asia/Manila', business_day_cutoff_local_time='07:00:00'
+            WHERE site_pos_server_id='{SiteId:D}';
+            UPDATE pos.fiscal_reporting_periods
+            SET period_start_at='2026-08-02T23:00:00Z', period_end_at='2026-08-03T23:00:00Z',
+                reporting_timezone_name='Asia/Manila', business_day_cutoff_local_time='07:00:00'
+            WHERE fiscal_reporting_period_id='73000000-0000-4000-8000-000000000010';
+            INSERT INTO pos.fiscal_reporting_periods(
+                fiscal_reporting_period_id,fiscal_reporting_contract_version_id,site_pos_server_id,fiscal_identity_id,
+                period_status_code_id,business_day_date,period_start_at,period_end_at,reporting_timezone_name,
+                business_day_cutoff_local_time,currency_code,period_sequence,expected_prior_period_id,opened_at,
+                created_by_ref,updated_by_ref)
+            VALUES('{CurrentPeriodId:D}','f6766f48-62f0-513f-b9eb-e61c2f3e8c66','{SiteId:D}','{IdentityId:D}',
+                '1a6f7021-bc84-5c01-afaa-c5d6685633c8','2026-08-04','2026-08-03T23:00:00Z','2026-08-04T23:00:00Z',
+                'Asia/Manila','07:00:00','PHP',2,'73000000-0000-4000-8000-000000000010','2026-08-03T23:00:00Z',
+                'x-cutoff-proof','x-cutoff-proof');
+            UPDATE pos.site_pos_servers
+            SET business_day_cutoff_local_time='08:00:00'
+            WHERE site_pos_server_id='{SiteId:D}';
+            """);
+
+        await using var app = await StartApiAsync(connectionString);
+        using var client = CreateClient(app);
+        Authorize(client);
+        using var response = await client.PostAsJsonAsync(
+            "/v1/fiscal-reports/x-readings/",
+            new GenerateFiscalXReadingRequest("x-cutoff-current-period", SiteId, IdentityId, DateTimeOffset.Parse("2026-08-03T23:00:00Z")));
+        var body = await response.Content.ReadFromJsonAsync<FiscalXReadingApiResponse>();
+
+        Assert.Equal(HttpStatusCode.Created, response.StatusCode);
+        Assert.NotNull(body?.XReading);
+        Assert.Equal(CurrentPeriodId, body.XReading.FiscalReportingPeriodId);
+        Assert.Equal(new DateOnly(2026, 8, 4), body.XReading.BusinessDayDate);
+        Assert.Equal(new TimeOnly(7, 0), body.XReading.BusinessDayCutoffLocalTime);
+        Assert.Equal(0, body.XReading.QualifyingDocumentCount);
+        Assert.Equal(2L, await ScalarAsync<long>(connectionString,
+            "SELECT count(*) FROM pos.fiscal_reporting_periods p JOIN pos.controlled_codes c ON c.controlled_code_id=p.period_status_code_id WHERE c.code_key='open'"));
+        Assert.Equal(0L, await ScalarAsync<long>(connectionString,
+            "SELECT count(*) FROM pos.x_z_reports WHERE report_kind_code_id='1c628bc2-49c3-53e8-ae83-2082bcf28467'"));
     }
 
     private static async Task ProveConcurrentUncommittedDocumentIsExcludedAsync(string connectionString, HttpClient client)

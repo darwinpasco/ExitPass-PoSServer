@@ -128,11 +128,12 @@ END
 `$`$;
 
 UPDATE pos.site_pos_servers
-SET reporting_timezone_name=COALESCE(reporting_timezone_name,'Asia/Manila'),
-    business_day_cutoff_local_time=COALESCE(business_day_cutoff_local_time,'00:00:00'),
+SET reporting_timezone_name='Asia/Manila',
+    business_day_cutoff_local_time='07:00:00',
     updated_at=CURRENT_TIMESTAMP
 WHERE site_pos_server_id='$sitePosServerId'
-  AND (reporting_timezone_name IS NULL OR business_day_cutoff_local_time IS NULL);
+  AND (reporting_timezone_name,business_day_cutoff_local_time)
+      IS DISTINCT FROM ('Asia/Manila','07:00:00'::time);
 
 INSERT INTO pos.channel_terminals(
   channel_terminal_id,site_pos_server_id,channel_terminal_code,display_name,

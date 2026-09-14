@@ -958,6 +958,113 @@ public sealed class FiscalDocumentApiPostgresSmokeTests
     }
 
     [Fact]
+    public async Task FiscalDocumentCreationRollsToTimestampContainingPitxPeriodWhilePriorPeriodRemainsOpen()
+    {
+        if (!TryGetSmokeConnectionString(out var connectionString))
+        {
+            return;
+        }
+
+        await RebuildDisposableDatabaseAsync(connectionString);
+        await InsertDisposableSmokeFixtureAsync(connectionString);
+        var initialWindow = PostgresFiscalCloseBoundaryCoordinator.ResolveBusinessDayWindow(
+            DateTimeOffset.UtcNow,
+            "Asia/Manila",
+            new TimeOnly(7, 0));
+
+        await using (var setupConnection = new NpgsqlConnection(connectionString))
+        {
+            await setupConnection.OpenAsync();
+            await ExecuteSqlAsync(
+                setupConnection,
+                """
+                update pos.site_pos_servers
+                set reporting_timezone_name='Asia/Manila', business_day_cutoff_local_time='07:00:00'
+                where site_pos_server_id=@site;
+                update pos.fiscal_reporting_periods
+                set business_day_date=@prior_business_date,
+                    period_start_at=@prior_start,
+                    period_end_at=@prior_end,
+                    reporting_timezone_name='Asia/Manila',
+                    business_day_cutoff_local_time='07:00:00'
+                where fiscal_reporting_period_id=@period;
+                """,
+                command =>
+                {
+                    command.Parameters.AddWithValue("site", SitePosServerId);
+                    command.Parameters.AddWithValue("period", FiscalReportingPeriodId);
+                    command.Parameters.AddWithValue("prior_business_date", initialWindow.BusinessDayDate.AddDays(-1));
+                    command.Parameters.AddWithValue("prior_start", initialWindow.PeriodStartAt.AddDays(-1));
+                    command.Parameters.AddWithValue("prior_end", initialWindow.PeriodStartAt);
+                });
+        }
+
+        await using var app = await StartApiAsync(connectionString);
+        using var client = CreateClient(app);
+        using var response = await client.PostAsJsonAsync(
+            "/v1/fiscal-documents/",
+            CreateValidRequest("cutoff-rollover") with { BusinessDayDate = null });
+        var body = await response.Content.ReadFromJsonAsync<CreateFiscalDocumentResponse>();
+
+        Assert.Equal(HttpStatusCode.Accepted, response.StatusCode);
+        Assert.NotNull(body?.FiscalDocumentId);
+
+        await using var verifyConnection = new NpgsqlConnection(connectionString);
+        await verifyConnection.OpenAsync();
+        await using var verifyCommand = new NpgsqlCommand(
+            """
+            select d.fiscal_reporting_period_id,d.business_day_date,d.created_at,
+                   p.period_start_at,p.period_end_at,p.reporting_timezone_name,
+                   p.business_day_cutoff_local_time,p.expected_prior_period_id
+            from pos.fiscal_documents d
+            join pos.fiscal_reporting_periods p on p.fiscal_reporting_period_id=d.fiscal_reporting_period_id
+            where d.fiscal_document_id=@document;
+            """,
+            verifyConnection);
+        verifyCommand.Parameters.AddWithValue("document", body.FiscalDocumentId.Value);
+        await using var reader = await verifyCommand.ExecuteReaderAsync();
+        Assert.True(await reader.ReadAsync());
+        var assignedPeriodId = reader.GetGuid(0);
+        var assignedBusinessDate = reader.GetFieldValue<DateOnly>(1);
+        var createdAt = reader.GetFieldValue<DateTimeOffset>(2);
+        var periodStartAt = reader.GetFieldValue<DateTimeOffset>(3);
+        var periodEndAt = reader.GetFieldValue<DateTimeOffset>(4);
+        Assert.NotEqual(FiscalReportingPeriodId, assignedPeriodId);
+        Assert.True(periodStartAt <= createdAt && createdAt < periodEndAt);
+        Assert.Equal("Asia/Manila", reader.GetString(5));
+        Assert.Equal(new TimeOnly(7, 0), reader.GetFieldValue<TimeOnly>(6));
+        Assert.Equal(FiscalReportingPeriodId, reader.GetGuid(7));
+        await reader.CloseAsync();
+
+        var expectedWindow = PostgresFiscalCloseBoundaryCoordinator.ResolveBusinessDayWindow(
+            createdAt,
+            "Asia/Manila",
+            new TimeOnly(7, 0));
+        Assert.Equal(expectedWindow.BusinessDayDate, assignedBusinessDate);
+        Assert.Equal(expectedWindow.PeriodStartAt, periodStartAt);
+        Assert.Equal(expectedWindow.PeriodEndAt, periodEndAt);
+        Assert.Equal(2L, await ScalarLongAsync(
+            verifyConnection,
+            "select count(*) from pos.fiscal_reporting_periods p join pos.controlled_codes c on c.controlled_code_id=p.period_status_code_id where c.code_key='open'"));
+        Assert.Equal(0L, await ScalarLongAsync(verifyConnection, "select count(*) from pos.x_z_reports"));
+
+        await ExecuteSqlAsync(
+            verifyConnection,
+            "update pos.site_pos_servers set business_day_cutoff_local_time='08:00:00' where site_pos_server_id=@site",
+            command => command.Parameters.AddWithValue("site", SitePosServerId));
+        await using var snapshotCommand = new NpgsqlCommand(
+            "select reporting_timezone_name,business_day_cutoff_local_time,period_start_at,period_end_at from pos.fiscal_reporting_periods where fiscal_reporting_period_id=@period",
+            verifyConnection);
+        snapshotCommand.Parameters.AddWithValue("period", assignedPeriodId);
+        await using var snapshotReader = await snapshotCommand.ExecuteReaderAsync();
+        Assert.True(await snapshotReader.ReadAsync());
+        Assert.Equal("Asia/Manila", snapshotReader.GetString(0));
+        Assert.Equal(new TimeOnly(7, 0), snapshotReader.GetFieldValue<TimeOnly>(1));
+        Assert.Equal(periodStartAt, snapshotReader.GetFieldValue<DateTimeOffset>(2));
+        Assert.Equal(periodEndAt, snapshotReader.GetFieldValue<DateTimeOffset>(3));
+    }
+
+    [Fact]
     public async Task ConcurrentFiscalDocumentPostsReceiveDistinctFiscalNumbers()
     {
         if (!TryGetSmokeConnectionString(out var connectionString))
@@ -1995,6 +2102,12 @@ public sealed class FiscalDocumentApiPostgresSmokeTests
     {
         await using var command = new NpgsqlCommand(sql, connection);
         command.Parameters.AddWithValue("id", id);
+        return Convert.ToInt64(await command.ExecuteScalarAsync() ?? 0L);
+    }
+
+    private static async Task<long> ScalarLongAsync(NpgsqlConnection connection, string sql)
+    {
+        await using var command = new NpgsqlCommand(sql, connection);
         return Convert.ToInt64(await command.ExecuteScalarAsync() ?? 0L);
     }
 
