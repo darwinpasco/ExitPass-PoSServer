@@ -17,17 +17,19 @@ public sealed record FiscalReportingHistorySnapshot(FiscalReportingPeriodSnapsho
 public interface IFiscalReportingHistoryRepository
 {
     Task<FiscalReportingHistorySnapshot> ReadAsync(Guid sitePosServerId, Guid fiscalIdentityId, string currencyCode,
-        int limit, CancellationToken cancellationToken = default);
+        string reportKind, int limit, CancellationToken cancellationToken = default);
 }
 
 public sealed class FiscalReportingHistoryService(IFiscalReportingHistoryRepository repository)
 {
     public Task<FiscalReportingHistorySnapshot> ReadAsync(Guid sitePosServerId, Guid fiscalIdentityId,
-        string currencyCode, int limit = 50, CancellationToken cancellationToken = default)
+        string currencyCode, string reportKind, int limit = 50, CancellationToken cancellationToken = default)
     {
         var currency = currencyCode?.Trim().ToUpperInvariant();
-        if (sitePosServerId == Guid.Empty || fiscalIdentityId == Guid.Empty || currency is not { Length: 3 } || limit is < 1 or > 100)
+        var kind = reportKind?.Trim().ToUpperInvariant();
+        if (sitePosServerId == Guid.Empty || fiscalIdentityId == Guid.Empty || currency is not { Length: 3 } ||
+            kind is not ("X" or "Z") || limit is < 1 or > 100)
             return Task.FromResult(new FiscalReportingHistorySnapshot(null, [], [], "fiscal_reporting_history_invalid", "The fiscal reporting history request is invalid."));
-        return repository.ReadAsync(sitePosServerId, fiscalIdentityId, currency, limit, cancellationToken);
+        return repository.ReadAsync(sitePosServerId, fiscalIdentityId, currency, kind, limit, cancellationToken);
     }
 }
