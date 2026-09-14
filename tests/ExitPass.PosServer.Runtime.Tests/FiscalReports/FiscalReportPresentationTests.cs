@@ -106,21 +106,21 @@ public sealed class FiscalReportPresentationTests
 
         AssertInOrder(x,
             "TAXPAYER INFORMATION", "PTU INFORMATION", "MACHINE INFORMATION", "REPORT INFORMATION",
-            "SINCE LAST Z READ", "SALES SUMMARY", "VAT SUMMARY / VATABLE SALES", "VAT BREAKDOWN",
-            "NET SALES", "PAYMENT METHODS", "PARKING METRICS", "Printed Date", "Operator", "NOTHING FOLLOWS");
+            "SINCE LAST Z READ", "SALES SUMMARY", "VATABLE SALES",
+            "NET SALES", "PAYMENT METHODS", "Printed Date", "Operator", "NOTHING FOLLOWS");
         AssertInOrder(z,
             "TAXPAYER INFORMATION", "PTU INFORMATION", "MACHINE INFORMATION", "REPORT INFORMATION",
-            "COUNTERS", "SALES SUMMARY", "VAT SUMMARY", "VAT BREAKDOWN", "NET SALES",
-            "PAYMENT METHODS", "PARKING METRICS", "Printed Date", "Operator", "NOTHING FOLLOWS");
+            "COUNTERS", "SALES SUMMARY", "VATABLE SALES", "NET SALES",
+            "PAYMENT METHODS", "Printed Date", "Operator", "NOTHING FOLLOWS");
 
         foreach (var report in new[] { x, z })
         foreach (var method in new[] { "CASH", "CARD", "QRPH", "GCASH", "MAYA" })
             Assert.Single(report.Split('\n'), line => line.StartsWith(method, StringComparison.Ordinal));
-        Assert.Contains("CASH         2", x, StringComparison.Ordinal);
-        Assert.Contains("CARD         0", x, StringComparison.Ordinal);
-        Assert.Contains("QRPH         0", x, StringComparison.Ordinal);
-        Assert.Contains("GCASH        0", x, StringComparison.Ordinal);
-        Assert.Contains("MAYA         0", x, StringComparison.Ordinal);
+        AssertPayment(x, "CASH", 2, "PHP 100.00");
+        AssertPayment(x, "CARD", 0, "PHP 0.00");
+        AssertPayment(x, "QRPH", 0, "PHP 0.00");
+        AssertPayment(x, "GCASH", 0, "PHP 0.00");
+        AssertPayment(x, "MAYA", 0, "PHP 0.00");
         Assert.DoesNotContain("BANK TRANSFER", x, StringComparison.Ordinal);
         Assert.DoesNotContain("BANK TRANSFER", z, StringComparison.Ordinal);
 
@@ -134,6 +134,34 @@ public sealed class FiscalReportPresentationTests
         Assert.Contains("PHP 100.00", x, StringComparison.Ordinal);
         Assert.Contains("Z Counter", z, StringComparison.Ordinal);
         Assert.Contains("12", z, StringComparison.Ordinal);
+        var compactX = string.Concat(x.Where(character => !char.IsWhiteSpace(character)));
+        Assert.Contains("Registered Name", x, StringComparison.Ordinal);
+        Assert.Contains("Trade Name", x, StringComparison.Ordinal);
+        Assert.Contains("ProfessionalParkingManagementCorporation", compactX, StringComparison.Ordinal);
+        Assert.Contains("TIN", x, StringComparison.Ordinal);
+        Assert.Contains("999-999-999-000", x, StringComparison.Ordinal);
+        Assert.Contains("VAT Type", x, StringComparison.Ordinal);
+        Assert.Contains("Vat-able", x, StringComparison.Ordinal);
+        Assert.Contains("Branch Code", x, StringComparison.Ordinal);
+        Assert.Contains("PITX Level 3", x, StringComparison.Ordinal);
+        Assert.Contains("PTU-TEST-PITX-L3-0001", compactX, StringComparison.Ordinal);
+        Assert.Contains("PTU Issue Date:       2026-01-01", x, StringComparison.Ordinal);
+        Assert.Contains("Valid Until:          2031-01-01", x, StringComparison.Ordinal);
+        Assert.Contains("Last Z Counter:             0000", x, StringComparison.Ordinal);
+        Assert.Contains("Last Z Closed:              0000", x, StringComparison.Ordinal);
+        Assert.Contains("Voids:                         0", x, StringComparison.Ordinal);
+        Assert.Contains("Cancelled:                     0", x, StringComparison.Ordinal);
+        Assert.Contains("Returns:                       0", x, StringComparison.Ordinal);
+        foreach (var report in new[] { x, z })
+        {
+            Assert.DoesNotContain("NOT RECORDED", report, StringComparison.Ordinal);
+            Assert.DoesNotContain("PARKING METRICS", report, StringComparison.Ordinal);
+            Assert.DoesNotContain("Output Identity", report, StringComparison.Ordinal);
+            Assert.DoesNotContain("Print Contract", report, StringComparison.Ordinal);
+            Assert.DoesNotContain(XRecord().FiscalIdentityId.ToString("D"), report, StringComparison.OrdinalIgnoreCase);
+            Assert.DoesNotContain(XRecord().SitePosServerId.ToString("D"), report, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("Operator:                 SYSTEM", report, StringComparison.Ordinal);
+        }
         Assert.Equal(Amounts(), service.Present(XRecord()).Presentation?.Amounts);
         Assert.Equal(ZRecord().CounterSnapshot.ResultingZCounterValue, service.Present(ZRecord()).Presentation?.Counters?.ResultingZCounterValue);
     }
@@ -154,20 +182,16 @@ public sealed class FiscalReportPresentationTests
         };
         var distinctText = Text(renderer, service.Present(distinct).Presentation!);
 
-        Assert.Contains("QRPH         1", distinctText, StringComparison.Ordinal);
-        Assert.Contains("PHP 20.00", distinctText, StringComparison.Ordinal);
-        Assert.Contains("GCASH        1", distinctText, StringComparison.Ordinal);
-        Assert.Contains("PHP 30.00", distinctText, StringComparison.Ordinal);
-        Assert.Contains("MAYA         1", distinctText, StringComparison.Ordinal);
-        Assert.Contains("PHP 50.00", distinctText, StringComparison.Ordinal);
+        AssertPayment(distinctText, "QRPH", 1, "PHP 20.00");
+        AssertPayment(distinctText, "GCASH", 1, "PHP 30.00");
+        AssertPayment(distinctText, "MAYA", 1, "PHP 50.00");
 
         var aggregateOnly = XRecord() with { Tenders = [new("digital_wallet", 2, 10_000, "PHP")] };
         var aggregateText = Text(renderer, service.Present(aggregateOnly).Presentation!);
-        Assert.Contains("SOURCE CATEGORY", aggregateText, StringComparison.Ordinal);
-        Assert.Contains("NOT DISTINGUISHABLE", aggregateText, StringComparison.Ordinal);
-        Assert.Contains("QRPH         0", aggregateText, StringComparison.Ordinal);
-        Assert.Contains("GCASH        0", aggregateText, StringComparison.Ordinal);
-        Assert.Contains("MAYA         0", aggregateText, StringComparison.Ordinal);
+        AssertPayment(aggregateText, "QRPH", 0, "PHP 0.00");
+        AssertPayment(aggregateText, "GCASH", 0, "PHP 0.00");
+        AssertPayment(aggregateText, "MAYA", 0, "PHP 0.00");
+        Assert.DoesNotContain("SOURCE CATEGORY", aggregateText, StringComparison.Ordinal);
         Assert.Contains("TOTAL PAYMENTS", aggregateText, StringComparison.Ordinal);
         Assert.Contains("PHP 100.00", aggregateText, StringComparison.Ordinal);
         Assert.DoesNotContain("BANK TRANSFER", aggregateText, StringComparison.Ordinal);
@@ -178,7 +202,11 @@ public sealed class FiscalReportPresentationTests
     {
         var record = XRecord() with { FiscalReportReference = "X-VERY-LONG-AUTHORITATIVE-REFERENCE-1234567890" };
         var presentation = new FiscalReportPresentationService().Present(record).Presentation!;
-        var artifact = new FiscalReportOutputRenderer().CreateExport(presentation, FiscalReportOutputFormat.Pdf);
+        var artifact = new FiscalReportOutputRenderer().CreateExport(
+            presentation,
+            FiscalReportOutputFormat.Pdf,
+            FiscalReportPrintWidthProfile.Narrow,
+            ReceiptProfile());
         var pdf = Encoding.ASCII.GetString(artifact.Content);
         var text = PdfText(artifact.Content);
 
@@ -198,6 +226,37 @@ public sealed class FiscalReportPresentationTests
     }
 
     [Fact]
+    public void OptionalMachineAndInvoiceFieldsAreOmittedWhenUnavailable()
+    {
+        var presentation = new FiscalReportPresentationService().Present(XRecord() with
+        {
+            FiscalNumberRanges = []
+        }).Presentation!;
+        var profile = ReceiptProfile() with
+        {
+            MachineIdentificationNumber = null,
+            TerminalId = null,
+            SerialNumber = null,
+            Model = null,
+            SoftwareVersion = null,
+            Location = null
+        };
+        var receipt = PdfText(new FiscalReportOutputRenderer().CreateExport(
+            presentation,
+            FiscalReportOutputFormat.Pdf,
+            FiscalReportPrintWidthProfile.Narrow,
+            profile).Content);
+
+        Assert.DoesNotContain("MACHINE INFORMATION", receipt, StringComparison.Ordinal);
+        Assert.DoesNotContain("Beginning Invoice", receipt, StringComparison.Ordinal);
+        Assert.DoesNotContain("Ending Invoice", receipt, StringComparison.Ordinal);
+        Assert.DoesNotContain("NOT RECORDED", receipt, StringComparison.Ordinal);
+        Assert.DoesNotContain("Surcharges", receipt, StringComparison.Ordinal);
+        Assert.DoesNotContain("Cancel Amount", receipt, StringComparison.Ordinal);
+        Assert.DoesNotContain("VAT BREAKDOWN", receipt, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void FormattingIsInvariantAndSupportsExplicitNegativeAndZeroValues()
     {
         Assert.Equal("PHP 0.00", FiscalReportOutputRenderer.FormatAmount(0, "PHP"));
@@ -210,7 +269,11 @@ public sealed class FiscalReportPresentationTests
     }
 
     private static string Text(FiscalReportOutputRenderer renderer, FiscalReportPresentationModel presentation) =>
-        PdfText(renderer.CreateExport(presentation, FiscalReportOutputFormat.Pdf).Content);
+        PdfText(renderer.CreateExport(
+            presentation,
+            FiscalReportOutputFormat.Pdf,
+            FiscalReportPrintWidthProfile.Narrow,
+            ReceiptProfile()).Content);
 
     private static string PdfText(byte[] bytes)
     {
@@ -229,6 +292,29 @@ public sealed class FiscalReportPresentationTests
             previous = current;
         }
     }
+
+    private static void AssertPayment(string text, string method, long count, string amount)
+    {
+        var line = Assert.Single(text.Split('\n'), candidate => candidate.StartsWith(method, StringComparison.Ordinal));
+        Assert.Contains(count.ToString(System.Globalization.CultureInfo.InvariantCulture), line, StringComparison.Ordinal);
+        Assert.Contains(amount, line, StringComparison.Ordinal);
+    }
+
+    private static FiscalReportReceiptProfile ReceiptProfile() => new(
+        "Professional Parking Management Corporation",
+        "Professional Parking Management Corporation",
+        "999-999-999-000",
+        "Vat-able",
+        "PITX Level 3",
+        "PTU-TEST-PITX-L3-0001",
+        new DateOnly(2026, 1, 1),
+        new DateOnly(2031, 1, 1),
+        "MIN-TEST-PITX-L3-001",
+        null,
+        "SN-TEST-PITX-L3-001",
+        null,
+        null,
+        "PITX Level 3");
 
     private static FiscalXReadingRecord XRecord() => new(
         Guid.Parse("81000000-0000-4000-8000-000000000001"),

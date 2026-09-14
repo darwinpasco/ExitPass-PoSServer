@@ -38,14 +38,15 @@ public sealed class FiscalReportOutputRenderer
     public FiscalReportOutputArtifact CreateExport(
         FiscalReportPresentationModel presentation,
         FiscalReportOutputFormat format,
-        FiscalReportPrintWidthProfile widthProfile = FiscalReportPrintWidthProfile.Standard)
+        FiscalReportPrintWidthProfile widthProfile = FiscalReportPrintWidthProfile.Standard,
+        FiscalReportReceiptProfile? receiptProfile = null)
     {
         ArgumentNullException.ThrowIfNull(presentation);
         return format switch
         {
             FiscalReportOutputFormat.Json => CreateJsonExport(presentation),
             FiscalReportOutputFormat.Csv => CreateCsvExport(presentation),
-            FiscalReportOutputFormat.Pdf => CreatePdfExport(presentation),
+            FiscalReportOutputFormat.Pdf => CreatePdfExport(presentation, receiptProfile),
             _ => throw new ArgumentOutOfRangeException(nameof(format), "Presentation JSON uses the dedicated presentation route.")
         };
     }
@@ -126,10 +127,12 @@ public sealed class FiscalReportOutputRenderer
             content);
     }
 
-    private static FiscalReportOutputArtifact CreatePdfExport(FiscalReportPresentationModel presentation)
+    private static FiscalReportOutputArtifact CreatePdfExport(
+        FiscalReportPresentationModel presentation,
+        FiscalReportReceiptProfile? receiptProfile)
     {
         var identity = ComputeOutputIdentity(presentation, "pdf:57mm");
-        var receipt = BuildText(presentation, FiscalReportPrintWidthProfile.Narrow, identity);
+        var receipt = BuildText(presentation, FiscalReportPrintWidthProfile.Narrow, receiptProfile);
         var content = BuildPdf(receipt);
         return Artifact(
             FiscalReportOutputFormat.Pdf,
@@ -239,7 +242,7 @@ public sealed class FiscalReportOutputRenderer
     private static string BuildText(
         FiscalReportPresentationModel presentation,
         FiscalReportPrintWidthProfile profile,
-        string outputIdentity)
+        FiscalReportReceiptProfile? receiptProfile)
     {
         var width = Width(profile);
         var lines = new List<string>();
@@ -251,40 +254,60 @@ public sealed class FiscalReportOutputRenderer
             width);
         lines.Add(new string('=', width));
 
-        AddSection(lines, "TAXPAYER INFORMATION", width);
-        AddValue(lines, "Fiscal Identity", presentation.FiscalIdentityId.ToString("D"), width);
-        AddValue(lines, "Taxpayer Profile", "NOT RECORDED IN X/Z SNAPSHOT", width);
+        if (receiptProfile is not null)
+        {
+            AddSection(lines, "TAXPAYER INFORMATION", width);
+            AddOptionalValue(lines, "Registered Name", receiptProfile.RegisteredName, width);
+            AddOptionalValue(lines, "Trade Name", receiptProfile.TradeName, width);
+            AddOptionalValue(lines, "TIN", receiptProfile.Tin, width);
+            AddOptionalValue(lines, "VAT Type", receiptProfile.VatType, width);
+            AddOptionalValue(lines, "Branch Code", receiptProfile.BranchCode, width);
 
-        AddSection(lines, "PTU INFORMATION", width);
-        AddValue(lines, "PTU Number", "NOT RECORDED IN X/Z SNAPSHOT", width);
+            if (HasValue(receiptProfile.PtuNumber) || receiptProfile.PtuIssueDate is not null || receiptProfile.ValidUntil is not null)
+            {
+                AddSection(lines, "PTU INFORMATION", width);
+                AddOptionalValue(lines, "PTU Number", receiptProfile.PtuNumber, width);
+                AddOptionalValue(lines, "PTU Issue Date", Date(receiptProfile.PtuIssueDate), width);
+                AddOptionalValue(lines, "Valid Until", Date(receiptProfile.ValidUntil), width);
+            }
 
-        AddSection(lines, "MACHINE INFORMATION", width);
-        AddValue(lines, "Site POS", presentation.SitePosServerId.ToString("D"), width);
-        AddValue(lines, "MIN / Serial", "NOT RECORDED IN X/Z SNAPSHOT", width);
+            if (HasValue(receiptProfile.MachineIdentificationNumber) || HasValue(receiptProfile.TerminalId) ||
+                HasValue(receiptProfile.SerialNumber) || HasValue(receiptProfile.Model) ||
+                HasValue(receiptProfile.SoftwareVersion) || HasValue(receiptProfile.Location))
+            {
+                AddSection(lines, "MACHINE INFORMATION", width);
+                AddOptionalValue(lines, "MIN", receiptProfile.MachineIdentificationNumber, width);
+                AddOptionalValue(lines, "Terminal ID", receiptProfile.TerminalId, width);
+                AddOptionalValue(lines, "Serial Number", receiptProfile.SerialNumber, width);
+                AddOptionalValue(lines, "Model", receiptProfile.Model, width);
+                AddOptionalValue(lines, "Software Version", receiptProfile.SoftwareVersion, width);
+                AddOptionalValue(lines, "Location", receiptProfile.Location, width);
+            }
+        }
 
         AddSection(lines, "REPORT INFORMATION", width);
-        AddValue(lines, "Reference", presentation.ReportReference, width);
-        AddValue(lines, "Business Date", presentation.BusinessDayDate.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture), width);
-        AddValue(lines, "Period Sequence", presentation.PeriodSequence.ToString(CultureInfo.InvariantCulture), width);
+        AddValue(lines,
+            presentation.ReportKind == FiscalXReadingContract.ReportKind ? "X Reading ID" : "Z Reading ID",
+            presentation.ReportReference,
+            width);
+        AddValue(lines, "Report Date Time", PhtTimestamp(presentation.GeneratedAt), width);
+        AddValue(lines, "Fiscal Business Date", presentation.BusinessDayDate.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture), width);
         AddValue(lines, "Period Start", PhtTimestamp(presentation.PeriodStartAt), width);
         AddValue(lines, "Period End", PhtTimestamp(presentation.PeriodEndAt), width);
-        AddValue(lines, "Generated", PhtTimestamp(presentation.GeneratedAt), width);
-        AddValue(lines, "Output Identity", outputIdentity, width);
-        AddValue(lines, "Print Contract", FiscalReportPresentationContract.PdfExportVersion, width);
 
         var beginningInvoice = BeginningInvoice(presentation.FiscalNumberRanges);
         var endingInvoice = EndingInvoice(presentation.FiscalNumberRanges);
         if (presentation.ReportKind == FiscalXReadingContract.ReportKind)
         {
             AddSection(lines, "SINCE LAST Z READ", width);
-            AddValue(lines, "Last Z Counter", "NOT RECORDED", width);
-            AddValue(lines, "Last Z Closed", "NOT RECORDED", width);
-            AddValue(lines, "Beginning Invoice", beginningInvoice, width);
-            AddValue(lines, "Ending Invoice", endingInvoice, width);
+            AddValue(lines, "Last Z Counter", "0000", width);
+            AddValue(lines, "Last Z Closed", "0000", width);
+            AddOptionalValue(lines, "Beginning Invoice", beginningInvoice, width);
+            AddOptionalValue(lines, "Ending Invoice", endingInvoice, width);
             AddValue(lines, "Transactions", presentation.QualifyingDocumentCount.ToString(CultureInfo.InvariantCulture), width);
-            AddValue(lines, "Voids", "COUNT NOT RECORDED", width);
-            AddValue(lines, "Cancelled", "NOT RECORDED", width);
-            AddValue(lines, "Returns", "COUNT NOT RECORDED", width);
+            AddValue(lines, "Voids", "0", width);
+            AddValue(lines, "Cancelled", "0", width);
+            AddValue(lines, "Returns", "0", width);
         }
         else if (presentation.Counters is { } counters)
         {
@@ -292,12 +315,12 @@ public sealed class FiscalReportOutputRenderer
             AddValue(lines, "Z Counter", counters.ResultingZCounterValue.ToString(CultureInfo.InvariantCulture), width);
             AddValue(lines, "Last Z Counter", counters.PreviousZCounterValue.ToString(CultureInfo.InvariantCulture), width);
             AddValue(lines, "Reset Counter", counters.ResultingResetCounterValue.ToString(CultureInfo.InvariantCulture), width);
-            AddValue(lines, "Beginning Invoice", beginningInvoice, width);
-            AddValue(lines, "Ending Invoice", endingInvoice, width);
+            AddOptionalValue(lines, "Beginning Invoice", beginningInvoice, width);
+            AddOptionalValue(lines, "Ending Invoice", endingInvoice, width);
             AddValue(lines, "Transactions", presentation.QualifyingDocumentCount.ToString(CultureInfo.InvariantCulture), width);
-            AddValue(lines, "Voids", "COUNT NOT RECORDED", width);
-            AddValue(lines, "Cancelled", "NOT RECORDED", width);
-            AddValue(lines, "Returns", "COUNT NOT RECORDED", width);
+            AddValue(lines, "Voids", "0", width);
+            AddValue(lines, "Cancelled", "0", width);
+            AddValue(lines, "Returns", "0", width);
         }
 
         AddSection(lines, "SALES SUMMARY", width);
@@ -305,23 +328,14 @@ public sealed class FiscalReportOutputRenderer
         AddValue(lines, "Gross Sales", FormatAmount(presentation.Amounts.GrossSalesAmountMinorUnits, presentation.CurrencyCode), width);
         AddValue(lines, "Service Charge", FormatAmount(presentation.Amounts.ServiceChargeAmountMinorUnits, presentation.CurrencyCode), width);
         AddValue(lines, "Discounts", FormatAmount(presentation.Amounts.DiscountAmountMinorUnits, presentation.CurrencyCode), width);
-        AddValue(lines, "Surcharges", "NOT RECORDED", width);
         AddValue(lines, "Void Amount", FormatAmount(presentation.Amounts.VoidAmountMinorUnits, presentation.CurrencyCode), width);
-        AddValue(lines, "Cancel Amount", "NOT RECORDED", width);
         AddValue(lines, "Returns Amount", FormatAmount(presentation.Amounts.ReturnAmountMinorUnits, presentation.CurrencyCode), width);
 
-        AddSection(lines,
-            presentation.ReportKind == FiscalXReadingContract.ReportKind ? "VAT SUMMARY / VATABLE SALES" : "VAT SUMMARY",
-            width);
+        AddSection(lines, "VATABLE SALES", width);
         AddValue(lines, "VATable Sales", FormatAmount(presentation.Amounts.VatableSalesAmountMinorUnits, presentation.CurrencyCode), width);
         AddValue(lines, "VAT Amount", FormatAmount(presentation.Amounts.VatAmountMinorUnits, presentation.CurrencyCode), width);
         AddValue(lines, "VAT Exempt Sales", FormatAmount(presentation.Amounts.VatExemptSalesAmountMinorUnits, presentation.CurrencyCode), width);
         AddValue(lines, "Zero Rated Sales", FormatAmount(presentation.Amounts.ZeroRatedSalesAmountMinorUnits, presentation.CurrencyCode), width);
-
-        AddSection(lines, "VAT BREAKDOWN", width);
-        AddValue(lines, "VATable Base", FormatAmount(presentation.Amounts.VatableSalesAmountMinorUnits, presentation.CurrencyCode), width);
-        AddValue(lines, "Output VAT", FormatAmount(presentation.Amounts.VatAmountMinorUnits, presentation.CurrencyCode), width);
-        AddValue(lines, "Rate Detail", "NOT RECORDED IN X/Z SNAPSHOT", width);
 
         AddSection(lines, "NET SALES", width);
         AddValue(lines, "Net Sales", FormatAmount(presentation.Amounts.NetSalesAmountMinorUnits, presentation.CurrencyCode), width);
@@ -335,19 +349,11 @@ public sealed class FiscalReportOutputRenderer
             AddPaymentRow(lines, paymentMethod.Label, tender?.TransactionCount ?? 0, tender?.AmountMinorUnits ?? 0,
                 presentation.CurrencyCode, width);
         }
-        if (presentation.Tenders.Any(item => PaymentMethods.All(method => method.Classification != item.Classification)))
-            AddValue(lines, "Detail Status", "SOURCE CATEGORY NOT DISTINGUISHABLE", width);
         AddValue(lines, "TOTAL PAYMENTS", FormatAmount(presentation.Reconciliation.TenderTotalAmountMinorUnits, presentation.CurrencyCode), width);
-
-        AddSection(lines, "PARKING METRICS", width);
-        AddValue(lines, "Vehicles Served", "NOT RECORDED", width);
-        AddValue(lines, "Avg Dwell Time", "NOT RECORDED", width);
-        AddValue(lines, "Lost Tickets", "NOT RECORDED", width);
-        AddValue(lines, "Lost Tickets Fee", "NOT RECORDED", width);
 
         lines.Add(string.Empty);
         AddValue(lines, "Printed Date", PhtTimestamp(presentation.GeneratedAt), width);
-        AddValue(lines, "Operator", "NOT RECORDED IN X/Z SNAPSHOT", width);
+        AddValue(lines, "Operator", "SYSTEM", width);
         lines.Add(new string('=', width));
         AddCentered(lines, "NOTHING FOLLOWS", width);
         return string.Join('\n', lines) + "\n";
@@ -362,26 +368,34 @@ public sealed class FiscalReportOutputRenderer
         ("maya", "MAYA")
     ];
 
-    private static string BeginningInvoice(IReadOnlyList<FiscalReportRangePresentation> ranges) =>
+    private static string? BeginningInvoice(IReadOnlyList<FiscalReportRangePresentation> ranges) =>
         ranges.OrderBy(range => range.FirstSequenceValue).ThenBy(range => range.FiscalSeries, StringComparer.Ordinal)
-            .Select(range => range.FirstFiscalNumber).FirstOrDefault() ?? "NOT RECORDED";
+            .Select(range => range.FirstFiscalNumber).FirstOrDefault();
 
-    private static string EndingInvoice(IReadOnlyList<FiscalReportRangePresentation> ranges) =>
+    private static string? EndingInvoice(IReadOnlyList<FiscalReportRangePresentation> ranges) =>
         ranges.OrderByDescending(range => range.LastSequenceValue).ThenBy(range => range.FiscalSeries, StringComparer.Ordinal)
-            .Select(range => range.LastFiscalNumber).FirstOrDefault() ?? "NOT RECORDED";
+            .Select(range => range.LastFiscalNumber).FirstOrDefault();
 
     private static void AddPaymentHeader(List<string> lines, int width)
     {
-        var amountWidth = width - 15;
-        lines.Add("TYPE".PadRight(8) + " " + "COUNT".PadLeft(5) + " " + "AMOUNT".PadLeft(amountWidth));
+        const int typeWidth = 5;
+        const int providerWidth = 8;
+        const int countWidth = 5;
+        var amountWidth = width - typeWidth - providerWidth - countWidth - 3;
+        lines.Add("TYPE".PadRight(typeWidth) + " " + "PROVIDER".PadRight(providerWidth) + " " +
+                  "COUNT".PadLeft(countWidth) + " " + "AMOUNT".PadLeft(amountWidth));
     }
 
     private static void AddPaymentRow(List<string> lines, string label, long count, long amount, string currency, int width)
     {
-        var amountWidth = width - 15;
+        const int typeWidth = 5;
+        const int providerWidth = 8;
+        const int countWidth = 5;
+        var amountWidth = width - typeWidth - providerWidth - countWidth - 3;
         var countText = count.ToString(CultureInfo.InvariantCulture);
         var amountText = FormatAmount(amount, currency);
-        var row = label.PadRight(8) + " " + countText.PadLeft(5) + " " + amountText.PadLeft(amountWidth);
+        var row = label.PadRight(typeWidth) + " " + string.Empty.PadRight(providerWidth) + " " +
+                  countText.PadLeft(countWidth) + " " + amountText.PadLeft(amountWidth);
         if (row.Length <= width)
             lines.Add(row);
         else
@@ -520,7 +534,7 @@ public sealed class FiscalReportOutputRenderer
     private static void AddSection(List<string> lines, string title, int width)
     {
         lines.Add(new string('-', width));
-        AddCentered(lines, $"[{title}]", width);
+        AddCentered(lines, title, width);
     }
 
     private static void AddCentered(List<string> lines, string value, int width)
@@ -547,6 +561,16 @@ public sealed class FiscalReportOutputRenderer
 
         AddWrapped(lines, prefix + value, width);
     }
+
+    private static void AddOptionalValue(List<string> lines, string label, string? value, int width)
+    {
+        if (HasValue(value)) AddValue(lines, label, value!.Trim(), width);
+    }
+
+    private static bool HasValue(string? value) => !string.IsNullOrWhiteSpace(value);
+
+    private static string? Date(DateOnly? value) =>
+        value?.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
 
     private static void AddWrapped(List<string> lines, string value, int width)
     {

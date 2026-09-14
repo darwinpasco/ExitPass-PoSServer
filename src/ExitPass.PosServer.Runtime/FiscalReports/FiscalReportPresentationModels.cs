@@ -150,6 +150,22 @@ public sealed record FiscalReportOutputArtifact(
     string ContentDisposition,
     byte[] Content);
 
+public sealed record FiscalReportReceiptProfile(
+    string? RegisteredName,
+    string? TradeName,
+    string? Tin,
+    string? VatType,
+    string? BranchCode,
+    string? PtuNumber,
+    DateOnly? PtuIssueDate,
+    DateOnly? ValidUntil,
+    string? MachineIdentificationNumber,
+    string? TerminalId,
+    string? SerialNumber,
+    string? Model,
+    string? SoftwareVersion,
+    string? Location);
+
 public sealed record FiscalReportPresentationEnvelope(
     string ContractVersion,
     string OutputIdentity,

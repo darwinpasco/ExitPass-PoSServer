@@ -1,7 +1,9 @@
 using System.Security.Claims;
 using System.Text;
+using System.Text.RegularExpressions;
 using ExitPass.PosServer.Api.FiscalDocuments;
 using ExitPass.PosServer.Api.FiscalReports;
+using ExitPass.PosServer.Runtime.FiscalDocuments;
 using ExitPass.PosServer.Runtime.FiscalReports;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
@@ -69,15 +71,15 @@ public sealed class FiscalReportOutputApiTests
         var service = new FiscalXReadingService(new XRepository(new(FiscalXReadingOutcome.Replayed, record)));
 
         var presentation = await ExecuteAsync(context => FiscalReportOutputEndpoint.GetXPresentationAsync(
-            record.FiscalReportReference, service, new(), new(), context, NullLogger<FiscalReportOutputAudit>.Instance));
+            record.FiscalReportReference, service, new(), new(), new ProfileRepository(), context, NullLogger<FiscalReportOutputAudit>.Instance));
         var export1 = await ExecuteAsync(context => FiscalReportOutputEndpoint.GetXExportAsync(
-            record.FiscalReportReference, "csv", null, service, new(), new(), context, NullLogger<FiscalReportOutputAudit>.Instance));
+            record.FiscalReportReference, "csv", null, service, new(), new(), new ProfileRepository(), context, NullLogger<FiscalReportOutputAudit>.Instance));
         var export2 = await ExecuteAsync(context => FiscalReportOutputEndpoint.GetXExportAsync(
-            record.FiscalReportReference, "csv", null, service, new(), new(), context, NullLogger<FiscalReportOutputAudit>.Instance));
+            record.FiscalReportReference, "csv", null, service, new(), new(), new ProfileRepository(), context, NullLogger<FiscalReportOutputAudit>.Instance));
         var pdf1 = await ExecuteAsync(context => FiscalReportOutputEndpoint.GetXExportAsync(
-            record.FiscalReportReference, "pdf", null, service, new(), new(), context, NullLogger<FiscalReportOutputAudit>.Instance));
+            record.FiscalReportReference, "pdf", null, service, new(), new(), new ProfileRepository(), context, NullLogger<FiscalReportOutputAudit>.Instance));
         var pdf2 = await ExecuteAsync(context => FiscalReportOutputEndpoint.GetXExportAsync(
-            record.FiscalReportReference, "pdf", "57mm", service, new(), new(), context, NullLogger<FiscalReportOutputAudit>.Instance));
+            record.FiscalReportReference, "pdf", "57mm", service, new(), new(), new ProfileRepository(), context, NullLogger<FiscalReportOutputAudit>.Instance));
 
         Assert.Equal(StatusCodes.Status200OK, presentation.StatusCode);
         Assert.Equal("application/json; charset=utf-8", presentation.ContentType);
@@ -92,6 +94,13 @@ public sealed class FiscalReportOutputApiTests
         Assert.Equal("application/pdf", pdf1.ContentType);
         Assert.Contains(".pdf", pdf1.Headers.ContentDisposition.ToString(), StringComparison.OrdinalIgnoreCase);
         Assert.StartsWith("%PDF-1.4", Encoding.ASCII.GetString(pdf1.Body), StringComparison.Ordinal);
+        var receipt = PdfText(pdf1.Body);
+        Assert.Contains("Registered Name", receipt, StringComparison.Ordinal);
+        Assert.Contains("999-999-999-000", receipt, StringComparison.Ordinal);
+        Assert.Contains("PTU-TEST-PITX-L3-0001".Replace("-", string.Empty), receipt.Replace("-", string.Empty).Replace("\n", string.Empty), StringComparison.Ordinal);
+        Assert.DoesNotContain(record.FiscalIdentityId.ToString("D"), receipt, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain(record.SitePosServerId.ToString("D"), receipt, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("NOT RECORDED", receipt, StringComparison.Ordinal);
         Assert.DoesNotContain("beneficiary", Encoding.UTF8.GetString(presentation.Body), StringComparison.OrdinalIgnoreCase);
     }
 
@@ -103,9 +112,9 @@ public sealed class FiscalReportOutputApiTests
         var missing = new FiscalXReadingService(new XRepository(new(FiscalXReadingOutcome.NotFound)));
 
         var denied = await ExecuteAsync(context => FiscalReportOutputEndpoint.GetXPresentationAsync(
-            record.FiscalReportReference, found, new(), new(), context, NullLogger<FiscalReportOutputAudit>.Instance), Guid.NewGuid());
+            record.FiscalReportReference, found, new(), new(), new ProfileRepository(), context, NullLogger<FiscalReportOutputAudit>.Instance), Guid.NewGuid());
         var absent = await ExecuteAsync(context => FiscalReportOutputEndpoint.GetXPresentationAsync(
-            record.FiscalReportReference, missing, new(), new(), context, NullLogger<FiscalReportOutputAudit>.Instance));
+            record.FiscalReportReference, missing, new(), new(), new ProfileRepository(), context, NullLogger<FiscalReportOutputAudit>.Instance));
 
         Assert.Equal(StatusCodes.Status404NotFound, denied.StatusCode);
         Assert.Equal(absent.StatusCode, denied.StatusCode);
@@ -121,11 +130,11 @@ public sealed class FiscalReportOutputApiTests
         var unavailable = new FiscalXReadingService(new XRepository(new(FiscalXReadingOutcome.PersistenceFailure)));
 
         var unsupported = await ExecuteAsync(context => FiscalReportOutputEndpoint.GetXExportAsync(
-            valid.FiscalReportReference, "text", null, service, new(), new(), context, NullLogger<FiscalReportOutputAudit>.Instance));
+            valid.FiscalReportReference, "text", null, service, new(), new(), new ProfileRepository(), context, NullLogger<FiscalReportOutputAudit>.Instance));
         var invalid = await ExecuteAsync(context => FiscalReportOutputEndpoint.GetXPresentationAsync(
-            valid.FiscalReportReference, malformed, new(), new(), context, NullLogger<FiscalReportOutputAudit>.Instance));
+            valid.FiscalReportReference, malformed, new(), new(), new ProfileRepository(), context, NullLogger<FiscalReportOutputAudit>.Instance));
         var failed = await ExecuteAsync(context => FiscalReportOutputEndpoint.GetXPresentationAsync(
-            valid.FiscalReportReference, unavailable, new(), new(), context, NullLogger<FiscalReportOutputAudit>.Instance));
+            valid.FiscalReportReference, unavailable, new(), new(), new ProfileRepository(), context, NullLogger<FiscalReportOutputAudit>.Instance));
 
         Assert.Equal(StatusCodes.Status400BadRequest, unsupported.StatusCode);
         Assert.Equal(StatusCodes.Status422UnprocessableEntity, invalid.StatusCode);
@@ -140,11 +149,11 @@ public sealed class FiscalReportOutputApiTests
         var record = ZRecord();
         var service = new FiscalZReadingService(new ZRepository(new(FiscalZReadingOutcome.Replayed, record)));
         var allowed = await ExecuteAsync(context => FiscalReportOutputEndpoint.GetZPresentationAsync(
-            record.FiscalReportReference, service, new(), new(), context, NullLogger<FiscalReportOutputAudit>.Instance));
+            record.FiscalReportReference, service, new(), new(), new ProfileRepository(), context, NullLogger<FiscalReportOutputAudit>.Instance));
         var pdf = await ExecuteAsync(context => FiscalReportOutputEndpoint.GetZExportAsync(
-            record.FiscalReportReference, "pdf", null, service, new(), new(), context, NullLogger<FiscalReportOutputAudit>.Instance));
+            record.FiscalReportReference, "pdf", null, service, new(), new(), new ProfileRepository(), context, NullLogger<FiscalReportOutputAudit>.Instance));
         var denied = await ExecuteAsync(context => FiscalReportOutputEndpoint.GetZPresentationAsync(
-            record.FiscalReportReference, service, new(), new(), context, NullLogger<FiscalReportOutputAudit>.Instance), currency: "USD");
+            record.FiscalReportReference, service, new(), new(), new ProfileRepository(), context, NullLogger<FiscalReportOutputAudit>.Instance), currency: "USD");
 
         Assert.Equal(StatusCodes.Status200OK, allowed.StatusCode);
         Assert.Contains("resultingZCounterValue\":12", Encoding.UTF8.GetString(allowed.Body), StringComparison.Ordinal);
@@ -203,6 +212,13 @@ public sealed class FiscalReportOutputApiTests
         return new(context.Response.StatusCode, context.Response.ContentType, context.Response.Headers, ((MemoryStream)context.Response.Body).ToArray());
     }
 
+    private static string PdfText(byte[] bytes)
+    {
+        var pdf = Encoding.ASCII.GetString(bytes);
+        return string.Join('\n', Regex.Matches(pdf, @"\((?<text>(?:\\.|[^\\)])*)\) Tj")
+            .Select(match => Regex.Unescape(match.Groups["text"].Value)));
+    }
+
     private static FiscalXReadingRecord XRecord() => new(
         Guid.Parse("83000000-0000-4000-8000-000000000010"), "X-20260806-0001",
         Guid.Parse("83000000-0000-4000-8000-000000000011"), "operation-x", "X_READING",
@@ -254,5 +270,43 @@ public sealed class FiscalReportOutputApiTests
     {
         public Task<FiscalZReadingResult> CloseAsync(FiscalZReadingCommand command, CancellationToken cancellationToken = default) => Task.FromResult(result);
         public Task<FiscalZReadingResult> GetByReferenceAsync(string fiscalReportReference, CancellationToken cancellationToken = default) => Task.FromResult(result);
+    }
+
+    private sealed class ProfileRepository : ISalesInvoiceHeaderProfileRepository
+    {
+        public Task<IReadOnlyList<SalesInvoiceHeaderProfile>> ListHeaderProfilesAsync(
+            Guid? siteId,
+            Guid? sitePosServerId,
+            CancellationToken cancellationToken) =>
+            Task.FromResult<IReadOnlyList<SalesInvoiceHeaderProfile>>([PitxProfile()]);
+
+        public Task<FiscalIdentityProfile> CreateFiscalIdentityAsync(FiscalIdentityProfile identity, CancellationToken cancellationToken) => throw new NotSupportedException();
+        public Task<FiscalIdentityProfile?> GetFiscalIdentityAsync(Guid fiscalIdentityId, CancellationToken cancellationToken) => throw new NotSupportedException();
+        public Task<FiscalIdentityProfile> UpdateFiscalIdentityAsync(FiscalIdentityProfile identity, CancellationToken cancellationToken) => throw new NotSupportedException();
+        public Task<bool> IsFiscalIdentityInGovernedUseAsync(Guid fiscalIdentityId, CancellationToken cancellationToken) => throw new NotSupportedException();
+        public Task<SalesInvoiceHeaderProfile> CreateHeaderProfileAsync(SalesInvoiceHeaderProfile profile, CancellationToken cancellationToken) => throw new NotSupportedException();
+        public Task<SalesInvoiceHeaderProfile?> GetHeaderProfileAsync(Guid salesInvoiceHeaderProfileId, CancellationToken cancellationToken) => throw new NotSupportedException();
+        public Task<SalesInvoiceHeaderProfile> UpdateHeaderProfileDraftAsync(SalesInvoiceHeaderProfile profile, CancellationToken cancellationToken) => throw new NotSupportedException();
+        public Task<SalesInvoiceHeaderProfile> ApproveHeaderProfileAsync(Guid salesInvoiceHeaderProfileId, DateTimeOffset approvedAt, string approvedByRef, CancellationToken cancellationToken) => throw new NotSupportedException();
+        public Task<SalesInvoiceHeaderProfile> RetireHeaderProfileAsync(Guid salesInvoiceHeaderProfileId, DateTimeOffset retiredAt, string retiredByRef, CancellationToken cancellationToken) => throw new NotSupportedException();
+        public Task<SalesInvoiceHeaderProfileResolutionResult> ResolveEffectiveSalesInvoiceHeaderProfileAsync(Guid siteId, Guid sitePosServerId, DateTimeOffset effectiveAt, CancellationToken cancellationToken) => throw new NotSupportedException();
+        public Task<SalesInvoiceHeaderProfileUsage> GetHeaderProfileUsageAsync(Guid salesInvoiceHeaderProfileId, CancellationToken cancellationToken) => throw new NotSupportedException();
+    }
+
+    private static SalesInvoiceHeaderProfile PitxProfile()
+    {
+        var now = DateTimeOffset.Parse("2026-01-01T00:00:00Z");
+        return new(
+            Guid.Parse("83000000-0000-4000-8000-000000000030"), FiscalIdentityId,
+            Guid.Parse("2d1dcdf8-f563-537c-8542-0bde7cc9da97"), SitePosServerId,
+            "pitx-profile-v1", SalesInvoiceHeaderProfileVersions.TemplateVersion,
+            SalesInvoiceHeaderProfileVersions.PresentationVersion,
+            "SN-TEST-PITX-L3-001", "MIN-TEST-PITX-L3-001", "PITX Level 3",
+            "ACC-TEST-2026-0001", new DateOnly(2026, 1, 1), new DateOnly(2031, 1, 1),
+            "PTU-TEST-PITX-L3-0001", new DateOnly(2026, 1, 1), "SALES INVOICE", "THANK YOU",
+            now, null, SalesInvoiceHeaderProfileLifecycle.Approved, now, "approver", null, now, now,
+            "creator", "updater",
+            new(FiscalIdentityId, "Professional Parking Management Corporation", "PITX Level 3",
+                "999-999-999-000", "VAT", SalesInvoiceHeaderProfileLifecycle.Approved, now, now, "creator", "updater"));
     }
 }

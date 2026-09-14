@@ -1,4 +1,5 @@
 using ExitPass.PosServer.Api.FiscalDocuments;
+using ExitPass.PosServer.Runtime.FiscalDocuments;
 using ExitPass.PosServer.Runtime.FiscalReports;
 
 namespace ExitPass.PosServer.Api.FiscalReports;
@@ -18,10 +19,11 @@ public static class FiscalReportOutputEndpoint
         FiscalXReadingService readService,
         FiscalReportPresentationService presentationService,
         FiscalReportOutputRenderer renderer,
+        ISalesInvoiceHeaderProfileRepository headerProfileRepository,
         HttpContext context,
         ILogger<FiscalReportOutputAudit> logger,
         CancellationToken cancellationToken = default) =>
-        await GetXAsync(reference, null, null, readService, presentationService, renderer, context, logger, cancellationToken)
+        await GetXAsync(reference, null, null, readService, presentationService, renderer, headerProfileRepository, context, logger, cancellationToken)
             .ConfigureAwait(false);
 
     public static async Task<IResult> GetXExportAsync(
@@ -31,10 +33,11 @@ public static class FiscalReportOutputEndpoint
         FiscalXReadingService readService,
         FiscalReportPresentationService presentationService,
         FiscalReportOutputRenderer renderer,
+        ISalesInvoiceHeaderProfileRepository headerProfileRepository,
         HttpContext context,
         ILogger<FiscalReportOutputAudit> logger,
         CancellationToken cancellationToken = default) =>
-        await GetXAsync(reference, format, width, readService, presentationService, renderer, context, logger, cancellationToken)
+        await GetXAsync(reference, format, width, readService, presentationService, renderer, headerProfileRepository, context, logger, cancellationToken)
             .ConfigureAwait(false);
 
     public static async Task<IResult> GetZPresentationAsync(
@@ -42,10 +45,11 @@ public static class FiscalReportOutputEndpoint
         FiscalZReadingService readService,
         FiscalReportPresentationService presentationService,
         FiscalReportOutputRenderer renderer,
+        ISalesInvoiceHeaderProfileRepository headerProfileRepository,
         HttpContext context,
         ILogger<FiscalReportOutputAudit> logger,
         CancellationToken cancellationToken = default) =>
-        await GetZAsync(reference, null, null, readService, presentationService, renderer, context, logger, cancellationToken)
+        await GetZAsync(reference, null, null, readService, presentationService, renderer, headerProfileRepository, context, logger, cancellationToken)
             .ConfigureAwait(false);
 
     public static async Task<IResult> GetZExportAsync(
@@ -55,10 +59,11 @@ public static class FiscalReportOutputEndpoint
         FiscalZReadingService readService,
         FiscalReportPresentationService presentationService,
         FiscalReportOutputRenderer renderer,
+        ISalesInvoiceHeaderProfileRepository headerProfileRepository,
         HttpContext context,
         ILogger<FiscalReportOutputAudit> logger,
         CancellationToken cancellationToken = default) =>
-        await GetZAsync(reference, format, width, readService, presentationService, renderer, context, logger, cancellationToken)
+        await GetZAsync(reference, format, width, readService, presentationService, renderer, headerProfileRepository, context, logger, cancellationToken)
             .ConfigureAwait(false);
 
     private static async Task<IResult> GetXAsync(
@@ -68,6 +73,7 @@ public static class FiscalReportOutputEndpoint
         FiscalXReadingService readService,
         FiscalReportPresentationService presentationService,
         FiscalReportOutputRenderer renderer,
+        ISalesInvoiceHeaderProfileRepository headerProfileRepository,
         HttpContext context,
         ILogger<FiscalReportOutputAudit> logger,
         CancellationToken cancellationToken)
@@ -90,8 +96,16 @@ public static class FiscalReportOutputEndpoint
             return Hidden(context, correlation);
         }
 
+        var receiptProfile = outputFormat == FiscalReportOutputFormat.Pdf
+            ? await ResolveReceiptProfileAsync(
+                headerProfileRepository,
+                read.Record.SitePosServerId,
+                read.Record.FiscalIdentityId,
+                read.Record.GeneratedAt,
+                cancellationToken).ConfigureAwait(false)
+            : null;
         var presented = presentationService.Present(read.Record);
-        return Complete(context, presented, renderer, outputFormat, profile, correlation, logger);
+        return Complete(context, presented, renderer, outputFormat, profile, receiptProfile, correlation, logger);
     }
 
     private static async Task<IResult> GetZAsync(
@@ -101,6 +115,7 @@ public static class FiscalReportOutputEndpoint
         FiscalZReadingService readService,
         FiscalReportPresentationService presentationService,
         FiscalReportOutputRenderer renderer,
+        ISalesInvoiceHeaderProfileRepository headerProfileRepository,
         HttpContext context,
         ILogger<FiscalReportOutputAudit> logger,
         CancellationToken cancellationToken)
@@ -123,8 +138,16 @@ public static class FiscalReportOutputEndpoint
             return Hidden(context, correlation);
         }
 
+        var receiptProfile = outputFormat == FiscalReportOutputFormat.Pdf
+            ? await ResolveReceiptProfileAsync(
+                headerProfileRepository,
+                read.Record.SitePosServerId,
+                read.Record.FiscalIdentityId,
+                read.Record.GeneratedAt,
+                cancellationToken).ConfigureAwait(false)
+            : null;
         var presented = presentationService.Present(read.Record);
-        return Complete(context, presented, renderer, outputFormat, profile, correlation, logger);
+        return Complete(context, presented, renderer, outputFormat, profile, receiptProfile, correlation, logger);
     }
 
     private static IResult Complete(
@@ -133,6 +156,7 @@ public static class FiscalReportOutputEndpoint
         FiscalReportOutputRenderer renderer,
         FiscalReportOutputFormat format,
         FiscalReportPrintWidthProfile profile,
+        FiscalReportReceiptProfile? receiptProfile,
         string correlation,
         ILogger logger)
     {
@@ -151,7 +175,7 @@ public static class FiscalReportOutputEndpoint
 
         var artifact = format == FiscalReportOutputFormat.PresentationJson
             ? renderer.CreatePresentationJson(result.Presentation)
-            : renderer.CreateExport(result.Presentation, format, profile);
+            : renderer.CreateExport(result.Presentation, format, profile, receiptProfile);
         ApplyHeaders(context, artifact);
         logger.LogInformation(
             "Fiscal report output produced. Kind={ReportKind} Reference={ReportReference} Format={Format} OutputIdentity={OutputIdentity} Correlation={Correlation}",
@@ -200,6 +224,49 @@ public static class FiscalReportOutputEndpoint
         context.Response.Headers["X-ExitPass-Output-Identity"] = artifact.OutputIdentity;
         context.Response.Headers["X-ExitPass-Output-Contract"] = artifact.ContractVersion;
     }
+
+    private static async Task<FiscalReportReceiptProfile?> ResolveReceiptProfileAsync(
+        ISalesInvoiceHeaderProfileRepository repository,
+        Guid sitePosServerId,
+        Guid fiscalIdentityId,
+        DateTimeOffset effectiveAt,
+        CancellationToken cancellationToken)
+    {
+        var profiles = await repository.ListHeaderProfilesAsync(null, sitePosServerId, cancellationToken).ConfigureAwait(false);
+        var matches = profiles
+            .Where(candidate =>
+                candidate.FiscalIdentityId == fiscalIdentityId &&
+                candidate.LifecycleStatus != SalesInvoiceHeaderProfileLifecycle.Draft &&
+                candidate.EffectiveFrom <= effectiveAt &&
+                (candidate.EffectiveTo is null || effectiveAt < candidate.EffectiveTo))
+            .ToArray();
+        if (matches.Length != 1 || matches[0].FiscalIdentity is not { } identity) return null;
+
+        var profile = matches[0];
+        return new FiscalReportReceiptProfile(
+            identity.RegisteredBusinessName,
+            identity.RegisteredBusinessName,
+            identity.Tin,
+            VatType(identity.TaxpayerClassification),
+            profile.ParkingLocationDisplay,
+            profile.PtuNumber,
+            profile.PtuIssuedDate,
+            profile.BirAccreditationValidUntil,
+            profile.MachineIdentificationNumber,
+            null,
+            profile.PosSerialNumber,
+            null,
+            null,
+            profile.ParkingLocationDisplay);
+    }
+
+    private static string? VatType(string? classification) =>
+        classification?.Trim().ToUpperInvariant() switch
+        {
+            "VAT" or "VAT-ABLE" or "VATABLE" or "VAT REGISTERED" => "Vat-able",
+            { Length: > 0 } => classification.Trim(),
+            _ => null
+        };
 
     private static IResult Hidden(HttpContext context, string correlation) =>
         Error(context, "fiscal_report_not_found", "Fiscal report was not found.", correlation, StatusCodes.Status404NotFound);
