@@ -41,7 +41,7 @@ public sealed class FiscalReportOutputPostgresIntegrationTests
         var xReference = Assert.IsType<string>(xCreated?.XReading?.FiscalReportReference);
 
         var xBeforeClose = await ReadAllAsync(client, "x-readings", xReference);
-        Assert.Contains("\"title\":\"X READING\"", xBeforeClose.Presentation.Text, StringComparison.Ordinal);
+        Assert.Contains("\"title\":\"X READING REPORT\"", xBeforeClose.Presentation.Text, StringComparison.Ordinal);
         Assert.Contains("INTERIM_READ_ONLY", xBeforeClose.Presentation.Text, StringComparison.Ordinal);
         Assert.Contains("X READING", xBeforeClose.Text.Text, StringComparison.Ordinal);
         Assert.DoesNotContain("Z READING", xBeforeClose.Text.Text, StringComparison.Ordinal);
@@ -62,7 +62,7 @@ public sealed class FiscalReportOutputPostgresIntegrationTests
         var xAfterClose = await ReadAllAsync(client, "x-readings", xReference);
         var zOutputs = await ReadAllAsync(client, "z-readings", zReference);
         AssertEquivalent(xBeforeClose, xAfterClose);
-        Assert.Contains("\"title\":\"Z READING\"", zOutputs.Presentation.Text, StringComparison.Ordinal);
+        Assert.Contains("\"title\":\"Z READING REPORT\"", zOutputs.Presentation.Text, StringComparison.Ordinal);
         Assert.Contains("IMMUTABLE_CLOSED", zOutputs.Presentation.Text, StringComparison.Ordinal);
         Assert.Contains("\"resultingZCounterValue\":1", zOutputs.Presentation.Text, StringComparison.Ordinal);
         Assert.Contains("\"resultingResetCounterValue\":0", zOutputs.Presentation.Text, StringComparison.Ordinal);

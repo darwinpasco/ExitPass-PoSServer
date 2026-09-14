@@ -42,7 +42,7 @@ public sealed class FiscalReportPresentationService
         return Build(
             FiscalReportPresentationContract.XPresentationVersion,
             record.ReportKind,
-            "X READING",
+            "X READING REPORT",
             record.ReportStatus,
             "OPEN_AT_OBSERVATION",
             "INTERIM_READ_ONLY",
@@ -134,7 +134,7 @@ public sealed class FiscalReportPresentationService
         return Build(
             FiscalReportPresentationContract.ZPresentationVersion,
             record.ReportKind,
-            "Z READING",
+            "Z READING REPORT",
             record.ReportStatus,
             record.PeriodStatus,
             "IMMUTABLE_CLOSED",
