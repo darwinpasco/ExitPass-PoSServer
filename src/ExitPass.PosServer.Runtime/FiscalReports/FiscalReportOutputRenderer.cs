@@ -244,75 +244,148 @@ public sealed class FiscalReportOutputRenderer
         var width = Width(profile);
         var lines = new List<string>();
         AddCentered(lines, presentation.Title, width);
-        AddCentered(lines, presentation.Finality, width);
+        AddCentered(lines,
+            presentation.ReportKind == FiscalXReadingContract.ReportKind
+                ? "(INTERIM SALES REPORT)"
+                : "(END-OF-DAY SALES REPORT)",
+            width);
         lines.Add(new string('=', width));
-        AddSection(lines, "REPORT IDENTITY", width);
-        AddValue(lines, "Reference", presentation.ReportReference, width);
-        AddValue(lines, "Kind", presentation.ReportKind, width);
-        AddValue(lines, "Status", presentation.ReportStatus, width);
+
+        AddSection(lines, "TAXPAYER INFORMATION", width);
+        AddValue(lines, "Fiscal Identity", presentation.FiscalIdentityId.ToString("D"), width);
+        AddValue(lines, "Taxpayer Profile", "NOT RECORDED IN X/Z SNAPSHOT", width);
+
+        AddSection(lines, "PTU INFORMATION", width);
+        AddValue(lines, "PTU Number", "NOT RECORDED IN X/Z SNAPSHOT", width);
+
+        AddSection(lines, "MACHINE INFORMATION", width);
         AddValue(lines, "Site POS", presentation.SitePosServerId.ToString("D"), width);
-        AddValue(lines, "Site", presentation.SiteIdentityPosture.ToUpperInvariant(), width);
-        AddValue(lines, "Fiscal identity", presentation.FiscalIdentityId.ToString("D"), width);
-        AddValue(lines, "Period", presentation.FiscalReportingPeriodId.ToString("D"), width);
-        AddValue(lines, "Period sequence", presentation.PeriodSequence.ToString(CultureInfo.InvariantCulture), width);
-        AddValue(lines, "Business date", presentation.BusinessDayDate.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture), width);
-        AddValue(lines, "Period start", Timestamp(presentation.PeriodStartAt), width);
-        AddValue(lines, "Period end", Timestamp(presentation.PeriodEndAt), width);
-        AddValue(lines, "Generated", Timestamp(presentation.GeneratedAt), width);
-        AddValue(lines, "Committed", Timestamp(presentation.CommittedAt), width);
-        AddValue(lines, "Closed", presentation.ClosedAt is null ? "NOT APPLICABLE" : Timestamp(presentation.ClosedAt.Value), width);
+        AddValue(lines, "MIN / Serial", "NOT RECORDED IN X/Z SNAPSHOT", width);
 
-        if (presentation.Counters is { } counters)
+        AddSection(lines, "REPORT INFORMATION", width);
+        AddValue(lines, "Reference", presentation.ReportReference, width);
+        AddValue(lines, "Business Date", presentation.BusinessDayDate.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture), width);
+        AddValue(lines, "Period Sequence", presentation.PeriodSequence.ToString(CultureInfo.InvariantCulture), width);
+        AddValue(lines, "Period Start", PhtTimestamp(presentation.PeriodStartAt), width);
+        AddValue(lines, "Period End", PhtTimestamp(presentation.PeriodEndAt), width);
+        AddValue(lines, "Generated", PhtTimestamp(presentation.GeneratedAt), width);
+        AddValue(lines, "Output Identity", outputIdentity, width);
+        AddValue(lines, "Print Contract", FiscalReportPresentationContract.PrintVersion, width);
+
+        var beginningInvoice = BeginningInvoice(presentation.FiscalNumberRanges);
+        var endingInvoice = EndingInvoice(presentation.FiscalNumberRanges);
+        if (presentation.ReportKind == FiscalXReadingContract.ReportKind)
         {
-            AddSection(lines, "Z COUNTER AND GTA", width);
-            AddValue(lines, "Z number", counters.ResultingZCounterValue.ToString(CultureInfo.InvariantCulture), width);
-            AddValue(lines, "Previous Z", counters.PreviousZCounterValue.ToString(CultureInfo.InvariantCulture), width);
-            AddValue(lines, "Reset counter", counters.ResultingResetCounterValue.ToString(CultureInfo.InvariantCulture), width);
-            AddValue(lines, "Previous GTA", FormatAmount(counters.PreviousGrandTotalAmountMinorUnits, presentation.CurrencyCode), width);
-            AddValue(lines, "Period GTA", FormatAmount(counters.CurrentPeriodGrandTotalAmountMinorUnits, presentation.CurrencyCode), width);
-            AddValue(lines, "Resulting GTA", FormatAmount(counters.ResultingGrandTotalAmountMinorUnits, presentation.CurrencyCode), width);
+            AddSection(lines, "SINCE LAST Z READ", width);
+            AddValue(lines, "Last Z Counter", "NOT RECORDED", width);
+            AddValue(lines, "Last Z Closed", "NOT RECORDED", width);
+            AddValue(lines, "Beginning Invoice", beginningInvoice, width);
+            AddValue(lines, "Ending Invoice", endingInvoice, width);
+            AddValue(lines, "Transactions", presentation.QualifyingDocumentCount.ToString(CultureInfo.InvariantCulture), width);
+            AddValue(lines, "Voids", "COUNT NOT RECORDED", width);
+            AddValue(lines, "Cancelled", "NOT RECORDED", width);
+            AddValue(lines, "Returns", "COUNT NOT RECORDED", width);
+        }
+        else if (presentation.Counters is { } counters)
+        {
+            AddSection(lines, "COUNTERS", width);
+            AddValue(lines, "Z Counter", counters.ResultingZCounterValue.ToString(CultureInfo.InvariantCulture), width);
+            AddValue(lines, "Last Z Counter", counters.PreviousZCounterValue.ToString(CultureInfo.InvariantCulture), width);
+            AddValue(lines, "Reset Counter", counters.ResultingResetCounterValue.ToString(CultureInfo.InvariantCulture), width);
+            AddValue(lines, "Beginning Invoice", beginningInvoice, width);
+            AddValue(lines, "Ending Invoice", endingInvoice, width);
+            AddValue(lines, "Transactions", presentation.QualifyingDocumentCount.ToString(CultureInfo.InvariantCulture), width);
+            AddValue(lines, "Voids", "COUNT NOT RECORDED", width);
+            AddValue(lines, "Cancelled", "NOT RECORDED", width);
+            AddValue(lines, "Returns", "COUNT NOT RECORDED", width);
         }
 
-        AddSection(lines, "SALES AND TAX TOTALS", width);
-        AddValue(lines, "Transactions", presentation.QualifyingDocumentCount.ToString(CultureInfo.InvariantCulture), width);
-        AddPrintAmountRows(lines, presentation.Amounts, presentation.CurrencyCode, width);
+        AddSection(lines, "SALES SUMMARY", width);
+        AddValue(lines, "Currency", presentation.CurrencyCode, width);
+        AddValue(lines, "Gross Sales", FormatAmount(presentation.Amounts.GrossSalesAmountMinorUnits, presentation.CurrencyCode), width);
+        AddValue(lines, "Service Charge", FormatAmount(presentation.Amounts.ServiceChargeAmountMinorUnits, presentation.CurrencyCode), width);
+        AddValue(lines, "Discounts", FormatAmount(presentation.Amounts.DiscountAmountMinorUnits, presentation.CurrencyCode), width);
+        AddValue(lines, "Surcharges", "NOT RECORDED", width);
+        AddValue(lines, "Void Amount", FormatAmount(presentation.Amounts.VoidAmountMinorUnits, presentation.CurrencyCode), width);
+        AddValue(lines, "Cancel Amount", "NOT RECORDED", width);
+        AddValue(lines, "Returns Amount", FormatAmount(presentation.Amounts.ReturnAmountMinorUnits, presentation.CurrencyCode), width);
 
-        AddSection(lines, "TENDER BREAKDOWN", width);
-        if (presentation.Tenders.Count == 0) lines.Add("NONE RECORDED");
-        foreach (var item in presentation.Tenders)
-            AddValue(lines, Label(item.Classification), $"{item.TransactionCount} / {FormatAmount(item.AmountMinorUnits, item.CurrencyCode)}", width);
+        AddSection(lines,
+            presentation.ReportKind == FiscalXReadingContract.ReportKind ? "VAT SUMMARY / VATABLE SALES" : "VAT SUMMARY",
+            width);
+        AddValue(lines, "VATable Sales", FormatAmount(presentation.Amounts.VatableSalesAmountMinorUnits, presentation.CurrencyCode), width);
+        AddValue(lines, "VAT Amount", FormatAmount(presentation.Amounts.VatAmountMinorUnits, presentation.CurrencyCode), width);
+        AddValue(lines, "VAT Exempt Sales", FormatAmount(presentation.Amounts.VatExemptSalesAmountMinorUnits, presentation.CurrencyCode), width);
+        AddValue(lines, "Zero Rated Sales", FormatAmount(presentation.Amounts.ZeroRatedSalesAmountMinorUnits, presentation.CurrencyCode), width);
 
-        AddSection(lines, "DISCOUNT BREAKDOWN", width);
-        if (presentation.Discounts.Count == 0) lines.Add("NONE RECORDED");
-        foreach (var item in presentation.Discounts)
-            AddValue(lines, Label(item.Classification), FormatAmount(item.DiscountAmountMinorUnits, item.CurrencyCode), width);
+        AddSection(lines, "VAT BREAKDOWN", width);
+        AddValue(lines, "VATable Base", FormatAmount(presentation.Amounts.VatableSalesAmountMinorUnits, presentation.CurrencyCode), width);
+        AddValue(lines, "Output VAT", FormatAmount(presentation.Amounts.VatAmountMinorUnits, presentation.CurrencyCode), width);
+        AddValue(lines, "Rate Detail", "NOT RECORDED IN X/Z SNAPSHOT", width);
 
-        AddSection(lines, "FISCAL NUMBER RANGES", width);
-        if (presentation.FiscalNumberRanges.Count == 0) lines.Add("NONE RECORDED");
-        foreach (var range in presentation.FiscalNumberRanges)
+        AddSection(lines, "NET SALES", width);
+        AddValue(lines, "Net Sales", FormatAmount(presentation.Amounts.NetSalesAmountMinorUnits, presentation.CurrencyCode), width);
+        AddValue(lines, "Total Collected", FormatAmount(presentation.Reconciliation.TenderTotalAmountMinorUnits, presentation.CurrencyCode), width);
+
+        AddSection(lines, "PAYMENT METHODS", width);
+        AddPaymentHeader(lines, width);
+        foreach (var paymentMethod in PaymentMethods)
         {
-            AddValue(lines, "Series", range.FiscalSeries, width);
-            AddValue(lines, "First", $"{range.FirstSequenceValue}: {range.FirstFiscalNumber}", width);
-            AddValue(lines, "Last", $"{range.LastSequenceValue}: {range.LastFiscalNumber}", width);
-            AddValue(lines, "Gap count", range.Gaps.Count.ToString(CultureInfo.InvariantCulture), width);
-            foreach (var gap in range.Gaps)
-                AddValue(lines, $"Gap {gap.SequenceValue}", Label(gap.Classification), width);
+            var tender = presentation.Tenders.SingleOrDefault(item => item.Classification == paymentMethod.Classification);
+            AddPaymentRow(lines, paymentMethod.Label, tender?.TransactionCount ?? 0, tender?.AmountMinorUnits ?? 0,
+                presentation.CurrencyCode, width);
         }
+        if (presentation.Tenders.Any(item => PaymentMethods.All(method => method.Classification != item.Classification)))
+            AddValue(lines, "Detail Status", "SOURCE CATEGORY NOT DISTINGUISHABLE", width);
+        AddValue(lines, "TOTAL PAYMENTS", FormatAmount(presentation.Reconciliation.TenderTotalAmountMinorUnits, presentation.CurrencyCode), width);
 
-        AddSection(lines, "RECONCILIATION", width);
-        AddValue(lines, "Status", presentation.Reconciliation.Status, width);
-        AddValue(lines, "Tender", presentation.Reconciliation.TenderReconciled ? "RECONCILED" : "FAILED", width);
-        AddValue(lines, "Discount", presentation.Reconciliation.DiscountReconciled ? "RECONCILED" : "FAILED", width);
-        AddValue(lines, "Ranges", presentation.Reconciliation.RangeCountReconciled ? "RECONCILED" : "FAILED", width);
-        AddValue(lines, "Sequence gaps", presentation.Reconciliation.SequenceGapCount.ToString(CultureInfo.InvariantCulture), width);
+        AddSection(lines, "PARKING METRICS", width);
+        AddValue(lines, "Vehicles Served", "NOT RECORDED", width);
+        AddValue(lines, "Avg Dwell Time", "NOT RECORDED", width);
+        AddValue(lines, "Lost Tickets", "NOT RECORDED", width);
+        AddValue(lines, "Lost Tickets Fee", "NOT RECORDED", width);
 
-        AddSection(lines, "FISCAL POSTURE", width);
-        foreach (var statement in presentation.Statements)
-            AddWrapped(lines, statement, width);
+        lines.Add(string.Empty);
+        AddValue(lines, "Printed Date", PhtTimestamp(presentation.GeneratedAt), width);
+        AddValue(lines, "Operator", "NOT RECORDED IN X/Z SNAPSHOT", width);
         lines.Add(new string('=', width));
-        AddValue(lines, "Output identity", outputIdentity, width);
-        AddValue(lines, "Print contract", FiscalReportPresentationContract.PrintVersion, width);
+        AddCentered(lines, "NOTHING FOLLOWS", width);
         return string.Join('\n', lines) + "\n";
+    }
+
+    private static readonly (string Classification, string Label)[] PaymentMethods =
+    [
+        ("cash", "CASH"),
+        ("card", "CARD"),
+        ("qrph", "QRPH"),
+        ("gcash", "GCASH"),
+        ("maya", "MAYA")
+    ];
+
+    private static string BeginningInvoice(IReadOnlyList<FiscalReportRangePresentation> ranges) =>
+        ranges.OrderBy(range => range.FirstSequenceValue).ThenBy(range => range.FiscalSeries, StringComparer.Ordinal)
+            .Select(range => range.FirstFiscalNumber).FirstOrDefault() ?? "NOT RECORDED";
+
+    private static string EndingInvoice(IReadOnlyList<FiscalReportRangePresentation> ranges) =>
+        ranges.OrderByDescending(range => range.LastSequenceValue).ThenBy(range => range.FiscalSeries, StringComparer.Ordinal)
+            .Select(range => range.LastFiscalNumber).FirstOrDefault() ?? "NOT RECORDED";
+
+    private static void AddPaymentHeader(List<string> lines, int width)
+    {
+        var amountWidth = width - 15;
+        lines.Add("TYPE".PadRight(8) + " " + "COUNT".PadLeft(5) + " " + "AMOUNT".PadLeft(amountWidth));
+    }
+
+    private static void AddPaymentRow(List<string> lines, string label, long count, long amount, string currency, int width)
+    {
+        var amountWidth = width - 15;
+        var countText = count.ToString(CultureInfo.InvariantCulture);
+        var amountText = FormatAmount(amount, currency);
+        var row = label.PadRight(8) + " " + countText.PadLeft(5) + " " + amountText.PadLeft(amountWidth);
+        if (row.Length <= width)
+            lines.Add(row);
+        else
+            AddValue(lines, label, $"{countText} / {amountText}", width);
     }
 
     private static void AddAmountRows(
@@ -378,6 +451,9 @@ public sealed class FiscalReportOutputRenderer
 
     private static string Timestamp(DateTimeOffset value) =>
         value.ToUniversalTime().ToString("O", CultureInfo.InvariantCulture);
+
+    private static string PhtTimestamp(DateTimeOffset value) =>
+        value.ToOffset(TimeSpan.FromHours(8)).ToString("yyyy-MM-dd HH:mm:ss 'PHT'", CultureInfo.InvariantCulture);
 
     private static string Label(string value) => value.Replace('_', ' ').ToUpperInvariant();
 

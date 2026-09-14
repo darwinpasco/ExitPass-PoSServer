@@ -17,12 +17,12 @@ public sealed class FiscalReportPresentationTests
 
         Assert.True(x.Succeeded);
         Assert.True(z.Succeeded);
-        Assert.Equal("X READING", x.Presentation?.Title);
+        Assert.Equal("X READING REPORT", x.Presentation?.Title);
         Assert.Equal("INTERIM_READ_ONLY", x.Presentation?.Finality);
         Assert.Equal("OPEN_AT_OBSERVATION", x.Presentation?.PeriodStatus);
         Assert.Null(x.Presentation?.Counters);
         Assert.Contains(x.Presentation!.FieldPostures, field => field is { Field: "grandTotalObservation", Posture: "not_recorded" });
-        Assert.Equal("Z READING", z.Presentation?.Title);
+        Assert.Equal("Z READING REPORT", z.Presentation?.Title);
         Assert.Equal("IMMUTABLE_CLOSED", z.Presentation?.Finality);
         Assert.Equal("CLOSED", z.Presentation?.PeriodStatus);
         Assert.Equal(7, z.Presentation?.PeriodSequence);
@@ -84,8 +84,90 @@ public sealed class FiscalReportPresentationTests
         Assert.Equal("text/csv; charset=utf-8", csv1.ContentType);
         Assert.Equal("text/plain; charset=utf-8", text1.ContentType);
         Assert.Contains("section,key,classification,count,amount_minor_units,currency,value\n", Encoding.UTF8.GetString(csv1.Content), StringComparison.Ordinal);
-        Assert.Contains("Z READING", Encoding.UTF8.GetString(text1.Content), StringComparison.Ordinal);
+        Assert.Contains("Z READING REPORT", Encoding.UTF8.GetString(text1.Content), StringComparison.Ordinal);
         Assert.DoesNotContain("REPRINT", Encoding.UTF8.GetString(text1.Content), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void ReceiptTextUsesApprovedTitlesSectionsPaymentsAmountsAndPht()
+    {
+        var service = new FiscalReportPresentationService();
+        var renderer = new FiscalReportOutputRenderer();
+        var x = Text(renderer, service.Present(XRecord()).Presentation!);
+        var z = Text(renderer, service.Present(ZRecord()).Presentation!);
+
+        Assert.Equal("X READING REPORT", x.Split('\n')[0].Trim());
+        Assert.Contains("(INTERIM SALES REPORT)", x, StringComparison.Ordinal);
+        Assert.Equal("Z READING REPORT", z.Split('\n')[0].Trim());
+        Assert.Contains("(END-OF-DAY SALES REPORT)", z, StringComparison.Ordinal);
+
+        AssertInOrder(x,
+            "TAXPAYER INFORMATION", "PTU INFORMATION", "MACHINE INFORMATION", "REPORT INFORMATION",
+            "SINCE LAST Z READ", "SALES SUMMARY", "VAT SUMMARY / VATABLE SALES", "VAT BREAKDOWN",
+            "NET SALES", "PAYMENT METHODS", "PARKING METRICS", "Printed Date", "Operator", "NOTHING FOLLOWS");
+        AssertInOrder(z,
+            "TAXPAYER INFORMATION", "PTU INFORMATION", "MACHINE INFORMATION", "REPORT INFORMATION",
+            "COUNTERS", "SALES SUMMARY", "VAT SUMMARY", "VAT BREAKDOWN", "NET SALES",
+            "PAYMENT METHODS", "PARKING METRICS", "Printed Date", "Operator", "NOTHING FOLLOWS");
+
+        foreach (var report in new[] { x, z })
+        foreach (var method in new[] { "CASH", "CARD", "QRPH", "GCASH", "MAYA" })
+            Assert.Single(report.Split('\n'), line => line.StartsWith(method, StringComparison.Ordinal));
+        Assert.Contains("CASH         2", x, StringComparison.Ordinal);
+        Assert.Contains("CARD         0", x, StringComparison.Ordinal);
+        Assert.Contains("QRPH         0", x, StringComparison.Ordinal);
+        Assert.Contains("GCASH        0", x, StringComparison.Ordinal);
+        Assert.Contains("MAYA         0", x, StringComparison.Ordinal);
+        Assert.DoesNotContain("BANK TRANSFER", x, StringComparison.Ordinal);
+        Assert.DoesNotContain("BANK TRANSFER", z, StringComparison.Ordinal);
+
+        Assert.Contains("2026-08-06 16:00:00 PHT", x, StringComparison.Ordinal);
+        Assert.Contains("2026-08-07 00:00:00 PHT", z, StringComparison.Ordinal);
+        Assert.Contains("Printed Date", x, StringComparison.Ordinal);
+        Assert.DoesNotContain("2026-08-06T08:00:00Z", x, StringComparison.Ordinal);
+        Assert.Contains("Gross Sales", x, StringComparison.Ordinal);
+        Assert.Contains("PHP 120.00", x, StringComparison.Ordinal);
+        Assert.Contains("Net Sales", x, StringComparison.Ordinal);
+        Assert.Contains("PHP 100.00", x, StringComparison.Ordinal);
+        Assert.Contains("Z Counter", z, StringComparison.Ordinal);
+        Assert.Contains("12", z, StringComparison.Ordinal);
+        Assert.Equal(Amounts(), service.Present(XRecord()).Presentation?.Amounts);
+        Assert.Equal(ZRecord().CounterSnapshot.ResultingZCounterValue, service.Present(ZRecord()).Presentation?.Counters?.ResultingZCounterValue);
+    }
+
+    [Fact]
+    public void WalletMethodsRemainDistinctAndUndifferentiatedWalletsAreNotInvented()
+    {
+        var service = new FiscalReportPresentationService();
+        var renderer = new FiscalReportOutputRenderer();
+        var distinct = XRecord() with
+        {
+            Tenders =
+            [
+                new("qrph", 1, 2_000, "PHP"),
+                new("gcash", 1, 3_000, "PHP"),
+                new("maya", 1, 5_000, "PHP")
+            ]
+        };
+        var distinctText = Text(renderer, service.Present(distinct).Presentation!);
+
+        Assert.Contains("QRPH         1", distinctText, StringComparison.Ordinal);
+        Assert.Contains("PHP 20.00", distinctText, StringComparison.Ordinal);
+        Assert.Contains("GCASH        1", distinctText, StringComparison.Ordinal);
+        Assert.Contains("PHP 30.00", distinctText, StringComparison.Ordinal);
+        Assert.Contains("MAYA         1", distinctText, StringComparison.Ordinal);
+        Assert.Contains("PHP 50.00", distinctText, StringComparison.Ordinal);
+
+        var aggregateOnly = XRecord() with { Tenders = [new("digital_wallet", 2, 10_000, "PHP")] };
+        var aggregateText = Text(renderer, service.Present(aggregateOnly).Presentation!);
+        Assert.Contains("SOURCE CATEGORY NOT", aggregateText, StringComparison.Ordinal);
+        Assert.Contains("DISTINGUISHABLE", aggregateText, StringComparison.Ordinal);
+        Assert.Contains("QRPH         0", aggregateText, StringComparison.Ordinal);
+        Assert.Contains("GCASH        0", aggregateText, StringComparison.Ordinal);
+        Assert.Contains("MAYA         0", aggregateText, StringComparison.Ordinal);
+        Assert.Contains("TOTAL PAYMENTS", aggregateText, StringComparison.Ordinal);
+        Assert.Contains("PHP 100.00", aggregateText, StringComparison.Ordinal);
+        Assert.DoesNotContain("BANK TRANSFER", aggregateText, StringComparison.Ordinal);
     }
 
     [Theory]
@@ -105,7 +187,7 @@ public sealed class FiscalReportPresentationTests
             "X-VERY-LONG-AUTHORITATIVE-REFERENCE-1234567890",
             text.Replace("\n", string.Empty, StringComparison.Ordinal),
             StringComparison.Ordinal);
-        Assert.Contains("THIS X READING DOES NOT CLOSE", text, StringComparison.Ordinal);
+        Assert.Contains("NOTHING FOLLOWS", text, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -118,6 +200,23 @@ public sealed class FiscalReportPresentationTests
         Assert.Equal(FiscalReportPrintWidthProfile.Narrow, narrow);
         Assert.False(FiscalReportOutputRenderer.TryParseWidthProfile("unknown", out _));
         Assert.False(FiscalReportOutputRenderer.TryParseFormat("pdf", out _));
+    }
+
+    private static string Text(FiscalReportOutputRenderer renderer, FiscalReportPresentationModel presentation) =>
+        Encoding.UTF8.GetString(renderer.CreateExport(
+            presentation,
+            FiscalReportOutputFormat.Text,
+            FiscalReportPrintWidthProfile.Standard).Content);
+
+    private static void AssertInOrder(string text, params string[] values)
+    {
+        var previous = -1;
+        foreach (var value in values)
+        {
+            var current = text.IndexOf(value, StringComparison.Ordinal);
+            Assert.True(current > previous, $"'{value}' was missing or out of order.");
+            previous = current;
+        }
     }
 
     private static FiscalXReadingRecord XRecord() => new(
