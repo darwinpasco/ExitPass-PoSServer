@@ -47,7 +47,7 @@ public sealed class FiscalXReadingAggregationService
 
     private static readonly HashSet<string> TenderClassifications = new(StringComparer.Ordinal)
     {
-        "cash", "card", "digital_wallet", "bank_transfer", "other_non_cash"
+        "cash", "card", "qrph", "gcash", "maya", "digital_wallet", "bank_transfer", "other_non_cash"
     };
 
     public FiscalXReadingAggregate Aggregate(

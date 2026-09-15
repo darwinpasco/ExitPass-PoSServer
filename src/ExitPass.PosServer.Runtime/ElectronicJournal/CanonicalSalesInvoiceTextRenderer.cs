@@ -72,7 +72,7 @@ public sealed class CanonicalSalesInvoiceTextRenderer
         AddValue(lines, "Zero Rated Sales", Money(invoice.ZeroRatedSalesMinorUnits, currency));
 
         AddSection(lines, "PAYMENT DETAILS");
-        lines.Add("Type       Provider                      Amount");
+        lines.Add("Type                                  Amount");
         AppendPaymentDetails(lines, invoice.Presentation, currency, invoice.TotalAmountMinorUnits);
 
         lines.Add(Separator);
@@ -105,8 +105,10 @@ public sealed class CanonicalSalesInvoiceTextRenderer
             AddValue(lines, "PTU", supplier.PtuNumber);
             AddValue(lines, "PTU Date", supplier.PtuIssuedDate.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture));
         }
-        if (!string.IsNullOrWhiteSpace(invoice.FooterText)) AddCentered(lines, invoice.FooterText.Trim());
-        AddCentered(lines, "THANK YOU FOR CHOOSING OUR SERVICE");
+        var configuredFooter = invoice.FooterText?.Trim();
+        if (!string.IsNullOrWhiteSpace(configuredFooter)) AddCentered(lines, configuredFooter);
+        if (!string.Equals(configuredFooter, "THANK YOU FOR CHOOSING OUR SERVICE", StringComparison.OrdinalIgnoreCase))
+            AddCentered(lines, "THANK YOU FOR CHOOSING OUR SERVICE");
         lines.Add(string.Empty);
         AddCentered(lines, "===== NOTHING FOLLOWS =====");
 
@@ -150,23 +152,21 @@ public sealed class CanonicalSalesInvoiceTextRenderer
 
     private static void AddTender(List<string> lines, CanonicalSalesInvoiceTender tender, string currency)
     {
-        var providers = Wrap(tender.Provider ?? string.Empty, 18).ToArray();
         var amount = Money(tender.AmountMinorUnits, currency);
-        if (tender.Label.Length <= 10 && amount.Length <= 16)
+        if (tender.Label.Length + amount.Length + 1 <= ReceiptWidth)
         {
-            lines.Add($"{tender.Label,-10} {providers[0],-18} {amount,16}");
-            foreach (var provider in providers.Skip(1)) lines.Add($"           {provider}");
+            lines.Add(tender.Label + new string(' ', ReceiptWidth - tender.Label.Length - amount.Length) + amount);
             return;
         }
 
         AddValue(lines, "Type", tender.Label);
-        AddValue(lines, "Provider", tender.Provider);
         AddValue(lines, "Amount", amount);
     }
 
     private static void AddValue(List<string> lines, string label, string? value)
     {
-        var resolved = value ?? string.Empty;
+        if (string.IsNullOrWhiteSpace(value)) return;
+        var resolved = value;
         if (label.Length + resolved.Length + 1 <= ReceiptWidth)
         {
             lines.Add(label + new string(' ', ReceiptWidth - label.Length - resolved.Length) + resolved);
@@ -261,7 +261,7 @@ public sealed record CanonicalSalesInvoiceLine(
 
 public sealed record CanonicalSalesInvoiceDiscount(string Label, long AmountMinorUnits);
 
-public sealed record CanonicalSalesInvoiceTender(string Label, string? Provider, long AmountMinorUnits);
+public sealed record CanonicalSalesInvoiceTender(string Label, long AmountMinorUnits);
 
 public sealed record CanonicalSalesInvoicePresentation(
     string? BranchOrSite,

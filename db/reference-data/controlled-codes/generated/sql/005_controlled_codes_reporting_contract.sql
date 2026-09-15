@@ -74,6 +74,9 @@ WITH source(controlled_code_id, set_key, code_key, display_name, description, so
     ('156acddb-4eee-5653-8b47-55375928c15b'::uuid, 'fiscal_reporting_tender_classification', 'digital_wallet', 'Digital Wallet', 'Governed digital-wallet tender aggregate.', 30),
     ('d0eadc45-339d-5376-bad4-ca26167edc25'::uuid, 'fiscal_reporting_tender_classification', 'bank_transfer', 'Bank Transfer', 'Governed bank-transfer tender aggregate.', 40),
     ('6f99281a-4847-5699-96e8-5138e82d01cb'::uuid, 'fiscal_reporting_tender_classification', 'other_non_cash', 'Other Non-Cash', 'Explicitly governed other non-cash aggregate.', 50),
+    ('a9dadabe-5e23-5226-9d32-42016c93b526'::uuid, 'fiscal_reporting_tender_classification', 'qrph', 'QRPH', 'Specific QR Ph tender aggregate for current reports.', 60),
+    ('2c096526-1c02-5081-948c-0ade7196b61a'::uuid, 'fiscal_reporting_tender_classification', 'gcash', 'GCash', 'Specific GCash tender aggregate for current reports.', 70),
+    ('74bed3e8-9678-560b-95cf-ead2b4d5d733'::uuid, 'fiscal_reporting_tender_classification', 'maya', 'Maya', 'Specific Maya tender aggregate for current reports.', 80),
 
     ('d7151b60-b08f-587f-9063-dd81e6ea5663'::uuid, 'fiscal_sequence_gap_classification', 'voided_document', 'Voided Document', 'Sequence belongs to a voided document.', 10),
     ('b1d73736-c963-575a-a497-fb9d16ca8914'::uuid, 'fiscal_sequence_gap_classification', 'failed_issuance', 'Failed Issuance', 'Sequence consumed by governed failed issuance.', 20),
@@ -86,8 +89,17 @@ INSERT INTO pos.controlled_codes (
     created_at, updated_at
 )
 SELECT source.controlled_code_id, sets.controlled_code_set_id, source.code_key,
-       source.display_name, source.description, 'Z-006A', source.sort_order,
-       true, '2026-08-03T00:00:00Z'::timestamptz, NULL, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
+       source.display_name, source.description,
+       CASE WHEN source.set_key = 'fiscal_reporting_tender_classification'
+                  AND source.code_key IN ('qrph', 'gcash', 'maya')
+            THEN 'PITX live fiscal tender classification correction'
+            ELSE 'Z-006A' END,
+       source.sort_order, true,
+       CASE WHEN source.set_key = 'fiscal_reporting_tender_classification'
+                  AND source.code_key IN ('qrph', 'gcash', 'maya')
+            THEN '2026-09-15T00:00:00Z'::timestamptz
+            ELSE '2026-08-03T00:00:00Z'::timestamptz END,
+       NULL, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
 FROM source
 JOIN pos.controlled_code_sets sets ON sets.code_set_key = source.set_key
 ON CONFLICT (controlled_code_id) DO UPDATE SET

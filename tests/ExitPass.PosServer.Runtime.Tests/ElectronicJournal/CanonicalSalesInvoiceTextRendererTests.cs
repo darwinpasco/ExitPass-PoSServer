@@ -34,7 +34,7 @@ public sealed class CanonicalSalesInvoiceTextRendererTests
             "SALES INVOICE", "ORIGINAL", "SI No", "Issued Date", "PARKING DETAILS", "Ticket Number",
             "Plate Number", "Entry Time", "Payment", "Duration", "ITEMS", "Description", "Subtotal",
             "DISCOUNTS", "Discount Reason", "Discount Amount", "VAT BREAKDOWN", "VATable Sales", "VAT Amount",
-            "VAT Exempt Sales", "Zero Rated Sales", "PAYMENT DETAILS", "GCASH", "PayMongo", "Total Paid",
+            "VAT Exempt Sales", "Zero Rated Sales", "PAYMENT DETAILS", "GCASH", "Total Paid",
             "THIS SERVES AS YOUR SALES INVOICE", "Print Date", "Customer Information",
             "POS SOFTWARE SUPPLIER / DEVELOPER", "THANK YOU FOR CHOOSING OUR SERVICE", "NOTHING FOLLOWS"
         };
@@ -47,6 +47,11 @@ public sealed class CanonicalSalesInvoiceTextRendererTests
             prior = index;
         }
         Assert.True(Count(text, "------------------------------------------------") >= 6);
+        Assert.DoesNotContain("Provider", text, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("PayMongo", text, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("NOT RECORDED", text, StringComparison.OrdinalIgnoreCase);
+        Assert.Equal(1, CountLines(text, "THANK YOU FOR CHOOSING OUR SERVICE"));
+        Assert.Equal(1, CountLines(text, "===== NOTHING FOLLOWS ====="));
         Assert.All(text.Split("\r\n", StringSplitOptions.RemoveEmptyEntries), line => Assert.True(line.Length <= 48, line));
     }
 
@@ -84,6 +89,35 @@ public sealed class CanonicalSalesInvoiceTextRendererTests
             Assert.True(index > prior, $"Expected '{value}' after the prior canonical field.");
             prior = index;
         }
+    }
+
+    [Theory]
+    [InlineData("QRPH")]
+    [InlineData("GCASH")]
+    [InlineData("MAYA")]
+    [InlineData("CARD")]
+    [InlineData("CASH")]
+    public void ApprovedTenderTypeIsIdenticalInPrintAndElectronicJournalWithoutProvider(string tenderType)
+    {
+        var invoice = Invoice() with
+        {
+            Presentation = Invoice().Presentation! with
+            {
+                Tenders = [new CanonicalSalesInvoiceTender(tenderType, 11200)]
+            }
+        };
+        var renderer = new CanonicalSalesInvoiceTextRenderer();
+
+        var printed = new SalesInvoicePrinterPayloadRenderer(renderer).RenderVisibleText(invoice);
+        var journal = new ElectronicJournalInvoiceTextRenderer(renderer).RenderPersisted([
+            new(invoice.FiscalDocumentId, invoice.FiscalDocumentNumber, invoice.BusinessDayDate, invoice.IssuedAt, printed.Text)
+        ]);
+
+        Assert.Equal(printed.Text, Encoding.UTF8.GetString(journal.Bytes));
+        Assert.Contains(tenderType, printed.Text, StringComparison.Ordinal);
+        Assert.Contains("PHP 112.00", printed.Text, StringComparison.Ordinal);
+        Assert.DoesNotContain("Provider", printed.Text, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("PayMongo", printed.Text, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]
@@ -243,7 +277,7 @@ public sealed class CanonicalSalesInvoiceTextRendererTests
             "01:00:00",
             12000,
             [new("Senior Discount", 800)],
-            [new("GCASH", "PayMongo", 11200)],
+            [new("GCASH", 11200)],
             11200,
             12000,
             800,
