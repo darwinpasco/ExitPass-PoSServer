@@ -181,18 +181,8 @@ public sealed class PersistentIstSchemaReconciliationProofTests
                 .RenderAsync(body.FiscalDocumentId.Value);
             Assert.True(render.Succeeded);
             Assert.NotNull(render.Render);
-            // The writer rendered the exact request draft, whose tender carried ProviderRef=CASH
-            // and no resolved code key. Recreate that immutable writer input for byte comparison.
-            var exactCreationRender = render.Render with
-            {
-                Tenders = render.Render.Tenders.Select(tender => tender with
-                {
-                    TenderTypeCodeKey = null,
-                    ProviderRef = "CASH"
-                }).ToArray()
-            };
             var expectedPrintableText = scope.ServiceProvider.GetRequiredService<CanonicalSalesInvoiceTextRenderer>()
-                .Render(scope.ServiceProvider.GetRequiredService<CanonicalSalesInvoiceTextFactory>().Create(exactCreationRender)).Text;
+                .Render(scope.ServiceProvider.GetRequiredService<CanonicalSalesInvoiceTextFactory>().Create(render.Render)).Text;
             await using var printableCommand = new NpgsqlCommand(
                 "select printable_sales_invoice_text from pos.electronic_journal_records where event_reference=@event", connection);
             printableCommand.Parameters.AddWithValue("event", body.ElectronicJournalEventReference!);

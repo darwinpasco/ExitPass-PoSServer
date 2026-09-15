@@ -209,6 +209,12 @@ public sealed class PostgresFiscalDocumentRepository : IFiscalDocumentRepository
                     await tenderCommand.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
                 }
 
+                var tenderTypeCodeKeys = await ReadTenderTypeCodeKeysAsync(
+                    connection,
+                    transaction,
+                    resolvedDraft.Tenders,
+                    cancellationToken).ConfigureAwait(false);
+
                 foreach (var taxDetail in resolvedDraft.TaxDetails)
                 {
                     await using var taxCommand = new NpgsqlCommand(
@@ -297,7 +303,7 @@ public sealed class PostgresFiscalDocumentRepository : IFiscalDocumentRepository
                         BusinessDayDate: resolvedDraft.BusinessDayDate,
                         IdempotencyReference: idempotency.Key,
                         PrintableSalesInvoiceText: new CanonicalSalesInvoiceTextRenderer().Render(
-                            new CanonicalSalesInvoiceTextFactory().Create(resolvedDraft)).Text),
+                            new CanonicalSalesInvoiceTextFactory().Create(resolvedDraft, tenderTypeCodeKeys)).Text),
                     cancellationToken).ConfigureAwait(false);
 
                 resolvedDraft = resolvedDraft with
@@ -1544,6 +1550,36 @@ public sealed class PostgresFiscalDocumentRepository : IFiscalDocumentRepository
 
         var tenderContextParameter = command.Parameters.Add("tender_context", NpgsqlDbType.Jsonb);
         tenderContextParameter.Value = (object?)PostgresFiscalDocumentSql.CreateTenderContextJson(tender) ?? DBNull.Value;
+    }
+
+    private static async Task<IReadOnlyDictionary<Guid, string>> ReadTenderTypeCodeKeysAsync(
+        NpgsqlConnection connection,
+        NpgsqlTransaction transaction,
+        IReadOnlyList<FiscalTenderInput> tenders,
+        CancellationToken cancellationToken)
+    {
+        var requested = tenders.Select(value => value.TenderTypeCodeId).Distinct().ToArray();
+        if (requested.Length == 0) return new Dictionary<Guid, string>();
+
+        await using var command = new NpgsqlCommand("""
+            SELECT code.controlled_code_id, code.code_key
+            FROM pos.controlled_codes code
+            JOIN pos.controlled_code_sets code_set
+              ON code_set.controlled_code_set_id = code.controlled_code_set_id
+            WHERE code.controlled_code_id = ANY(@ids)
+              AND code_set.code_set_key = 'tender_type'
+              AND code_set.is_active
+              AND code.is_active;
+            """, connection, transaction);
+        command.Parameters.AddWithValue("ids", requested);
+        var resolved = new Dictionary<Guid, string>();
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
+        while (await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
+            resolved.Add(reader.GetGuid(0), reader.GetString(1));
+
+        if (resolved.Count != requested.Length)
+            throw new InvalidOperationException("A governed active fiscal tender classification could not be resolved.");
+        return resolved;
     }
 
     private static void AddTaxDetailParameters(

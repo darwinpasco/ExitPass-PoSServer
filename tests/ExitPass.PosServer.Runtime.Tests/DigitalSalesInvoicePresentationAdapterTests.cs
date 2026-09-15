@@ -110,6 +110,28 @@ public sealed class DigitalSalesInvoicePresentationAdapterTests
     }
 
     [Fact]
+    public void PresentsPersistedParkingFactsFromFiscalDocumentContext()
+    {
+        var render = ValidRenderModel(assignedNumber: true) with
+        {
+            DocumentContextJson = """
+                {"reference_context":{"branch_site":"PITX Level 3","parking_location":"PITX Level 3","ticket_number":"TICKET-18","plate_number":"ABC-1234","entry_time":"2026-09-15 07:05:00 PHT","payment_time":"2026-09-15 08:00:00 PHT","duration":"00:55:00"}}
+                """
+        };
+
+        var result = new DigitalSalesInvoicePresentationAdapter().Adapt(
+            DigitalSalesInvoiceRenderResult.Success(render),
+            DigitalSalesInvoiceTemplateContract.Create());
+
+        var rows = Section(result.Presentation!, "parkingPaymentReferences").Rows;
+        Assert.Contains(rows, row => row.Key == "parkingPresentation.ticketNumber" && row.DisplayValue == "TICKET-18");
+        Assert.Contains(rows, row => row.Key == "parkingPresentation.plateNumber" && row.DisplayValue == "ABC-1234");
+        Assert.Contains(rows, row => row.Key == "parkingPresentation.entryTime" && row.DisplayValue == "2026-09-15 07:05:00 PHT");
+        Assert.Contains(rows, row => row.Key == "parkingPresentation.paymentTime" && row.DisplayValue == "2026-09-15 08:00:00 PHT");
+        Assert.Contains(rows, row => row.Key == "parkingPresentation.duration" && row.DisplayValue == "00:55:00");
+    }
+
+    [Fact]
     public void PresentsNotAssignedFiscalNumberWithWarningAndUnavailableNumber()
     {
         var render = ValidRenderModel(assignedNumber: false);

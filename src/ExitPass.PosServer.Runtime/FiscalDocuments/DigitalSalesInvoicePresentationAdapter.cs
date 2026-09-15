@@ -1,4 +1,5 @@
 using System.Globalization;
+using System.Text.Json;
 
 namespace ExitPass.PosServer.Runtime.FiscalDocuments;
 
@@ -167,14 +168,48 @@ public sealed class DigitalSalesInvoicePresentationAdapter
 
     private static IReadOnlyList<DigitalSalesInvoicePresentationRowModel> ParkingPaymentRows(
         DigitalSalesInvoiceRenderModel render,
-        DigitalSalesInvoiceTemplateContractModel contract) =>
+        DigitalSalesInvoiceTemplateContractModel contract)
+    {
+        var context = ReadReferenceContext(render.DocumentContextJson);
+        return
         [
             Row("parkingPaymentReferences.centralPmsParkingSessionRef", "Central PMS Parking Session Ref", "identifier", FieldPosture(contract, "parkingPaymentReferences.centralPmsParkingSessionRef"), render.CentralPmsParkingSessionRef),
             Row("parkingPaymentReferences.centralPmsPaymentAttemptRef", "Central PMS Payment Attempt Ref", "identifier", FieldPosture(contract, "parkingPaymentReferences.centralPmsPaymentAttemptRef"), render.CentralPmsPaymentAttemptRef),
             Row("parkingPaymentReferences.centralPmsPaymentConfirmationRef", "Central PMS Payment Confirmation Ref", "identifier", FieldPosture(contract, "parkingPaymentReferences.centralPmsPaymentConfirmationRef"), render.CentralPmsPaymentConfirmationRef),
             Row("parkingPaymentReferences.paymentFinalityRef", "Payment Finality Ref", "identifier", FieldPosture(contract, "parkingPaymentReferences.paymentFinalityRef"), render.PaymentFinalityRef),
-            Row("parkingPaymentReferences.vendorAckRef", "Vendor Acknowledgement Ref", "identifier", FieldPosture(contract, "parkingPaymentReferences.vendorAckRef"), render.VendorAckRef)
+            Row("parkingPaymentReferences.vendorAckRef", "Vendor Acknowledgement Ref", "identifier", FieldPosture(contract, "parkingPaymentReferences.vendorAckRef"), render.VendorAckRef),
+            Row("parkingPresentation.branchSite", "Branch / Site", "text", "optional", ContextValue(context, "branch_site")),
+            Row("parkingPresentation.parkingLocation", "Parking Location", "text", "optional", ContextValue(context, "parking_location")),
+            Row("parkingPresentation.ticketNumber", "Ticket Number", "text", "optional", ContextValue(context, "ticket_number")),
+            Row("parkingPresentation.plateNumber", "Plate Number", "text", "optional", ContextValue(context, "plate_number")),
+            Row("parkingPresentation.entryTime", "Entry Time", "dateTime", "optional", ContextValue(context, "entry_time")),
+            Row("parkingPresentation.paymentTime", "Payment", "dateTime", "optional", ContextValue(context, "payment_time")),
+            Row("parkingPresentation.duration", "Duration", "text", "optional", ContextValue(context, "duration"))
         ];
+    }
+
+    private static IReadOnlyDictionary<string, string?> ReadReferenceContext(string? json)
+    {
+        var values = new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase);
+        if (string.IsNullOrWhiteSpace(json)) return values;
+        try
+        {
+            using var document = JsonDocument.Parse(json);
+            if (document.RootElement.TryGetProperty("reference_context", out var context) &&
+                context.ValueKind == JsonValueKind.Object)
+                foreach (var property in context.EnumerateObject())
+                    if (property.Value.ValueKind == JsonValueKind.String)
+                        values[property.Name] = property.Value.GetString();
+        }
+        catch (JsonException)
+        {
+            return values;
+        }
+        return values;
+    }
+
+    private static string? ContextValue(IReadOnlyDictionary<string, string?> values, string key) =>
+        values.TryGetValue(key, out var value) && !string.IsNullOrWhiteSpace(value) ? value : null;
 
     private static IReadOnlyList<DigitalSalesInvoicePresentationRowModel> CustomerInformationRows(
         DigitalSalesInvoiceRenderModel render,
