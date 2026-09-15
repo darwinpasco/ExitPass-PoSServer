@@ -5,9 +5,7 @@ namespace ExitPass.PosServer.Runtime.ElectronicJournal;
 
 public sealed class CanonicalSalesInvoiceTextFactory
 {
-    public CanonicalSalesInvoiceText Create(
-        FiscalDocumentDraft draft,
-        IReadOnlyDictionary<Guid, string> tenderTypeCodeKeys)
+    public CanonicalSalesInvoiceText Create(FiscalDocumentDraft draft)
     {
         var assignedAt = draft.FiscalNumberAssignedAt ?? DateTimeOffset.MinValue;
         return Create(new DigitalSalesInvoiceRenderModel(
@@ -26,10 +24,7 @@ public sealed class CanonicalSalesInvoiceTextFactory
                 value.BeneficiaryRef, value.EvidenceRef, value.ApprovalRef)).ToArray(),
             draft.TaxDetails.Select(value => new DigitalSalesInvoiceTaxDetailRenderModel(null, value.TaxTypeCodeId,
                 value.TaxClassificationCodeId, value.TaxRate, value.TaxableAmountMinorUnits, value.TaxAmountMinorUnits, value.CurrencyCode)).ToArray(),
-            draft.Tenders.Select(value => new DigitalSalesInvoiceTenderRenderModel(
-                value.TenderTypeCodeId,
-                tenderTypeCodeKeys.TryGetValue(value.TenderTypeCodeId, out var codeKey) ? codeKey : null,
-                value.AmountMinorUnits,
+            draft.Tenders.Select(value => new DigitalSalesInvoiceTenderRenderModel(value.TenderTypeCodeId, null, value.AmountMinorUnits,
                 value.CurrencyCode, value.CentralPmsPaymentAttemptRef, value.CentralPmsPaymentConfirmationRef, value.PaymentFinalityRef, value.ProviderRef)).ToArray(),
             draft.Totals.Select(value => new DigitalSalesInvoiceTotalRenderModel(value.TotalTypeCodeId, value.AmountMinorUnits, value.CurrencyCode)).ToArray(),
             new DigitalSalesInvoiceFooterRenderModel("canonical", []), draft.SalesInvoiceHeaderSnapshot,
@@ -85,12 +80,13 @@ public sealed class CanonicalSalesInvoiceTextFactory
             Value(context, "entry_time", "entryTime", "entry_at", "entryAt"),
             Value(context, "payment_time", "paymentTime", "paid_at", "paidAt"),
             Value(context, "duration", "durationText", "parking_duration"),
-            total,
+            source.Lines.Sum(line => line.GrossAmountMinorUnits),
             source.Discounts.Select(discount => new CanonicalSalesInvoiceDiscount(
-                statutory?.EntitlementType is { Length: > 0 } entitlement ? $"{entitlement} Discount" : "Discount",
+                statutory?.EntitlementType is { Length: > 0 } entitlement ? $"{entitlement} Discount" : "NOT RECORDED",
                 discount.DiscountAmountMinorUnits)).ToArray(),
             source.Tenders.Select(tender => new CanonicalSalesInvoiceTender(
-                RequireTenderType(tender.TenderTypeCodeKey, context),
+                (tender.TenderTypeCodeKey ?? Value(context, "payment_method", "paymentMethod") ?? "NOT RECORDED").ToUpperInvariant(),
+                tender.ProviderRef,
                 tender.AmountMinorUnits)).ToArray(),
             source.Tenders.Count == 0 ? total : source.Tenders.Sum(tender => tender.AmountMinorUnits),
             LongValue(context, "tendered_amount_minor_units", "tenderedAmountMinorUnits"),
@@ -189,19 +185,4 @@ public sealed class CanonicalSalesInvoiceTextFactory
 
     private static long? LongValue(IReadOnlyDictionary<string, string?> values, params string[] names) =>
         long.TryParse(Value(values, names), out var value) ? value : null;
-
-    private static string RequireTenderType(
-        string? tenderTypeCodeKey,
-        IReadOnlyDictionary<string, string?> context)
-    {
-        var governed = tenderTypeCodeKey?.Trim().ToLowerInvariant();
-        if (governed is not ("cash" or "card" or "qrph" or "gcash" or "maya"))
-            throw new InvalidOperationException("The governed fiscal tender classification is unavailable or unsupported.");
-
-        var contextual = Value(context, "payment_method", "paymentMethod")?.Trim().ToLowerInvariant();
-        if (contextual is not null && !string.Equals(contextual, governed, StringComparison.Ordinal))
-            throw new InvalidOperationException("The Sales Invoice payment context conflicts with the governed fiscal tender classification.");
-
-        return governed.ToUpperInvariant();
-    }
 }

@@ -55,23 +55,13 @@ WITH source(id,set_key,code_key,name,description,sort_order) AS (VALUES
 ('6abfc6aa-b94e-5a24-b533-8d18a33c468b'::uuid,'fiscal_total_type','payable_total','Payable Total','Authoritative final payable amount.',10),
 ('ab180f41-e181-5579-b9f1-5ae7a840a946'::uuid,'tax_classification','vatable','VATable','VATable fiscal amount.',10),
 ('328dcb64-584a-5f59-a304-2e5189a2aa83'::uuid,'tax_type','vat','VAT','Value-added tax.',10),
-('5d98cd59-9478-53cd-950d-5798c321581f'::uuid,'tender_type','cash','Cash','Customer paid with cash.',5),
-('a4bd3153-076e-564f-af56-3532be501e95'::uuid,'tender_type','card','Card','Customer selected card payment.',10),
-('7cf418c0-b844-52ae-b7cc-dd9c51332da8'::uuid,'tender_type','qrph','QRPH','Customer selected QR Ph payment.',20),
-('b1a4e59e-1f6b-52b6-9d37-a8c40894df2b'::uuid,'tender_type','gcash','GCash','Customer selected GCash payment.',30),
-('80382615-90f6-58aa-9d53-35f35e45586c'::uuid,'tender_type','maya','Maya','Customer selected Maya payment.',40))
+('a4bd3153-076e-564f-af56-3532be501e95'::uuid,'tender_type','card','Card','Customer selected card payment.',10))
 INSERT INTO pos.controlled_codes(
     controlled_code_id,controlled_code_set_id,code_key,display_name,description,
     source_ref,sort_order,is_active,effective_start_at,created_at,updated_at)
 SELECT source.id,sets.controlled_code_set_id,source.code_key,source.name,source.description,
-       CASE WHEN source.code_key IN ('cash','qrph','gcash','maya')
-            THEN 'PITX live fiscal tender classification correction'
-            ELSE 'Restart 41 persistent PITX POS issuance readiness' END,
-       source.sort_order,true,
-       CASE WHEN source.code_key IN ('cash','qrph','gcash','maya')
-            THEN '2026-09-15T00:00:00Z'::timestamptz
-            ELSE '2026-09-04T00:00:00Z'::timestamptz END,
-       CURRENT_TIMESTAMP,CURRENT_TIMESTAMP
+       'Restart 41 persistent PITX POS issuance readiness',source.sort_order,true,
+       '2026-09-04T00:00:00Z'::timestamptz,CURRENT_TIMESTAMP,CURRENT_TIMESTAMP
 FROM source
 JOIN pos.controlled_code_sets sets ON sets.code_set_key=source.set_key
 ON CONFLICT(controlled_code_id) DO UPDATE SET

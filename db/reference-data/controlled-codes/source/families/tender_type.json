@@ -15,17 +15,6 @@
     "effective_start_at": "2026-09-04T00:00:00Z",
     "effective_end_at": null,
     "codes": [{
-      "code_key": "cash",
-      "display_name": "Cash",
-      "description": "Customer paid with cash.",
-      "source_ref": "PITX live fiscal tender classification correction",
-      "sort_order": 5,
-      "is_active": true,
-      "is_deprecated": false,
-      "effective_start_at": "2026-09-15T00:00:00Z",
-      "effective_end_at": null,
-      "replaced_by_code_key": null
-    }, {
       "code_key": "card",
       "display_name": "Card",
       "description": "Customer selected card payment.",
@@ -34,39 +23,6 @@
       "is_active": true,
       "is_deprecated": false,
       "effective_start_at": "2026-09-04T00:00:00Z",
-      "effective_end_at": null,
-      "replaced_by_code_key": null
-    }, {
-      "code_key": "qrph",
-      "display_name": "QRPH",
-      "description": "Customer selected QR Ph payment.",
-      "source_ref": "PITX live fiscal tender classification correction",
-      "sort_order": 20,
-      "is_active": true,
-      "is_deprecated": false,
-      "effective_start_at": "2026-09-15T00:00:00Z",
-      "effective_end_at": null,
-      "replaced_by_code_key": null
-    }, {
-      "code_key": "gcash",
-      "display_name": "GCash",
-      "description": "Customer selected GCash payment.",
-      "source_ref": "PITX live fiscal tender classification correction",
-      "sort_order": 30,
-      "is_active": true,
-      "is_deprecated": false,
-      "effective_start_at": "2026-09-15T00:00:00Z",
-      "effective_end_at": null,
-      "replaced_by_code_key": null
-    }, {
-      "code_key": "maya",
-      "display_name": "Maya",
-      "description": "Customer selected Maya payment.",
-      "source_ref": "PITX live fiscal tender classification correction",
-      "sort_order": 40,
-      "is_active": true,
-      "is_deprecated": false,
-      "effective_start_at": "2026-09-15T00:00:00Z",
       "effective_end_at": null,
       "replaced_by_code_key": null
     }]

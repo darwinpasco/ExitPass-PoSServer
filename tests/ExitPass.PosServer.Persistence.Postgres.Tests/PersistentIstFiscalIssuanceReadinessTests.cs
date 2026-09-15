@@ -138,24 +138,6 @@ public sealed class PersistentIstFiscalIssuanceReadinessTests
         Assert.Contains("families/fiscal_sequence_state.json", index);
     }
 
-    [Fact]
-    public void ApprovedSpecificTenderCodesArePresentAndLegacyReportingCodesRemainAvailable()
-    {
-        var issuance = ReadRepoFile("db", "reference-data", "controlled-codes", "generated", "sql", "010_controlled_codes_fiscal_issuance.sql");
-        var reporting = ReadRepoFile("db", "reference-data", "controlled-codes", "generated", "sql", "005_controlled_codes_reporting_contract.sql");
-
-        Assert.Contains("'tender_type','cash'", issuance, StringComparison.OrdinalIgnoreCase);
-        Assert.Contains("'tender_type','card'", issuance, StringComparison.OrdinalIgnoreCase);
-        Assert.Contains("'tender_type','qrph'", issuance, StringComparison.OrdinalIgnoreCase);
-        Assert.Contains("'tender_type','gcash'", issuance, StringComparison.OrdinalIgnoreCase);
-        Assert.Contains("'tender_type','maya'", issuance, StringComparison.OrdinalIgnoreCase);
-        Assert.Contains("'fiscal_reporting_tender_classification', 'qrph'", reporting, StringComparison.OrdinalIgnoreCase);
-        Assert.Contains("'fiscal_reporting_tender_classification', 'gcash'", reporting, StringComparison.OrdinalIgnoreCase);
-        Assert.Contains("'fiscal_reporting_tender_classification', 'maya'", reporting, StringComparison.OrdinalIgnoreCase);
-        Assert.Contains("'fiscal_reporting_tender_classification', 'digital_wallet'", reporting, StringComparison.OrdinalIgnoreCase);
-        Assert.Contains("'fiscal_reporting_tender_classification', 'bank_transfer'", reporting, StringComparison.OrdinalIgnoreCase);
-    }
-
     private static string ReadScript(string fileName) =>
         ReadRepoFile("db", "scripts", fileName);
 

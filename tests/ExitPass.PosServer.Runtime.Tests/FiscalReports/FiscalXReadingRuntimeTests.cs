@@ -65,32 +65,6 @@ public sealed class FiscalXReadingRuntimeTests
     }
 
     [Fact]
-    public void SpecificDigitalTenderClassificationsRemainSeparate()
-    {
-        var qrph = Document("issued", sequence: 1) with
-        {
-            Lines = [new("parking_fee", 10_000, 0, 0, 10_000, "PHP")],
-            Tenders = [new("qrph", 10_000, "PHP")],
-            Taxes = [new("vatable", false, 8_929, 1_071, "PHP")],
-            Discounts = []
-        };
-        var gcash = Document("issued", sequence: 2) with
-        {
-            Lines = [new("parking_fee", 10_000, 0, 0, 10_000, "PHP")],
-            Tenders = [new("gcash", 10_000, "PHP")],
-            Taxes = [new("vatable", false, 8_929, 1_071, "PHP")],
-            Discounts = []
-        };
-
-        var aggregate = new FiscalXReadingAggregationService().Aggregate([qrph, gcash], [], "PHP");
-
-        Assert.Contains(aggregate.Tenders, tender => tender.Classification == "qrph" && tender.TransactionCount == 1 && tender.AmountMinorUnits == 10_000);
-        Assert.Contains(aggregate.Tenders, tender => tender.Classification == "gcash" && tender.TransactionCount == 1 && tender.AmountMinorUnits == 10_000);
-        Assert.DoesNotContain(aggregate.Tenders, tender => tender.Classification == "card");
-        Assert.Equal(20_000, aggregate.Tenders.Sum(tender => tender.AmountMinorUnits));
-    }
-
-    [Fact]
     public void SeniorCitizenAndPwdRemainSeparateFromVatExemption()
     {
         var senior = Document("recorded", 1) with
