@@ -52,6 +52,11 @@
       "governance_owner": "Engineering"
     },
     {
+      "code_set_key": "discount_privilege_type",
+      "path": "families/discount_privilege_type.json",
+      "governance_owner": "Accounting"
+    },
+    {
       "code_set_key": "electronic_journal_access_action",
       "path": "families/electronic_journal_access_action.json",
       "governance_owner": "Engineering"
