@@ -28,6 +28,8 @@ public sealed class FiscalDocumentApiPostgresSmokeTests
     private static readonly Guid FiscalTaxClassificationCodeId = Guid.Parse("10000000-0000-0000-0000-000000000402");
     private static readonly Guid FiscalVatExemptTaxClassificationCodeId = Guid.Parse("10000000-0000-0000-0000-000000000403");
     private static readonly Guid FiscalDiscountPrivilegeTypeCodeId = Guid.Parse("10000000-0000-0000-0000-000000000501");
+    private static readonly Guid GovernedStatutoryDiscountPrivilegeTypeCodeId =
+        Guid.Parse("3a29922e-e8e6-5adb-a205-f68d09e41762");
     private static readonly Guid FiscalTotalTypeCodeId = Guid.Parse("10000000-0000-0000-0000-000000000601");
     private static readonly Guid FiscalIdentityId = Guid.Parse("10000000-0000-0000-0000-000000000701");
     private static readonly Guid FiscalSequenceFamilyCodeId = Guid.Parse("10000000-0000-0000-0000-000000000801");
@@ -301,9 +303,10 @@ public sealed class FiscalDocumentApiPostgresSmokeTests
 
         await RebuildDisposableDatabaseAsync(connectionString);
         await InsertDisposableSmokeFixtureAsync(connectionString);
+        await ConfigureStatutorySalesInvoiceHeaderAsync(connectionString);
         await using var app = await StartApiAsync(connectionString);
         using var client = CreateClient(app);
-        var request = CreateValidZeroPayableStatutoryRequest("zero-payable");
+        var request = WithGovernedStatutoryPrivilegeCode(CreateValidZeroPayableStatutoryRequest("zero-payable"));
 
         using var response = await client.PostAsJsonAsync("/v1/fiscal-documents/", request);
         var responseText = await response.Content.ReadAsStringAsync();
@@ -330,6 +333,13 @@ public sealed class FiscalDocumentApiPostgresSmokeTests
         Assert.Null(getBody.Document.CentralPmsPaymentConfirmationRef);
         Assert.Null(getBody.Document.PaymentFinalityRef);
         Assert.Empty(getBody.Document.Tenders);
+        var privilege = Assert.Single(getBody.Document.DiscountPrivilegeDetails);
+        Assert.Equal(GovernedStatutoryDiscountPrivilegeTypeCodeId, privilege.DiscountPrivilegeTypeCodeId);
+        Assert.Equal(2679, privilege.BasisAmountMinorUnits);
+        Assert.Equal(2679, privilege.DiscountAmountMinorUnits);
+        Assert.Equal(321, privilege.VatPrivilegeAmountMinorUnits);
+        Assert.Equal("PHP", privilege.CurrencyCode);
+        Assert.Equal(request.AppliedStatutoryFiscalFacts!.StatutoryValidationId!.Value.ToString("D"), privilege.ApprovalRef);
         Assert.Equal(0, Assert.Single(getBody.Document.Totals).AmountMinorUnits);
         Assert.Equal(body.ElectronicJournalEventReference, getBody.Document.ElectronicJournalEventReference);
         Assert.Equal("OSCA-12345", getBody.Document.InvoiceCustomerInformation!.StatutoryIdNumber);
@@ -706,10 +716,11 @@ public sealed class FiscalDocumentApiPostgresSmokeTests
 
         await RebuildDisposableDatabaseAsync(connectionString);
         await InsertDisposableSmokeFixtureAsync(connectionString);
+        await ConfigureStatutorySalesInvoiceHeaderAsync(connectionString);
 
         await using var app = await StartApiAsync(connectionString);
         using var client = CreateClient(app);
-        var request = CreateValidStatutoryRequest("statutory-senior");
+        var request = WithGovernedStatutoryPrivilegeCode(CreateValidStatutoryRequest("statutory-senior"));
 
         using var response = await client.PostAsJsonAsync("/v1/fiscal-documents/", request);
         var body = await response.Content.ReadFromJsonAsync<CreateFiscalDocumentResponse>();
@@ -728,6 +739,8 @@ public sealed class FiscalDocumentApiPostgresSmokeTests
         Assert.Equal(HttpStatusCode.OK, getResponse.StatusCode);
         Assert.NotNull(getBody?.Document);
         Assert.NotNull(getBody.Document.AppliedStatutoryFiscalFacts);
+        Assert.Equal(GovernedStatutoryDiscountPrivilegeTypeCodeId,
+            Assert.Single(getBody.Document.DiscountPrivilegeDetails).DiscountPrivilegeTypeCodeId);
         Assert.Null(getBody.Document.SemanticRequestHash);
         Assert.Equal("pos-server-fiscal-document-create:sha256:v4", getBody.Document.SemanticRequestHashVersion);
         Assert.Equal("SENIOR_CITIZEN", getBody.Document.AppliedStatutoryFiscalFacts.EntitlementType);
@@ -804,7 +817,13 @@ public sealed class FiscalDocumentApiPostgresSmokeTests
         Assert.False(invalidBody.Succeeded);
         Assert.Equal("applied_statutory_facts_not_final", invalidBody.Code);
 
-        var pwdRequest = CreateValidPwdStatutoryRequest("statutory-pwd");
+        await using (var profileConnection = new NpgsqlConnection(connectionString))
+        {
+            await profileConnection.OpenAsync();
+            await ExecuteSqlAsync(profileConnection,
+                "update pos.sales_invoice_header_profiles set site_id = '22000000-0000-4000-8000-000000000006' where sales_invoice_header_profile_id = '10000000-0000-0000-0000-000000000703';");
+        }
+        var pwdRequest = WithGovernedStatutoryPrivilegeCode(CreateValidPwdStatutoryRequest("statutory-pwd"));
         using var pwdResponse = await client.PostAsJsonAsync("/v1/fiscal-documents/", pwdRequest);
         var pwdBody = await pwdResponse.Content.ReadFromJsonAsync<CreateFiscalDocumentResponse>();
         WriteCreateResult("statutory pwd create", pwdResponse.StatusCode, pwdBody);
@@ -821,6 +840,8 @@ public sealed class FiscalDocumentApiPostgresSmokeTests
         Assert.Equal(HttpStatusCode.OK, pwdGetResponse.StatusCode);
         Assert.NotNull(pwdGetBody?.Document?.AppliedStatutoryFiscalFacts);
         Assert.Equal("PWD", pwdGetBody.Document.AppliedStatutoryFiscalFacts.EntitlementType);
+        Assert.Equal(GovernedStatutoryDiscountPrivilegeTypeCodeId,
+            Assert.Single(pwdGetBody.Document.DiscountPrivilegeDetails).DiscountPrivilegeTypeCodeId);
         Assert.Equal("ASSISTED_PAYMENT_TERMINAL", pwdGetBody.Document.AppliedStatutoryFiscalFacts.SourcePaymentChannel);
         Assert.Equal(Guid.Parse("22000000-0000-4000-8000-000000000011"), pwdGetBody.Document.AppliedStatutoryFiscalFacts.TerminalCashTenderId);
 
@@ -1478,6 +1499,48 @@ public sealed class FiscalDocumentApiPostgresSmokeTests
             });
     }
 
+    private static async Task ConfigureStatutorySalesInvoiceHeaderAsync(string connectionString)
+    {
+        await using var connection = new NpgsqlConnection(connectionString);
+        await connection.OpenAsync();
+        await ExecuteSqlAsync(connection,
+            """
+            update pos.fiscal_identities set
+                registered_business_name = 'API Smoke Registered Business',
+                registered_business_address = 'Synthetic Test Address',
+                tin = 'SYNTHETIC-TIN',
+                taxpayer_classification = 'CORPORATION',
+                created_by_ref = 'statutory-fiscal-smoke',
+                updated_by_ref = 'statutory-fiscal-smoke'
+            where fiscal_identity_id = @fiscal_identity_id;
+            insert into pos.sales_invoice_header_profiles (
+                sales_invoice_header_profile_id, fiscal_identity_id, site_id, site_pos_server_id,
+                profile_version, template_version, presentation_version, pos_serial_number,
+                machine_identification_number, parking_location_display,
+                supplier_developer_registered_name, supplier_developer_address, supplier_developer_tin,
+                bir_accreditation_number, bir_accreditation_issued_date, bir_accreditation_valid_until,
+                ptu_number, ptu_issued_date, sales_invoice_legal_statement,
+                customer_service_footer, effective_from, lifecycle_status, approved_at,
+                approved_by_ref, created_by_ref, updated_by_ref
+            ) values (
+                '10000000-0000-0000-0000-000000000703', @fiscal_identity_id,
+                '21000000-0000-4000-8000-000000000006', @site_pos_server_id,
+                'statutory-smoke-v1', 'digital-sales-invoice-json-v1',
+                'digital-sales-invoice-presentation-json-v1', 'SYN-SERIAL-STAT', 'SYN-MIN-STAT',
+                'SYNTHETIC TEST SITE', 'SYNTHETIC SOFTWARE SUPPLIER', 'SYNTHETIC SUPPLIER ADDRESS',
+                'SYNTHETIC-SUPPLIER-TIN', 'SYN-ACCREDITATION-STAT',
+                '2026-01-01', '2027-01-01', 'SYN-PTU-STAT', '2026-01-01',
+                'SYNTHETIC SALES INVOICE', 'SYNTHETIC SUPPORT',
+                '2026-01-01T00:00:00Z', 'APPROVED', '2026-01-01T00:00:00Z',
+                'statutory-fiscal-smoke', 'statutory-fiscal-smoke', 'statutory-fiscal-smoke');
+            """,
+            command =>
+            {
+                command.Parameters.AddWithValue("fiscal_identity_id", FiscalIdentityId);
+                command.Parameters.AddWithValue("site_pos_server_id", SitePosServerId);
+            });
+    }
+
     private static async Task ConfigureHistoricalAndCurrentPeriodsAsync(string connectionString)
     {
         await using var connection = new NpgsqlConnection(connectionString);
@@ -1807,6 +1870,18 @@ public sealed class FiscalDocumentApiPostgresSmokeTests
             AppliedStatutoryFiscalFacts = facts
         };
     }
+
+    private static CreateFiscalDocumentRequest WithGovernedStatutoryPrivilegeCode(CreateFiscalDocumentRequest request) =>
+        request with
+        {
+            DiscountPrivilegeDetails =
+            [
+                request.DiscountPrivilegeDetails![0] with
+                {
+                    DiscountPrivilegeTypeCodeId = GovernedStatutoryDiscountPrivilegeTypeCodeId
+                }
+            ]
+        };
 
     private static CreateFiscalDocumentRequest CreateValidPwdStatutoryRequest(string suffix)
     {

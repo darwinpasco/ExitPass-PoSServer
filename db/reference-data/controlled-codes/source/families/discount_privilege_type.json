@@ -1,0 +1,37 @@
+{
+  "schema_version": "1.0",
+  "source_key": "controlled_codes.discount_privilege_type.v1",
+  "source_name": "Discount Privilege Type Controlled Codes",
+  "source_description": "Fiscal discount and VAT privilege detail classifications supplied from approved Central PMS facts.",
+  "governance_owner": "Accounting",
+  "source_ref": "ExitPass_POS_Server_Controlled_Code_Seed_Code_Family_Map.md; ExitPass_POS_Server_Applied_Statutory_Fiscal_Facts_Contract_v1.0",
+  "code_sets": [
+    {
+      "code_set_key": "discount_privilege_type",
+      "display_name": "Discount Privilege Type",
+      "description": "Classification of a fiscal discount or privilege detail, separate from entitlement type and reporting classification.",
+      "governance_owner": "Accounting",
+      "source_ref": "ExitPass_POS_Server_Controlled_Code_Seed_Code_Family_Map.md; ExitPass_POS_Server_Applied_Statutory_Fiscal_Facts_Contract_v1.0",
+      "is_active": true,
+      "effective_start_at": "2026-09-21T00:00:00Z",
+      "effective_end_at": null,
+      "codes": [
+        {
+          "code_key": "statutory_discount_and_vat_privilege",
+          "display_name": "Statutory Discount and VAT Privilege",
+          "description": "An approved statutory fiscal detail carrying a discount amount and VAT privilege amount calculated by Central PMS; this code does not determine eligibility or recalculate either amount.",
+          "source_ref": "ExitPass_POS_Server_Applied_Statutory_Fiscal_Facts_Contract_v1.0",
+          "sort_order": 10,
+          "is_active": true,
+          "is_deprecated": false,
+          "effective_start_at": "2026-09-21T00:00:00Z",
+          "effective_end_at": null,
+          "replaced_by_code_key": null
+        }
+      ]
+    }
+  ],
+  "notes": [
+    "The fiscal detail type describes the combined statutory discount and VAT privilege facts for current supported statutory issuance; FREE_PARKING remains the distinct benefit classification."
+  ]
+}

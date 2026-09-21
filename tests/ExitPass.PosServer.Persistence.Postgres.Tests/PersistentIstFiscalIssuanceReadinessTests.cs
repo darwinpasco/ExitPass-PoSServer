@@ -1,4 +1,7 @@
 using System.Runtime.CompilerServices;
+using System.Security.Cryptography;
+using System.Text;
+using System.Text.Json;
 using Xunit;
 
 namespace ExitPass.PosServer.Persistence.Postgres.Tests;
@@ -136,6 +139,45 @@ public sealed class PersistentIstFiscalIssuanceReadinessTests
         Assert.DoesNotContain("fixture", generated, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("families/fiscal_document_type.json", index);
         Assert.Contains("families/fiscal_sequence_state.json", index);
+    }
+
+    [Fact]
+    public void StatutoryDiscountPrivilegeCodeIsIndexedGeneratedAndDistinctFromSmokeFixture()
+    {
+        var index = ReadRepoFile("db", "reference-data", "controlled-codes", "source", "controlled_code_source_index.json");
+        var family = ReadRepoFile("db", "reference-data", "controlled-codes", "source", "families", "discount_privilege_type.json");
+        var generated = ReadRepoFile("db", "reference-data", "controlled-codes", "generated", "sql", "011_controlled_codes_discount_privilege_type.sql");
+        using var indexJson = JsonDocument.Parse(index);
+        using var familyJson = JsonDocument.Parse(family);
+        var namespaceId = Guid.Parse(indexJson.RootElement.GetProperty("uuid_namespace").GetString()!);
+        var indexedFamily = Assert.Single(indexJson.RootElement.GetProperty("family_sources").EnumerateArray(),
+            entry => entry.GetProperty("code_set_key").GetString() == "discount_privilege_type");
+        Assert.Equal("families/discount_privilege_type.json", indexedFamily.GetProperty("path").GetString());
+
+        var codeSet = Assert.Single(familyJson.RootElement.GetProperty("code_sets").EnumerateArray());
+        var code = Assert.Single(codeSet.GetProperty("codes").EnumerateArray());
+        Assert.Equal("discount_privilege_type", codeSet.GetProperty("code_set_key").GetString());
+        Assert.Equal("statutory_discount_and_vat_privilege", code.GetProperty("code_key").GetString());
+        var setId = SourceUuid(namespaceId, "pos.controlled_code_sets:discount_privilege_type");
+        var codeId = SourceUuid(namespaceId,
+            "pos.controlled_codes:discount_privilege_type:statutory_discount_and_vat_privilege");
+        Assert.Equal(Guid.Parse("cf381b39-3016-5d8a-9833-44ff70ac216d"), setId);
+        Assert.Equal(Guid.Parse("3a29922e-e8e6-5adb-a205-f68d09e41762"), codeId);
+        Assert.Contains(setId.ToString("D"), generated);
+        Assert.Contains(codeId.ToString("D"), generated);
+        Assert.Contains("'discount_privilege_type'", generated);
+        Assert.Contains("'statutory_discount_and_vat_privilege'", generated);
+        Assert.DoesNotContain("10000000-0000-0000-0000-000000000501", generated);
+        Assert.Contains("ON CONFLICT (controlled_code_id) DO NOTHING", generated);
+    }
+
+    private static Guid SourceUuid(Guid namespaceId, string name)
+    {
+        var namespaceBytes = Convert.FromHexString(namespaceId.ToString("N"));
+        var hash = SHA1.HashData(namespaceBytes.Concat(Encoding.UTF8.GetBytes(name)).ToArray());
+        hash[6] = (byte)((hash[6] & 0x0f) | 0x50);
+        hash[8] = (byte)((hash[8] & 0x3f) | 0x80);
+        return Guid.ParseExact(Convert.ToHexString(hash[..16]), "N");
     }
 
     private static string ReadScript(string fileName) =>
