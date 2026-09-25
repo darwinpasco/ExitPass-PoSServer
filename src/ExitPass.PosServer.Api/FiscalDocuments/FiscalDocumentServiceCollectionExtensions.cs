@@ -94,7 +94,6 @@ public static class FiscalDocumentServiceCollectionExtensions
         services.AddScoped<ElectronicJournalService>();
         services.AddSingleton<ElectronicJournalExportRenderer>();
         services.AddScoped<ElectronicJournalInvoiceTextService>();
-        services.AddSingleton<CanonicalSalesInvoiceTextFactory>();
         services.AddSingleton<CanonicalSalesInvoiceTextRenderer>();
         services.AddSingleton<ElectronicJournalInvoiceTextRenderer>();
         services.AddScoped<AnnexE1Service>();

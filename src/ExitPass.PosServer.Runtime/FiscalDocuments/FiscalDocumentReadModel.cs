@@ -136,7 +136,8 @@ public sealed record FiscalDiscountPrivilegeDetailReadModel(
     string? ApprovalRef,
     string? DiscountPrivilegeContextJson,
     DateTimeOffset CreatedAt,
-    DateTimeOffset UpdatedAt);
+    DateTimeOffset UpdatedAt,
+    string? DiscountPrivilegeTypeCodeKey = null);
 
 public sealed record FiscalTotalReadModel(
     Guid FiscalTotalId,
@@ -146,4 +147,5 @@ public sealed record FiscalTotalReadModel(
     string CurrencyCode,
     string? TotalContextJson,
     DateTimeOffset CreatedAt,
-    DateTimeOffset UpdatedAt);
+    DateTimeOffset UpdatedAt,
+    string? TotalTypeCodeKey = null);

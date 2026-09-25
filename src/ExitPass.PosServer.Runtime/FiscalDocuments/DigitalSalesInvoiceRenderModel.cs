@@ -43,7 +43,10 @@ public sealed record DigitalSalesInvoiceRenderModel(
     string CompletionBasis = FiscalCompletionBasisCodes.PaymentFinality,
     string? CompletionAuthorityRef = null,
     InvoiceCustomerInformationSnapshot? InvoiceCustomerInformation = null,
-    string? DocumentContextJson = null);
+    string? DocumentContextJson = null,
+    DigitalSalesInvoiceFiscalContentRenderModel? FiscalContent = null,
+    string DocumentDesignation = "SALES INVOICE",
+    string CopyDesignation = "ORIGINAL");
 
 public sealed record DigitalSalesInvoiceLineRenderModel(
     int LineSequence,
@@ -68,7 +71,9 @@ public sealed record DigitalSalesInvoiceDiscountRenderModel(
     string CurrencyCode,
     string? BeneficiaryRef,
     string? EvidenceRef,
-    string? ApprovalRef);
+    string? ApprovalRef,
+    string? DiscountPrivilegeTypeCodeKey = null,
+    string? Reason = null);
 
 public sealed record DigitalSalesInvoiceTaxDetailRenderModel(
     Guid? FiscalDocumentLineId,
@@ -93,8 +98,31 @@ public sealed record DigitalSalesInvoiceTenderRenderModel(
 public sealed record DigitalSalesInvoiceTotalRenderModel(
     Guid TotalTypeCodeId,
     long AmountMinorUnits,
-    string CurrencyCode);
+    string CurrencyCode,
+    string? TotalTypeCodeKey = null);
 
 public sealed record DigitalSalesInvoiceFooterRenderModel(
     string RenderingStatus,
-    IReadOnlyList<string> DisclaimerPlaceholders);
+    IReadOnlyList<string> DisclaimerPlaceholders,
+    IReadOnlyList<string>? ClosingTextLines = null);
+
+public sealed record DigitalSalesInvoiceFiscalContentRenderModel(
+    string? BranchOrSite,
+    string? TicketNumber,
+    string? PlateNumber,
+    string? EntryTimeText,
+    string? PaymentTimeText,
+    string? ParkingDurationText,
+    string? PaymentMethod,
+    long SubtotalAmountMinorUnits,
+    long DiscountAmountMinorUnits,
+    long VatableSalesMinorUnits,
+    long VatAmountMinorUnits,
+    long VatExemptSalesMinorUnits,
+    long ZeroRatedSalesMinorUnits,
+    long TotalAmountMinorUnits,
+    long TotalPaidMinorUnits,
+    long? TenderedAmountMinorUnits,
+    long? ChangeAmountMinorUnits,
+    string CurrencyCode,
+    bool ShowCustomerSignatureLine);

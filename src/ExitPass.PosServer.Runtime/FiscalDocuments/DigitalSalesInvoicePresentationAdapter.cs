@@ -26,6 +26,12 @@ public sealed class DigitalSalesInvoicePresentationAdapter
         }
 
         var render = renderResult.Render;
+        if (render.FiscalContent is null)
+        {
+            return DigitalSalesInvoicePresentationResult.InvalidSource(
+                "Canonical Sales Invoice fiscal content is required.");
+        }
+
         var sections = new List<DigitalSalesInvoicePresentationSectionModel>
         {
             Section(templateContract, "header", "Header", 10, HeaderRows(render, templateContract)),
@@ -84,6 +90,8 @@ public sealed class DigitalSalesInvoicePresentationAdapter
         DigitalSalesInvoiceTemplateContractModel contract) =>
         [
             Row("header.documentTitle", "Document Title", "text", "required", "Digital Sales Invoice"),
+            Row("header.documentDesignation", "Fiscal Document Designation", "text", "required", render.DocumentDesignation),
+            Row("header.copyDesignation", "Copy Designation", "text", "required", render.CopyDesignation),
             Row("header.templateContractVersion", "Template Contract Version", "identifier", FieldPosture(contract, "header.templateContractVersion"), contract.TemplateContractVersion),
             Row("header.fiscalTemplateFamily", "Fiscal Template Family", "identifier", FieldPosture(contract, "header.fiscalTemplateFamily"), contract.FiscalTemplateFamily),
             Row("header.renderFormat", "Render Format", "text", FieldPosture(contract, "header.renderFormat"), contract.RenderFormat),
@@ -167,14 +175,27 @@ public sealed class DigitalSalesInvoicePresentationAdapter
 
     private static IReadOnlyList<DigitalSalesInvoicePresentationRowModel> ParkingPaymentRows(
         DigitalSalesInvoiceRenderModel render,
-        DigitalSalesInvoiceTemplateContractModel contract) =>
+        DigitalSalesInvoiceTemplateContractModel contract)
+    {
+        var fiscal = render.FiscalContent!;
+        return
         [
+            Row("parkingPaymentReferences.branchOrSite", "Branch / Site", "text", FieldPosture(contract, "parkingPaymentReferences.branchOrSite"), fiscal.BranchOrSite),
+            Row("parkingPaymentReferences.ticketNumber", "Ticket Number", "identifier", FieldPosture(contract, "parkingPaymentReferences.ticketNumber"), fiscal.TicketNumber),
+            Row("parkingPaymentReferences.plateNumber", "Plate Number", "identifier", FieldPosture(contract, "parkingPaymentReferences.plateNumber"), fiscal.PlateNumber),
+            Row("parkingPaymentReferences.entryTime", "Entry Time", "dateTime", FieldPosture(contract, "parkingPaymentReferences.entryTime"), fiscal.EntryTimeText),
+            Row("parkingPaymentReferences.paymentTime", "Payment / Completion Time", "dateTime", FieldPosture(contract, "parkingPaymentReferences.paymentTime"), fiscal.PaymentTimeText),
+            Row("parkingPaymentReferences.parkingDuration", "Parking Duration", "text", FieldPosture(contract, "parkingPaymentReferences.parkingDuration"), fiscal.ParkingDurationText),
+            Row("parkingPaymentReferences.paymentMethod", "Payment Method", "text", FieldPosture(contract, "parkingPaymentReferences.paymentMethod"), fiscal.PaymentMethod),
             Row("parkingPaymentReferences.centralPmsParkingSessionRef", "Central PMS Parking Session Ref", "identifier", FieldPosture(contract, "parkingPaymentReferences.centralPmsParkingSessionRef"), render.CentralPmsParkingSessionRef),
             Row("parkingPaymentReferences.centralPmsPaymentAttemptRef", "Central PMS Payment Attempt Ref", "identifier", FieldPosture(contract, "parkingPaymentReferences.centralPmsPaymentAttemptRef"), render.CentralPmsPaymentAttemptRef),
             Row("parkingPaymentReferences.centralPmsPaymentConfirmationRef", "Central PMS Payment Confirmation Ref", "identifier", FieldPosture(contract, "parkingPaymentReferences.centralPmsPaymentConfirmationRef"), render.CentralPmsPaymentConfirmationRef),
             Row("parkingPaymentReferences.paymentFinalityRef", "Payment Finality Ref", "identifier", FieldPosture(contract, "parkingPaymentReferences.paymentFinalityRef"), render.PaymentFinalityRef),
-            Row("parkingPaymentReferences.vendorAckRef", "Vendor Acknowledgement Ref", "identifier", FieldPosture(contract, "parkingPaymentReferences.vendorAckRef"), render.VendorAckRef)
+            Row("parkingPaymentReferences.vendorAckRef", "Vendor Acknowledgement Ref", "identifier", FieldPosture(contract, "parkingPaymentReferences.vendorAckRef"), render.VendorAckRef),
+            Row("parkingPaymentReferences.completionBasis", "Completion Basis", "status", FieldPosture(contract, "parkingPaymentReferences.completionBasis"), render.CompletionBasis),
+            Row("parkingPaymentReferences.completionAuthorityRef", "Completion Authority Ref", "identifier", FieldPosture(contract, "parkingPaymentReferences.completionAuthorityRef"), render.CompletionAuthorityRef)
         ];
+    }
 
     private static IReadOnlyList<DigitalSalesInvoicePresentationRowModel> CustomerInformationRows(
         DigitalSalesInvoiceRenderModel render,
@@ -187,7 +208,8 @@ public sealed class DigitalSalesInvoicePresentationAdapter
             Row("customerInformation.address", "Address", "text", FieldPosture(contract, "customerInformation.address"), customer?.Address),
             Row("customerInformation.tin", "TIN", "identifier", FieldPosture(contract, "customerInformation.tin"), customer?.Tin),
             Row("customerInformation.businessStyle", "Business Style", "text", FieldPosture(contract, "customerInformation.businessStyle"), customer?.BusinessStyle),
-            Row("customerInformation.statutoryIdNumber", "OSCA ID No. / PWD ID No.", "identifier", FieldPosture(contract, "customerInformation.statutoryIdNumber"), render.AppliedStatutoryFiscalFacts is null ? null : customer?.StatutoryIdNumber)
+            Row("customerInformation.statutoryIdNumber", "OSCA ID No. / PWD ID No.", "identifier", FieldPosture(contract, "customerInformation.statutoryIdNumber"), render.AppliedStatutoryFiscalFacts is null ? null : customer?.StatutoryIdNumber),
+            Row("customerInformation.showSignatureLine", "Customer Sign", "boolean", FieldPosture(contract, "customerInformation.showSignatureLine"), render.FiscalContent!.ShowCustomerSignatureLine)
         ];
     }
 
@@ -195,31 +217,16 @@ public sealed class DigitalSalesInvoicePresentationAdapter
         DigitalSalesInvoiceRenderModel render,
         DigitalSalesInvoiceTemplateContractModel contract)
     {
-        var currency = render.TaxDetails.Select(tax => tax.CurrencyCode)
-            .Concat(render.Totals.Select(total => total.CurrencyCode))
-            .FirstOrDefault() ?? "PHP";
-        var vatableSales = SumTaxableAmount(render.TaxDetails, "vatable");
-        var vatExemptSales = SumTaxableAmount(render.TaxDetails, "vat_exempt");
-        var zeroRatedSales = SumTaxableAmount(render.TaxDetails, "zero_rated");
-        var vatAmount = render.TaxDetails
-            .Where(tax => tax.TaxClassificationCodeKey is "vatable" or "vat_exempt" or "zero_rated")
-            .Sum(tax => tax.TaxAmountMinorUnits);
+        var fiscal = render.FiscalContent!;
 
         return
         [
-            AmountRow("totals.vatableSales", "VATable Sales", FieldPosture(contract, "totals.vatableSales"), vatableSales, currency),
-            AmountRow("totals.vatAmount", "VAT Amount", FieldPosture(contract, "totals.vatAmount"), vatAmount, currency),
-            AmountRow("totals.vatExemptSales", "VAT Exempt Sales", FieldPosture(contract, "totals.vatExemptSales"), vatExemptSales, currency),
-            AmountRow("totals.zeroRatedSales", "Zero Rated Sales", FieldPosture(contract, "totals.zeroRatedSales"), zeroRatedSales, currency)
+            AmountRow("totals.vatableSales", "VATable Sales", FieldPosture(contract, "totals.vatableSales"), fiscal.VatableSalesMinorUnits, fiscal.CurrencyCode),
+            AmountRow("totals.vatAmount", "VAT Amount", FieldPosture(contract, "totals.vatAmount"), fiscal.VatAmountMinorUnits, fiscal.CurrencyCode),
+            AmountRow("totals.vatExemptSales", "VAT Exempt Sales", FieldPosture(contract, "totals.vatExemptSales"), fiscal.VatExemptSalesMinorUnits, fiscal.CurrencyCode),
+            AmountRow("totals.zeroRatedSales", "Zero Rated Sales", FieldPosture(contract, "totals.zeroRatedSales"), fiscal.ZeroRatedSalesMinorUnits, fiscal.CurrencyCode)
         ];
     }
-
-    private static long SumTaxableAmount(
-        IEnumerable<DigitalSalesInvoiceTaxDetailRenderModel> taxDetails,
-        string classification) =>
-        taxDetails
-            .Where(tax => string.Equals(tax.TaxClassificationCodeKey, classification, StringComparison.Ordinal))
-            .Sum(tax => tax.TaxableAmountMinorUnits);
 
     private static IReadOnlyList<DigitalSalesInvoicePresentationRowModel> LineRows(
         DigitalSalesInvoiceRenderModel render,
@@ -257,6 +264,8 @@ public sealed class DigitalSalesInvoicePresentationAdapter
                 {
                     Row($"{key}.fiscalDocumentLineId", "Fiscal Document Line ID", "identifier", FieldPosture(contract, "discounts"), discount.FiscalDocumentLineId),
                     Row($"{key}.discountPrivilegeTypeCodeId", "Discount Privilege Type Code ID", "identifier", FieldPosture(contract, "discounts"), discount.DiscountPrivilegeTypeCodeId),
+                    Row($"{key}.discountPrivilegeTypeCodeKey", "Discount Privilege Type", "status", FieldPosture(contract, "discounts.discountPrivilegeTypeCodeKey"), discount.DiscountPrivilegeTypeCodeKey),
+                    Row($"{key}.reason", "Discount Reason", "text", FieldPosture(contract, "discounts.reason"), discount.Reason),
                     AmountRow($"{key}.basisAmount", "Basis Amount", FieldPosture(contract, "discounts"), discount.BasisAmountMinorUnits, discount.CurrencyCode),
                     AmountRow($"{key}.discountAmount", "Discount Amount", FieldPosture(contract, "discounts"), discount.DiscountAmountMinorUnits, discount.CurrencyCode),
                     AmountRow($"{key}.vatPrivilegeAmount", "VAT Privilege Amount", FieldPosture(contract, "discounts"), discount.VatPrivilegeAmountMinorUnits, discount.CurrencyCode),
@@ -340,8 +349,10 @@ public sealed class DigitalSalesInvoicePresentationAdapter
 
     private static IReadOnlyList<DigitalSalesInvoicePresentationRowModel> TotalRows(
         DigitalSalesInvoiceRenderModel render,
-        DigitalSalesInvoiceTemplateContractModel contract) =>
-        render.Totals
+        DigitalSalesInvoiceTemplateContractModel contract)
+    {
+        var fiscal = render.FiscalContent!;
+        return render.Totals
             .OrderBy(total => total.TotalTypeCodeId)
             .SelectMany((total, index) =>
             {
@@ -349,10 +360,19 @@ public sealed class DigitalSalesInvoicePresentationAdapter
                 return new[]
                 {
                     Row($"{key}.totalTypeCodeId", "Total Type Code ID", "identifier", FieldPosture(contract, "totals"), total.TotalTypeCodeId),
+                    Row($"{key}.totalTypeCodeKey", "Total Type", "status", FieldPosture(contract, "totals.totalTypeCodeKey"), total.TotalTypeCodeKey),
                     AmountRow($"{key}.amount", "Total Amount", FieldPosture(contract, "totals"), total.AmountMinorUnits, total.CurrencyCode)
                 };
             })
+            .Concat(
+            [
+                AmountRow("totals.summary.subtotal", "Subtotal", FieldPosture(contract, "totals.summary.subtotal"), fiscal.SubtotalAmountMinorUnits, fiscal.CurrencyCode),
+                AmountRow("totals.summary.discountAmount", "Discount Amount", FieldPosture(contract, "totals.summary.discountAmount"), fiscal.DiscountAmountMinorUnits, fiscal.CurrencyCode),
+                AmountRow("totals.summary.totalAmount", "Total Amount", FieldPosture(contract, "totals.summary.totalAmount"), fiscal.TotalAmountMinorUnits, fiscal.CurrencyCode),
+                AmountRow("totals.summary.totalPaid", "Total Paid / Completed", FieldPosture(contract, "totals.summary.totalPaid"), fiscal.TotalPaidMinorUnits, fiscal.CurrencyCode)
+            ])
             .ToArray();
+    }
 
     private static IReadOnlyList<DigitalSalesInvoicePresentationRowModel> AuditRows(
         DigitalSalesInvoiceRenderModel render,
@@ -374,6 +394,8 @@ public sealed class DigitalSalesInvoicePresentationAdapter
         }
         .Concat(render.Footer.DisclaimerPlaceholders.Select((placeholder, index) =>
             Row($"footerDisclaimers.placeholders[{index:D4}]", "Footer Placeholder", "placeholder", FieldPosture(contract, "footerDisclaimers"), placeholder)))
+        .Concat((render.Footer.ClosingTextLines ?? []).Select((line, index) =>
+            Row($"footerDisclaimers.closingText[{index:D4}]", "Closing Text", "text", FieldPosture(contract, "footerDisclaimers.closingText"), line)))
         .ToArray();
 
     private static IReadOnlyList<DigitalSalesInvoicePresentationRowModel> DeferredRows(

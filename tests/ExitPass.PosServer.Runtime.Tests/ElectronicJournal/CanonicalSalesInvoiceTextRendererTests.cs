@@ -15,7 +15,7 @@ public sealed class CanonicalSalesInvoiceTextRendererTests
 
         var printed = new SalesInvoicePrinterPayloadRenderer(renderer).RenderVisibleText(invoice);
         var journal = new ElectronicJournalInvoiceTextRenderer(renderer).RenderPersisted([
-            new(invoice.FiscalDocumentId, invoice.FiscalDocumentNumber, invoice.BusinessDayDate, invoice.IssuedAt, printed.Text)
+            new(invoice.FiscalDocumentId, invoice.FiscalDocumentNumber!, invoice.BusinessDayDate!.Value, invoice.FiscalNumberAssignedAt!.Value, printed.Text)
         ]);
 
         Assert.Equal(printed.Bytes, journal.Bytes);
@@ -34,8 +34,8 @@ public sealed class CanonicalSalesInvoiceTextRendererTests
             "SALES INVOICE", "ORIGINAL", "SI No", "Issued Date", "PARKING DETAILS", "Ticket Number",
             "Plate Number", "Entry Time", "Payment", "Duration", "ITEMS", "Description", "Subtotal",
             "DISCOUNTS", "Discount Reason", "Discount Amount", "VAT BREAKDOWN", "VATable Sales", "VAT Amount",
-            "VAT Exempt Sales", "Zero Rated Sales", "PAYMENT DETAILS", "GCASH", "PayMongo", "Total Paid",
-            "THIS SERVES AS YOUR SALES INVOICE", "Print Date", "Customer Information",
+            "VAT Exempt Sales", "Zero Rated Sales", "Total Amount", "PAYMENT DETAILS", "GCASH", "PayMongo", "Total Paid",
+            "THIS SERVES AS YOUR SALES INVOICE", "Customer Information",
             "POS SOFTWARE SUPPLIER / DEVELOPER", "THANK YOU FOR CHOOSING OUR SERVICE", "NOTHING FOLLOWS"
         };
 
@@ -47,6 +47,7 @@ public sealed class CanonicalSalesInvoiceTextRendererTests
             prior = index;
         }
         Assert.True(Count(text, "------------------------------------------------") >= 6);
+        Assert.DoesNotContain("Print Date", text, StringComparison.Ordinal);
         Assert.All(text.Split("\r\n", StringSplitOptions.RemoveEmptyEntries), line => Assert.True(line.Length <= 48, line));
     }
 
@@ -94,11 +95,11 @@ public sealed class CanonicalSalesInvoiceTextRendererTests
         var original = renderer.RenderVisibleText(invoice).Text;
         var reprintRecord = new FiscalDocumentReprintRecord(
             Guid.Parse("aaaaaaaa-0000-4000-8000-000000000101"), "REPRINT-0001", invoice.FiscalDocumentId,
-            invoice.FiscalDocumentNumber, 1, Guid.Parse("aaaaaaaa-0000-4000-8000-000000000102"),
+            invoice.FiscalDocumentNumber!, 1, Guid.Parse("aaaaaaaa-0000-4000-8000-000000000102"),
             Guid.Parse("aaaaaaaa-0000-4000-8000-000000000103"), "PHP",
             Guid.Parse("aaaaaaaa-0000-4000-8000-000000000104"), Guid.Parse("aaaaaaaa-0000-4000-8000-000000000105"),
-            invoice.BusinessDayDate, 1, "fiscal_document_copy", "committed", "customer_request", "output-001",
-            "print", true, invoice.IssuedAt, invoice.IssuedAt, "operator", "pos-server", "correlation", "operation",
+            invoice.BusinessDayDate!.Value, 1, "fiscal_document_copy", "committed", "customer_request", "output-001",
+            "print", true, invoice.FiscalNumberAssignedAt!.Value, invoice.FiscalNumberAssignedAt.Value, "operator", "pos-server", "correlation", "operation",
             "EJ-REPRINT-001");
         var reprint = renderer.RenderReprintVisibleText(invoice, reprintRecord).Text;
 
@@ -118,7 +119,7 @@ public sealed class CanonicalSalesInvoiceTextRendererTests
         {
             FiscalDocumentId = Guid.Parse("aaaaaaaa-0000-4000-8000-000000000002"),
             FiscalDocumentNumber = "SI-00000002",
-            IssuedAt = DateTimeOffset.Parse("2026-09-10T02:00:00Z")
+            FiscalNumberAssignedAt = DateTimeOffset.Parse("2026-09-10T02:00:00Z")
         };
         var first = renderer.Render([later, Invoice(), Invoice()]);
         var second = renderer.Render([Invoice(), later]);
@@ -140,15 +141,14 @@ public sealed class CanonicalSalesInvoiceTextRendererTests
         {
             FiscalDocumentId = Guid.Parse("aaaaaaaa-0000-4000-8000-000000000002"),
             FiscalDocumentNumber = "SI-00000002",
-            IssuedAt = DateTimeOffset.Parse("2026-09-10T02:00:00Z"),
-            Presentation = firstInvoice.Presentation! with { PresentationTimestamp = DateTimeOffset.Parse("2026-09-10T02:00:00Z") }
+            FiscalNumberAssignedAt = DateTimeOffset.Parse("2026-09-10T02:00:00Z")
         };
         var firstPrint = printer.RenderVisibleText(firstInvoice);
         var secondPrint = printer.RenderVisibleText(secondInvoice);
         var journal = new ElectronicJournalInvoiceTextRenderer(renderer).RenderPersisted([
-            new(secondInvoice.FiscalDocumentId, secondInvoice.FiscalDocumentNumber, secondInvoice.BusinessDayDate, secondInvoice.IssuedAt, secondPrint.Text),
-            new(firstInvoice.FiscalDocumentId, firstInvoice.FiscalDocumentNumber, firstInvoice.BusinessDayDate, firstInvoice.IssuedAt, firstPrint.Text),
-            new(firstInvoice.FiscalDocumentId, firstInvoice.FiscalDocumentNumber, firstInvoice.BusinessDayDate, firstInvoice.IssuedAt, firstPrint.Text)
+            new(secondInvoice.FiscalDocumentId, secondInvoice.FiscalDocumentNumber!, secondInvoice.BusinessDayDate!.Value, secondInvoice.FiscalNumberAssignedAt!.Value, secondPrint.Text),
+            new(firstInvoice.FiscalDocumentId, firstInvoice.FiscalDocumentNumber!, firstInvoice.BusinessDayDate!.Value, firstInvoice.FiscalNumberAssignedAt!.Value, firstPrint.Text),
+            new(firstInvoice.FiscalDocumentId, firstInvoice.FiscalDocumentNumber!, firstInvoice.BusinessDayDate!.Value, firstInvoice.FiscalNumberAssignedAt!.Value, firstPrint.Text)
         ]);
         var evidenceDirectory = Path.Combine(AppContext.BaseDirectory, "g4-evidence");
         Directory.CreateDirectory(evidenceDirectory);
@@ -177,13 +177,13 @@ public sealed class CanonicalSalesInvoiceTextRendererTests
             "fiscal_document_committed",
             "historical:invoice:1",
             "v1",
-            invoice.IssuedAt,
+            invoice.FiscalNumberAssignedAt!.Value,
             "actor",
             "service",
             "correlation",
             new SortedDictionary<string, string?> { ["fiscal_document_number"] = invoice.FiscalDocumentNumber },
             invoice.FiscalDocumentId,
-            BusinessDayDate: invoice.BusinessDayDate,
+            BusinessDayDate: invoice.BusinessDayDate!.Value,
             PrintableSalesInvoiceText: null);
         var semantic = ElectronicJournalCanonicalizer.ComputeSemanticHash(
             append, ElectronicJournalContract.LegacySemanticHashVersion);
@@ -210,53 +210,42 @@ public sealed class CanonicalSalesInvoiceTextRendererTests
         Assert.Equal("fiscal_document_committed", repository.LastQuery?.EventType);
     }
 
-    private static CanonicalSalesInvoiceText Invoice() => new(
-        Guid.Parse("aaaaaaaa-0000-4000-8000-000000000001"),
-        "SI-00000001",
-        DateTimeOffset.Parse("2026-09-10T01:00:00Z"),
-        new DateOnly(2026, 9, 10),
-        "ExitPass Parking Corporation",
-        "PITX, Paranaque City",
-        "123-456-789-000",
-        "POS-SN-001",
-        "MIN-001",
-        "PTU-001",
-        "BIR-ACC-001",
-        new("Juan Dela Cruz", "123 Sample Street", "123-456-789-000", "Retail", "OSCA ID No.", "OSCA-0001", true),
-        [new(1, "Parking fee - regular parking", 1m, 11200, 11200, "PHP")],
-        10000,
-        1200,
-        0,
-        0,
-        11200,
-        "PHP",
-        "Customer service: support@example.test",
-        new(
-            "PITX",
-            "PITX Parking Facility",
-            "TERMINAL-01",
-            "PARKING-SESSION-001",
-            "TICKET-0001",
-            "ABC-1234",
-            "2026-09-10 00:00:00 UTC",
-            "2026-09-10 01:00:00 UTC",
-            "01:00:00",
-            12000,
-            [new("Senior Discount", 800)],
-            [new("GCASH", "PayMongo", 11200)],
-            11200,
-            12000,
-            800,
-            "THIS SERVES AS YOUR SALES INVOICE",
-            DateTimeOffset.Parse("2026-09-10T01:00:00Z")),
-        new(
-            "ExitPass Software Inc.",
-            "Supplier Address, Philippines",
-            "987-654-321-000",
-            "BIR-ACC-001",
-            new DateOnly(2026, 1, 15),
-            "PTU-001",
-            new DateOnly(2026, 2, 10)));
+    private static DigitalSalesInvoiceRenderModel Invoice()
+    {
+        var issuedAt = DateTimeOffset.Parse("2026-09-10T01:00:00Z");
+        var fiscalIdentityId = Guid.Parse("aaaaaaaa-0000-4000-8000-000000000103");
+        var statutory = new AppliedStatutoryFiscalFactsSnapshot(
+            Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(),
+            "SENIOR_CITIZEN", "STATUTORY_DISCOUNT", new("NATIONAL_LAW"), Guid.NewGuid(), Guid.NewGuid(),
+            12000, 10000, 1200, "VATABLE", 800, 11200, "PHP", issuedAt, "WEBPAY");
+        var header = new SalesInvoiceHeaderSnapshot(
+            fiscalIdentityId, Guid.NewGuid(), "v1", "ExitPass Parking Corporation", "PITX, Paranaque City",
+            "123-456-789-000", "POS-SN-001", "MIN-001", "PITX Parking Facility", "TERMINAL-01",
+            "BIR-ACC-001", new DateOnly(2026, 1, 15), new DateOnly(2031, 1, 15), "PTU-001",
+            new DateOnly(2026, 2, 10), "THIS SERVES AS YOUR SALES INVOICE",
+            "Customer service: support@example.test", "digital-sales-invoice-json-v1",
+            "digital-sales-invoice-presentation-json-v1", issuedAt, issuedAt, "ExitPass Software Inc.",
+            "Supplier Address, Philippines", "987-654-321-000");
+
+        return new DigitalSalesInvoiceRenderModel(
+            Guid.Parse("aaaaaaaa-0000-4000-8000-000000000001"), Guid.NewGuid(), Guid.NewGuid(), fiscalIdentityId,
+            Guid.NewGuid(), "sales_invoice", Guid.NewGuid(), "issued", "assigned", Guid.NewGuid(), 1,
+            "SI-00000001", "PITX-SI", "SI-", null, issuedAt, "pos-server", new DateOnly(2026, 9, 10),
+            "PARKING-SESSION-001", "PAYMENT-ATTEMPT-001", "PAYMENT-CONFIRMATION-001", "FINALITY-001", null,
+            null, null, null, "not_voided", null, null, issuedAt, issuedAt,
+            [new(1, Guid.NewGuid(), null, "Parking fee - regular parking", 1m, 11200, 12000, 800, 0, 11200, "PHP", null)],
+            [new(null, Guid.NewGuid(), 10000, 800, 1200, "PHP", "OSCA-0001", null, null,
+                "statutory_discount_and_vat_privilege", "Senior Discount")],
+            [new(null, Guid.NewGuid(), Guid.NewGuid(), 12m, 10000, 1200, "PHP", "vatable")],
+            [new(Guid.NewGuid(), "gcash", 11200, "PHP", null, null, "FINALITY-001", "PayMongo")],
+            [new(Guid.NewGuid(), 11200, "PHP", "payable_total")],
+            new("canonical", [], ["THANK YOU FOR CHOOSING OUR SERVICE", "===== NOTHING FOLLOWS ====="]),
+            header, statutory, InvoiceCustomerInformation: new("Juan Dela Cruz", "123 Sample Street",
+                "123-456-789-000", "Retail", "OSCA-0001"),
+            FiscalContent: new("PITX", "TICKET-0001", "ABC-1234", "2026-09-10 00:00:00 UTC",
+                "2026-09-10 01:00:00 UTC", "01:00:00", "GCASH", 12000, 800, 10000, 1200, 0, 0,
+                11200, 11200, 12000, 800, "PHP", true));
+    }
 
     private static int Count(string text, string value) =>
         (text.Length - text.Replace(value, string.Empty, StringComparison.Ordinal).Length) / value.Length;

@@ -276,6 +276,18 @@ public sealed class PostgresFiscalDocumentRepository : IFiscalDocumentRepository
                 AddIdempotencyCompletionParameters(completeIdempotencyCommand, resolvedDraft, idempotency);
                 await completeIdempotencyCommand.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
 
+                var canonicalCodeKeys = await ResolveCanonicalSalesInvoiceCodeKeysAsync(
+                    connection,
+                    transaction,
+                    resolvedDraft,
+                    cancellationToken).ConfigureAwait(false);
+                var canonicalSalesInvoice = DigitalSalesInvoiceRenderModelFactory.Create(
+                    resolvedDraft,
+                    canonicalCodeKeys);
+                var printableSalesInvoiceText = new CanonicalSalesInvoiceTextRenderer()
+                    .Render(canonicalSalesInvoice)
+                    .Text;
+
                 var electronicJournalEventReference = await PostgresElectronicJournalWriter.AppendAsync(
                     connection,
                     transaction,
@@ -296,8 +308,7 @@ public sealed class PostgresFiscalDocumentRepository : IFiscalDocumentRepository
                         FiscalSequencePolicyId: resolvedDraft.ResolvedFiscalSequencePolicyId,
                         BusinessDayDate: resolvedDraft.BusinessDayDate,
                         IdempotencyReference: idempotency.Key,
-                        PrintableSalesInvoiceText: new CanonicalSalesInvoiceTextRenderer().Render(
-                            new CanonicalSalesInvoiceTextFactory().Create(resolvedDraft)).Text),
+                        PrintableSalesInvoiceText: printableSalesInvoiceText),
                     cancellationToken).ConfigureAwait(false);
 
                 resolvedDraft = resolvedDraft with
@@ -1030,6 +1041,39 @@ public sealed class PostgresFiscalDocumentRepository : IFiscalDocumentRepository
         throw new FiscalDocumentFiscalContextException(
             FiscalDocumentCreationErrorCode.AppliedStatutoryControlledCodeUnavailable,
             "Applied statutory fiscal facts require active governed POS Server controlled codes.");
+    }
+
+    private static async Task<IReadOnlyDictionary<Guid, string>> ResolveCanonicalSalesInvoiceCodeKeysAsync(
+        NpgsqlConnection connection,
+        NpgsqlTransaction transaction,
+        FiscalDocumentDraft draft,
+        CancellationToken cancellationToken)
+    {
+        var codeIds = draft.Tenders.Select(value => value.TenderTypeCodeId)
+            .Concat(draft.TaxDetails.Select(value => value.TaxClassificationCodeId))
+            .Concat(draft.DiscountPrivilegeDetails.Select(value => value.DiscountPrivilegeTypeCodeId))
+            .Concat(draft.Totals.Select(value => value.TotalTypeCodeId))
+            .Distinct()
+            .ToArray();
+        if (codeIds.Length == 0) return new Dictionary<Guid, string>();
+
+        await using var command = new NpgsqlCommand(
+            "select controlled_code_id, code_key from pos.controlled_codes where controlled_code_id = any(@code_ids);",
+            connection,
+            transaction);
+        command.Parameters.AddWithValue(
+            "code_ids",
+            NpgsqlDbType.Array | NpgsqlDbType.Uuid,
+            codeIds);
+
+        var result = new Dictionary<Guid, string>();
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
+        while (await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
+            result.Add(reader.GetGuid(0), reader.GetString(1));
+
+        if (result.Count != codeIds.Length)
+            throw new InvalidOperationException("Canonical Sales Invoice controlled classifications are unavailable.");
+        return result;
     }
 
     private static async Task<long> ReadScalarInt64Async(

@@ -589,23 +589,26 @@ public sealed class PostgresFiscalDocumentReader : IFiscalDocumentReader
             connection,
             """
             select
-                fiscal_discount_privilege_detail_id,
-                fiscal_document_id,
-                fiscal_document_line_id,
-                discount_privilege_type_code_id,
-                basis_amount_minor_units,
-                discount_amount_minor_units,
-                vat_privilege_amount_minor_units,
-                currency_code,
-                beneficiary_ref,
-                evidence_ref,
-                approval_ref,
-                discount_privilege_context::text,
-                created_at,
-                updated_at
-            from pos.fiscal_discount_privilege_details
-            where fiscal_document_id = @fiscal_document_id
-            order by created_at, fiscal_discount_privilege_detail_id;
+                discount.fiscal_discount_privilege_detail_id,
+                discount.fiscal_document_id,
+                discount.fiscal_document_line_id,
+                discount.discount_privilege_type_code_id,
+                discount.basis_amount_minor_units,
+                discount.discount_amount_minor_units,
+                discount.vat_privilege_amount_minor_units,
+                discount.currency_code,
+                discount.beneficiary_ref,
+                discount.evidence_ref,
+                discount.approval_ref,
+                discount.discount_privilege_context::text,
+                discount.created_at,
+                discount.updated_at,
+                privilege_code.code_key
+            from pos.fiscal_discount_privilege_details discount
+            left join pos.controlled_codes privilege_code
+                on privilege_code.controlled_code_id = discount.discount_privilege_type_code_id
+            where discount.fiscal_document_id = @fiscal_document_id
+            order by discount.created_at, discount.fiscal_discount_privilege_detail_id;
             """,
             fiscalDocumentId);
 
@@ -627,7 +630,8 @@ public sealed class PostgresFiscalDocumentReader : IFiscalDocumentReader
                 GetSafeString(reader, 10),
                 GetSafeString(reader, 11),
                 reader.GetFieldValue<DateTimeOffset>(12),
-                reader.GetFieldValue<DateTimeOffset>(13)));
+                reader.GetFieldValue<DateTimeOffset>(13),
+                GetSafeString(reader, 14)));
         }
 
         return results;
@@ -642,17 +646,20 @@ public sealed class PostgresFiscalDocumentReader : IFiscalDocumentReader
             connection,
             """
             select
-                fiscal_total_id,
-                fiscal_document_id,
-                total_type_code_id,
-                amount_minor_units,
-                currency_code,
-                total_context::text,
-                created_at,
-                updated_at
-            from pos.fiscal_totals
-            where fiscal_document_id = @fiscal_document_id
-            order by total_type_code_id, fiscal_total_id;
+                total.fiscal_total_id,
+                total.fiscal_document_id,
+                total.total_type_code_id,
+                total.amount_minor_units,
+                total.currency_code,
+                total.total_context::text,
+                total.created_at,
+                total.updated_at,
+                total_code.code_key
+            from pos.fiscal_totals total
+            left join pos.controlled_codes total_code
+                on total_code.controlled_code_id = total.total_type_code_id
+            where total.fiscal_document_id = @fiscal_document_id
+            order by total.total_type_code_id, total.fiscal_total_id;
             """,
             fiscalDocumentId);
 
@@ -668,7 +675,8 @@ public sealed class PostgresFiscalDocumentReader : IFiscalDocumentReader
                 reader.GetString(4),
                 GetSafeString(reader, 5),
                 reader.GetFieldValue<DateTimeOffset>(6),
-                reader.GetFieldValue<DateTimeOffset>(7)));
+                reader.GetFieldValue<DateTimeOffset>(7),
+                GetSafeString(reader, 8)));
         }
 
         return results;
