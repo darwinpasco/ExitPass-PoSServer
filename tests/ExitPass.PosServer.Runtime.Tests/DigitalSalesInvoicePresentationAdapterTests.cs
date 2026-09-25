@@ -9,7 +9,7 @@ public sealed class DigitalSalesInvoicePresentationAdapterTests
     [Fact]
     public void CustomerInformationAndOrdinaryVatBreakdownArePresentedFromAuthoritativeTaxFacts()
     {
-        var render = ValidRenderModel(assignedNumber: true) with
+        var render = DigitalSalesInvoiceRenderModelFactory.Complete(ValidRenderModel(assignedNumber: true) with
         {
             InvoiceCustomerInformation = new InvoiceCustomerInformationSnapshot(
                 "Juan Dela Cruz", "100 Sample Street", "123-456-789", "Sample Trading", null),
@@ -21,7 +21,7 @@ public sealed class DigitalSalesInvoicePresentationAdapterTests
                     TaxAmountMinorUnits = 1500
                 }
             ]
-        };
+        });
 
         var result = new DigitalSalesInvoicePresentationAdapter().Adapt(
             DigitalSalesInvoiceRenderResult.Success(render),
@@ -46,7 +46,7 @@ public sealed class DigitalSalesInvoicePresentationAdapterTests
     [Fact]
     public void StatutoryVatExemptBreakdownAndApprovedOscaPwdIdUseAuthoritativeFacts()
     {
-        var render = ValidRenderModel(assignedNumber: true) with
+        var render = DigitalSalesInvoiceRenderModelFactory.Complete(ValidRenderModel(assignedNumber: true) with
         {
             AppliedStatutoryFiscalFacts = StatutoryFacts(),
             InvoiceCustomerInformation = new InvoiceCustomerInformationSnapshot(
@@ -59,7 +59,7 @@ public sealed class DigitalSalesInvoicePresentationAdapterTests
                     TaxAmountMinorUnits = 0
                 }
             ]
-        };
+        });
 
         var result = new DigitalSalesInvoicePresentationAdapter().Adapt(
             DigitalSalesInvoiceRenderResult.Success(render),
@@ -347,7 +347,7 @@ public sealed class DigitalSalesInvoicePresentationAdapterTests
         presentation.Sections.Single(section => section.Name == name);
 
     private static DigitalSalesInvoiceRenderModel ValidRenderModel(bool assignedNumber) =>
-        new(
+        DigitalSalesInvoiceRenderModelFactory.Complete(new(
             Guid.Parse("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"),
             Guid.Parse("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb"),
             Guid.Parse("99999999-9999-9999-9999-999999999999"),
@@ -400,7 +400,7 @@ public sealed class DigitalSalesInvoicePresentationAdapterTests
                 [
                     "Digital Sales Invoice rendering foundation.",
                     "Final statutory footer text and accredited template remain subject to compliance approval."
-                ]));
+                ])));
 
     private static DigitalSalesInvoiceLineRenderModel Line(int sequence, string description, long grossAmountMinorUnits) =>
         new(

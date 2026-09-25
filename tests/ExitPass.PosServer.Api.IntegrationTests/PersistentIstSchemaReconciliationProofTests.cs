@@ -192,7 +192,7 @@ public sealed class PersistentIstSchemaReconciliationProofTests
                 }).ToArray()
             };
             var expectedPrintableText = scope.ServiceProvider.GetRequiredService<CanonicalSalesInvoiceTextRenderer>()
-                .Render(scope.ServiceProvider.GetRequiredService<CanonicalSalesInvoiceTextFactory>().Create(exactCreationRender)).Text;
+                .Render(exactCreationRender).Text;
             await using var printableCommand = new NpgsqlCommand(
                 "select printable_sales_invoice_text from pos.electronic_journal_records where event_reference=@event", connection);
             printableCommand.Parameters.AddWithValue("event", body.ElectronicJournalEventReference!);
