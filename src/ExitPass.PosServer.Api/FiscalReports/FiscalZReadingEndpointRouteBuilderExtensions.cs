@@ -12,6 +12,12 @@ public static class FiscalZReadingEndpointRouteBuilderExtensions
             FiscalReportingHistoryEndpoint.ReadAsync(sitePosServerId, fiscalIdentityId, currencyCode, "Z", service, context, ct))
             .RequireAuthorization(FiscalZReadingAuthorization.ReadPolicyName);
 
+        group.MapGet("/closeable-periods", (Guid sitePosServerId, Guid fiscalIdentityId, string? currencyCode,
+            CloseableFiscalBusinessDateService service, HttpContext context, CancellationToken ct) =>
+            CloseableFiscalBusinessDateEndpoint.ReadAsync(
+                sitePosServerId, fiscalIdentityId, currencyCode, service, context, ct))
+            .RequireAuthorization(FiscalZReadingAuthorization.ReadPolicyName);
+
         group.MapPost("/", async (CloseFiscalZReadingRequest request, FiscalZReadingService service, HttpContext context, CancellationToken cancellationToken) =>
         {
             var response = await FiscalZReadingEndpoint.CloseAsync(request, service, context, cancellationToken).ConfigureAwait(false);
