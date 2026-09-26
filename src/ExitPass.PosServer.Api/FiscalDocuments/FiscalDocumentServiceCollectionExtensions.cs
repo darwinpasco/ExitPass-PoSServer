@@ -29,6 +29,7 @@ public static class FiscalDocumentServiceCollectionExtensions
             services.TryAddScoped<ISalesInvoiceHeaderProfileRepository, PersistenceNotConfiguredSalesInvoiceHeaderProfileRepository>();
             services.TryAddScoped<IFiscalXReadingRepository, UnavailableFiscalXReadingRepository>();
             services.TryAddScoped<IFiscalReportingHistoryRepository, UnavailableFiscalReportingHistoryRepository>();
+            services.TryAddScoped<ICloseableFiscalBusinessDateRepository, UnavailableCloseableFiscalBusinessDateRepository>();
             services.TryAddScoped<IFiscalZCloseStateRepository, UnavailableFiscalZCloseStateRepository>();
             services.TryAddScoped<IFiscalZReadingRepository, UnavailableFiscalZReadingRepository>();
             services.TryAddScoped<IBirSalesSummaryRepository, UnavailableBirSalesSummaryRepository>();
@@ -43,6 +44,7 @@ public static class FiscalDocumentServiceCollectionExtensions
             services.TryAddScoped<ISalesInvoiceHeaderProfileRepository, PersistenceNotConfiguredSalesInvoiceHeaderProfileRepository>();
             services.TryAddScoped<IFiscalXReadingRepository, UnavailableFiscalXReadingRepository>();
             services.TryAddScoped<IFiscalReportingHistoryRepository, UnavailableFiscalReportingHistoryRepository>();
+            services.TryAddScoped<ICloseableFiscalBusinessDateRepository, UnavailableCloseableFiscalBusinessDateRepository>();
             services.TryAddScoped<IFiscalZCloseStateRepository, UnavailableFiscalZCloseStateRepository>();
             services.TryAddScoped<IFiscalZReadingRepository, UnavailableFiscalZReadingRepository>();
             services.TryAddScoped<IBirSalesSummaryRepository, UnavailableBirSalesSummaryRepository>();
@@ -61,6 +63,7 @@ public static class FiscalDocumentServiceCollectionExtensions
             services.TryAddScoped<ISalesInvoiceHeaderProfileRepository, PostgresSalesInvoiceHeaderProfileRepository>();
             services.TryAddScoped<IFiscalXReadingRepository, PostgresFiscalXReadingRepository>();
             services.TryAddScoped<IFiscalReportingHistoryRepository, PostgresFiscalReportingHistoryRepository>();
+            services.TryAddScoped<ICloseableFiscalBusinessDateRepository, PostgresCloseableFiscalBusinessDateRepository>();
             services.TryAddScoped<IFiscalZCloseStateRepository, PostgresFiscalZCloseStateRepository>();
             services.TryAddScoped<IFiscalZReadingRepository, PostgresFiscalZReadingRepository>();
             services.TryAddScoped<IBirSalesSummaryRepository, PostgresBirSalesSummaryRepository>();
@@ -87,6 +90,7 @@ public static class FiscalDocumentServiceCollectionExtensions
         services.AddScoped<FiscalXReadingAggregationService>();
         services.AddScoped<FiscalXReadingService>();
         services.AddScoped<FiscalReportingHistoryService>();
+        services.AddScoped<CloseableFiscalBusinessDateService>();
         services.AddScoped<FiscalZCloseStateInitializationService>();
         services.AddScoped<FiscalZReadingService>();
         services.AddScoped<BirSalesSummaryService>();

@@ -17,6 +17,7 @@ public sealed class FiscalZReadingPostgresIntegrationTests
 {
     private const string ConnectionVariable = "POSSERVER_Z_READING_TEST_DB_URL";
     private static readonly Guid SiteId = Guid.Parse("73000000-0000-4000-8000-000000000001");
+    private static readonly Guid SiteBId = Guid.Parse("73000000-0000-4000-8000-000000000101");
     private static readonly Guid IdentityId = Guid.Parse("73000000-0000-4000-8000-000000000002");
     private static readonly Guid PeriodId = Guid.Parse("73000000-0000-4000-8000-000000000010");
 
@@ -286,6 +287,191 @@ public sealed class FiscalZReadingPostgresIntegrationTests
         Assert.Equal(System.Text.Json.JsonValueKind.Null, noCandidate.RootElement.GetProperty("currentPeriod").ValueKind);
     }
 
+    [Fact]
+    public async Task CloseablePeriodsReturnAllAndOnlyTheRequestedSitesContiguousEndedPeriods()
+    {
+        var connectionString = Environment.GetEnvironmentVariable(ConnectionVariable);
+        if (string.IsNullOrWhiteSpace(connectionString)) return;
+
+        var siteASecondPeriodId = Guid.Parse("73000000-0000-4000-8000-000000000120");
+        var siteAThirdPeriodId = Guid.Parse("73000000-0000-4000-8000-000000000121");
+        var siteAActivePeriodId = Guid.Parse("73000000-0000-4000-8000-000000000122");
+        var siteBEndedPeriodId = Guid.Parse("73000000-0000-4000-8000-000000000123");
+        var siteBActivePeriodId = Guid.Parse("73000000-0000-4000-8000-000000000124");
+
+        await RebuildAsync(connectionString);
+        await ExecuteFileAsync(connectionString, Path.Combine(
+            FindRepositoryRoot(),
+            "tests",
+            "ExitPass.PosServer.Api.IntegrationTests",
+            "Fixtures",
+            "fiscal_x_reading_runtime_fixture.sql"));
+        await ExecuteAsync(connectionString, $"""
+            UPDATE pos.site_pos_servers
+            SET business_day_cutoff_local_time='07:00:00'
+            WHERE site_pos_server_id='{SiteId:D}';
+            UPDATE pos.fiscal_reporting_periods
+            SET business_day_cutoff_local_time='07:00:00'
+            WHERE fiscal_reporting_period_id='{PeriodId:D}';
+
+            INSERT INTO pos.site_pos_servers(
+                site_pos_server_id,site_pos_server_code,display_name,reporting_timezone_name,
+                business_day_cutoff_local_time,is_active)
+            VALUES('{SiteBId:D}','closeable-proof-site-b','Closeable Proof Site B','Asia/Manila','12:00:00',true);
+
+            INSERT INTO pos.site_pos_server_fiscal_identity_history(
+                site_pos_server_fiscal_identity_history_id,site_pos_server_id,fiscal_identity_id,
+                effective_start_at,assignment_reason_text)
+            VALUES
+                ('73000000-0000-4000-8000-000000000190','{SiteId:D}','{IdentityId:D}',
+                 '2026-01-01T00:00:00Z','Synthetic closeable Site A scope'),
+                ('73000000-0000-4000-8000-000000000191','{SiteBId:D}','{IdentityId:D}',
+                 '2026-01-01T00:00:00Z','Synthetic closeable Site B scope');
+
+            INSERT INTO pos.fiscal_reporting_periods(
+                fiscal_reporting_period_id,fiscal_reporting_contract_version_id,site_pos_server_id,
+                fiscal_identity_id,period_status_code_id,business_day_date,period_start_at,period_end_at,
+                reporting_timezone_name,business_day_cutoff_local_time,currency_code,period_sequence,
+                expected_prior_period_id,opened_at,created_by_ref,updated_by_ref)
+            VALUES
+                ('{siteASecondPeriodId:D}','f6766f48-62f0-513f-b9eb-e61c2f3e8c66','{SiteId:D}','{IdentityId:D}',
+                 '1a6f7021-bc84-5c01-afaa-c5d6685633c8','2026-08-04','2026-08-03T23:00:00Z',
+                 '2026-08-04T23:00:00Z','Asia/Manila','07:00:00','PHP',2,'{PeriodId:D}',
+                 '2026-08-03T23:00:00Z','closeable-proof','closeable-proof'),
+                ('{siteAThirdPeriodId:D}','f6766f48-62f0-513f-b9eb-e61c2f3e8c66','{SiteId:D}','{IdentityId:D}',
+                 '1a6f7021-bc84-5c01-afaa-c5d6685633c8','2026-08-05','2026-08-04T23:00:00Z',
+                 '2026-08-05T23:00:00Z','Asia/Manila','07:00:00','PHP',3,'{siteASecondPeriodId:D}',
+                 '2026-08-04T23:00:00Z','closeable-proof','closeable-proof'),
+                ('{siteAActivePeriodId:D}','f6766f48-62f0-513f-b9eb-e61c2f3e8c66','{SiteId:D}','{IdentityId:D}',
+                 '1a6f7021-bc84-5c01-afaa-c5d6685633c8',current_date,transaction_timestamp()-interval '1 hour',
+                 transaction_timestamp()+interval '1 hour','Asia/Manila','07:00:00','PHP',4,'{siteAThirdPeriodId:D}',
+                 transaction_timestamp()-interval '1 hour','closeable-proof','closeable-proof'),
+                ('{siteBEndedPeriodId:D}','f6766f48-62f0-513f-b9eb-e61c2f3e8c66','{SiteBId:D}','{IdentityId:D}',
+                 '1a6f7021-bc84-5c01-afaa-c5d6685633c8','2026-08-04','2026-08-04T04:00:00Z',
+                 '2026-08-05T04:00:00Z','Asia/Manila','12:00:00','PHP',1,NULL,
+                 '2026-08-04T04:00:00Z','closeable-proof','closeable-proof'),
+                ('{siteBActivePeriodId:D}','f6766f48-62f0-513f-b9eb-e61c2f3e8c66','{SiteBId:D}','{IdentityId:D}',
+                 '1a6f7021-bc84-5c01-afaa-c5d6685633c8','2026-08-05',transaction_timestamp()-interval '1 hour',
+                 transaction_timestamp()+interval '1 hour','Asia/Manila','12:00:00','PHP',2,'{siteBEndedPeriodId:D}',
+                 transaction_timestamp()-interval '1 hour','closeable-proof','closeable-proof');
+
+            INSERT INTO pos.fiscal_documents(
+                fiscal_document_id,site_pos_server_id,fiscal_identity_id,fiscal_document_type_code_id,
+                fiscal_document_status_code_id,fiscal_sequence_policy_id,fiscal_sequence_value,
+                fiscal_document_number,fiscal_series,fiscal_number_assigned_at,business_day_date,
+                currency_code,fiscal_reporting_period_id,payment_finality_ref,completion_basis,
+                completion_authority_ref,created_at,updated_at)
+            VALUES(
+                '73000000-0000-4000-8000-000000000130','{SiteId:D}','{IdentityId:D}',
+                '73000000-0000-4000-8000-000000000201','73000000-0000-4000-8000-000000000202',
+                '73000000-0000-4000-8000-000000000003',3,'SI-00000003','SI','2026-08-05T01:00:00Z',
+                '2026-08-05','PHP','{siteAThirdPeriodId:D}','payment-finality-closeable-003',
+                'PAYMENT_FINALITY','payment-finality-closeable-003','2026-08-05T01:00:00Z','2026-08-05T01:00:00Z');
+            INSERT INTO pos.fiscal_document_lines(
+                fiscal_document_line_id,fiscal_document_id,line_sequence,line_type_code_id,description,
+                gross_amount_minor_units,discount_amount_minor_units,net_amount_minor_units,currency_code,
+                is_active,created_at,updated_at)
+            VALUES('73000000-0000-4000-8000-000000000131','73000000-0000-4000-8000-000000000130',1,
+                '73000000-0000-4000-8000-000000000204','Synthetic single transaction',100,0,100,'PHP',true,
+                '2026-08-05T01:00:00Z','2026-08-05T01:00:00Z');
+            INSERT INTO pos.fiscal_tenders(
+                fiscal_tender_id,fiscal_document_id,tender_type_code_id,amount_minor_units,currency_code,
+                created_at,updated_at)
+            VALUES('73000000-0000-4000-8000-000000000132','73000000-0000-4000-8000-000000000130',
+                '73000000-0000-4000-8000-000000000205',100,'PHP','2026-08-05T01:00:00Z','2026-08-05T01:00:00Z');
+            INSERT INTO pos.fiscal_tax_details(
+                fiscal_tax_detail_id,fiscal_document_id,tax_type_code_id,tax_classification_code_id,
+                taxable_amount_minor_units,tax_amount_minor_units,currency_code,created_at,updated_at)
+            VALUES('73000000-0000-4000-8000-000000000133','73000000-0000-4000-8000-000000000130',
+                '73000000-0000-4000-8000-000000000207','73000000-0000-4000-8000-000000000208',
+                100,0,'PHP','2026-08-05T01:00:00Z','2026-08-05T01:00:00Z');
+            """);
+
+        await using var app = await StartApiAsync(connectionString);
+        using var client = CreateClient(app);
+        Authorize(client);
+        using var siteAStateResponse = await client.PostAsJsonAsync(
+            "/v1/admin/fiscal-z-close-states/initialize",
+            new InitializeFiscalZCloseStateRequest(
+                "closeable-site-a-state", SiteId, IdentityId, "PHP", "approved_new_scope_zero", 0, 0, 0,
+                "approved-closeable-site-a"));
+        Assert.True(siteAStateResponse.IsSuccessStatusCode, await siteAStateResponse.Content.ReadAsStringAsync());
+        using var siteBStateResponse = await client.PostAsJsonAsync(
+            "/v1/admin/fiscal-z-close-states/initialize",
+            new InitializeFiscalZCloseStateRequest(
+                "closeable-site-b-state", SiteBId, IdentityId, "PHP", "approved_new_scope_zero", 0, 0, 0,
+                "approved-closeable-site-b"));
+        Assert.True(siteBStateResponse.IsSuccessStatusCode, await siteBStateResponse.Content.ReadAsStringAsync());
+
+        var siteAQuery = $"?sitePosServerId={SiteId:D}&fiscalIdentityId={IdentityId:D}&currencyCode=PHP";
+        var siteBQuery = $"?sitePosServerId={SiteBId:D}&fiscalIdentityId={IdentityId:D}&currencyCode=PHP";
+        using var siteAResponse = await client.GetAsync($"/v1/fiscal-reports/z-readings/closeable-periods{siteAQuery}");
+        using var siteBResponse = await client.GetAsync($"/v1/fiscal-reports/z-readings/closeable-periods{siteBQuery}");
+        var siteAText = await siteAResponse.Content.ReadAsStringAsync();
+        var siteBText = await siteBResponse.Content.ReadAsStringAsync();
+        Assert.True(siteAResponse.IsSuccessStatusCode, siteAText);
+        Assert.True(siteBResponse.IsSuccessStatusCode, siteBText);
+
+        using var siteAJson = System.Text.Json.JsonDocument.Parse(siteAText);
+        using var siteBJson = System.Text.Json.JsonDocument.Parse(siteBText);
+        Assert.Equal(SiteId, siteAJson.RootElement.GetProperty("sitePosServerId").GetGuid());
+        Assert.Equal(SiteBId, siteBJson.RootElement.GetProperty("sitePosServerId").GetGuid());
+        var siteAPeriods = siteAJson.RootElement.GetProperty("fiscalBusinessDates").EnumerateArray().ToArray();
+        var siteBPeriods = siteBJson.RootElement.GetProperty("fiscalBusinessDates").EnumerateArray().ToArray();
+
+        Assert.Equal([PeriodId, siteASecondPeriodId, siteAThirdPeriodId],
+            siteAPeriods.Select(row => row.GetProperty("fiscalReportingPeriodId").GetGuid()).ToArray());
+        Assert.Equal([2L, 0L, 1L],
+            siteAPeriods.Select(row => row.GetProperty("transactionCount").GetInt64()).ToArray());
+        Assert.Equal([1L, 2L, 3L],
+            siteAPeriods.Select(row => row.GetProperty("expectedStateVersion").GetInt64()).ToArray());
+        Assert.Equal(siteAPeriods.Length,
+            siteAPeriods.Select(row => row.GetProperty("fiscalReportingPeriodId").GetGuid()).Distinct().Count());
+        Assert.Equal("2026-08-03", siteAPeriods[0].GetProperty("fiscalBusinessDate").GetString());
+        Assert.Equal(DateTimeOffset.Parse("2026-08-03T00:00:00Z"),
+            siteAPeriods[0].GetProperty("periodStart").GetDateTimeOffset());
+        Assert.Equal(DateTimeOffset.Parse("2026-08-04T00:00:00Z"),
+            siteAPeriods[0].GetProperty("periodEnd").GetDateTimeOffset());
+        Assert.All(siteAPeriods, row => Assert.Equal("OPEN", row.GetProperty("status").GetString()));
+        Assert.DoesNotContain(siteAPeriods,
+            row => row.GetProperty("fiscalReportingPeriodId").GetGuid() == siteAActivePeriodId);
+
+        var siteBOnly = Assert.Single(siteBPeriods);
+        Assert.Equal(siteBEndedPeriodId, siteBOnly.GetProperty("fiscalReportingPeriodId").GetGuid());
+        Assert.Equal(0, siteBOnly.GetProperty("transactionCount").GetInt64());
+        Assert.DoesNotContain(siteBPeriods,
+            row => row.GetProperty("fiscalReportingPeriodId").GetGuid() == siteBActivePeriodId);
+        Assert.DoesNotContain(siteBPeriods,
+            row => siteAPeriods.Select(siteA => siteA.GetProperty("fiscalReportingPeriodId").GetGuid())
+                .Contains(row.GetProperty("fiscalReportingPeriodId").GetGuid()));
+        Assert.DoesNotContain(siteAPeriods,
+            row => row.GetProperty("fiscalReportingPeriodId").GetGuid() == siteBEndedPeriodId);
+        Assert.Contains(siteAPeriods, row => row.GetProperty("fiscalBusinessDate").GetString() == "2026-08-05");
+        Assert.DoesNotContain(siteBPeriods, row => row.GetProperty("fiscalBusinessDate").GetString() == "2026-08-05");
+        Assert.Equal("07:00:00", await ScalarAsync<string>(connectionString,
+            $"SELECT business_day_cutoff_local_time::text FROM pos.site_pos_servers WHERE site_pos_server_id='{SiteId:D}'"));
+        Assert.Equal("12:00:00", await ScalarAsync<string>(connectionString,
+            $"SELECT business_day_cutoff_local_time::text FROM pos.site_pos_servers WHERE site_pos_server_id='{SiteBId:D}'"));
+
+        using var closedResponse = await client.PostAsJsonAsync(
+            "/v1/fiscal-reports/z-readings/",
+            new CloseFiscalZReadingRequest(
+                "closeable-site-a-oldest", SiteId, IdentityId, "PHP", PeriodId, 1));
+        Assert.Equal(HttpStatusCode.Created, closedResponse.StatusCode);
+
+        using var rereadResponse = await client.GetAsync($"/v1/fiscal-reports/z-readings/closeable-periods{siteAQuery}");
+        var rereadText = await rereadResponse.Content.ReadAsStringAsync();
+        Assert.True(rereadResponse.IsSuccessStatusCode, rereadText);
+        using var rereadJson = System.Text.Json.JsonDocument.Parse(rereadText);
+        var remaining = rereadJson.RootElement.GetProperty("fiscalBusinessDates").EnumerateArray().ToArray();
+        Assert.Equal([siteASecondPeriodId, siteAThirdPeriodId],
+            remaining.Select(row => row.GetProperty("fiscalReportingPeriodId").GetGuid()).ToArray());
+        Assert.Equal([2L, 3L],
+            remaining.Select(row => row.GetProperty("expectedStateVersion").GetInt64()).ToArray());
+        Assert.Equal(2L, await ScalarAsync<long>(connectionString,
+            $"SELECT state_version FROM pos.fiscal_z_close_states WHERE site_pos_server_id='{SiteId:D}' AND fiscal_identity_id='{IdentityId:D}' AND currency_code='PHP'"));
+    }
+
     private static async Task ProveCompetingCloseAsync(string connectionString, HttpClient client)
     {
         const string sql = """
@@ -375,7 +561,7 @@ public sealed class FiscalZReadingPostgresIntegrationTests
             ["ConnectionStrings:PosServer"]=connectionString,["PosServer:Admin:ApiKeys:0:Principal"]="z-proof-service",["PosServer:Admin:ApiKeys:0:Key"]="synthetic-z-proof-key",
             ["PosServer:Admin:ApiKeys:0:Permissions:0"]=FiscalZCloseStateInitializationAuthorization.Permission,["PosServer:Admin:ApiKeys:0:Permissions:1"]=FiscalZReadingAuthorization.ClosePermission,["PosServer:Admin:ApiKeys:0:Permissions:2"]=FiscalZReadingAuthorization.ReadPermission,
             ["PosServer:Admin:ApiKeys:0:Permissions:3"]=FiscalXReadingAuthorization.GeneratePermission,["PosServer:Admin:ApiKeys:0:Permissions:4"]=FiscalXReadingAuthorization.ReadPermission,
-            ["PosServer:Admin:ApiKeys:0:SitePosServerIds:0"]=SiteId.ToString("D"),["PosServer:Admin:ApiKeys:0:FiscalIdentityIds:0"]=IdentityId.ToString("D"),["PosServer:Admin:ApiKeys:0:CurrencyCodes:0"]="PHP"
+            ["PosServer:Admin:ApiKeys:0:SitePosServerIds:0"]=SiteId.ToString("D"),["PosServer:Admin:ApiKeys:0:SitePosServerIds:1"]=SiteBId.ToString("D"),["PosServer:Admin:ApiKeys:0:FiscalIdentityIds:0"]=IdentityId.ToString("D"),["PosServer:Admin:ApiKeys:0:CurrencyCodes:0"]="PHP"
         });
         builder.Services.AddPosServerFiscalDocumentApi(builder.Configuration);var app=builder.Build();app.UseAuthentication();app.UseAuthorization();app.MapFiscalZCloseStateInitializationEndpoints();app.MapFiscalXReadingEndpoints();app.MapFiscalZReadingEndpoints();await app.StartAsync();return app;
     }
