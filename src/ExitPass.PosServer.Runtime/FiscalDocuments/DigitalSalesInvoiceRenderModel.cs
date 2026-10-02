@@ -46,7 +46,8 @@ public sealed record DigitalSalesInvoiceRenderModel(
     string? DocumentContextJson = null,
     DigitalSalesInvoiceFiscalContentRenderModel? FiscalContent = null,
     string DocumentDesignation = "SALES INVOICE",
-    string CopyDesignation = "ORIGINAL");
+    string CopyDesignation = "ORIGINAL",
+    string? OriginalCanonicalText = null);
 
 public sealed record DigitalSalesInvoiceLineRenderModel(
     int LineSequence,
@@ -93,7 +94,8 @@ public sealed record DigitalSalesInvoiceTenderRenderModel(
     string? CentralPmsPaymentAttemptRef,
     string? CentralPmsPaymentConfirmationRef,
     string? PaymentFinalityRef,
-    string? ProviderRef);
+    string? ProviderRef,
+    string? TenderContextJson = null);
 
 public sealed record DigitalSalesInvoiceTotalRenderModel(
     Guid TotalTypeCodeId,

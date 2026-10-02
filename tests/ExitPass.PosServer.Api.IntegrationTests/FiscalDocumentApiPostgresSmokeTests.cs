@@ -503,6 +503,13 @@ public sealed class FiscalDocumentApiPostgresSmokeTests
         Assert.Equal(HttpStatusCode.Conflict, missing.StatusCode);
         Assert.Equal("fiscal_reporting_period_unavailable", missingBody?.Code);
 
+        using var future = await client.PostAsJsonAsync(
+            "/v1/fiscal-documents/",
+            CreateValidRequest("future-period") with { BusinessDayDate = DateOnly.FromDateTime(DateTime.UtcNow.AddDays(5)) });
+        var futureBody = await future.Content.ReadFromJsonAsync<CreateFiscalDocumentResponse>();
+        Assert.Equal(HttpStatusCode.Conflict, future.StatusCode);
+        Assert.Equal("fiscal_reporting_period_unavailable", futureBody?.Code);
+
         await using (var connection = new NpgsqlConnection(connectionString))
         {
             await connection.OpenAsync();
@@ -978,8 +985,11 @@ public sealed class FiscalDocumentApiPostgresSmokeTests
             "fiscal_sequence_state_not_found");
     }
 
-    [Fact]
-    public async Task FiscalDocumentCreationRollsToTimestampContainingPitxPeriodWhilePriorPeriodRemainsOpen()
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task FiscalDocumentCreationRollsToTimestampContainingPitxPeriodWhilePriorPeriodRemainsOpen(
+        bool suppliesExplicitCurrentBusinessDate)
     {
         if (!TryGetSmokeConnectionString(out var connectionString))
         {
@@ -988,45 +998,20 @@ public sealed class FiscalDocumentApiPostgresSmokeTests
 
         await RebuildDisposableDatabaseAsync(connectionString);
         await InsertDisposableSmokeFixtureAsync(connectionString);
-        var initialWindow = PostgresFiscalCloseBoundaryCoordinator.ResolveBusinessDayWindow(
-            DateTimeOffset.UtcNow,
-            "Asia/Manila",
-            new TimeOnly(7, 0));
-
-        await using (var setupConnection = new NpgsqlConnection(connectionString))
-        {
-            await setupConnection.OpenAsync();
-            await ExecuteSqlAsync(
-                setupConnection,
-                """
-                update pos.site_pos_servers
-                set reporting_timezone_name='Asia/Manila', business_day_cutoff_local_time='07:00:00'
-                where site_pos_server_id=@site;
-                update pos.fiscal_reporting_periods
-                set business_day_date=@prior_business_date,
-                    period_start_at=@prior_start,
-                    period_end_at=@prior_end,
-                    reporting_timezone_name='Asia/Manila',
-                    business_day_cutoff_local_time='07:00:00'
-                where fiscal_reporting_period_id=@period;
-                """,
-                command =>
-                {
-                    command.Parameters.AddWithValue("site", SitePosServerId);
-                    command.Parameters.AddWithValue("period", FiscalReportingPeriodId);
-                    command.Parameters.AddWithValue("prior_business_date", initialWindow.BusinessDayDate.AddDays(-1));
-                    command.Parameters.AddWithValue("prior_start", initialWindow.PeriodStartAt.AddDays(-1));
-                    command.Parameters.AddWithValue("prior_end", initialWindow.PeriodStartAt);
-                });
-        }
+        var initialWindow = await MoveFixturePeriodToPriorPitxBusinessDateAsync(connectionString);
+        await ConfigureStatutorySalesInvoiceHeaderAsync(connectionString);
 
         await using var app = await StartApiAsync(connectionString);
         using var client = CreateClient(app);
         using var response = await client.PostAsJsonAsync(
             "/v1/fiscal-documents/",
-            CreateValidRequest("cutoff-rollover") with { BusinessDayDate = null });
+            CreateValidRequest($"cutoff-rollover-{suppliesExplicitCurrentBusinessDate}") with
+            {
+                BusinessDayDate = suppliesExplicitCurrentBusinessDate ? initialWindow.BusinessDayDate : null
+            });
         var body = await response.Content.ReadFromJsonAsync<CreateFiscalDocumentResponse>();
 
+        WriteCreateResult($"cutoff-rollover-{suppliesExplicitCurrentBusinessDate}", response.StatusCode, body);
         Assert.Equal(HttpStatusCode.Accepted, response.StatusCode);
         Assert.NotNull(body?.FiscalDocumentId);
 
@@ -1083,6 +1068,66 @@ public sealed class FiscalDocumentApiPostgresSmokeTests
         Assert.Equal(new TimeOnly(7, 0), snapshotReader.GetFieldValue<TimeOnly>(1));
         Assert.Equal(periodStartAt, snapshotReader.GetFieldValue<DateTimeOffset>(2));
         Assert.Equal(periodEndAt, snapshotReader.GetFieldValue<DateTimeOffset>(3));
+    }
+
+    [Fact]
+    public async Task ConcurrentExplicitCurrentBusinessDateCreatesOneCanonicalOpenPeriod()
+    {
+        if (!TryGetSmokeConnectionString(out var connectionString))
+        {
+            return;
+        }
+
+        await RebuildDisposableDatabaseAsync(connectionString);
+        await InsertDisposableSmokeFixtureAsync(connectionString);
+        var currentWindow = await MoveFixturePeriodToPriorPitxBusinessDateAsync(connectionString);
+        await ConfigureStatutorySalesInvoiceHeaderAsync(connectionString);
+
+        await using var app = await StartApiAsync(connectionString);
+        using var client = CreateClient(app);
+        var firstTask = client.PostAsJsonAsync(
+            "/v1/fiscal-documents/",
+            CreateValidRequest("explicit-current-concurrent-a") with { BusinessDayDate = currentWindow.BusinessDayDate });
+        var secondTask = client.PostAsJsonAsync(
+            "/v1/fiscal-documents/",
+            CreateValidRequest("explicit-current-concurrent-b") with { BusinessDayDate = currentWindow.BusinessDayDate });
+        await Task.WhenAll(firstTask, secondTask);
+
+        using var firstResponse = await firstTask;
+        using var secondResponse = await secondTask;
+        var firstBody = await firstResponse.Content.ReadFromJsonAsync<CreateFiscalDocumentResponse>();
+        var secondBody = await secondResponse.Content.ReadFromJsonAsync<CreateFiscalDocumentResponse>();
+        WriteCreateResult("explicit-current-concurrent-a", firstResponse.StatusCode, firstBody);
+        WriteCreateResult("explicit-current-concurrent-b", secondResponse.StatusCode, secondBody);
+        Assert.Equal(HttpStatusCode.Accepted, firstResponse.StatusCode);
+        Assert.Equal(HttpStatusCode.Accepted, secondResponse.StatusCode);
+        Assert.NotNull(firstBody?.FiscalDocumentId);
+        Assert.NotNull(secondBody?.FiscalDocumentId);
+
+        await using var connection = new NpgsqlConnection(connectionString);
+        await connection.OpenAsync();
+        await using var command = new NpgsqlCommand(
+            """
+            select count(distinct p.fiscal_reporting_period_id),
+                   count(d.fiscal_document_id),
+                   bool_and(p.period_status_code_id=@open_status)
+            from pos.fiscal_reporting_periods p
+            left join pos.fiscal_documents d on d.fiscal_reporting_period_id=p.fiscal_reporting_period_id
+            where p.site_pos_server_id=@site
+              and p.fiscal_identity_id=@identity
+              and p.currency_code='PHP'
+              and p.business_day_date=@business_day_date;
+            """,
+            connection);
+        command.Parameters.AddWithValue("site", SitePosServerId);
+        command.Parameters.AddWithValue("identity", FiscalIdentityId);
+        command.Parameters.AddWithValue("business_day_date", currentWindow.BusinessDayDate);
+        command.Parameters.AddWithValue("open_status", Guid.Parse("1a6f7021-bc84-5c01-afaa-c5d6685633c8"));
+        await using var reader = await command.ExecuteReaderAsync();
+        Assert.True(await reader.ReadAsync());
+        Assert.Equal(1, reader.GetInt64(0));
+        Assert.Equal(2, reader.GetInt64(1));
+        Assert.True(reader.GetBoolean(2));
     }
 
     [Fact]
@@ -1178,6 +1223,41 @@ public sealed class FiscalDocumentApiPostgresSmokeTests
                 "select current_sequence_value from pos.fiscal_sequence_states where fiscal_sequence_policy_id = @id",
                 FiscalSequencePolicyId));
         }
+    }
+
+    private static async Task<(DateOnly BusinessDayDate, DateTimeOffset PeriodStartAt, DateTimeOffset PeriodEndAt)>
+        MoveFixturePeriodToPriorPitxBusinessDateAsync(string connectionString)
+    {
+        var currentWindow = PostgresFiscalCloseBoundaryCoordinator.ResolveBusinessDayWindow(
+            DateTimeOffset.UtcNow,
+            "Asia/Manila",
+            new TimeOnly(7, 0));
+
+        await using var connection = new NpgsqlConnection(connectionString);
+        await connection.OpenAsync();
+        await ExecuteSqlAsync(
+            connection,
+            """
+            update pos.site_pos_servers
+            set reporting_timezone_name='Asia/Manila', business_day_cutoff_local_time='07:00:00'
+            where site_pos_server_id=@site;
+            update pos.fiscal_reporting_periods
+            set business_day_date=@prior_business_date,
+                period_start_at=@prior_start,
+                period_end_at=@prior_end,
+                reporting_timezone_name='Asia/Manila',
+                business_day_cutoff_local_time='07:00:00'
+            where fiscal_reporting_period_id=@period;
+            """,
+            command =>
+            {
+                command.Parameters.AddWithValue("site", SitePosServerId);
+                command.Parameters.AddWithValue("period", FiscalReportingPeriodId);
+                command.Parameters.AddWithValue("prior_business_date", currentWindow.BusinessDayDate.AddDays(-1));
+                command.Parameters.AddWithValue("prior_start", currentWindow.PeriodStartAt.AddDays(-1));
+                command.Parameters.AddWithValue("prior_end", currentWindow.PeriodStartAt);
+            });
+        return currentWindow;
     }
 
     private bool TryGetSmokeConnectionString(out string connectionString)
@@ -1685,7 +1765,17 @@ public sealed class FiscalDocumentApiPostgresSmokeTests
                     12500,
                     "PHP",
                     new Dictionary<string, string> { ["source_system"] = "central_pms" })
-            ]);
+            ],
+            ReferenceContext: new Dictionary<string, string>
+            {
+                ["branch_site"] = "PITX Level 3",
+                ["ticket_number"] = $"ticket-{suffix}",
+                ["plate_number"] = "ABC-1234",
+                ["entry_time"] = "2026-09-29T00:42:30.7855730+00:00",
+                ["payment_time"] = "2026-09-30T14:39:48.6742010+00:00",
+                ["parking_duration"] = "37:57:17",
+                ["payment_method"] = "CASH"
+            });
 
     private static CreateFiscalDocumentRequest CreateValidStatutoryRequest(string suffix)
     {

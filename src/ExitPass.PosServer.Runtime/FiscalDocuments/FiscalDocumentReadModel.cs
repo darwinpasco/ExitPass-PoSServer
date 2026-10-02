@@ -48,7 +48,8 @@ public sealed record FiscalDocumentReadModel(
     string CompletionBasis = FiscalCompletionBasisCodes.PaymentFinality,
     string? CompletionAuthorityRef = null,
     string? ElectronicJournalEventReference = null,
-    InvoiceCustomerInformationSnapshot? InvoiceCustomerInformation = null);
+    InvoiceCustomerInformationSnapshot? InvoiceCustomerInformation = null,
+    string? OriginalCanonicalText = null);
 
 public sealed record FiscalDocumentStatusHistoryReadModel(
     Guid FiscalDocumentStatusHistoryId,

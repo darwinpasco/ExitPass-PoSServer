@@ -1,10 +1,16 @@
 using System.Reflection;
+using System.Security.Claims;
+using System.Security.Cryptography;
+using System.Text;
 using ExitPass.PosServer.Api.FiscalDocuments;
+using ExitPass.PosServer.Api.FiscalReports;
 using ExitPass.PosServer.Persistence.Postgres.FiscalDocuments;
 using ExitPass.PosServer.Runtime.FiscalDocuments;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.FileProviders;
+using Microsoft.Extensions.Hosting;
 using Xunit;
 
 namespace ExitPass.PosServer.Api.Tests;
@@ -291,6 +297,107 @@ public sealed class DigitalSalesInvoiceEndpointTests
     }
 
     [Fact]
+    public async Task PresentationEndpointIncludesCanonicalPrintableTextFromCurrentRenderModel()
+    {
+        var document = ValidReadModel(assignedNumber: true) with
+        {
+            SalesInvoiceHeaderSnapshot = ValidHeaderSnapshot(),
+            DocumentContextJson = """
+                {"reference_context":{"branch_site":"PITX Level 3","ticket_number":"1474119573117","plate_number":"ABC1117","entry_time":"2026-09-29T00:42:30.7855730+00:00","payment_time":"2026-09-30T14:39:48.6742010+00:00","parking_duration":"37:57:17"}}
+                """
+        };
+        var service = new DigitalSalesInvoiceRenderService(
+            new FiscalDocumentReadService(new StubFiscalDocumentReader(document)));
+
+        var response = await DigitalSalesInvoicePresentationEndpoint.GetByFiscalDocumentIdAsync(
+            document.FiscalDocumentId,
+            service,
+            new DigitalSalesInvoicePresentationAdapter());
+
+        Assert.NotNull(response.CanonicalText);
+        Assert.Contains("Branch / Site", response.CanonicalText, StringComparison.Ordinal);
+        Assert.Contains("PITX Level 3", response.CanonicalText, StringComparison.Ordinal);
+        Assert.Contains("1474119573117", response.CanonicalText, StringComparison.Ordinal);
+        Assert.Contains("ABC1117", response.CanonicalText, StringComparison.Ordinal);
+        Assert.Contains("2026-09-30 22:39", response.CanonicalText, StringComparison.Ordinal);
+        Assert.DoesNotContain("2026-09-30T14:39:48.6742010+00:00", response.CanonicalText, StringComparison.Ordinal);
+        Assert.DoesNotContain("PHT", response.CanonicalText, StringComparison.Ordinal);
+        Assert.Contains("37:57:17", response.CanonicalText, StringComparison.Ordinal);
+        Assert.Contains("CASH", response.CanonicalText, StringComparison.Ordinal);
+        Assert.Null(response.CanonicalTextAuthority);
+        Assert.Null(response.CanonicalTextHash);
+    }
+
+    [Fact]
+    public async Task PresentationEndpointReturnsPersistedIssuanceTimeOriginalWithoutRerendering()
+    {
+        const string persistedOriginal = "PERSISTED ORIGINAL\r\nSI No: SI-000001\r\nNOTHING FOLLOWS\r\n";
+        var document = ValidReadModel(assignedNumber: true) with
+        {
+            SalesInvoiceHeaderSnapshot = ValidHeaderSnapshot(),
+            OriginalCanonicalText = persistedOriginal
+        };
+        var service = new DigitalSalesInvoiceRenderService(
+            new FiscalDocumentReadService(new StubFiscalDocumentReader(document)));
+
+        var response = await DigitalSalesInvoicePresentationEndpoint.GetByFiscalDocumentIdAsync(
+            document.FiscalDocumentId,
+            service,
+            new DigitalSalesInvoicePresentationAdapter());
+
+        Assert.Equal(persistedOriginal, response.CanonicalText);
+        Assert.Equal("digital-sales-invoice-presentation-json-v2-persisted-original", response.PresentationVersion);
+        Assert.Equal("persisted_original_electronic_journal", response.CanonicalTextAuthority);
+        Assert.Equal(
+            $"sha256:{Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(persistedOriginal))).ToLowerInvariant()}",
+            response.CanonicalTextHash);
+    }
+
+    [Fact]
+    public async Task GovernedReprintReturnsCanonicalReprintTextForCompleteDocument()
+    {
+        var document = ValidReadModel(assignedNumber: true) with
+        {
+            SalesInvoiceHeaderSnapshot = ValidHeaderSnapshot(),
+            OriginalCanonicalText = "ORIGINAL ISSUANCE-TIME TEXT THAT MUST NOT BECOME THE REPRINT BODY",
+            DocumentContextJson = """
+                {"reference_context":{"branch_site":"PITX Level 3","ticket_number":"1474119573117","plate_number":"ABC1117","entry_time":"2026-09-29T00:42:30.7855730+00:00","payment_time":"2026-09-30T14:39:48.6742010+00:00","parking_duration":"37:57:17"}}
+                """
+        };
+        var renderService = new DigitalSalesInvoiceRenderService(
+            new FiscalDocumentReadService(new StubFiscalDocumentReader(document)));
+        var context = new DefaultHttpContext
+        {
+            User = ReprintPrincipal(document.SitePosServerId, document.FiscalIdentityId!.Value, "PHP")
+        };
+        context.Request.Headers[SalesInvoiceHeaderProfileAdminAuthorization.CorrelationHeaderName] =
+            "canonical-reprint-test";
+
+        var response = await FiscalDocumentReprintEndpoint.RecordCanonicalAsync(
+            document.FiscalDocumentId,
+            new RecordFiscalDocumentReprintRequest(
+                "canonical-reprint-operation",
+                document.SitePosServerId,
+                document.FiscalIdentityId,
+                "PHP",
+                "operator_request"),
+            new FiscalDocumentReprintService(new RecordingReprintRepository(document)),
+            renderService,
+            context,
+            new TestHost(Environments.Production));
+
+        Assert.True(response.Succeeded);
+        Assert.NotNull(response.Reprint);
+        Assert.Contains("REPRINT", response.CanonicalText, StringComparison.Ordinal);
+        Assert.DoesNotContain("ORIGINAL", response.CanonicalText, StringComparison.Ordinal);
+        Assert.Contains("1474119573117", response.CanonicalText, StringComparison.Ordinal);
+        Assert.Contains("2026-09-30 22:39", response.CanonicalText, StringComparison.Ordinal);
+        Assert.DoesNotContain("2026-09-30T14:39:48.6742010+00:00", response.CanonicalText, StringComparison.Ordinal);
+        Assert.DoesNotContain("PHT", response.CanonicalText, StringComparison.Ordinal);
+        Assert.DoesNotContain("ISSUANCE-TIME", response.CanonicalText, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task PresentationEndpointMapsUnassignedFiscalDocumentToWarningNotice()
     {
         var document = ValidReadModel(assignedNumber: false);
@@ -443,7 +550,7 @@ public sealed class DigitalSalesInvoiceEndpointTests
                     11500,
                     "PHP",
                     "line-source-001",
-                    "{\"source_system\":\"central_pms\"}",
+                    "{\"source_system\":\"central_pms\",\"paymentMethod\":\"CASH\"}",
                     true,
                     DateTimeOffset.Parse("2026-07-01T08:00:00Z"),
                     DateTimeOffset.Parse("2026-07-01T08:00:00Z"))
@@ -508,6 +615,33 @@ public sealed class DigitalSalesInvoiceEndpointTests
                     DateTimeOffset.Parse("2026-07-01T08:00:00Z"))
             ]);
 
+    private static SalesInvoiceHeaderSnapshot ValidHeaderSnapshot() =>
+        new(
+            Guid.Parse("eeeeeeee-0000-0000-0000-000000000001"),
+            Guid.Parse("eeeeeeee-0000-0000-0000-000000000002"),
+            "v1",
+            "ExitPass Parking Corporation",
+            "PITX Level 3, Paranaque City",
+            "123-456-789-000",
+            "POS-SN-001",
+            "MIN-001",
+            "PITX Level 3",
+            "PITX-L3-APT",
+            "ACC-001",
+            new DateOnly(2026, 1, 1),
+            new DateOnly(2030, 1, 1),
+            "PTU-001",
+            new DateOnly(2026, 1, 1),
+            "THIS DOCUMENT SERVES AS YOUR SALES INVOICE.",
+            "Thank you.",
+            "digital-sales-invoice-json-v1",
+            "digital-sales-invoice-presentation-json-v1",
+            DateTimeOffset.Parse("2026-01-01T00:00:00Z"),
+            DateTimeOffset.Parse("2026-01-01T00:00:00Z"),
+            "ExitPass Systems, Inc.",
+            "Makati City",
+            "987-654-321-000");
+
     private static string FindApiSourcePath(string fileName)
     {
         var current = new DirectoryInfo(AppContext.BaseDirectory);
@@ -529,6 +663,62 @@ public sealed class DigitalSalesInvoiceEndpointTests
         }
 
         throw new FileNotFoundException($"Could not locate {fileName}.");
+    }
+
+    private static ClaimsPrincipal ReprintPrincipal(Guid sitePosServerId, Guid fiscalIdentityId, string currency) =>
+        new(new ClaimsIdentity(
+        [
+            new Claim(ClaimTypes.NameIdentifier, "central-pms-test"),
+            new Claim(SalesInvoiceHeaderProfileAdminAuthorization.PermissionClaimType,
+                FiscalDocumentReprintAuthorization.RecordPermission),
+            new Claim(FiscalXReadingAuthorization.SitePosServerScopeClaimType, sitePosServerId.ToString("D")),
+            new Claim(FiscalXReadingAuthorization.FiscalIdentityScopeClaimType, fiscalIdentityId.ToString("D")),
+            new Claim(FiscalZReadingAuthorization.CurrencyScopeClaimType, currency),
+            new Claim(BirSalesSummaryAuthorization.AuthorityClassClaimType, "PRODUCTION")
+        ], "test"));
+
+    private sealed class RecordingReprintRepository(FiscalDocumentReadModel document) : IFiscalDocumentReprintRepository
+    {
+        public Task<FiscalDocumentReprintResult> RecordAsync(
+            FiscalDocumentReprintCommand command,
+            string semanticRequestHash,
+            CancellationToken cancellationToken = default) =>
+            Task.FromResult(new FiscalDocumentReprintResult(
+                FiscalDocumentReprintOutcome.Created,
+                new FiscalDocumentReprintRecord(
+                    Guid.Parse("eeeeeeee-0000-0000-0000-000000000101"),
+                    "RPR-TEST",
+                    command.FiscalDocumentId,
+                    document.FiscalDocumentNumber!,
+                    document.FiscalSequenceValue!.Value,
+                    command.SitePosServerId,
+                    command.FiscalIdentityId,
+                    command.CurrencyCode,
+                    Guid.Parse("eeeeeeee-0000-0000-0000-000000000102"),
+                    document.FiscalSequencePolicyId!.Value,
+                    document.BusinessDayDate!.Value,
+                    1,
+                    "fiscal_document_copy",
+                    "committed",
+                    command.ReasonCode,
+                    "RPO-TEST",
+                    "print_presentation",
+                    true,
+                    DateTimeOffset.Parse("2026-10-01T00:00:00Z"),
+                    DateTimeOffset.Parse("2026-10-01T00:00:00Z"),
+                    command.ActorReference,
+                    command.ServiceIdentityReference,
+                    command.CorrelationReference,
+                    command.OperationKey,
+                    "EJ-REPRINT-TEST")));
+    }
+
+    private sealed class TestHost(string environmentName) : IHostEnvironment
+    {
+        public string EnvironmentName { get; set; } = environmentName;
+        public string ApplicationName { get; set; } = "tests";
+        public string ContentRootPath { get; set; } = Directory.GetCurrentDirectory();
+        public IFileProvider ContentRootFileProvider { get; set; } = new NullFileProvider();
     }
 
     private sealed class StubFiscalDocumentReader : IFiscalDocumentReader

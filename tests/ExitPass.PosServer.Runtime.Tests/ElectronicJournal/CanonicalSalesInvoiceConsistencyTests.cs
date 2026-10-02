@@ -71,7 +71,11 @@ public sealed class CanonicalSalesInvoiceConsistencyTests
         Assert.Equal(fiscal.PlateNumber, Row(presentation, "parkingPaymentReferences.plateNumber").DisplayValue);
         Assert.Contains(fiscal.PlateNumber!, ej, StringComparison.Ordinal);
         Assert.Equal(fiscal.EntryTimeText, Row(presentation, "parkingPaymentReferences.entryTime").DisplayValue);
-        Assert.Contains(fiscal.EntryTimeText!, ej, StringComparison.Ordinal);
+        Assert.Contains("2026-09-25 08:00", ej, StringComparison.Ordinal);
+        Assert.DoesNotContain(fiscal.EntryTimeText!, ej, StringComparison.Ordinal);
+        Assert.Equal(fiscal.PaymentTimeText, Row(presentation, "parkingPaymentReferences.paymentTime").DisplayValue);
+        Assert.Contains("2026-09-25 09:30", ej, StringComparison.Ordinal);
+        Assert.DoesNotContain(fiscal.PaymentTimeText!, ej, StringComparison.Ordinal);
         Assert.Equal(fiscal.ParkingDurationText, Row(presentation, "parkingPaymentReferences.parkingDuration").DisplayValue);
         Assert.Contains(fiscal.ParkingDurationText!, ej, StringComparison.Ordinal);
         Assert.Equal(canonical.CompletionBasis, Row(presentation, "parkingPaymentReferences.completionBasis").DisplayValue);
@@ -90,7 +94,7 @@ public sealed class CanonicalSalesInvoiceConsistencyTests
         Assert.Equal(fiscal.TotalPaidMinorUnits, Row(presentation, "totals.summary.totalPaid").RawValue);
         Assert.Contains(Money(fiscal.VatableSalesMinorUnits), ej, StringComparison.Ordinal);
         Assert.Contains(Money(fiscal.VatAmountMinorUnits), ej, StringComparison.Ordinal);
-        Assert.Contains($"Total Amount{new string(' ', 36 - Money(fiscal.TotalAmountMinorUnits).Length)}{Money(fiscal.TotalAmountMinorUnits)}", ej, StringComparison.Ordinal);
+        Assert.Contains($"Total Amount{new string(' ', 23 - Money(fiscal.TotalAmountMinorUnits).Length)}{Money(fiscal.TotalAmountMinorUnits)}", ej, StringComparison.Ordinal);
         Assert.Contains(canonical.Lines.Single().Description, ej, StringComparison.Ordinal);
         var customer = canonical.InvoiceCustomerInformation!;
         Assert.Equal(customer.CustomerName, Row(presentation, "customerInformation.customerName").DisplayValue);

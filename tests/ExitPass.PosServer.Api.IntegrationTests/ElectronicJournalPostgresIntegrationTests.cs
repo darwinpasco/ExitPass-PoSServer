@@ -368,6 +368,7 @@ public sealed class ElectronicJournalPostgresIntegrationTests
         Assert.Equal(HttpStatusCode.OK, replay.StatusCode);
         var replayedRecord = await replay.Content.ReadFromJsonAsync<FiscalDocumentReprintApiResponse>();
         Assert.Equal(createdRecord?.Reprint, replayedRecord?.Reprint);
+        Assert.Equal(createdRecord?.CanonicalText, replayedRecord?.CanonicalText);
         using var conflict = await reprintClient.PostAsJsonAsync(
             $"/v1/fiscal-documents/{FiscalDocumentId:D}/reprints", request with { ReasonCode = "audit_request" });
         Assert.Equal(HttpStatusCode.Conflict, conflict.StatusCode);
@@ -408,7 +409,7 @@ public sealed class ElectronicJournalPostgresIntegrationTests
         using var fixtureResponse = await fixture.PostAsJsonAsync(
             $"/v1/fiscal-documents/{FiscalDocumentId:D}/reprints", Reprint("ej-reprint-fixture", "operator_request"));
         Assert.Equal(HttpStatusCode.NotFound, fixtureResponse.StatusCode);
-        using var readOnly = CreateClient(app, ProductionKey, ElectronicJournalAuthorization.ReadPermission);
+        using var readOnly = CreateClient(app, ProductionKey, FiscalDocumentAuthorization.ReadPermission);
         using var readOnlyResponse = await readOnly.PostAsJsonAsync(
             $"/v1/fiscal-documents/{FiscalDocumentId:D}/reprints", Reprint("ej-reprint-read-only", "operator_request"));
         Assert.Equal(HttpStatusCode.Forbidden, readOnlyResponse.StatusCode);
@@ -745,6 +746,7 @@ public sealed class ElectronicJournalPostgresIntegrationTests
             ["PosServer:Admin:ApiKeys:0:Permissions:2"] = ElectronicJournalAuthorization.ExportPermission,
             ["PosServer:Admin:ApiKeys:0:Permissions:3"] = ElectronicJournalAuthorization.IntegrityPermission,
             ["PosServer:Admin:ApiKeys:0:Permissions:4"] = FiscalDocumentReprintAuthorization.RecordPermission,
+            ["PosServer:Admin:ApiKeys:0:Permissions:5"] = FiscalDocumentAuthorization.ReadPermission,
             ["PosServer:Admin:ApiKeys:1:Principal"] = "ej-fixture-service",
             ["PosServer:Admin:ApiKeys:1:Key"] = FixtureKey,
             ["PosServer:Admin:ApiKeys:1:AuthorityClass"] = "FIXTURE",

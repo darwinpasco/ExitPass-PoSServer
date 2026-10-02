@@ -60,7 +60,11 @@ public sealed class PostgresFiscalDocumentReader : IFiscalDocumentReader
                 AppliedStatutoryFiscalFacts = appliedStatutoryFacts,
                 InvoiceCustomerInformation = ParseInvoiceCustomerInformation(
                     header.DocumentContextJson,
-                    appliedStatutoryFacts is not null)
+                    appliedStatutoryFacts is not null),
+                OriginalCanonicalText = await ReadOriginalCanonicalTextAsync(
+                    connection,
+                    fiscalDocumentId,
+                    cancellationToken).ConfigureAwait(false)
             };
         }
         catch (Exception ex) when (ex is NpgsqlException or TimeoutException or InvalidOperationException)
@@ -69,6 +73,31 @@ public sealed class PostgresFiscalDocumentReader : IFiscalDocumentReader
                 "Fiscal document read failed.",
                 ex);
         }
+    }
+
+    private static async Task<string?> ReadOriginalCanonicalTextAsync(
+        NpgsqlConnection connection,
+        Guid fiscalDocumentId,
+        CancellationToken cancellationToken)
+    {
+        await using var command = CreateCommand(
+            connection,
+            """
+            select printable_sales_invoice_text
+            from pos.electronic_journal_records
+            where fiscal_document_id = @fiscal_document_id
+              and reprint_request_id is null
+              and is_canonical
+              and printable_sales_invoice_text is not null
+            order by stream_sequence_value, electronic_journal_record_id
+            limit 1;
+            """,
+            fiscalDocumentId);
+
+        var value = await command.ExecuteScalarAsync(cancellationToken).ConfigureAwait(false);
+        return value is string canonicalText && !string.IsNullOrWhiteSpace(canonicalText)
+            ? canonicalText
+            : null;
     }
 
     private static InvoiceCustomerInformationSnapshot? ParseInvoiceCustomerInformation(

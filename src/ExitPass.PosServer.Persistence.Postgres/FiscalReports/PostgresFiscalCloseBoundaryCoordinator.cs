@@ -87,16 +87,9 @@ public static class PostgresFiscalCloseBoundaryCoordinator
             businessDayDate,
             cancellationToken).ConfigureAwait(false);
 
-        if (periods.Count == 0 && businessDayDate is null)
+        if (periods.Count == 0)
         {
-            await EnsureCurrentOpenPeriodAsync(
-                connection,
-                transaction,
-                sitePosServerId,
-                fiscalIdentityId,
-                currencyCode,
-                cancellationToken).ConfigureAwait(false);
-            periods = await ReadMatchingPeriodsAsync(
+            var currentPeriodWasEligible = await EnsureCurrentOpenPeriodAsync(
                 connection,
                 transaction,
                 sitePosServerId,
@@ -104,6 +97,17 @@ public static class PostgresFiscalCloseBoundaryCoordinator
                 currencyCode,
                 businessDayDate,
                 cancellationToken).ConfigureAwait(false);
+            if (currentPeriodWasEligible)
+            {
+                periods = await ReadMatchingPeriodsAsync(
+                    connection,
+                    transaction,
+                    sitePosServerId,
+                    fiscalIdentityId,
+                    currencyCode,
+                    businessDayDate,
+                    cancellationToken).ConfigureAwait(false);
+            }
         }
 
         if (periods.Count == 0)
@@ -215,12 +219,13 @@ public static class PostgresFiscalCloseBoundaryCoordinator
         return periods;
     }
 
-    private static async Task EnsureCurrentOpenPeriodAsync(
+    private static async Task<bool> EnsureCurrentOpenPeriodAsync(
         NpgsqlConnection connection,
         NpgsqlTransaction transaction,
         Guid sitePosServerId,
         Guid fiscalIdentityId,
         string currencyCode,
+        DateOnly? requestedBusinessDayDate,
         CancellationToken cancellationToken)
     {
         const string configurationSql = """
@@ -272,6 +277,11 @@ public static class PostgresFiscalCloseBoundaryCoordinator
             throw InvalidReportingTimezone(exception);
         }
 
+        if (requestedBusinessDayDate is not null && requestedBusinessDayDate.Value != window.BusinessDayDate)
+        {
+            return false;
+        }
+
         const string insertSql = """
             INSERT INTO pos.fiscal_reporting_periods(
                 fiscal_reporting_period_id, fiscal_reporting_contract_version_id,
@@ -319,6 +329,7 @@ public static class PostgresFiscalCloseBoundaryCoordinator
         insertCommand.Parameters.AddWithValue("opened_at", fiscalTimestamp);
         insertCommand.Parameters.AddWithValue("actor", PeriodRolloverActor);
         await insertCommand.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
+        return true;
     }
 
     private static FiscalCloseBoundaryException InvalidReportingTimezone(Exception innerException) =>

@@ -1,4 +1,5 @@
 using System.Security.Claims;
+using ExitPass.PosServer.Runtime.ElectronicJournal;
 using ExitPass.PosServer.Runtime.FiscalDocuments;
 
 namespace ExitPass.PosServer.Api.FiscalDocuments;
@@ -16,10 +17,45 @@ public sealed record FiscalDocumentReprintApiResponse(
     string CorrelationId,
     int HttpStatusCode,
     FiscalDocumentReprintRecord? Reprint = null,
-    string? Message = null);
+    string? Message = null,
+    string? CanonicalText = null);
 
 public static class FiscalDocumentReprintEndpoint
 {
+    public static async Task<FiscalDocumentReprintApiResponse> RecordCanonicalAsync(
+        Guid fiscalDocumentId,
+        RecordFiscalDocumentReprintRequest request,
+        FiscalDocumentReprintService service,
+        DigitalSalesInvoiceRenderService renderService,
+        HttpContext context,
+        IHostEnvironment environment,
+        CancellationToken cancellationToken = default)
+    {
+        var response = await RecordAsync(
+            fiscalDocumentId,
+            request,
+            service,
+            context,
+            environment,
+            cancellationToken).ConfigureAwait(false);
+        if (!response.Succeeded || response.Reprint is null) return response;
+
+        var render = await renderService.RenderAsync(fiscalDocumentId, cancellationToken).ConfigureAwait(false);
+        if (!render.Succeeded || render.Render is null) return response;
+
+        try
+        {
+            var canonicalText = new SalesInvoicePrinterPayloadRenderer(new CanonicalSalesInvoiceTextRenderer())
+                .RenderReprintVisibleText(render.Render, response.Reprint)
+                .Text;
+            return response with { CanonicalText = canonicalText };
+        }
+        catch (InvalidOperationException)
+        {
+            return response;
+        }
+    }
+
     public static async Task<FiscalDocumentReprintApiResponse> RecordAsync(
         Guid fiscalDocumentId,
         RecordFiscalDocumentReprintRequest request,
