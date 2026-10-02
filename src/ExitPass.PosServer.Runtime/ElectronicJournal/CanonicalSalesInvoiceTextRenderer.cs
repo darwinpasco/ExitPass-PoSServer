@@ -10,8 +10,10 @@ namespace ExitPass.PosServer.Runtime.ElectronicJournal;
 /// </summary>
 public sealed class CanonicalSalesInvoiceTextRenderer
 {
-    private const string Separator = "------------------------------------------------";
-    private const int ReceiptWidth = 48;
+    private const int ReceiptWidth = 35;
+    private const int SeparatorWidth = 32;
+    private static readonly string Separator = new('-', SeparatorWidth);
+    private const string ClosingText = "THANK YOU FOR CHOOSING OUR SERVICE";
 
     public CanonicalSalesInvoiceTextOutput Render(DigitalSalesInvoiceRenderModel invoice) =>
         Render(invoice, invoice.CopyDesignation);
@@ -46,22 +48,19 @@ public sealed class CanonicalSalesInvoiceTextRenderer
         AddCentered(lines, RequireCopyLabel(copyDesignation));
         lines.Add(string.Empty);
         AddValue(lines, "SI No", invoice.FiscalDocumentNumber);
-        AddValue(lines, "Issued Date", PhtTimestamp(invoice.FiscalNumberAssignedAt.Value));
+        AddValue(lines, "Issued Date", LocalTimestamp(invoice.FiscalNumberAssignedAt.Value));
         AddValue(lines, "Business Date", invoice.BusinessDayDate.Value.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture));
 
         AddSection(lines, "PARKING DETAILS");
         AddValue(lines, "Ticket Number", fiscal.TicketNumber);
         AddValue(lines, "Plate Number", fiscal.PlateNumber);
-        AddValue(lines, "Entry Time", fiscal.EntryTimeText);
-        lines.Add(string.Empty);
-        AddValue(lines, "Payment", fiscal.PaymentTimeText);
+        AddValue(lines, "Entry Time", CompactTimestamp(fiscal.EntryTimeText));
+        AddValue(lines, "Payment", CompactTimestamp(fiscal.PaymentTimeText));
         AddValue(lines, "Duration", fiscal.ParkingDurationText);
 
         AddSection(lines, "ITEMS");
-        lines.Add("# Description      Qty        Unit       Amount");
         foreach (var item in invoice.Lines.OrderBy(item => item.LineSequence))
             AddItem(lines, item, currency);
-        lines.Add(string.Empty);
         AddValue(lines, "Subtotal", Money(fiscal.SubtotalAmountMinorUnits, currency));
 
         AddSection(lines, "DISCOUNTS");
@@ -87,7 +86,6 @@ public sealed class CanonicalSalesInvoiceTextRenderer
         AddValue(lines, "Total Amount", Money(fiscal.TotalAmountMinorUnits, currency));
 
         AddSection(lines, "PAYMENT DETAILS");
-        lines.Add("Type       Provider                      Amount");
         foreach (var tender in invoice.Tenders) AddTender(lines, tender, fiscal.PaymentMethod, currency);
         AddValue(lines, "Total Paid", Money(fiscal.TotalPaidMinorUnits, currency));
         if (fiscal.TenderedAmountMinorUnits is { } tendered) AddValue(lines, "Tendered", Money(tendered, currency));
@@ -97,36 +95,38 @@ public sealed class CanonicalSalesInvoiceTextRenderer
 
         lines.Add(Separator);
         AddCentered(lines, header.SalesInvoiceLegalStatement);
+        AddValue(lines, "Print Date", LocalTimestamp(invoice.FiscalNumberAssignedAt.Value));
 
         var customer = invoice.InvoiceCustomerInformation;
-        if (HasCustomer(customer, fiscal.ShowCustomerSignatureLine))
-        {
-            AddSection(lines, "Customer Information");
-            AddValue(lines, "NAME", customer?.CustomerName);
-            AddValue(lines, "ADDRESS", customer?.Address);
-            AddValue(lines, "TIN", customer?.Tin);
-            AddValue(lines, "BUS. STYLE", customer?.BusinessStyle);
-            var statutoryId = invoice.AppliedStatutoryFiscalFacts is null ? null : customer?.StatutoryIdNumber;
-            if (!string.IsNullOrWhiteSpace(statutoryId))
-                AddValue(lines, StatutoryIdLabel(invoice.AppliedStatutoryFiscalFacts?.EntitlementType), statutoryId);
-            if (fiscal.ShowCustomerSignatureLine) lines.Add("Customer Sign : __________________________");
-        }
+        AddSection(lines, "Customer Information");
+        AddValue(lines, "NAME", customer?.CustomerName);
+        AddValue(lines, "ADDRESS", customer?.Address);
+        AddValue(lines, "TIN", customer?.Tin);
+        AddValue(lines, "BUS. STYLE", customer?.BusinessStyle);
+        var statutoryId = invoice.AppliedStatutoryFiscalFacts is null ? null : customer?.StatutoryIdNumber;
+        if (!string.IsNullOrWhiteSpace(statutoryId))
+            AddValue(lines, StatutoryIdLabel(invoice.AppliedStatutoryFiscalFacts?.EntitlementType), statutoryId);
+        if (fiscal.ShowCustomerSignatureLine) AddValue(lines, "Customer Sign", "____________________");
 
         AddSection(lines, "POS SOFTWARE SUPPLIER / DEVELOPER");
         AddCentered(lines, header.SupplierDeveloperRegisteredName);
         AddCentered(lines, header.SupplierDeveloperAddress);
-        lines.Add(string.Empty);
         AddValue(lines, "TIN", header.SupplierDeveloperTin);
         AddValue(lines, "ACCR. NO.", header.BirAccreditationNumber);
         AddValue(lines, "DATE ISSUED", header.BirAccreditationIssuedDate.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture));
         AddValue(lines, "PTU", header.PtuNumber);
         AddValue(lines, "PTU Date", header.PtuIssuedDate.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture));
-        if (!string.IsNullOrWhiteSpace(header.CustomerServiceFooter)) AddCentered(lines, header.CustomerServiceFooter.Trim());
+        if (!string.IsNullOrWhiteSpace(header.CustomerServiceFooter) &&
+            !string.Equals(header.CustomerServiceFooter.Trim(), ClosingText, StringComparison.OrdinalIgnoreCase))
+            AddCentered(lines, header.CustomerServiceFooter.Trim());
         foreach (var closingLine in invoice.Footer.ClosingTextLines ?? [])
-        {
-            if (closingLine.Contains("NOTHING FOLLOWS", StringComparison.Ordinal)) lines.Add(string.Empty);
-            AddCentered(lines, closingLine);
-        }
+            if (!string.IsNullOrWhiteSpace(closingLine) &&
+                !string.Equals(closingLine.Trim(), ClosingText, StringComparison.OrdinalIgnoreCase) &&
+                !closingLine.Contains("NOTHING FOLLOWS", StringComparison.OrdinalIgnoreCase))
+                AddCentered(lines, closingLine.Trim());
+        AddCentered(lines, ClosingText);
+        lines.Add(string.Empty);
+        AddCentered(lines, "===== NOTHING FOLLOWS =====");
 
         var text = string.Join("\r\n", lines) + "\r\n";
         return new(text, Encoding.UTF8.GetBytes(text));
@@ -152,18 +152,11 @@ public sealed class CanonicalSalesInvoiceTextRenderer
 
     private static void AddItem(List<string> lines, DigitalSalesInvoiceLineRenderModel item, string currency)
     {
-        var descriptions = Wrap(item.Description, 14).ToArray();
-        var row = $"{item.LineSequence,2} {descriptions[0],-14} {item.Quantity,4:0.##} {Money(item.UnitAmountMinorUnits, currency),11} {Money(item.NetAmountMinorUnits, currency),12}";
-        if (row.Length <= ReceiptWidth)
-        {
-            lines.Add(row);
-        }
-        else
-        {
-            AddValue(lines, $"{item.LineSequence} {descriptions[0]}", Money(item.NetAmountMinorUnits, currency));
-            AddValue(lines, "Qty / Unit", $"{item.Quantity:0.##} / {Money(item.UnitAmountMinorUnits, currency)}");
-        }
-        foreach (var description in descriptions.Skip(1)) lines.Add($"   {description}");
+        AddValue(lines, "Item", item.LineSequence.ToString(CultureInfo.InvariantCulture));
+        AddValue(lines, "Description", item.Description);
+        AddValue(lines, "Quantity", item.Quantity.ToString("0.##", CultureInfo.InvariantCulture));
+        AddValue(lines, "Unit Amount", Money(item.UnitAmountMinorUnits, currency));
+        AddValue(lines, "Amount", Money(item.NetAmountMinorUnits, currency));
     }
 
     private static void AddTender(
@@ -172,31 +165,29 @@ public sealed class CanonicalSalesInvoiceTextRenderer
         string? paymentMethod,
         string currency)
     {
-        var label = (tender.TenderTypeCodeKey ?? paymentMethod ?? "NOT RECORDED").ToUpperInvariant();
-        var providers = Wrap(tender.ProviderRef ?? string.Empty, 18).ToArray();
-        var amount = Money(tender.AmountMinorUnits, currency);
-        if (label.Length <= 10 && amount.Length <= 16)
-        {
-            lines.Add($"{label,-10} {providers[0],-18} {amount,16}");
-            foreach (var provider in providers.Skip(1)) lines.Add($"           {provider}");
-            return;
-        }
-
+        var label = (paymentMethod ?? tender.TenderTypeCodeKey ?? "NOT RECORDED").ToUpperInvariant();
         AddValue(lines, "Type", label);
-        AddValue(lines, "Provider", tender.ProviderRef);
-        AddValue(lines, "Amount", amount);
+        if (!string.IsNullOrWhiteSpace(tender.ProviderRef) &&
+            !string.Equals(tender.ProviderRef, "not_applicable", StringComparison.OrdinalIgnoreCase))
+            AddValue(lines, "Provider", tender.ProviderRef);
+        AddValue(lines, "Amount", Money(tender.AmountMinorUnits, currency));
     }
 
     private static void AddValue(List<string> lines, string label, string? value)
     {
-        var resolved = value ?? string.Empty;
+        var resolved = value?.Trim() ?? string.Empty;
+        if (resolved.Length == 0)
+        {
+            lines.Add(label);
+            return;
+        }
         if (label.Length + resolved.Length + 1 <= ReceiptWidth)
         {
             lines.Add(label + new string(' ', ReceiptWidth - label.Length - resolved.Length) + resolved);
             return;
         }
         lines.Add(label);
-        foreach (var line in Wrap(resolved, ReceiptWidth)) lines.Add(line);
+        foreach (var line in Wrap(resolved, ReceiptWidth)) lines.Add(line.PadLeft(ReceiptWidth));
     }
 
     private static void AddCentered(List<string> lines, string value)
@@ -219,14 +210,30 @@ public sealed class CanonicalSalesInvoiceTextRenderer
         yield return remaining;
     }
 
-    private static bool HasCustomer(InvoiceCustomerInformationSnapshot? customer, bool showSignatureLine) =>
-        showSignatureLine || customer is not null && new[]
-        {
-            customer.CustomerName, customer.Address, customer.Tin, customer.BusinessStyle, customer.StatutoryIdNumber
-        }.Any(value => !string.IsNullOrWhiteSpace(value));
+    private static string LocalTimestamp(DateTimeOffset value) =>
+        value.ToOffset(TimeSpan.FromHours(8)).ToString("yyyy-MM-dd HH:mm", CultureInfo.InvariantCulture);
 
-    private static string PhtTimestamp(DateTimeOffset value) =>
-        value.ToOffset(TimeSpan.FromHours(8)).ToString("yyyy-MM-dd HH:mm:ss 'PHT'", CultureInfo.InvariantCulture);
+    private static string? CompactTimestamp(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value)) return value;
+        var normalized = value.Trim();
+        if (normalized.EndsWith(" PHT", StringComparison.OrdinalIgnoreCase))
+        {
+            var localText = normalized[..^4].TrimEnd();
+            return DateTime.TryParse(localText, CultureInfo.InvariantCulture, DateTimeStyles.AllowWhiteSpaces, out var local)
+                ? local.ToString("yyyy-MM-dd HH:mm", CultureInfo.InvariantCulture)
+                : localText;
+        }
+        if (normalized.EndsWith(" UTC", StringComparison.OrdinalIgnoreCase))
+            normalized = normalized[..^4] + "Z";
+        return DateTimeOffset.TryParse(
+                normalized,
+                CultureInfo.InvariantCulture,
+                DateTimeStyles.AllowWhiteSpaces | DateTimeStyles.AssumeUniversal,
+                out var parsed)
+            ? LocalTimestamp(parsed)
+            : normalized;
+    }
 
     private static string RequireDocumentDesignation(string value) =>
         string.Equals(value, "SALES INVOICE", StringComparison.Ordinal)

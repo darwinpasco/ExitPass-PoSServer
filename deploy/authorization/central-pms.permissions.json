@@ -1,0 +1,19 @@
+{
+  "profile": "central-pms-to-site-pos-server",
+  "version": 1,
+  "permissions": [
+    "fiscal_document.create",
+    "fiscal_document.read",
+    "sales_invoice_header_profile.admin",
+    "electronic_journal.read",
+    "electronic_journal.export",
+    "fiscal_x_reading.read",
+    "fiscal_x_reading.generate",
+    "fiscal_x_reading.export",
+    "fiscal_z_reading.read",
+    "fiscal_z_reading.close",
+    "fiscal_z_reading.export",
+    "fiscal_z_close_state.initialize",
+    "fiscal_document.reprint.record"
+  ]
+}

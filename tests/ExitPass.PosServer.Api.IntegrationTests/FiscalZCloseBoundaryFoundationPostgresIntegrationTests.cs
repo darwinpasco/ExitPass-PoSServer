@@ -3,6 +3,7 @@ using System.Net.Http.Json;
 using ExitPass.PosServer.Api.FiscalDocuments;
 using ExitPass.PosServer.Api.FiscalReports;
 using ExitPass.PosServer.Persistence.Postgres.FiscalReports;
+using ExitPass.PosServer.Runtime.FiscalReports;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Hosting.Server;
@@ -70,6 +71,62 @@ public sealed class FiscalZCloseBoundaryFoundationPostgresIntegrationTests
         await AssertForcedInitializationFailureRollsBackAsync(connectionString, client);
         await AssertBoundarySerializationAndClosedRevalidationAsync(connectionString);
         await AssertIndependentCurrencyDoesNotBlockAsync(connectionString);
+    }
+
+    [Fact]
+    public async Task MissingExplicitCurrentBusinessDateInitializesOneOpenPeriodWithoutClosingPriorPeriod()
+    {
+        var connectionString = Environment.GetEnvironmentVariable(ConnectionVariable);
+        if (string.IsNullOrWhiteSpace(connectionString)) return;
+
+        await RebuildAsync(connectionString);
+        await SeedScopeAsync(connectionString);
+        var currentWindow = await MoveSeededPeriodToPriorPitxBusinessDateAsync(connectionString);
+
+        var assignment = await ResolveExplicitBusinessDateAsync(connectionString, currentWindow.BusinessDayDate);
+
+        Assert.Equal(currentWindow.BusinessDayDate, assignment.BusinessDayDate);
+        Assert.Equal(currentWindow.PeriodStartAt, assignment.PeriodStartAt);
+        Assert.Equal(currentWindow.PeriodEndAt, assignment.PeriodEndAt);
+        Assert.Equal(2, await ScalarAsync<long>(connectionString,
+            "SELECT count(*) FROM pos.fiscal_reporting_periods WHERE period_status_code_id='1a6f7021-bc84-5c01-afaa-c5d6685633c8'"));
+        Assert.Equal(1, await ScalarAsync<long>(connectionString,
+            $"SELECT count(*) FROM pos.fiscal_reporting_periods WHERE business_day_date='{currentWindow.BusinessDayDate:yyyy-MM-dd}'"));
+        Assert.Equal(0, await ScalarAsync<long>(connectionString, "SELECT count(*) FROM pos.x_z_reports"));
+    }
+
+    [Fact]
+    public async Task MissingExplicitHistoricalAndFutureBusinessDatesRemainUnavailable()
+    {
+        var connectionString = Environment.GetEnvironmentVariable(ConnectionVariable);
+        if (string.IsNullOrWhiteSpace(connectionString)) return;
+
+        await RebuildAsync(connectionString);
+        await SeedScopeAsync(connectionString);
+        var currentWindow = await MoveSeededPeriodToPriorPitxBusinessDateAsync(connectionString);
+
+        await AssertExplicitBusinessDateUnavailableAsync(connectionString, currentWindow.BusinessDayDate.AddDays(-2));
+        await AssertExplicitBusinessDateUnavailableAsync(connectionString, currentWindow.BusinessDayDate.AddDays(1));
+        Assert.Equal(1, await ScalarAsync<long>(connectionString, "SELECT count(*) FROM pos.fiscal_reporting_periods"));
+    }
+
+    [Fact]
+    public async Task ConcurrentMissingExplicitCurrentBusinessDateResolvesOneCanonicalPeriod()
+    {
+        var connectionString = Environment.GetEnvironmentVariable(ConnectionVariable);
+        if (string.IsNullOrWhiteSpace(connectionString)) return;
+
+        await RebuildAsync(connectionString);
+        await SeedScopeAsync(connectionString);
+        var currentWindow = await MoveSeededPeriodToPriorPitxBusinessDateAsync(connectionString);
+
+        var assignments = await Task.WhenAll(
+            ResolveExplicitBusinessDateAsync(connectionString, currentWindow.BusinessDayDate),
+            ResolveExplicitBusinessDateAsync(connectionString, currentWindow.BusinessDayDate));
+
+        Assert.Equal(assignments[0].FiscalReportingPeriodId, assignments[1].FiscalReportingPeriodId);
+        Assert.Equal(1, await ScalarAsync<long>(connectionString,
+            $"SELECT count(*) FROM pos.fiscal_reporting_periods WHERE business_day_date='{currentWindow.BusinessDayDate:yyyy-MM-dd}'"));
     }
 
     private static async Task AssertForcedInitializationFailureRollsBackAsync(
@@ -180,6 +237,63 @@ public sealed class FiscalZCloseBoundaryFoundationPostgresIntegrationTests
         Assert.Same(acquisition, await Task.WhenAny(acquisition, Task.Delay(1000)));
         await secondTransaction.RollbackAsync();
         await firstTransaction.RollbackAsync();
+    }
+
+    private static async Task<FiscalReportingPeriodAssignment> ResolveExplicitBusinessDateAsync(
+        string connectionString,
+        DateOnly businessDayDate)
+    {
+        await using var connection = new NpgsqlConnection(connectionString);
+        await connection.OpenAsync();
+        await using var transaction = await connection.BeginTransactionAsync();
+        await PostgresFiscalCloseBoundaryCoordinator.AcquireAsync(
+            connection, transaction, SiteId, IdentityId, "PHP", default);
+        var assignment = await PostgresFiscalCloseBoundaryCoordinator.ResolveAndLockOpenPeriodAsync(
+            connection, transaction, SiteId, IdentityId, "PHP", businessDayDate, default);
+        await transaction.CommitAsync();
+        return assignment;
+    }
+
+    private static async Task AssertExplicitBusinessDateUnavailableAsync(
+        string connectionString,
+        DateOnly businessDayDate)
+    {
+        await using var connection = new NpgsqlConnection(connectionString);
+        await connection.OpenAsync();
+        await using var transaction = await connection.BeginTransactionAsync();
+        await PostgresFiscalCloseBoundaryCoordinator.AcquireAsync(
+            connection, transaction, SiteId, IdentityId, "PHP", default);
+        var exception = await Assert.ThrowsAsync<FiscalCloseBoundaryException>(() =>
+            PostgresFiscalCloseBoundaryCoordinator.ResolveAndLockOpenPeriodAsync(
+                connection, transaction, SiteId, IdentityId, "PHP", businessDayDate, default));
+        Assert.Equal(FiscalCloseBoundaryErrorCode.ReportingPeriodUnavailable, exception.ErrorCode);
+        await transaction.RollbackAsync();
+    }
+
+    private static async Task<(DateOnly BusinessDayDate, DateTimeOffset PeriodStartAt, DateTimeOffset PeriodEndAt)>
+        MoveSeededPeriodToPriorPitxBusinessDateAsync(string connectionString)
+    {
+        var databaseUtcTimestamp = await ScalarAsync<DateTime>(connectionString, "SELECT transaction_timestamp()");
+        var databaseTimestamp = new DateTimeOffset(DateTime.SpecifyKind(databaseUtcTimestamp, DateTimeKind.Utc));
+        var currentWindow = PostgresFiscalCloseBoundaryCoordinator.ResolveBusinessDayWindow(
+            databaseTimestamp,
+            "Asia/Manila",
+            new TimeOnly(7, 0));
+        await ExecuteAsync(
+            connectionString,
+            $"""
+            UPDATE pos.site_pos_servers
+            SET reporting_timezone_name='Asia/Manila', business_day_cutoff_local_time='07:00:00'
+            WHERE site_pos_server_id='{SiteId:D}';
+            UPDATE pos.fiscal_reporting_periods
+            SET business_day_date='{currentWindow.BusinessDayDate.AddDays(-1):yyyy-MM-dd}',
+                period_start_at='{currentWindow.PeriodStartAt.AddDays(-1):O}',
+                period_end_at='{currentWindow.PeriodStartAt:O}',
+                reporting_timezone_name='Asia/Manila',
+                business_day_cutoff_local_time='07:00:00'
+            WHERE fiscal_reporting_period_id='{PeriodId:D}';
+            """);
+        return currentWindow;
     }
 
     private static async Task SeedScopeAsync(string connectionString)

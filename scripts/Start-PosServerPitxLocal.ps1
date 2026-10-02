@@ -1,6 +1,8 @@
 [CmdletBinding()]
 param(
-    [switch] $SmokeTest
+    [switch] $SmokeTest,
+    [ValidateRange(0, 100)]
+    [int] $CentralPmsApiKeyIndex = 0
 )
 
 Set-StrictMode -Version Latest
@@ -19,6 +21,7 @@ $httpUrl = 'http://127.0.0.1:56067'
 $repoRoot = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
 $projectPath = Join-Path $repoRoot 'src\ExitPass.PosServer.Api\ExitPass.PosServer.Api.csproj'
 $dockerfilePath = Join-Path $repoRoot 'src\ExitPass.PosServer.Api\Dockerfile'
+$permissionProfilePath = Join-Path $repoRoot 'deploy\authorization\central-pms.permissions.json'
 $privateRoot = if ([string]::IsNullOrWhiteSpace($env:EXITPASS_PERSISTENT_IST_ROOT)) {
     'D:\SourceCodes\ExitPass.local\persistent-ist'
 }
@@ -58,6 +61,28 @@ function Get-PrivateEnvironmentValue {
     }
 
     return $line.Substring($prefix.Length)
+}
+
+function Get-PrivateEnvironmentPermissions {
+    param(
+        [Parameter(Mandatory)][string] $Path,
+        [Parameter(Mandatory)][int] $ApiKeyIndex
+    )
+
+    $pattern = "^PosServer__Admin__ApiKeys__${ApiKeyIndex}__Permissions__(\d+)=(.+)$"
+    $entries = Get-Content -LiteralPath $Path |
+        ForEach-Object {
+            if ($_ -match $pattern) {
+                [pscustomobject]@{ Index = [int] $Matches[1]; Permission = $Matches[2].Trim() }
+            }
+        } |
+        Where-Object { $null -ne $_ } |
+        Sort-Object Index
+    if ($entries.Count -gt 0 -and ($entries.Index -join ',') -ne ((0..($entries.Count - 1)) -join ',')) {
+        throw 'The private Central PMS permission indexes must be contiguous and start at zero.'
+    }
+
+    return @($entries.Permission)
 }
 
 function New-RandomSecret {
@@ -108,6 +133,46 @@ if (-not (Test-Path -LiteralPath $projectPath) -or -not (Test-Path -LiteralPath 
 }
 if (-not (Test-Path -LiteralPath $environmentFile)) {
     throw "Persistent PITX POS configuration was not found at $environmentFile."
+}
+if (-not (Test-Path -LiteralPath $permissionProfilePath)) {
+    throw "The Central PMS POS permission profile was not found at $permissionProfilePath."
+}
+
+try {
+    $permissionProfile = Get-Content -LiteralPath $permissionProfilePath -Raw | ConvertFrom-Json
+}
+catch {
+    throw 'The Central PMS POS permission profile is malformed.'
+}
+$profilePermissions = @($permissionProfile.permissions | ForEach-Object { ([string] $_).Trim() })
+if ($permissionProfile.profile -ne 'central-pms-to-site-pos-server' -or
+    $permissionProfile.version -ne 1 -or
+    $profilePermissions.Count -eq 0 -or
+    @($profilePermissions | Where-Object { [string]::IsNullOrWhiteSpace($_) -or $_.Contains('*') }).Count -gt 0 -or
+    ($profilePermissions | Select-Object -Unique).Count -ne $profilePermissions.Count) {
+    throw 'The Central PMS POS permission profile is invalid.'
+}
+
+$apiKeyPrefix = "PosServer__Admin__ApiKeys__${CentralPmsApiKeyIndex}__"
+$configuredPrincipal = Get-PrivateEnvironmentValue $environmentFile "${apiKeyPrefix}Principal"
+$configuredSecret = Get-PrivateEnvironmentValue $environmentFile "${apiKeyPrefix}Key"
+$configuredSiteScope = Get-PrivateEnvironmentValue $environmentFile "${apiKeyPrefix}SitePosServerIds__0"
+$configuredFiscalIdentityScope = Get-PrivateEnvironmentValue $environmentFile "${apiKeyPrefix}FiscalIdentityIds__0"
+$configuredCurrencyScope = Get-PrivateEnvironmentValue $environmentFile "${apiKeyPrefix}CurrencyCodes__0"
+if ([string]::IsNullOrWhiteSpace($configuredPrincipal) -or
+    [string]::IsNullOrWhiteSpace($configuredSecret) -or
+    [string]::IsNullOrWhiteSpace($configuredSiteScope) -or
+    [string]::IsNullOrWhiteSpace($configuredFiscalIdentityScope) -or
+    [string]::IsNullOrWhiteSpace($configuredCurrencyScope)) {
+    throw 'The private Central PMS principal, secret, and exact fiscal scopes are required.'
+}
+$configuredPermissions = Get-PrivateEnvironmentPermissions $environmentFile $CentralPmsApiKeyIndex
+if (($configuredPermissions -join "`n") -cne ($profilePermissions -join "`n")) {
+    throw 'The private Central PMS permission set does not match the checked-in allowlist.'
+}
+$permissionEnvironmentArguments = for ($index = 0; $index -lt $profilePermissions.Count; $index++) {
+    '--env'
+    "${apiKeyPrefix}Permissions__${index}=$($profilePermissions[$index])"
 }
 
 $databaseConnection = Get-PrivateEnvironmentValue $environmentFile 'ConnectionStrings__PosServer'
@@ -172,6 +237,7 @@ try {
         --network-alias 'exitpass-r41-pos-server' `
         --network-alias 'pitx-pos-server' `
         --env-file $environmentFile `
+        @permissionEnvironmentArguments `
         --env 'ASPNETCORE_URLS=http://+:8080;https://+:8443' `
         --env 'ASPNETCORE_Kestrel__Certificates__Default__Path=/https/exitpass-pos-local.pfx' `
         --env "ASPNETCORE_Kestrel__Certificates__Default__Password=$certificatePassword" `

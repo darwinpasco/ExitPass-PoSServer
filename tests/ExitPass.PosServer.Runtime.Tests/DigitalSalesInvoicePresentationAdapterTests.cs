@@ -1,4 +1,5 @@
 using System.Reflection;
+using System.Text.Json;
 using ExitPass.PosServer.Runtime.FiscalDocuments;
 using Xunit;
 
@@ -106,7 +107,41 @@ public sealed class DigitalSalesInvoicePresentationAdapterTests
             row.DisplayValue == "recorded");
         Assert.Contains(Section(result.Presentation, "tenders").Rows, row =>
             row.Key == "tenders[0000].tenderTypeCodeKey" &&
-            row.DisplayValue == "cash");
+                   row.DisplayValue == "cash");
+    }
+
+    [Fact]
+    public void FactoryPresentsAuthoritativeParkingAndPaymentContextOnce()
+    {
+        var render = DigitalSalesInvoiceRenderModelFactory.Complete(ValidRenderModel(assignedNumber: true) with
+        {
+            DocumentContextJson = JsonSerializer.Serialize(new
+            {
+                reference_context = new Dictionary<string, string>
+                {
+                    ["branch_site"] = "PITX Level 3",
+                    ["ticket_number"] = "1474119573117",
+                    ["plate_number"] = "ABC1117",
+                    ["entry_time"] = "2026-09-29T00:42:30.7855730+00:00",
+                    ["payment_time"] = "2026-09-30T14:39:48.6742010+00:00",
+                    ["parking_duration"] = "37:57:17",
+                    ["payment_method"] = "CASH"
+                }
+            })
+        });
+
+        var result = new DigitalSalesInvoicePresentationAdapter().Adapt(
+            DigitalSalesInvoiceRenderResult.Success(render),
+            DigitalSalesInvoiceTemplateContract.Create());
+
+        var rows = Section(result.Presentation!, "parkingPaymentReferences").Rows;
+        Assert.Contains(rows, row => row.Key == "parkingPaymentReferences.branchOrSite" && row.DisplayValue == "PITX Level 3" && row.Posture == "required");
+        Assert.Contains(rows, row => row.Key == "parkingPaymentReferences.ticketNumber" && row.DisplayValue == "1474119573117" && row.Posture == "required");
+        Assert.Contains(rows, row => row.Key == "parkingPaymentReferences.plateNumber" && row.DisplayValue == "ABC1117" && row.Posture == "required");
+        Assert.Contains(rows, row => row.Key == "parkingPaymentReferences.entryTime" && row.DisplayValue == "2026-09-29T00:42:30.7855730+00:00" && row.Posture == "required");
+        Assert.Contains(rows, row => row.Key == "parkingPaymentReferences.paymentTime" && row.DisplayValue == "2026-09-30T14:39:48.6742010+00:00" && row.Posture == "required");
+        Assert.Contains(rows, row => row.Key == "parkingPaymentReferences.parkingDuration" && row.DisplayValue == "37:57:17" && row.Posture == "required");
+        Assert.Contains(rows, row => row.Key == "parkingPaymentReferences.paymentMethod" && row.DisplayValue == "CASH" && row.Posture == "required");
     }
 
     [Fact]

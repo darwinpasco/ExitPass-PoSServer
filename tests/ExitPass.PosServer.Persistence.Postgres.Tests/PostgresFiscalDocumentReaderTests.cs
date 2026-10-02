@@ -7,7 +7,7 @@ namespace ExitPass.PosServer.Persistence.Postgres.Tests;
 public sealed class PostgresFiscalDocumentReaderTests
 {
     [Fact]
-    public void ReaderSqlTargetsOnlyFiscalDocumentPersistenceTables()
+    public void ReaderSqlTargetsFiscalDocumentTablesAndExactCanonicalOriginalJournalText()
     {
         var source = File.ReadAllText(FindReaderSourcePath());
 
@@ -20,6 +20,12 @@ public sealed class PostgresFiscalDocumentReaderTests
         Assert.Contains("from pos.fiscal_tax_details", source, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("from pos.fiscal_discount_privilege_details", source, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("from pos.fiscal_totals", source, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("from pos.electronic_journal_records", source, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("reprint_request_id is null", source, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("and is_canonical", source, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("printable_sales_invoice_text is not null", source, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("order by stream_sequence_value, electronic_journal_record_id", source, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("OriginalCanonicalText = await ReadOriginalCanonicalTextAsync", source, StringComparison.Ordinal);
         Assert.Contains(
             "from pos.fiscal_document_applied_statutory_facts",
             PostgresFiscalDocumentSql.SelectAppliedStatutoryFiscalFacts,

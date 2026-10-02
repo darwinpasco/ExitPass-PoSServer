@@ -46,9 +46,18 @@ public sealed class CanonicalSalesInvoiceTextRendererTests
             Assert.True(index > prior, $"Expected '{value}' after the prior canonical field.");
             prior = index;
         }
-        Assert.True(Count(text, "------------------------------------------------") >= 6);
-        Assert.DoesNotContain("Print Date", text, StringComparison.Ordinal);
-        Assert.All(text.Split("\r\n", StringSplitOptions.RemoveEmptyEntries), line => Assert.True(line.Length <= 48, line));
+        Assert.True(Count(text, "--------------------------------") >= 6);
+        Assert.Contains("Issued Date", text, StringComparison.Ordinal);
+        Assert.Contains("Entry Time", text, StringComparison.Ordinal);
+        Assert.Contains("2026-09-10 08:00", text, StringComparison.Ordinal);
+        Assert.Contains("Payment", text, StringComparison.Ordinal);
+        Assert.Contains("Print Date", text, StringComparison.Ordinal);
+        Assert.Equal(3, Count(text, "2026-09-10 09:00"));
+        Assert.DoesNotContain("PHT", text, StringComparison.Ordinal);
+        Assert.DoesNotContain("# Description", text, StringComparison.Ordinal);
+        Assert.DoesNotContain("Type       Provider", text, StringComparison.Ordinal);
+        Assert.Equal(1, Count(text, "THANK YOU FOR CHOOSING OUR SERVICE"));
+        Assert.All(text.Split("\r\n", StringSplitOptions.RemoveEmptyEntries), line => Assert.True(line.Length <= 35, line));
     }
 
     [Fact]
@@ -75,7 +84,8 @@ public sealed class CanonicalSalesInvoiceTextRendererTests
             "Retail",
             "OSCA ID No.",
             "OSCA-0001",
-            "Customer Sign : __________________________"
+            "Customer Sign",
+            "____________________"
         };
 
         var prior = -1;
@@ -85,6 +95,33 @@ public sealed class CanonicalSalesInvoiceTextRendererTests
             Assert.True(index > prior, $"Expected '{value}' after the prior canonical field.");
             prior = index;
         }
+    }
+
+    [Fact]
+    public void MandatoryDiscountAndCustomerSectionsRemainVisibleWhenValuesAreAbsent()
+    {
+        var invoice = Invoice() with
+        {
+            Discounts = [],
+            InvoiceCustomerInformation = null,
+            AppliedStatutoryFiscalFacts = null,
+            FiscalContent = Invoice().FiscalContent! with
+            {
+                DiscountAmountMinorUnits = 0,
+                ShowCustomerSignatureLine = false
+            }
+        };
+
+        var text = new CanonicalSalesInvoiceTextRenderer().Render(invoice).Text;
+
+        Assert.Contains("DISCOUNTS", text, StringComparison.Ordinal);
+        Assert.Contains("Discount Amount", text, StringComparison.Ordinal);
+        Assert.Contains("PHP 0.00", text, StringComparison.Ordinal);
+        Assert.Contains("Customer Information", text, StringComparison.Ordinal);
+        Assert.Contains("NAME", text, StringComparison.Ordinal);
+        Assert.Contains("ADDRESS", text, StringComparison.Ordinal);
+        Assert.Contains("TIN", text, StringComparison.Ordinal);
+        Assert.Contains("BUS. STYLE", text, StringComparison.Ordinal);
     }
 
     [Fact]

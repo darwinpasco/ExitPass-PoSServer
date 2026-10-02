@@ -69,7 +69,8 @@ public static class DigitalSalesInvoiceRenderModelFactory
             document.CompletionBasis,
             document.CompletionAuthorityRef,
             document.InvoiceCustomerInformation,
-            document.DocumentContextJson);
+            document.DocumentContextJson,
+            OriginalCanonicalText: document.OriginalCanonicalText);
 
         return Complete(model, context);
     }
@@ -158,8 +159,7 @@ public static class DigitalSalesInvoiceRenderModelFactory
             Value(context, "entry_time", "entryTime", "entry_at", "entryAt"),
             Value(context, "payment_time", "paymentTime", "paid_at", "paidAt"),
             Value(context, "duration", "durationText", "parking_duration"),
-            Value(context, "payment_method", "paymentMethod")
-                ?? model.Tenders.Select(value => value.TenderTypeCodeKey).FirstOrDefault(value => !string.IsNullOrWhiteSpace(value)),
+            ResolvePaymentMethod(model, context),
             model.Lines.Sum(line => line.GrossAmountMinorUnits),
             model.Discounts.Sum(discount => discount.DiscountAmountMinorUnits),
             SumTaxableAmount(model.TaxDetails, "vatable"),
@@ -264,7 +264,7 @@ public static class DigitalSalesInvoiceRenderModelFactory
     private static DigitalSalesInvoiceTenderRenderModel MapTender(FiscalTenderReadModel tender) =>
         new(tender.TenderTypeCodeId, tender.TenderTypeCodeKey, tender.AmountMinorUnits, tender.CurrencyCode,
             tender.CentralPmsPaymentAttemptRef, tender.CentralPmsPaymentConfirmationRef,
-            tender.PaymentFinalityRef, tender.ProviderRef);
+            tender.PaymentFinalityRef, tender.ProviderRef, tender.TenderContextJson);
 
     private static DigitalSalesInvoiceTenderRenderModel MapTender(
         FiscalTenderInput tender,
@@ -273,7 +273,31 @@ public static class DigitalSalesInvoiceRenderModelFactory
         controlledCodeKeys.TryGetValue(tender.TenderTypeCodeId, out var typeCodeKey);
         return new(tender.TenderTypeCodeId, typeCodeKey, tender.AmountMinorUnits, tender.CurrencyCode,
             tender.CentralPmsPaymentAttemptRef, tender.CentralPmsPaymentConfirmationRef,
-            tender.PaymentFinalityRef, tender.ProviderRef);
+            tender.PaymentFinalityRef, tender.ProviderRef,
+            tender.TenderContext is null ? null : JsonSerializer.Serialize(tender.TenderContext));
+    }
+
+    private static string? ResolvePaymentMethod(
+        DigitalSalesInvoiceRenderModel model,
+        IReadOnlyDictionary<string, string?> context)
+    {
+        var contextual = Value(context, "payment_method", "paymentMethod");
+        if (!string.IsNullOrWhiteSpace(contextual)) return contextual.ToUpperInvariant();
+
+        var tenderContextMethods = model.Tenders
+            .Select(tender => Value(ReadContext(tender.TenderContextJson), "payment_method", "paymentMethod"))
+            .Where(value => !string.IsNullOrWhiteSpace(value))
+            .Select(value => value!.ToUpperInvariant())
+            .Distinct(StringComparer.Ordinal)
+            .ToArray();
+        if (tenderContextMethods.Length == 1) return tenderContextMethods[0];
+
+        var tenderTypes = model.Tenders
+            .Select(tender => tender.TenderTypeCodeKey?.Trim().ToUpperInvariant())
+            .Where(value => !string.IsNullOrWhiteSpace(value))
+            .Distinct(StringComparer.Ordinal)
+            .ToArray();
+        return tenderTypes.Length == 1 ? tenderTypes[0] : null;
     }
 
     private static DigitalSalesInvoiceTotalRenderModel MapTotal(FiscalTotalReadModel total) =>

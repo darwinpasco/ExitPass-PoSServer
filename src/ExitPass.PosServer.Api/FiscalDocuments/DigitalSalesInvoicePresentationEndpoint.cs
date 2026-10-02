@@ -1,9 +1,17 @@
+using System.Security.Cryptography;
+using System.Text;
+using ExitPass.PosServer.Runtime.ElectronicJournal;
 using ExitPass.PosServer.Runtime.FiscalDocuments;
 
 namespace ExitPass.PosServer.Api.FiscalDocuments;
 
 public static class DigitalSalesInvoicePresentationEndpoint
 {
+    private const string PersistedOriginalPresentationVersion =
+        "digital-sales-invoice-presentation-json-v2-persisted-original";
+    private const string PersistedOriginalCanonicalTextAuthority =
+        "persisted_original_electronic_journal";
+
     public static async Task<GetDigitalSalesInvoicePresentationResponse> GetByFiscalDocumentIdAsync(
         Guid fiscalDocumentId,
         DigitalSalesInvoiceRenderService renderService,
@@ -85,6 +93,9 @@ public static class DigitalSalesInvoicePresentationEndpoint
         }
 
         var render = renderResult.Render;
+        var canonicalText = RenderCanonicalText(render);
+        var usesPersistedOriginal = render is not null &&
+            !string.IsNullOrWhiteSpace(render.OriginalCanonicalText);
 
         return new GetDigitalSalesInvoicePresentationResponse(
             true,
@@ -107,9 +118,39 @@ public static class DigitalSalesInvoicePresentationEndpoint
             VoidStatus: render?.VoidStatus,
             VoidReasonCode: render?.VoidReasonCode,
             VoidedAt: render?.VoidedAt,
-            PresentationVersion: presentationResult.Presentation.PresentationVersion,
+            PresentationVersion: usesPersistedOriginal
+                ? PersistedOriginalPresentationVersion
+                : presentationResult.Presentation.PresentationVersion,
             TemplateVersion: templateContract.TemplateContractVersion,
             ContentType: templateContract.RenderFormat,
+            CanonicalText: canonicalText,
+            CanonicalTextAuthority: usesPersistedOriginal
+                ? PersistedOriginalCanonicalTextAuthority
+                : null,
+            CanonicalTextHash: usesPersistedOriginal && canonicalText is not null
+                ? ComputeCanonicalTextHash(canonicalText)
+                : null,
             HttpStatusCode: StatusCodes.Status200OK);
+    }
+
+    private static string? RenderCanonicalText(DigitalSalesInvoiceRenderModel? render)
+    {
+        if (render is null) return null;
+        if (!string.IsNullOrWhiteSpace(render.OriginalCanonicalText)) return render.OriginalCanonicalText;
+
+        try
+        {
+            return new CanonicalSalesInvoiceTextRenderer().Render(render).Text;
+        }
+        catch (InvalidOperationException)
+        {
+            return null;
+        }
+    }
+
+    private static string ComputeCanonicalTextHash(string canonicalText)
+    {
+        var hash = SHA256.HashData(Encoding.UTF8.GetBytes(canonicalText));
+        return $"sha256:{Convert.ToHexString(hash).ToLowerInvariant()}";
     }
 }

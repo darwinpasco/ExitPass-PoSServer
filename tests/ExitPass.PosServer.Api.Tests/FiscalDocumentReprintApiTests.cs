@@ -1,4 +1,5 @@
 using System.Security.Claims;
+using System.Text.Json;
 using ExitPass.PosServer.Api.ElectronicJournal;
 using ExitPass.PosServer.Api.FiscalDocuments;
 using ExitPass.PosServer.Api.FiscalReports;
@@ -36,6 +37,15 @@ public sealed class FiscalDocumentReprintApiTests
             configuration, "synthetic-reprint-key", ElectronicJournalAuthorization.ReadPermission);
         Assert.True(authentication.Succeeded);
         Assert.Empty(authentication.Permissions);
+
+        values["PosServer:Admin:ApiKeys:0:Permissions:0"] = FiscalDocumentAuthorization.ReadPermission;
+        configuration = new ConfigurationBuilder().AddInMemoryCollection(values).Build();
+        authentication = SalesInvoiceHeaderProfileAdminAuthorization.Authenticate(
+            configuration, "synthetic-reprint-key", FiscalDocumentReprintAuthorization.RecordPermission);
+        Assert.True(authentication.Succeeded);
+        Assert.Empty(authentication.Permissions);
+
+        values["PosServer:Admin:ApiKeys:0:Permissions:0"] = FiscalDocumentReprintAuthorization.RecordPermission;
         values["PosServer:Admin:ApiKeys:0:SitePosServerIds:0"] = "*";
         Assert.False(SalesInvoiceHeaderProfileAdminAuthorization.ResolveConfiguredApiKeys(
             new ConfigurationBuilder().AddInMemoryCollection(values).Build()).IsValid);
@@ -69,6 +79,45 @@ public sealed class FiscalDocumentReprintApiTests
         Assert.Contains("/{fiscalDocumentId:guid}/reprints", routes, StringComparison.Ordinal);
         Assert.Contains("RequireAuthorization(FiscalDocumentReprintAuthorization.RecordPolicyName)", routes, StringComparison.Ordinal);
         Assert.Contains("FiscalDocumentReprintAuthorization.RecordPermission", services, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void CentralPmsPermissionProfileIsExactSecretFreeAndNarrow()
+    {
+        var root = FindRepositoryRoot();
+        var path = Path.Combine(root, "deploy", "authorization", "central-pms.permissions.json");
+        using var document = JsonDocument.Parse(File.ReadAllText(path));
+        var rootElement = document.RootElement;
+        string[] permissions = rootElement.GetProperty("permissions")
+            .EnumerateArray()
+            .Select(value => value.GetString()!)
+            .ToArray();
+
+        Assert.Equal("central-pms-to-site-pos-server", rootElement.GetProperty("profile").GetString());
+        Assert.Equal(1, rootElement.GetProperty("version").GetInt32());
+        Assert.Equal(
+        [
+            FiscalDocumentAuthorization.CreatePermission,
+            FiscalDocumentAuthorization.ReadPermission,
+            SalesInvoiceHeaderProfileAdminAuthorization.RequiredPermission,
+            ElectronicJournalAuthorization.ReadPermission,
+            ElectronicJournalAuthorization.ExportPermission,
+            FiscalXReadingAuthorization.ReadPermission,
+            FiscalXReadingAuthorization.GeneratePermission,
+            FiscalReportOutputAuthorization.XExportPermission,
+            FiscalZReadingAuthorization.ReadPermission,
+            FiscalZReadingAuthorization.ClosePermission,
+            FiscalReportOutputAuthorization.ZExportPermission,
+            FiscalZCloseStateInitializationAuthorization.Permission,
+            FiscalDocumentReprintAuthorization.RecordPermission
+        ], permissions);
+        Assert.DoesNotContain(permissions, permission => permission is null || permission.Contains('*'));
+        Assert.False(rootElement.TryGetProperty("principal", out _));
+        Assert.False(rootElement.TryGetProperty("key", out _));
+        Assert.False(rootElement.TryGetProperty("secret", out _));
+        Assert.False(rootElement.TryGetProperty("sitePosServerIds", out _));
+        Assert.False(rootElement.TryGetProperty("fiscalIdentityIds", out _));
+        Assert.False(rootElement.TryGetProperty("currencyCodes", out _));
     }
 
     private static Dictionary<string, string?> ConfigurationValues() => new()

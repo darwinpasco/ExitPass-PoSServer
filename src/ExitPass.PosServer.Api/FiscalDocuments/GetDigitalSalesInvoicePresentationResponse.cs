@@ -27,4 +27,7 @@ public sealed record GetDigitalSalesInvoicePresentationResponse(
     string? PresentationVersion = null,
     string? TemplateVersion = null,
     string? ContentType = null,
+    string? CanonicalText = null,
+    string? CanonicalTextAuthority = null,
+    string? CanonicalTextHash = null,
     [property: JsonIgnore] int HttpStatusCode = StatusCodes.Status200OK);

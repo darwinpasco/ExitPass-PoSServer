@@ -47,12 +47,13 @@ public static class FiscalDocumentEndpointRouteBuilderExtensions
             Guid fiscalDocumentId,
             RecordFiscalDocumentReprintRequest request,
             FiscalDocumentReprintService service,
+            DigitalSalesInvoiceRenderService renderService,
             HttpContext context,
             IHostEnvironment environment,
             CancellationToken cancellationToken) =>
         {
-            var response = await FiscalDocumentReprintEndpoint.RecordAsync(
-                fiscalDocumentId, request, service, context, environment, cancellationToken).ConfigureAwait(false);
+            var response = await FiscalDocumentReprintEndpoint.RecordCanonicalAsync(
+                fiscalDocumentId, request, service, renderService, context, environment, cancellationToken).ConfigureAwait(false);
             return Results.Json(response, statusCode: response.HttpStatusCode);
         }).RequireAuthorization(FiscalDocumentReprintAuthorization.RecordPolicyName);
 
