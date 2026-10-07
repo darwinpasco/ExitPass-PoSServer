@@ -8,6 +8,49 @@ namespace ExitPass.PosServer.Runtime.Tests;
 public sealed class DigitalSalesInvoicePresentationAdapterTests
 {
     [Fact]
+    public void CustomerPresentationOmitsInternalCompletionMetadataButRetainsCustomerPaymentAndVatFacts()
+    {
+        var authority = "ee536680-e869-4065-9778-32e901f53784";
+        var render = DigitalSalesInvoiceRenderModelFactory.Complete(ValidRenderModel(assignedNumber: true) with
+        {
+            CompletionBasis = FiscalCompletionBasisCodes.PaymentFinality,
+            CompletionAuthorityRef = authority,
+            Tenders = [Tender("FINALITY-CUSTOMER-001", "CASH", 35000) with { TenderTypeCodeKey = "cash" }],
+            TaxDetails =
+            [
+                TaxDetail(Guid.Parse("33333333-3333-3333-3333-333333333333"), "vatable") with
+                {
+                    TaxableAmountMinorUnits = 31250,
+                    TaxAmountMinorUnits = 3750
+                }
+            ],
+            Totals = [new(Guid.NewGuid(), 35000, "PHP", "payable_total")]
+        });
+
+        var result = new DigitalSalesInvoicePresentationAdapter().Adapt(
+            DigitalSalesInvoiceRenderResult.Success(render),
+            DigitalSalesInvoiceTemplateContract.Create());
+
+        Assert.True(result.Succeeded);
+        Assert.Equal(FiscalCompletionBasisCodes.PaymentFinality, render.CompletionBasis);
+        Assert.Equal(authority, render.CompletionAuthorityRef);
+        var rows = result.Presentation!.Sections.SelectMany(section => section.Rows).ToArray();
+        Assert.DoesNotContain(rows, row => row.Key is
+            "parkingPaymentReferences.completionBasis" or
+            "parkingPaymentReferences.completionAuthorityRef");
+        Assert.DoesNotContain(rows, row => row.Label is "Completion Basis" or "Completion Authority Ref");
+        Assert.DoesNotContain(rows, row => string.Equals(row.DisplayValue, authority, StringComparison.OrdinalIgnoreCase));
+        Assert.Contains(rows, row => row.Key == "tenders[0000].tenderTypeCodeKey" && row.DisplayValue == "cash");
+        Assert.Contains(rows, row => row.Key == "tenders[0000].providerRef" && row.DisplayValue == "CASH");
+        Assert.Contains(rows, row => row.Key == "tenders[0000].amount" && row.DisplayValue == "PHP 350.00");
+        Assert.Contains(rows, row => row.Key == "totals.summary.totalPaid" && row.DisplayValue == "PHP 350.00");
+        Assert.Contains(rows, row => row.Key == "totals.vatableSales" && row.DisplayValue == "PHP 312.50");
+        Assert.Contains(rows, row => row.Key == "totals.vatAmount" && row.DisplayValue == "PHP 37.50");
+        Assert.Contains(rows, row => row.Key == "totals.vatExemptSales" && row.DisplayValue == "PHP 0.00");
+        Assert.Contains(rows, row => row.Key == "totals.zeroRatedSales" && row.DisplayValue == "PHP 0.00");
+    }
+
+    [Fact]
     public void CustomerInformationAndOrdinaryVatBreakdownArePresentedFromAuthoritativeTaxFacts()
     {
         var render = DigitalSalesInvoiceRenderModelFactory.Complete(ValidRenderModel(assignedNumber: true) with

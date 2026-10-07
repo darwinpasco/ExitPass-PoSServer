@@ -37,7 +37,8 @@ public sealed class CanonicalSalesInvoiceConsistencyTests
         Assert.Equal("Senior Citizen Discount", canonical.Discounts.Single().Reason);
         Assert.Equal("Senior Citizen Discount", Row(presentation, "discounts[0000].reason").DisplayValue);
         Assert.Contains("Senior Citizen Discount", ej, StringComparison.Ordinal);
-        Assert.Contains("ZERO_PAYABLE_STATUTORY_FINALITY", ej, StringComparison.Ordinal);
+        Assert.Equal(FiscalCompletionBasisCodes.ZeroPayableStatutoryFinality, canonical.CompletionBasis);
+        Assert.DoesNotContain("ZERO_PAYABLE_STATUTORY_FINALITY", ej, StringComparison.Ordinal);
         Assert.Contains("PHP 0.00", ej, StringComparison.Ordinal);
     }
 
@@ -78,10 +79,13 @@ public sealed class CanonicalSalesInvoiceConsistencyTests
         Assert.DoesNotContain(fiscal.PaymentTimeText!, ej, StringComparison.Ordinal);
         Assert.Equal(fiscal.ParkingDurationText, Row(presentation, "parkingPaymentReferences.parkingDuration").DisplayValue);
         Assert.Contains(fiscal.ParkingDurationText!, ej, StringComparison.Ordinal);
-        Assert.Equal(canonical.CompletionBasis, Row(presentation, "parkingPaymentReferences.completionBasis").DisplayValue);
-        Assert.Contains(canonical.CompletionBasis, ej, StringComparison.Ordinal);
-        Assert.Equal(canonical.CompletionAuthorityRef, Row(presentation, "parkingPaymentReferences.completionAuthorityRef").DisplayValue);
-        Assert.Contains(canonical.CompletionAuthorityRef!, ej, StringComparison.Ordinal);
+        Assert.False(string.IsNullOrWhiteSpace(canonical.CompletionBasis));
+        Assert.False(string.IsNullOrWhiteSpace(canonical.CompletionAuthorityRef));
+        Assert.DoesNotContain(presentation.Sections.SelectMany(section => section.Rows), row =>
+            row.Key.Contains("completion", StringComparison.OrdinalIgnoreCase));
+        Assert.DoesNotContain("Completion Basis", ej, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("Completion Authority", ej, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain(canonical.CompletionAuthorityRef!, ej, StringComparison.OrdinalIgnoreCase);
         Assert.Equal(canonical.Lines.Single().Description, Row(presentation, "lineItems[0000].description").DisplayValue);
         Assert.Equal(canonical.Lines.Single().Quantity, Row(presentation, "lineItems[0000].quantity").RawValue);
         Assert.Equal(canonical.Lines.Single().UnitAmountMinorUnits, Row(presentation, "lineItems[0000].unitAmount").RawValue);

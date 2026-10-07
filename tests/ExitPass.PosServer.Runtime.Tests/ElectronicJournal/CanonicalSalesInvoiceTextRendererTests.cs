@@ -97,6 +97,60 @@ public sealed class CanonicalSalesInvoiceTextRendererTests
         }
     }
 
+    [Theory]
+    [InlineData("57 mm", 35)]
+    [InlineData("58 mm", 35)]
+    [InlineData("80 mm", 48)]
+    public void CustomerPrinterPayloadOmitsCompletionMetadataForEverySupportedPaperLayout(
+        string paperLayout,
+        int maximumCharacters)
+    {
+        var authority = "ee536680-e869-4065-9778-32e901f53784";
+        var invoice = Invoice() with
+        {
+            CompletionBasis = FiscalCompletionBasisCodes.PaymentFinality,
+            CompletionAuthorityRef = authority,
+            Tenders = [new(Guid.NewGuid(), "cash", 35000, "PHP", null, null, authority, "CASH")],
+            FiscalContent = Invoice().FiscalContent! with
+            {
+                PaymentMethod = "CASH",
+                SubtotalAmountMinorUnits = 35000,
+                DiscountAmountMinorUnits = 0,
+                VatableSalesMinorUnits = 31250,
+                VatAmountMinorUnits = 3750,
+                VatExemptSalesMinorUnits = 0,
+                ZeroRatedSalesMinorUnits = 0,
+                TotalAmountMinorUnits = 35000,
+                TotalPaidMinorUnits = 35000,
+                TenderedAmountMinorUnits = null,
+                ChangeAmountMinorUnits = null
+            }
+        };
+
+        var text = new SalesInvoicePrinterPayloadRenderer(new CanonicalSalesInvoiceTextRenderer())
+            .RenderVisibleText(invoice).Text;
+
+        Assert.All(
+            text.Split("\r\n", StringSplitOptions.RemoveEmptyEntries),
+            line => Assert.True(line.Length <= maximumCharacters, $"{paperLayout}: {line}"));
+        Assert.DoesNotContain("Completion Basis", text, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("Completion Authority", text, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain(authority, text, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("Type", text, StringComparison.Ordinal);
+        Assert.Contains("CASH", text, StringComparison.Ordinal);
+        Assert.Contains("Provider", text, StringComparison.Ordinal);
+        Assert.Contains("Amount", text, StringComparison.Ordinal);
+        Assert.Contains("Total Paid", text, StringComparison.Ordinal);
+        Assert.Contains("VATable Sales", text, StringComparison.Ordinal);
+        Assert.Contains("PHP 312.50", text, StringComparison.Ordinal);
+        Assert.Contains("VAT Amount", text, StringComparison.Ordinal);
+        Assert.Contains("PHP 37.50", text, StringComparison.Ordinal);
+        Assert.Contains("VAT Exempt Sales", text, StringComparison.Ordinal);
+        Assert.Contains("Zero Rated Sales", text, StringComparison.Ordinal);
+        Assert.Contains("Total Amount", text, StringComparison.Ordinal);
+        Assert.Contains("PHP 350.00", text, StringComparison.Ordinal);
+    }
+
     [Fact]
     public void MandatoryDiscountAndCustomerSectionsRemainVisibleWhenValuesAreAbsent()
     {

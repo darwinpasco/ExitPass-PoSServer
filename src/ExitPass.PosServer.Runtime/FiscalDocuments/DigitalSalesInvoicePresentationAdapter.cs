@@ -191,9 +191,7 @@ public sealed class DigitalSalesInvoicePresentationAdapter
             Row("parkingPaymentReferences.centralPmsPaymentAttemptRef", "Central PMS Payment Attempt Ref", "identifier", FieldPosture(contract, "parkingPaymentReferences.centralPmsPaymentAttemptRef"), render.CentralPmsPaymentAttemptRef),
             Row("parkingPaymentReferences.centralPmsPaymentConfirmationRef", "Central PMS Payment Confirmation Ref", "identifier", FieldPosture(contract, "parkingPaymentReferences.centralPmsPaymentConfirmationRef"), render.CentralPmsPaymentConfirmationRef),
             Row("parkingPaymentReferences.paymentFinalityRef", "Payment Finality Ref", "identifier", FieldPosture(contract, "parkingPaymentReferences.paymentFinalityRef"), render.PaymentFinalityRef),
-            Row("parkingPaymentReferences.vendorAckRef", "Vendor Acknowledgement Ref", "identifier", FieldPosture(contract, "parkingPaymentReferences.vendorAckRef"), render.VendorAckRef),
-            Row("parkingPaymentReferences.completionBasis", "Completion Basis", "status", FieldPosture(contract, "parkingPaymentReferences.completionBasis"), render.CompletionBasis),
-            Row("parkingPaymentReferences.completionAuthorityRef", "Completion Authority Ref", "identifier", FieldPosture(contract, "parkingPaymentReferences.completionAuthorityRef"), render.CompletionAuthorityRef)
+            Row("parkingPaymentReferences.vendorAckRef", "Vendor Acknowledgement Ref", "identifier", FieldPosture(contract, "parkingPaymentReferences.vendorAckRef"), render.VendorAckRef)
         ];
     }
 
