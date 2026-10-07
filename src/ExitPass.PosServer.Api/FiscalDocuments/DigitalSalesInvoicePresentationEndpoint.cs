@@ -95,7 +95,7 @@ public static class DigitalSalesInvoicePresentationEndpoint
         var render = renderResult.Render;
         var canonicalText = RenderCanonicalText(render);
         var usesPersistedOriginal = render is not null &&
-            !string.IsNullOrWhiteSpace(render.OriginalCanonicalText);
+            IsCustomerSafePersistedOriginal(render.OriginalCanonicalText);
 
         return new GetDigitalSalesInvoicePresentationResponse(
             true,
@@ -136,7 +136,7 @@ public static class DigitalSalesInvoicePresentationEndpoint
     private static string? RenderCanonicalText(DigitalSalesInvoiceRenderModel? render)
     {
         if (render is null) return null;
-        if (!string.IsNullOrWhiteSpace(render.OriginalCanonicalText)) return render.OriginalCanonicalText;
+        if (IsCustomerSafePersistedOriginal(render.OriginalCanonicalText)) return render.OriginalCanonicalText;
 
         try
         {
@@ -147,6 +147,11 @@ public static class DigitalSalesInvoicePresentationEndpoint
             return null;
         }
     }
+
+    private static bool IsCustomerSafePersistedOriginal(string? text) =>
+        !string.IsNullOrWhiteSpace(text) &&
+        !text.Contains("Completion Basis", StringComparison.OrdinalIgnoreCase) &&
+        !text.Contains("Completion Authority", StringComparison.OrdinalIgnoreCase);
 
     private static string ComputeCanonicalTextHash(string canonicalText)
     {

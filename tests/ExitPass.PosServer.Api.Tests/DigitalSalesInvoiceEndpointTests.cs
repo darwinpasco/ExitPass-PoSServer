@@ -354,6 +354,35 @@ public sealed class DigitalSalesInvoiceEndpointTests
     }
 
     [Fact]
+    public async Task PresentationEndpointRerendersLegacyOriginalThatContainsInternalCompletionMetadata()
+    {
+        const string authority = "ee536680-e869-4065-9778-32e901f53784";
+        var document = ValidReadModel(assignedNumber: true) with
+        {
+            SalesInvoiceHeaderSnapshot = ValidHeaderSnapshot(),
+            CompletionBasis = FiscalCompletionBasisCodes.PaymentFinality,
+            CompletionAuthorityRef = authority,
+            OriginalCanonicalText = $"PERSISTED ORIGINAL\r\nCompletion Basis PAYMENT_FINALITY\r\nCompletion Authority {authority}\r\n"
+        };
+        var service = new DigitalSalesInvoiceRenderService(
+            new FiscalDocumentReadService(new StubFiscalDocumentReader(document)));
+
+        var response = await DigitalSalesInvoicePresentationEndpoint.GetByFiscalDocumentIdAsync(
+            document.FiscalDocumentId,
+            service,
+            new DigitalSalesInvoicePresentationAdapter());
+
+        Assert.True(response.Succeeded);
+        Assert.DoesNotContain("Completion Basis", response.CanonicalText, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("Completion Authority", response.CanonicalText, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain(authority, response.CanonicalText, StringComparison.OrdinalIgnoreCase);
+        Assert.Null(response.CanonicalTextAuthority);
+        Assert.Null(response.CanonicalTextHash);
+        Assert.Equal(authority, document.CompletionAuthorityRef);
+        Assert.Contains(authority, document.OriginalCanonicalText, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task GovernedReprintReturnsCanonicalReprintTextForCompleteDocument()
     {
         var document = ValidReadModel(assignedNumber: true) with

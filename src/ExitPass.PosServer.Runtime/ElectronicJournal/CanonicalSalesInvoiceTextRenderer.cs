@@ -90,8 +90,6 @@ public sealed class CanonicalSalesInvoiceTextRenderer
         AddValue(lines, "Total Paid", Money(fiscal.TotalPaidMinorUnits, currency));
         if (fiscal.TenderedAmountMinorUnits is { } tendered) AddValue(lines, "Tendered", Money(tendered, currency));
         if (fiscal.ChangeAmountMinorUnits is { } change) AddValue(lines, "Change", Money(change, currency));
-        AddValue(lines, "Completion Basis", invoice.CompletionBasis);
-        AddValue(lines, "Completion Authority", invoice.CompletionAuthorityRef);
 
         lines.Add(Separator);
         AddCentered(lines, header.SalesInvoiceLegalStatement);
