@@ -1,0 +1,7 @@
+**
+!.dockerignore
+!Dockerfile
+!backup-loop.sh
+!healthcheck.sh
+!restore-from-gcs.sh
+!run-backup.sh
