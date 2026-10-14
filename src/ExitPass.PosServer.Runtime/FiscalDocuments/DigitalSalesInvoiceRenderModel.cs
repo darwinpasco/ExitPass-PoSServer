@@ -127,4 +127,5 @@ public sealed record DigitalSalesInvoiceFiscalContentRenderModel(
     long? TenderedAmountMinorUnits,
     long? ChangeAmountMinorUnits,
     string CurrencyCode,
-    bool ShowCustomerSignatureLine);
+    bool ShowCustomerSignatureLine,
+    string? CashierDisplayName = null);

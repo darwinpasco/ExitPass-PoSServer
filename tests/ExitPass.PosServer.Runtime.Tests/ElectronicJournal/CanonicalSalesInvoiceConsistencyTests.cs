@@ -36,10 +36,16 @@ public sealed class CanonicalSalesInvoiceConsistencyTests
         Assert.Contains("OSCA-1234567", ej, StringComparison.Ordinal);
         Assert.Equal("Senior Citizen Discount", canonical.Discounts.Single().Reason);
         Assert.Equal("Senior Citizen Discount", Row(presentation, "discounts[0000].reason").DisplayValue);
-        Assert.Contains("Senior Citizen Discount", ej, StringComparison.Ordinal);
+        Assert.Contains("DISCOUNT", ej, StringComparison.Ordinal);
         Assert.Equal(FiscalCompletionBasisCodes.ZeroPayableStatutoryFinality, canonical.CompletionBasis);
         Assert.DoesNotContain("ZERO_PAYABLE_STATUTORY_FINALITY", ej, StringComparison.Ordinal);
-        Assert.Contains("PHP 0.00", ej, StringComparison.Ordinal);
+        Assert.Contains("TOTAL", ej, StringComparison.Ordinal);
+        Assert.Contains("0.00", ej, StringComparison.Ordinal);
+        Assert.DoesNotContain("TENDERED", ej, StringComparison.Ordinal);
+        Assert.DoesNotContain("CHANGE", ej, StringComparison.Ordinal);
+        Assert.DoesNotContain(ej.Split("\r\n"), line =>
+            line.StartsWith("TYPE", StringComparison.Ordinal) &&
+            line.EndsWith("CASH", StringComparison.Ordinal));
     }
 
     [Fact]
@@ -96,10 +102,11 @@ public sealed class CanonicalSalesInvoiceConsistencyTests
         Assert.Equal(fiscal.DiscountAmountMinorUnits, Row(presentation, "totals.summary.discountAmount").RawValue);
         Assert.Equal(fiscal.TotalAmountMinorUnits, Row(presentation, "totals.summary.totalAmount").RawValue);
         Assert.Equal(fiscal.TotalPaidMinorUnits, Row(presentation, "totals.summary.totalPaid").RawValue);
-        Assert.Contains(Money(fiscal.VatableSalesMinorUnits), ej, StringComparison.Ordinal);
-        Assert.Contains(Money(fiscal.VatAmountMinorUnits), ej, StringComparison.Ordinal);
-        Assert.Contains($"Total Amount{new string(' ', 23 - Money(fiscal.TotalAmountMinorUnits).Length)}{Money(fiscal.TotalAmountMinorUnits)}", ej, StringComparison.Ordinal);
-        Assert.Contains(canonical.Lines.Single().Description, ej, StringComparison.Ordinal);
+        Assert.Contains(Amount(fiscal.VatableSalesMinorUnits), ej, StringComparison.Ordinal);
+        Assert.Contains(Amount(fiscal.VatAmountMinorUnits), ej, StringComparison.Ordinal);
+        Assert.Contains("TOTAL", ej, StringComparison.Ordinal);
+        Assert.Contains(Amount(fiscal.TotalAmountMinorUnits), ej, StringComparison.Ordinal);
+        Assert.Contains("PARKING FEE", ej, StringComparison.Ordinal);
         var customer = canonical.InvoiceCustomerInformation!;
         Assert.Equal(customer.CustomerName, Row(presentation, "customerInformation.customerName").DisplayValue);
         Assert.Equal(customer.Address, Row(presentation, "customerInformation.address").DisplayValue);
@@ -134,6 +141,8 @@ public sealed class CanonicalSalesInvoiceConsistencyTests
         presentation.Sections.SelectMany(section => section.Rows).Single(row => row.Key == key);
 
     private static string Money(long minorUnits) => $"PHP {minorUnits / 100m:N2}";
+
+    private static string Amount(long minorUnits) => $"{minorUnits / 100m:N2}";
 
     private static DigitalSalesInvoiceRenderModel Invoice(bool statutory)
     {

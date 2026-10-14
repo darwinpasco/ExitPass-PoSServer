@@ -37,66 +37,61 @@ public sealed class CanonicalSalesInvoiceTextRenderer
         var lines = new List<string>();
         AddCentered(lines, header.RegisteredBusinessName);
         AddCentered(lines, header.RegisteredBusinessAddress);
-        lines.Add(string.Empty);
         AddValue(lines, "VAT REG TIN", header.Tin);
         AddValue(lines, "MIN", header.MachineIdentificationNumber);
         AddValue(lines, "S/N", header.PosSerialNumber);
-        AddValue(lines, "Branch / Site", fiscal.BranchOrSite);
-        AddValue(lines, "Parking Location", header.ParkingLocationDisplay);
+        AddValue(lines, "BRANCH / SITE", fiscal.BranchOrSite);
+        AddValue(lines, "PARKING LOCATION", header.ParkingLocationDisplay);
 
-        AddSection(lines, RequireDocumentDesignation(invoice.DocumentDesignation));
+        lines.Add(string.Empty);
+        AddCentered(lines, RequireDocumentDesignation(invoice.DocumentDesignation));
         AddCentered(lines, RequireCopyLabel(copyDesignation));
         lines.Add(string.Empty);
-        AddValue(lines, "SI No", invoice.FiscalDocumentNumber);
-        AddValue(lines, "Issued Date", LocalTimestamp(invoice.FiscalNumberAssignedAt.Value));
-        AddValue(lines, "Business Date", invoice.BusinessDayDate.Value.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture));
+        AddValue(lines, "SI NO", invoice.FiscalDocumentNumber);
+        AddValue(lines, "ISSUED", LocalTimestamp(invoice.FiscalNumberAssignedAt.Value));
+        AddValue(lines, "BUSINESS DATE", invoice.BusinessDayDate.Value.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture));
+        AddValue(lines, "CASHIER", fiscal.CashierDisplayName);
 
-        AddSection(lines, "PARKING DETAILS");
-        AddValue(lines, "Ticket Number", fiscal.TicketNumber);
-        AddValue(lines, "Plate Number", fiscal.PlateNumber);
-        AddValue(lines, "Entry Time", CompactTimestamp(fiscal.EntryTimeText));
-        AddValue(lines, "Payment", CompactTimestamp(fiscal.PaymentTimeText));
-        AddValue(lines, "Duration", fiscal.ParkingDurationText);
+        lines.Add(string.Empty);
+        AddValue(lines, "TICKET", fiscal.TicketNumber);
+        AddValue(lines, "PLATE", fiscal.PlateNumber);
+        AddValue(lines, "ENTRY", CompactTimestamp(fiscal.EntryTimeText));
+        AddValue(lines, "PAYMENT", CompactTimestamp(fiscal.PaymentTimeText));
+        AddValue(lines, "DURATION", CompactDuration(fiscal.ParkingDurationText));
 
-        AddSection(lines, "ITEMS");
+        lines.Add(string.Empty);
+        lines.Add(Separator);
+        lines.Add("PARKING FEE");
         foreach (var item in invoice.Lines.OrderBy(item => item.LineSequence))
-            AddItem(lines, item, currency);
-        AddValue(lines, "Subtotal", Money(fiscal.SubtotalAmountMinorUnits, currency));
+            AddCompactItem(lines, item, currency);
+        lines.Add(Separator);
+        AddValue(lines, "SUBTOTAL", Amount(fiscal.SubtotalAmountMinorUnits));
+        AddValue(lines, "DISCOUNT", Amount(fiscal.DiscountAmountMinorUnits));
+        AddValue(lines, "VATABLE SALES", Amount(fiscal.VatableSalesMinorUnits));
+        AddValue(lines, "VAT AMOUNT", Amount(fiscal.VatAmountMinorUnits));
+        AddValue(lines, "VAT EXEMPT SALES", Amount(fiscal.VatExemptSalesMinorUnits));
+        AddValue(lines, "ZERO RATED SALES", Amount(fiscal.ZeroRatedSalesMinorUnits));
+        AddValue(lines, "TOTAL", Amount(fiscal.TotalAmountMinorUnits));
 
-        AddSection(lines, "DISCOUNTS");
-        if (invoice.Discounts.Count == 0)
+        lines.Add(string.Empty);
+        lines.Add("PAYMENT");
+        AddValue(lines, "TYPE", PaymentType(invoice, fiscal));
+        AddValue(lines, "AMOUNT DUE", Amount(fiscal.TotalAmountMinorUnits));
+        AddValue(lines, "TOTAL PAID", Amount(fiscal.TotalPaidMinorUnits));
+        if (IsCash(fiscal.PaymentMethod))
         {
-            AddValue(lines, "Discount Reason", "NONE");
-            AddValue(lines, "Discount Amount", Money(0, currency));
-        }
-        else
-        {
-            foreach (var discount in invoice.Discounts)
-            {
-                AddValue(lines, "Discount Reason", discount.Reason ?? "NOT RECORDED");
-                AddValue(lines, "Discount Amount", $"-{Money(discount.DiscountAmountMinorUnits, currency)}");
-            }
+            if (fiscal.TenderedAmountMinorUnits is { } tendered) AddValue(lines, "TENDERED", Amount(tendered));
+            if (fiscal.ChangeAmountMinorUnits is { } change) AddValue(lines, "CHANGE", Amount(change));
         }
 
-        AddSection(lines, "VAT BREAKDOWN");
-        AddValue(lines, "VATable Sales", Money(fiscal.VatableSalesMinorUnits, currency));
-        AddValue(lines, "VAT Amount", Money(fiscal.VatAmountMinorUnits, currency));
-        AddValue(lines, "VAT Exempt Sales", Money(fiscal.VatExemptSalesMinorUnits, currency));
-        AddValue(lines, "Zero Rated Sales", Money(fiscal.ZeroRatedSalesMinorUnits, currency));
-        AddValue(lines, "Total Amount", Money(fiscal.TotalAmountMinorUnits, currency));
-
-        AddSection(lines, "PAYMENT DETAILS");
-        foreach (var tender in invoice.Tenders) AddTender(lines, tender, fiscal.PaymentMethod, currency);
-        AddValue(lines, "Total Paid", Money(fiscal.TotalPaidMinorUnits, currency));
-        if (fiscal.TenderedAmountMinorUnits is { } tendered) AddValue(lines, "Tendered", Money(tendered, currency));
-        if (fiscal.ChangeAmountMinorUnits is { } change) AddValue(lines, "Change", Money(change, currency));
-
+        lines.Add(string.Empty);
         lines.Add(Separator);
         AddCentered(lines, header.SalesInvoiceLegalStatement);
-        AddValue(lines, "Print Date", LocalTimestamp(invoice.FiscalNumberAssignedAt.Value));
+        AddValue(lines, "PRINT DATE", LocalTimestamp(invoice.FiscalNumberAssignedAt.Value));
 
         var customer = invoice.InvoiceCustomerInformation;
-        AddSection(lines, "Customer Information");
+        lines.Add(string.Empty);
+        lines.Add("CUSTOMER INFORMATION");
         AddValue(lines, "NAME", customer?.CustomerName);
         AddValue(lines, "ADDRESS", customer?.Address);
         AddValue(lines, "TIN", customer?.Tin);
@@ -106,14 +101,15 @@ public sealed class CanonicalSalesInvoiceTextRenderer
             AddValue(lines, StatutoryIdLabel(invoice.AppliedStatutoryFiscalFacts?.EntitlementType), statutoryId);
         if (fiscal.ShowCustomerSignatureLine) AddValue(lines, "Customer Sign", "____________________");
 
-        AddSection(lines, "POS SOFTWARE SUPPLIER / DEVELOPER");
+        lines.Add(string.Empty);
+        lines.Add("POS SOFTWARE SUPPLIER / DEVELOPER");
         AddCentered(lines, header.SupplierDeveloperRegisteredName);
         AddCentered(lines, header.SupplierDeveloperAddress);
         AddValue(lines, "TIN", header.SupplierDeveloperTin);
-        AddValue(lines, "ACCR. NO.", header.BirAccreditationNumber);
+        AddValue(lines, "ACCR NO", header.BirAccreditationNumber);
         AddValue(lines, "DATE ISSUED", header.BirAccreditationIssuedDate.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture));
         AddValue(lines, "PTU", header.PtuNumber);
-        AddValue(lines, "PTU Date", header.PtuIssuedDate.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture));
+        AddValue(lines, "PTU DATE", header.PtuIssuedDate.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture));
         if (!string.IsNullOrWhiteSpace(header.CustomerServiceFooter) &&
             !string.Equals(header.CustomerServiceFooter.Trim(), ClosingText, StringComparison.OrdinalIgnoreCase))
             AddCentered(lines, header.CustomerServiceFooter.Trim());
@@ -123,7 +119,6 @@ public sealed class CanonicalSalesInvoiceTextRenderer
                 !closingLine.Contains("NOTHING FOLLOWS", StringComparison.OrdinalIgnoreCase))
                 AddCentered(lines, closingLine.Trim());
         AddCentered(lines, ClosingText);
-        lines.Add(string.Empty);
         AddCentered(lines, "===== NOTHING FOLLOWS =====");
 
         var text = string.Join("\r\n", lines) + "\r\n";
@@ -141,35 +136,34 @@ public sealed class CanonicalSalesInvoiceTextRenderer
     private static string Money(long minorUnits, string currency) =>
         $"{currency} {(minorUnits / 100m).ToString("N2", CultureInfo.InvariantCulture)}";
 
-    private static void AddSection(List<string> lines, string title)
+    private static string Amount(long minorUnits) =>
+        (minorUnits / 100m).ToString("N2", CultureInfo.InvariantCulture);
+
+    private static void AddCompactItem(List<string> lines, DigitalSalesInvoiceLineRenderModel item, string currency)
     {
-        lines.Add(Separator);
-        AddCentered(lines, title);
-        lines.Add(Separator);
+        var left = $"{item.Quantity:0.##} x {Money(item.UnitAmountMinorUnits, currency)}";
+        var right = Amount(item.NetAmountMinorUnits);
+        if (left.Length + right.Length + 1 <= ReceiptWidth)
+            lines.Add(left + new string(' ', ReceiptWidth - left.Length - right.Length) + right);
+        else
+        {
+            lines.Add(left);
+            lines.Add(right.PadLeft(ReceiptWidth));
+        }
     }
 
-    private static void AddItem(List<string> lines, DigitalSalesInvoiceLineRenderModel item, string currency)
-    {
-        AddValue(lines, "Item", item.LineSequence.ToString(CultureInfo.InvariantCulture));
-        AddValue(lines, "Description", item.Description);
-        AddValue(lines, "Quantity", item.Quantity.ToString("0.##", CultureInfo.InvariantCulture));
-        AddValue(lines, "Unit Amount", Money(item.UnitAmountMinorUnits, currency));
-        AddValue(lines, "Amount", Money(item.NetAmountMinorUnits, currency));
-    }
+    private static string PaymentType(
+        DigitalSalesInvoiceRenderModel invoice,
+        DigitalSalesInvoiceFiscalContentRenderModel fiscal) =>
+        !string.IsNullOrWhiteSpace(fiscal.PaymentMethod)
+            ? fiscal.PaymentMethod.Trim().ToUpperInvariant()
+            : invoice.Tenders.Count == 0 && fiscal.TotalAmountMinorUnits == 0
+                ? "NO PAYMENT REQUIRED"
+                : invoice.Tenders.Select(value => value.TenderTypeCodeKey?.Trim().ToUpperInvariant())
+                    .FirstOrDefault(value => !string.IsNullOrWhiteSpace(value)) ?? "NOT RECORDED";
 
-    private static void AddTender(
-        List<string> lines,
-        DigitalSalesInvoiceTenderRenderModel tender,
-        string? paymentMethod,
-        string currency)
-    {
-        var label = (paymentMethod ?? tender.TenderTypeCodeKey ?? "NOT RECORDED").ToUpperInvariant();
-        AddValue(lines, "Type", label);
-        if (!string.IsNullOrWhiteSpace(tender.ProviderRef) &&
-            !string.Equals(tender.ProviderRef, "not_applicable", StringComparison.OrdinalIgnoreCase))
-            AddValue(lines, "Provider", tender.ProviderRef);
-        AddValue(lines, "Amount", Money(tender.AmountMinorUnits, currency));
-    }
+    private static bool IsCash(string? paymentMethod) =>
+        string.Equals(paymentMethod?.Trim(), "CASH", StringComparison.OrdinalIgnoreCase);
 
     private static void AddValue(List<string> lines, string label, string? value)
     {
@@ -231,6 +225,18 @@ public sealed class CanonicalSalesInvoiceTextRenderer
                 out var parsed)
             ? LocalTimestamp(parsed)
             : normalized;
+    }
+
+    private static string? CompactDuration(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value)) return value;
+        var normalized = value.Trim();
+        if (TimeSpan.TryParse(normalized, CultureInfo.InvariantCulture, out var duration) && duration >= TimeSpan.Zero)
+        {
+            var totalHours = (long)Math.Floor(duration.TotalHours);
+            return $"{totalHours:00}:{duration.Minutes:00}:{duration.Seconds:00}";
+        }
+        return normalized;
     }
 
     private static string RequireDocumentDesignation(string value) =>
