@@ -1,0 +1,216 @@
+name: exitpass-posserver
+
+x-logging: &default-logging
+  driver: local
+  options:
+    max-size: ${CONTAINER_LOG_MAX_SIZE:-10m}
+    max-file: ${CONTAINER_LOG_MAX_FILES:-5}
+
+services:
+  postgres:
+    image: ${POSTGRES_IMAGE:?Set POSTGRES_IMAGE to the approved immutable digest reference}
+    restart: unless-stopped
+    stop_grace_period: 60s
+    environment:
+      POSTGRES_USER: posserver_bootstrap
+      POSTGRES_DB: ${POSSERVER_DB_NAME:-posserver}
+      POSTGRES_PASSWORD_FILE: /run/secrets/postgres_bootstrap_password
+      POSTGRES_INITDB_ARGS: --auth-host=scram-sha-256 --data-checksums
+      POSSERVER_SCHEMA_MANIFEST: /opt/exitpass/db/rebuild/pos_sql_apply_order.txt
+      POSSERVER_CONTROLLED_CODE_DIR: /opt/exitpass/db/reference-data/controlled-codes/generated/sql
+    command:
+      - postgres
+      - -c
+      - password_encryption=scram-sha-256
+      - -c
+      - log_connections=on
+      - -c
+      - log_disconnections=on
+    secrets:
+      - postgres_bootstrap_password
+      - postgres_admin_password
+      - postgres_app_password
+      - postgres_backup_password
+    volumes:
+      - pos_pgdata:/var/lib/postgresql/data
+      - ../db:/opt/exitpass/db:ro
+      - ./postgres/init:/docker-entrypoint-initdb.d:ro
+    networks:
+      - pos_internal
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB} -h 127.0.0.1"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 30s
+    logging: *default-logging
+    mem_limit: ${POSTGRES_MEMORY_LIMIT:-4g}
+    cpus: ${POSTGRES_CPU_LIMIT:-4.0}
+    security_opt:
+      - no-new-privileges:true
+
+  api:
+    image: ${POSSERVER_API_IMAGE:?Set POSSERVER_API_IMAGE to the approved immutable digest reference}
+    build:
+      context: ..
+      dockerfile: src/ExitPass.PosServer.Api/Dockerfile
+      args:
+        DOTNET_SDK_IMAGE: ${DOTNET_SDK_IMAGE:?Set DOTNET_SDK_IMAGE to the approved immutable digest reference}
+        DOTNET_ASPNET_IMAGE: ${DOTNET_ASPNET_IMAGE:?Set DOTNET_ASPNET_IMAGE to the approved immutable digest reference}
+    restart: unless-stopped
+    stop_grace_period: 30s
+    init: true
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      ASPNETCORE_ENVIRONMENT: ${ASPNETCORE_ENVIRONMENT:-Production}
+      ASPNETCORE_URLS: https://+:8443
+      ASPNETCORE_Kestrel__Certificates__Default__Path: /run/tls/tls.crt
+      ASPNETCORE_Kestrel__Certificates__Default__KeyPath: /run/tls/tls.key
+      POSSERVER_DB_HOST: postgres
+      POSSERVER_DB_PORT: "5432"
+      POSSERVER_DB_NAME: ${POSSERVER_DB_NAME:-posserver}
+      POSSERVER_DB_USER: posserver_app
+      POSSERVER_DB_PASSWORD_FILE: /run/secrets/postgres_app_password
+      PosServer__AnnexE1__ArtifactRoot: /var/lib/exitpass/annex-e1
+      POS_REQUIRE_COMPLETE_SALES_INVOICE_HEADER_PROFILE: ${POS_REQUIRE_COMPLETE_SALES_INVOICE_HEADER_PROFILE:-true}
+    secrets:
+      - postgres_app_password
+    volumes:
+      - pos_annex_e1:/var/lib/exitpass/annex-e1
+      - type: bind
+        source: ${POSSERVER_APP_CONFIG_FILE:?Set POSSERVER_APP_CONFIG_FILE to an external production configuration file}
+        target: /app/appsettings.Production.json
+        read_only: true
+      - type: bind
+        source: ${POSSERVER_TLS_CERT_FILE:?Set POSSERVER_TLS_CERT_FILE to the TLS certificate PEM file}
+        target: /run/tls/tls.crt
+        read_only: true
+      - type: bind
+        source: ${POSSERVER_TLS_KEY_FILE:?Set POSSERVER_TLS_KEY_FILE to the TLS private-key PEM file}
+        target: /run/tls/tls.key
+        read_only: true
+    tmpfs:
+      - /tmp:size=64m,mode=1777
+    ports:
+      - "${POSSERVER_HTTPS_BIND_ADDRESS:-127.0.0.1}:${POSSERVER_HTTPS_PORT:-8443}:8443"
+    networks:
+      - pos_internal
+      - api_ingress
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "--silent", "--show-error", "--insecure", "https://127.0.0.1:8443/health/ready"]
+      interval: 15s
+      timeout: 5s
+      retries: 8
+      start_period: 45s
+    read_only: true
+    logging: *default-logging
+    mem_limit: ${API_MEMORY_LIMIT:-1g}
+    cpus: ${API_CPU_LIMIT:-2.0}
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+
+  backup:
+    image: ${POSSERVER_BACKUP_IMAGE:?Set POSSERVER_BACKUP_IMAGE to the approved immutable digest reference}
+    build:
+      context: ./backup
+      args:
+        POSTGRES_BASE_IMAGE: ${POSTGRES_IMAGE:?Set POSTGRES_IMAGE to the approved immutable digest reference}
+        GOOGLE_CLOUD_CLI_VERSION: ${GOOGLE_CLOUD_CLI_VERSION:?Set GOOGLE_CLOUD_CLI_VERSION to the approved exact package version}
+    restart: unless-stopped
+    stop_grace_period: 120s
+    init: true
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      PGHOST: postgres
+      PGPORT: "5432"
+      PGDATABASE: ${POSSERVER_DB_NAME:-posserver}
+      PGUSER: posserver_backup
+      PGPASSWORD_FILE: /run/secrets/postgres_backup_password
+      ANNEX_E1_ROOT: /var/lib/exitpass/annex-e1
+      BACKUP_INTERVAL_SECONDS: ${BACKUP_INTERVAL_SECONDS:-3600}
+      BACKUP_START_DELAY_SECONDS: ${BACKUP_START_DELAY_SECONDS:-300}
+      BACKUP_HEALTH_GRACE_SECONDS: ${BACKUP_HEALTH_GRACE_SECONDS:-900}
+      BACKUP_RETENTION_DAYS: ${BACKUP_RETENTION_DAYS:-UNAPPROVED}
+      BACKUP_RPO_TARGET_SECONDS: ${BACKUP_RPO_TARGET_SECONDS:-3600}
+      RESTORE_RTO_TARGET_SECONDS: ${RESTORE_RTO_TARGET_SECONDS:-14400}
+      GCS_BUCKET: ${GCS_BUCKET:?Set GCS_BUCKET to the approved private bucket name}
+      GCS_PREFIX: ${GCS_PREFIX:?Set GCS_PREFIX to the approved site-specific object prefix}
+      GCS_EXPECTED_LOCATION: ${GCS_EXPECTED_LOCATION:?Set GCS_EXPECTED_LOCATION to the approved bucket location}
+      GCS_STORAGE_CLASS: ${GCS_STORAGE_CLASS:-STANDARD}
+      CLOUDSDK_CORE_PROJECT: ${GCP_PROJECT_ID:?Set GCP_PROJECT_ID to the approved project ID}
+      CLOUDSDK_CORE_DISABLE_PROMPTS: "1"
+      CLOUDSDK_CONFIG: /tmp/gcloud
+      CLOUDSDK_AUTH_CREDENTIAL_FILE_OVERRIDE: /run/secrets/gcp_backup_credentials
+      GOOGLE_APPLICATION_CREDENTIALS: /run/secrets/gcp_backup_credentials
+      AGE_RECIPIENT_FILE: /run/config/age-recipient.txt
+      SOURCE_REVISION: ${POSSERVER_SOURCE_REVISION:?Set POSSERVER_SOURCE_REVISION to the reviewed Git revision}
+    secrets:
+      - postgres_backup_password
+      - gcp_backup_credentials
+    configs:
+      - source: backup_age_recipient
+        target: /run/config/age-recipient.txt
+    volumes:
+      - pos_annex_e1:/var/lib/exitpass/annex-e1:ro
+      - pos_backup_staging:/var/lib/exitpass-backup/staging
+      - pos_backup_status:/var/lib/exitpass-backup/status
+    tmpfs:
+      - /tmp:size=${BACKUP_TMPFS_SIZE:-512m},mode=1777
+    networks:
+      - pos_internal
+      - backup_egress
+    healthcheck:
+      test: ["CMD", "/opt/exitpass-backup/healthcheck.sh"]
+      interval: 60s
+      timeout: 10s
+      retries: 3
+      start_period: 10m
+    read_only: true
+    logging: *default-logging
+    mem_limit: ${BACKUP_MEMORY_LIMIT:-1g}
+    cpus: ${BACKUP_CPU_LIMIT:-1.0}
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+
+networks:
+  pos_internal:
+    driver: bridge
+    internal: true
+  api_ingress:
+    driver: bridge
+  backup_egress:
+    driver: bridge
+
+volumes:
+  pos_pgdata:
+    name: ${POSSERVER_PGDATA_VOLUME:-exitpass_pos_pgdata}
+  pos_annex_e1:
+    name: ${POSSERVER_ANNEX_VOLUME:-exitpass_pos_annex_e1}
+  pos_backup_staging:
+    name: ${POSSERVER_BACKUP_STAGING_VOLUME:-exitpass_pos_backup_staging}
+  pos_backup_status:
+    name: ${POSSERVER_BACKUP_STATUS_VOLUME:-exitpass_pos_backup_status}
+
+secrets:
+  postgres_bootstrap_password:
+    file: ${POSSERVER_POSTGRES_BOOTSTRAP_PASSWORD_FILE:?Set the external bootstrap password file}
+  postgres_admin_password:
+    file: ${POSSERVER_POSTGRES_ADMIN_PASSWORD_FILE:?Set the external administration password file}
+  postgres_app_password:
+    file: ${POSSERVER_POSTGRES_APP_PASSWORD_FILE:?Set the external application password file}
+  postgres_backup_password:
+    file: ${POSSERVER_POSTGRES_BACKUP_PASSWORD_FILE:?Set the external backup password file}
+  gcp_backup_credentials:
+    file: ${POSSERVER_GCP_BACKUP_CREDENTIALS_FILE:?Set the external GCP ADC credential file}
+
+configs:
+  backup_age_recipient:
+    file: ${POSSERVER_BACKUP_AGE_RECIPIENT_FILE:?Set the age public recipient file}

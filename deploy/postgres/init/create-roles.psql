@@ -1,0 +1,44 @@
+-- Loaded explicitly by 10-create-roles.sh so the image entrypoint does not execute it twice.
+\set ON_ERROR_STOP on
+\getenv admin_password POSSERVER_ADMIN_DB_PASSWORD
+\getenv app_password POSSERVER_APP_DB_PASSWORD
+\getenv backup_password POSSERVER_BACKUP_DB_PASSWORD
+\getenv target_db POSSERVER_TARGET_DB
+
+BEGIN;
+
+CREATE ROLE posserver_admin
+    LOGIN
+    NOSUPERUSER
+    NOCREATEDB
+    NOCREATEROLE
+    NOREPLICATION
+    NOBYPASSRLS
+    PASSWORD :'admin_password';
+
+CREATE ROLE posserver_app
+    LOGIN
+    NOSUPERUSER
+    NOCREATEDB
+    NOCREATEROLE
+    NOREPLICATION
+    NOBYPASSRLS
+    PASSWORD :'app_password';
+
+CREATE ROLE posserver_backup
+    LOGIN
+    NOSUPERUSER
+    NOCREATEDB
+    NOCREATEROLE
+    NOREPLICATION
+    NOBYPASSRLS
+    PASSWORD :'backup_password';
+
+ALTER DATABASE :"target_db" OWNER TO posserver_admin;
+REVOKE ALL ON DATABASE :"target_db" FROM PUBLIC;
+GRANT CONNECT ON DATABASE :"target_db" TO posserver_admin, posserver_app, posserver_backup;
+GRANT TEMPORARY ON DATABASE :"target_db" TO posserver_admin;
+
+REVOKE CREATE ON SCHEMA public FROM PUBLIC;
+
+COMMIT;
