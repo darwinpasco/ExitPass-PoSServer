@@ -30,12 +30,12 @@ public sealed class CanonicalSalesInvoiceTextRendererTests
         var text = new CanonicalSalesInvoiceTextRenderer().Render(Invoice()).Text;
         var requiredStructure = new[]
         {
-            "ExitPass Parking Corporation", "VAT REG TIN", "MIN", "S/N", "Branch / Site", "Parking Location",
-            "SALES INVOICE", "ORIGINAL", "SI No", "Issued Date", "PARKING DETAILS", "Ticket Number",
-            "Plate Number", "Entry Time", "Payment", "Duration", "ITEMS", "Description", "Subtotal",
-            "DISCOUNTS", "Discount Reason", "Discount Amount", "VAT BREAKDOWN", "VATable Sales", "VAT Amount",
-            "VAT Exempt Sales", "Zero Rated Sales", "Total Amount", "PAYMENT DETAILS", "GCASH", "PayMongo", "Total Paid",
-            "THIS SERVES AS YOUR SALES INVOICE", "Customer Information",
+            "ExitPass Parking Corporation", "VAT REG TIN", "MIN", "S/N", "BRANCH / SITE", "PARKING LOCATION",
+            "SALES INVOICE", "ORIGINAL", "SI NO", "ISSUED", "BUSINESS DATE", "CASHIER", "System",
+            "TICKET", "PLATE", "ENTRY", "PAYMENT", "DURATION", "PARKING FEE", "SUBTOTAL", "DISCOUNT",
+            "VATABLE SALES", "VAT AMOUNT", "VAT EXEMPT SALES", "ZERO RATED SALES", "TOTAL",
+            "PAYMENT", "TYPE", "GCASH", "AMOUNT DUE", "TOTAL PAID",
+            "THIS SERVES AS YOUR SALES INVOICE", "PRINT DATE", "CUSTOMER INFORMATION",
             "POS SOFTWARE SUPPLIER / DEVELOPER", "THANK YOU FOR CHOOSING OUR SERVICE", "NOTHING FOLLOWS"
         };
 
@@ -46,14 +46,18 @@ public sealed class CanonicalSalesInvoiceTextRendererTests
             Assert.True(index > prior, $"Expected '{value}' after the prior canonical field.");
             prior = index;
         }
-        Assert.True(Count(text, "--------------------------------") >= 6);
-        Assert.Contains("Issued Date", text, StringComparison.Ordinal);
-        Assert.Contains("Entry Time", text, StringComparison.Ordinal);
+        Assert.Equal(3, Count(text, "--------------------------------"));
+        Assert.Contains("ISSUED", text, StringComparison.Ordinal);
+        Assert.Contains("ENTRY", text, StringComparison.Ordinal);
         Assert.Contains("2026-09-10 08:00", text, StringComparison.Ordinal);
-        Assert.Contains("Payment", text, StringComparison.Ordinal);
-        Assert.Contains("Print Date", text, StringComparison.Ordinal);
+        Assert.Contains("PAYMENT", text, StringComparison.Ordinal);
+        Assert.Contains("PRINT DATE", text, StringComparison.Ordinal);
         Assert.Equal(3, Count(text, "2026-09-10 09:00"));
+        Assert.Contains("DURATION                   01:00:00", text, StringComparison.Ordinal);
         Assert.DoesNotContain("PHT", text, StringComparison.Ordinal);
+        Assert.DoesNotContain("Provider", text, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("TENDERED", text, StringComparison.Ordinal);
+        Assert.DoesNotContain("CHANGE", text, StringComparison.Ordinal);
         Assert.DoesNotContain("# Description", text, StringComparison.Ordinal);
         Assert.DoesNotContain("Type       Provider", text, StringComparison.Ordinal);
         Assert.Equal(1, Count(text, "THANK YOU FOR CHOOSING OUR SERVICE"));
@@ -66,14 +70,14 @@ public sealed class CanonicalSalesInvoiceTextRendererTests
         var text = new CanonicalSalesInvoiceTextRenderer().Render(Invoice()).Text;
         var required = new[]
         {
-            "VATable Sales",
-            "PHP 100.00",
-            "VAT Amount",
-            "PHP 12.00",
-            "VAT Exempt Sales",
-            "PHP 0.00",
-            "Zero Rated Sales",
-            "Customer Information",
+            "VATABLE SALES",
+            "100.00",
+            "VAT AMOUNT",
+            "12.00",
+            "VAT EXEMPT SALES",
+            "0.00",
+            "ZERO RATED SALES",
+            "CUSTOMER INFORMATION",
             "NAME",
             "Juan Dela Cruz",
             "ADDRESS",
@@ -122,8 +126,9 @@ public sealed class CanonicalSalesInvoiceTextRendererTests
                 ZeroRatedSalesMinorUnits = 0,
                 TotalAmountMinorUnits = 35000,
                 TotalPaidMinorUnits = 35000,
-                TenderedAmountMinorUnits = null,
-                ChangeAmountMinorUnits = null
+                TenderedAmountMinorUnits = 35000,
+                ChangeAmountMinorUnits = 0,
+                CashierDisplayName = "Juan Dela Cruz"
             }
         };
 
@@ -136,19 +141,27 @@ public sealed class CanonicalSalesInvoiceTextRendererTests
         Assert.DoesNotContain("Completion Basis", text, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("Completion Authority", text, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain(authority, text, StringComparison.OrdinalIgnoreCase);
-        Assert.Contains("Type", text, StringComparison.Ordinal);
+        Assert.Contains("TYPE", text, StringComparison.Ordinal);
         Assert.Contains("CASH", text, StringComparison.Ordinal);
-        Assert.Contains("Provider", text, StringComparison.Ordinal);
-        Assert.Contains("Amount", text, StringComparison.Ordinal);
-        Assert.Contains("Total Paid", text, StringComparison.Ordinal);
-        Assert.Contains("VATable Sales", text, StringComparison.Ordinal);
-        Assert.Contains("PHP 312.50", text, StringComparison.Ordinal);
-        Assert.Contains("VAT Amount", text, StringComparison.Ordinal);
-        Assert.Contains("PHP 37.50", text, StringComparison.Ordinal);
-        Assert.Contains("VAT Exempt Sales", text, StringComparison.Ordinal);
-        Assert.Contains("Zero Rated Sales", text, StringComparison.Ordinal);
-        Assert.Contains("Total Amount", text, StringComparison.Ordinal);
-        Assert.Contains("PHP 350.00", text, StringComparison.Ordinal);
+        Assert.Contains("CASHIER", text, StringComparison.Ordinal);
+        Assert.Contains("Juan Dela Cruz", text, StringComparison.Ordinal);
+        Assert.DoesNotContain("Provider", text, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("AMOUNT DUE", text, StringComparison.Ordinal);
+        Assert.Contains("TOTAL PAID", text, StringComparison.Ordinal);
+        Assert.Contains(text.Split("\r\n"), line =>
+            line.StartsWith("TENDERED", StringComparison.Ordinal) &&
+            line.EndsWith("350.00", StringComparison.Ordinal));
+        Assert.Contains(text.Split("\r\n"), line =>
+            line.StartsWith("CHANGE", StringComparison.Ordinal) &&
+            line.EndsWith("0.00", StringComparison.Ordinal));
+        Assert.Contains("VATABLE SALES", text, StringComparison.Ordinal);
+        Assert.Contains("312.50", text, StringComparison.Ordinal);
+        Assert.Contains("VAT AMOUNT", text, StringComparison.Ordinal);
+        Assert.Contains("37.50", text, StringComparison.Ordinal);
+        Assert.Contains("VAT EXEMPT SALES", text, StringComparison.Ordinal);
+        Assert.Contains("ZERO RATED SALES", text, StringComparison.Ordinal);
+        Assert.Contains("TOTAL", text, StringComparison.Ordinal);
+        Assert.Contains("350.00", text, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -168,14 +181,38 @@ public sealed class CanonicalSalesInvoiceTextRendererTests
 
         var text = new CanonicalSalesInvoiceTextRenderer().Render(invoice).Text;
 
-        Assert.Contains("DISCOUNTS", text, StringComparison.Ordinal);
-        Assert.Contains("Discount Amount", text, StringComparison.Ordinal);
-        Assert.Contains("PHP 0.00", text, StringComparison.Ordinal);
-        Assert.Contains("Customer Information", text, StringComparison.Ordinal);
+        Assert.Contains("DISCOUNT", text, StringComparison.Ordinal);
+        Assert.Contains("0.00", text, StringComparison.Ordinal);
+        Assert.Contains("CUSTOMER INFORMATION", text, StringComparison.Ordinal);
         Assert.Contains("NAME", text, StringComparison.Ordinal);
         Assert.Contains("ADDRESS", text, StringComparison.Ordinal);
         Assert.Contains("TIN", text, StringComparison.Ordinal);
         Assert.Contains("BUS. STYLE", text, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void CompactCashReceiptKeepsRequiredFactsBelowTheFormerVerboseLineBudget()
+    {
+        var invoice = Invoice() with
+        {
+            Tenders = [new(Guid.NewGuid(), "cash", 11200, "PHP", null, null, "FINALITY-001", "CASH")],
+            FiscalContent = Invoice().FiscalContent! with
+            {
+                PaymentMethod = "CASH",
+                CashierDisplayName = "Juan Dela Cruz",
+                TenderedAmountMinorUnits = 12000,
+                ChangeAmountMinorUnits = 800
+            }
+        };
+
+        var lines = new CanonicalSalesInvoiceTextRenderer().Render(invoice).Text
+            .Split("\r\n", StringSplitOptions.RemoveEmptyEntries);
+
+        Assert.InRange(lines.Length, 35, 60);
+        Assert.Contains(lines, line => line.Contains("BUSINESS DATE", StringComparison.Ordinal));
+        Assert.Contains(lines, line => line.Contains("CASHIER", StringComparison.Ordinal));
+        Assert.Contains(lines, line => line.Contains("TENDERED", StringComparison.Ordinal));
+        Assert.Contains(lines, line => line.Contains("CHANGE", StringComparison.Ordinal));
     }
 
     [Fact]
@@ -335,7 +372,7 @@ public sealed class CanonicalSalesInvoiceTextRendererTests
                 "123-456-789-000", "Retail", "OSCA-0001"),
             FiscalContent: new("PITX", "TICKET-0001", "ABC-1234", "2026-09-10 00:00:00 UTC",
                 "2026-09-10 01:00:00 UTC", "01:00:00", "GCASH", 12000, 800, 10000, 1200, 0, 0,
-                11200, 11200, 12000, 800, "PHP", true));
+                11200, 11200, 12000, 800, "PHP", true, "System"));
     }
 
     private static int Count(string text, string value) =>

@@ -171,7 +171,8 @@ public static class DigitalSalesInvoiceRenderModelFactory
             LongValue(context, "tendered_amount_minor_units", "tenderedAmountMinorUnits"),
             LongValue(context, "change_amount_minor_units", "changeAmountMinorUnits"),
             currency,
-            true);
+            true,
+            Value(context, "cashier_display_name", "cashierDisplayName"));
 
         return model with { FiscalContent = fiscalContent };
     }

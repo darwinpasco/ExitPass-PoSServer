@@ -168,7 +168,10 @@ public sealed class DigitalSalesInvoicePresentationAdapterTests
                     ["entry_time"] = "2026-09-29T00:42:30.7855730+00:00",
                     ["payment_time"] = "2026-09-30T14:39:48.6742010+00:00",
                     ["parking_duration"] = "37:57:17",
-                    ["payment_method"] = "CASH"
+                    ["payment_method"] = "CASH",
+                    ["cashier_display_name"] = "Juan Dela Cruz",
+                    ["tendered_amount_minor_units"] = "10000",
+                    ["change_amount_minor_units"] = "0"
                 }
             })
         });
@@ -185,6 +188,9 @@ public sealed class DigitalSalesInvoicePresentationAdapterTests
         Assert.Contains(rows, row => row.Key == "parkingPaymentReferences.paymentTime" && row.DisplayValue == "2026-09-30T14:39:48.6742010+00:00" && row.Posture == "required");
         Assert.Contains(rows, row => row.Key == "parkingPaymentReferences.parkingDuration" && row.DisplayValue == "37:57:17" && row.Posture == "required");
         Assert.Contains(rows, row => row.Key == "parkingPaymentReferences.paymentMethod" && row.DisplayValue == "CASH" && row.Posture == "required");
+        Assert.Equal("Juan Dela Cruz", render.FiscalContent?.CashierDisplayName);
+        Assert.Equal(10_000, render.FiscalContent?.TenderedAmountMinorUnits);
+        Assert.Equal(0, render.FiscalContent?.ChangeAmountMinorUnits);
     }
 
     [Fact]
