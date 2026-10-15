@@ -245,7 +245,9 @@ try {
         --publish '127.0.0.1:56066:8443' `
         --mount "type=bind,source=$certificatePath,target=/https/exitpass-pos-local.pfx,readonly" `
         --label 'com.exitpass.local-runtime=pitx-pos-server' `
-        $imageName).Trim()
+        --entrypoint 'dotnet' `
+        $imageName `
+        'ExitPass.PosServer.Api.dll').Trim()
     if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace($containerId)) {
         throw 'POS Server container failed to start. Confirm ports 56066 and 56067 are available.'
     }
