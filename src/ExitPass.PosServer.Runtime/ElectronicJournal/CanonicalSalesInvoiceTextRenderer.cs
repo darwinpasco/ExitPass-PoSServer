@@ -12,6 +12,8 @@ public sealed class CanonicalSalesInvoiceTextRenderer
 {
     private const int ReceiptWidth = 35;
     private const int SeparatorWidth = 32;
+    private const int CustomerLabelWidth = 13;
+    private const int CustomerValueStart = CustomerLabelWidth + 1;
     private static readonly string Separator = new('-', SeparatorWidth);
     private const string ClosingText = "THANK YOU FOR CHOOSING OUR SERVICE";
 
@@ -92,14 +94,14 @@ public sealed class CanonicalSalesInvoiceTextRenderer
         var customer = invoice.InvoiceCustomerInformation;
         lines.Add(string.Empty);
         lines.Add("CUSTOMER INFORMATION");
-        AddValue(lines, "NAME", customer?.CustomerName);
-        AddValue(lines, "ADDRESS", customer?.Address);
-        AddValue(lines, "TIN", customer?.Tin);
-        AddValue(lines, "BUS. STYLE", customer?.BusinessStyle);
+        AddCustomerValue(lines, "NAME", customer?.CustomerName);
+        AddCustomerValue(lines, "ADDRESS", customer?.Address);
+        AddCustomerValue(lines, "TIN", customer?.Tin);
+        AddCustomerValue(lines, "BUS. STYLE", customer?.BusinessStyle);
         var statutoryId = invoice.AppliedStatutoryFiscalFacts is null ? null : customer?.StatutoryIdNumber;
         if (!string.IsNullOrWhiteSpace(statutoryId))
-            AddValue(lines, StatutoryIdLabel(invoice.AppliedStatutoryFiscalFacts?.EntitlementType), statutoryId);
-        if (fiscal.ShowCustomerSignatureLine) AddValue(lines, "Customer Sign", "____________________");
+            AddCustomerValue(lines, StatutoryIdLabel(invoice.AppliedStatutoryFiscalFacts?.EntitlementType), statutoryId);
+        if (fiscal.ShowCustomerSignatureLine) AddCustomerValue(lines, "Customer Sign", "____________________");
 
         lines.Add(string.Empty);
         lines.Add("POS SOFTWARE SUPPLIER / DEVELOPER");
@@ -180,6 +182,22 @@ public sealed class CanonicalSalesInvoiceTextRenderer
         }
         lines.Add(label);
         foreach (var line in Wrap(resolved, ReceiptWidth)) lines.Add(line.PadLeft(ReceiptWidth));
+    }
+
+    private static void AddCustomerValue(List<string> lines, string label, string? value)
+    {
+        var resolved = value?.Trim() ?? string.Empty;
+        if (resolved.Length == 0)
+        {
+            lines.Add(label);
+            return;
+        }
+
+        var valueIndent = new string(' ', CustomerValueStart);
+        var wrappedValue = Wrap(resolved, ReceiptWidth - CustomerValueStart).ToArray();
+        lines.Add(label.PadRight(CustomerValueStart) + wrappedValue[0]);
+        foreach (var continuation in wrappedValue.Skip(1))
+            lines.Add(valueIndent + continuation);
     }
 
     private static void AddCentered(List<string> lines, string value)

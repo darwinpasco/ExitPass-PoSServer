@@ -101,6 +101,148 @@ public sealed class CanonicalSalesInvoiceTextRendererTests
         }
     }
 
+    [Fact]
+    public void CustomerInformationUsesFixedColumnsAndPreservesUnicode()
+    {
+        var invoice = Invoice() with
+        {
+            AppliedStatutoryFiscalFacts = null,
+            InvoiceCustomerInformation = new InvoiceCustomerInformationSnapshot(
+                "Darwin Pasco",
+                "123 Doña Juana Townhomes, Pasig City",
+                "171459612",
+                "Pro Parking Inc",
+                null)
+        };
+
+        var lines = CustomerInformationLines(new CanonicalSalesInvoiceTextRenderer().Render(invoice).Text);
+
+        Assert.Equal([
+            "CUSTOMER INFORMATION",
+            "NAME          Darwin Pasco",
+            "ADDRESS       123 Doña Juana",
+            "              Townhomes, Pasig City",
+            "TIN           171459612",
+            "BUS. STYLE    Pro Parking Inc",
+            "Customer Sign ____________________"
+        ], lines);
+    }
+
+    [Fact]
+    public void ShortCustomerAddressRemainsOnOneTwoColumnRow()
+    {
+        var invoice = Invoice() with
+        {
+            InvoiceCustomerInformation = Invoice().InvoiceCustomerInformation! with
+            {
+                Address = "Pasig City",
+                StatutoryIdNumber = null
+            },
+            AppliedStatutoryFiscalFacts = null
+        };
+
+        var lines = CustomerInformationLines(new CanonicalSalesInvoiceTextRenderer().Render(invoice).Text);
+
+        Assert.Contains("ADDRESS       Pasig City", lines);
+    }
+
+    [Fact]
+    public void LongCustomerValuesWrapEveryContinuationAtTheValueColumn()
+    {
+        const int valueColumnIndex = 14;
+        var invoice = Invoice() with
+        {
+            AppliedStatutoryFiscalFacts = null,
+            InvoiceCustomerInformation = new InvoiceCustomerInformationSnapshot(
+                "Darwin Alexander Pasco Senior",
+                "Unit 101 123 Doña Juana Townhomes Pasig City Metro Manila Philippines",
+                "171459612",
+                "Professional Parking Management Corporation",
+                null)
+        };
+
+        var lines = CustomerInformationLines(new CanonicalSalesInvoiceTextRenderer().Render(invoice).Text);
+        var continuationLines = lines.Where(line => line.StartsWith(new string(' ', valueColumnIndex), StringComparison.Ordinal));
+
+        Assert.NotEmpty(continuationLines);
+        Assert.All(continuationLines, line =>
+        {
+            Assert.Equal(valueColumnIndex, line.TakeWhile(character => character == ' ').Count());
+            Assert.True(line.Length <= 35, line);
+        });
+        Assert.Contains("NAME          Darwin Alexander", lines);
+        Assert.Contains("              Pasco Senior", lines);
+        Assert.Contains("BUS. STYLE    Professional Parking", lines);
+        Assert.Contains("              Management", lines);
+        Assert.Contains("              Corporation", lines);
+    }
+
+    [Fact]
+    public void StatutoryIdUsesTheSameCustomerValueColumn()
+    {
+        var invoice = Invoice() with
+        {
+            InvoiceCustomerInformation = Invoice().InvoiceCustomerInformation! with
+            {
+                StatutoryIdNumber = "12443"
+            }
+        };
+
+        var lines = CustomerInformationLines(new CanonicalSalesInvoiceTextRenderer().Render(invoice).Text);
+
+        Assert.Contains("OSCA ID No.   12443", lines);
+    }
+
+    [Theory]
+    [InlineData("REGULAR_PAID")]
+    [InlineData("STATUTORY_PAID")]
+    [InlineData("ZERO_PAYABLE_STATUTORY")]
+    public void CustomerInformationLayoutIsIndependentOfCompletionType(string completionType)
+    {
+        var invoice = Invoice() with
+        {
+            InvoiceCustomerInformation = new InvoiceCustomerInformationSnapshot(
+                "Darwin Pasco",
+                "123 Doña Juana Townhomes, Pasig City",
+                "171459612",
+                "Pro Parking Inc",
+                completionType == "REGULAR_PAID" ? null : "12443")
+        };
+        invoice = completionType switch
+        {
+            "REGULAR_PAID" => invoice with
+            {
+                AppliedStatutoryFiscalFacts = null,
+                Discounts = []
+            },
+            "ZERO_PAYABLE_STATUTORY" => invoice with
+            {
+                CompletionBasis = FiscalCompletionBasisCodes.ZeroPayableStatutoryFinality,
+                CentralPmsPaymentAttemptRef = null,
+                CentralPmsPaymentConfirmationRef = null,
+                Tenders = [],
+                FiscalContent = invoice.FiscalContent! with
+                {
+                    PaymentMethod = null,
+                    TotalAmountMinorUnits = 0,
+                    TotalPaidMinorUnits = 0,
+                    TenderedAmountMinorUnits = null,
+                    ChangeAmountMinorUnits = null
+                }
+            },
+            _ => invoice
+        };
+
+        var lines = CustomerInformationLines(new CanonicalSalesInvoiceTextRenderer().Render(invoice).Text);
+
+        Assert.Contains("NAME          Darwin Pasco", lines);
+        Assert.Contains("ADDRESS       123 Doña Juana", lines);
+        Assert.Contains("              Townhomes, Pasig City", lines);
+        Assert.Contains("TIN           171459612", lines);
+        Assert.Contains("BUS. STYLE    Pro Parking Inc", lines);
+        Assert.Equal(completionType != "REGULAR_PAID", lines.Any(line => line == "OSCA ID No.   12443"));
+    }
+
     [Theory]
     [InlineData("57 mm", 35)]
     [InlineData("58 mm", 35)]
@@ -380,6 +522,16 @@ public sealed class CanonicalSalesInvoiceTextRendererTests
 
     private static int CountLines(string text, string value) =>
         text.Split("\r\n", StringSplitOptions.None).Count(line => line.Trim().Equals(value, StringComparison.Ordinal));
+
+    private static string[] CustomerInformationLines(string text)
+    {
+        var lines = text.Split("\r\n", StringSplitOptions.None);
+        var start = Array.IndexOf(lines, "CUSTOMER INFORMATION");
+        Assert.True(start >= 0);
+        var end = Array.IndexOf(lines, string.Empty, start);
+        Assert.True(end > start);
+        return lines[start..end];
+    }
 
     private sealed class HistoricalRepository(ElectronicJournalEvent historical) : IElectronicJournalRepository
     {
