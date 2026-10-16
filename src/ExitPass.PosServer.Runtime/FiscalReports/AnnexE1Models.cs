@@ -101,6 +101,14 @@ public sealed record AnnexE1GenerationCommand(
     string ServiceIdentityRef,
     string CorrelationId);
 
+public sealed record AnnexE1CurrentWorkbookQuery(
+    Guid SitePosServerId,
+    Guid FiscalIdentityId,
+    string CurrencyCode,
+    int CalendarYear,
+    int CalendarMonth,
+    string Profile);
+
 public sealed record AnnexE1Header(
     string TaxpayerName,
     string TaxpayerAddress,
@@ -214,6 +222,7 @@ public interface IAnnexE1Repository
 {
     Task<AnnexE1FactResult> RecordFactAsync(AnnexE1PeriodFactCommand command, CancellationToken cancellationToken = default);
     Task<AnnexE1WorkbookResult> GenerateAsync(AnnexE1GenerationCommand command, CancellationToken cancellationToken = default);
+    Task<AnnexE1WorkbookResult> GetCurrentAsync(AnnexE1CurrentWorkbookQuery query, CancellationToken cancellationToken = default);
     Task<AnnexE1WorkbookResult> GetAsync(Guid workbookId, CancellationToken cancellationToken = default);
     Task<AnnexE1ArtifactResult> DownloadAsync(Guid workbookId, CancellationToken cancellationToken = default);
 }

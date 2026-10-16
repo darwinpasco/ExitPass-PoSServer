@@ -9,6 +9,7 @@
     {"method":"POST","path":"/v1/fiscal-reports/annex-e/e1/accounting-facts","permission":"fiscal_annex_e.accounting_fact.record"},
     {"method":"POST","path":"/v1/fiscal-reports/annex-e/e1/known-zero-attestations","permission":"fiscal_annex_e.known_zero.attest"},
     {"method":"POST","path":"/v1/fiscal-reports/annex-e/e1/workbooks","permission":"fiscal_annex_e.generate"},
+    {"method":"GET","path":"/v1/fiscal-reports/annex-e/e1/workbooks/current","permission":"fiscal_annex_e.read"},
     {"method":"GET","path":"/v1/fiscal-reports/annex-e/e1/workbooks/{id}","permission":"fiscal_annex_e.read"},
     {"method":"GET","path":"/v1/fiscal-reports/annex-e/e1/workbooks/{id}/content","permission":"fiscal_annex_e.export"}
   ],

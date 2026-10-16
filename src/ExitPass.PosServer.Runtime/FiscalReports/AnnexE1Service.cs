@@ -71,6 +71,22 @@ public sealed class AnnexE1Service(IAnnexE1Repository repository)
     public Task<AnnexE1WorkbookResult> GetAsync(Guid id, CancellationToken cancellationToken = default) =>
         id == Guid.Empty ? Task.FromResult(new AnnexE1WorkbookResult(AnnexE1Outcome.InvalidRequest, SafeMessage: "An Annex E-1 reference is required.")) : repository.GetAsync(id, cancellationToken);
 
+    public Task<AnnexE1WorkbookResult> GetCurrentAsync(AnnexE1CurrentWorkbookQuery query, CancellationToken cancellationToken = default)
+    {
+        if (query.SitePosServerId == Guid.Empty || query.FiscalIdentityId == Guid.Empty ||
+            !ValidCurrency(query.CurrencyCode) || query.CalendarYear is < 2000 or > 9999 ||
+            query.CalendarMonth is < 1 or > 12 || !ValidReference(query.Profile, 200))
+            return Task.FromResult(new AnnexE1WorkbookResult(
+                AnnexE1Outcome.InvalidRequest,
+                SafeMessage: "The Annex E-1 current-workbook request is incomplete or invalid."));
+
+        return repository.GetCurrentAsync(query with
+        {
+            CurrencyCode = query.CurrencyCode.Trim(),
+            Profile = query.Profile.Trim()
+        }, cancellationToken);
+    }
+
     public Task<AnnexE1ArtifactResult> DownloadAsync(Guid id, CancellationToken cancellationToken = default) =>
         id == Guid.Empty ? Task.FromResult(new AnnexE1ArtifactResult(AnnexE1Outcome.InvalidRequest, SafeMessage: "An Annex E-1 reference is required.")) : repository.DownloadAsync(id, cancellationToken);
 
