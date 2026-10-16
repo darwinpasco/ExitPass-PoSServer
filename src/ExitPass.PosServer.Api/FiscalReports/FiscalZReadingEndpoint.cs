@@ -18,7 +18,8 @@ public sealed record FiscalZReadingApiResponse(
     string CorrelationId,
     int HttpStatusCode,
     FiscalZReadingRecord? ZReading = null,
-    string? Message = null);
+    string? Message = null,
+    BirSalesSummaryCompletion? BirSalesSummaryCompletion = null);
 
 public static class FiscalZReadingEndpoint
 {
@@ -73,8 +74,8 @@ public static class FiscalZReadingEndpoint
 
     private static FiscalZReadingApiResponse Map(FiscalZReadingResult result, string correlationId) => result.Outcome switch
     {
-        FiscalZReadingOutcome.Created => Success("fiscal_z_reading_closed", StatusCodes.Status201Created, result.Record!, correlationId),
-        FiscalZReadingOutcome.Replayed => Success("fiscal_z_reading_replayed", StatusCodes.Status200OK, result.Record!, correlationId),
+        FiscalZReadingOutcome.Created => Success("fiscal_z_reading_closed", StatusCodes.Status201Created, result.Record!, correlationId, result.BirSalesSummaryCompletion),
+        FiscalZReadingOutcome.Replayed => Success("fiscal_z_reading_replayed", StatusCodes.Status200OK, result.Record!, correlationId, result.BirSalesSummaryCompletion),
         FiscalZReadingOutcome.Conflict => Error("fiscal_z_reading_semantic_conflict", StatusCodes.Status409Conflict, result.SafeMessage, correlationId),
         FiscalZReadingOutcome.PeriodAlreadyClosed => Error("fiscal_reporting_period_already_closed", StatusCodes.Status409Conflict, result.SafeMessage, correlationId),
         FiscalZReadingOutcome.PeriodNotEnded => Error("fiscal_reporting_period_not_ended", StatusCodes.Status409Conflict, result.SafeMessage, correlationId),
@@ -98,8 +99,13 @@ public static class FiscalZReadingEndpoint
         _ => Error("fiscal_z_reading_invalid_request", StatusCodes.Status400BadRequest, result.SafeMessage, correlationId)
     };
 
-    private static FiscalZReadingApiResponse Success(string code, int status, FiscalZReadingRecord record, string correlation) =>
-        new(true, code, correlation, status, record);
+    private static FiscalZReadingApiResponse Success(
+        string code,
+        int status,
+        FiscalZReadingRecord record,
+        string correlation,
+        BirSalesSummaryCompletion? completion) =>
+        new(true, code, correlation, status, record, BirSalesSummaryCompletion: completion);
 
     private static FiscalZReadingApiResponse Error(string code, int status, string? message, string correlation) =>
         new(false, code, correlation, status, Message: message ?? "The Z Reading operation failed safely.");

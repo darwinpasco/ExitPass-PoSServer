@@ -110,11 +110,22 @@ public sealed class PostgresAnnexE1Repository(
             var generatedAt = await ClockAsync(connection, transaction, cancellationToken).ConfigureAwait(false);
             var header = BuildHeader(sources, generatedAt, command.RequestedByRef);
             var inputs = new List<AnnexE1RowInputs>(sources.Count);
+            var sourceFacts = new List<(Source Source, IReadOnlyDictionary<string, AnnexE1PeriodFactRecord> Facts)>(sources.Count);
             foreach (var source in sources)
             {
                 var facts = await ReadCurrentFactsAsync(connection, transaction, source.PeriodId, cancellationToken).ConfigureAwait(false);
-                inputs.Add(ToInputs(source, facts));
+                sourceFacts.Add((source, facts));
             }
+            var missingFacts = sourceFacts
+                .SelectMany(entry => RequiredFactTypes
+                    .Where(type => !entry.Facts.ContainsKey(type))
+                    .Select(type => $"{entry.Source.BusinessDate:yyyy-MM-dd}: {type}"))
+                .ToArray();
+            if (missingFacts.Length > 0)
+                throw new AnnexE1SafeException(
+                    AnnexE1Outcome.MissingAccountingFact,
+                    $"Annex E-1 governed accounting facts are incomplete for: {string.Join(", ", missingFacts)}.");
+            inputs.AddRange(sourceFacts.Select(entry => ToInputs(entry.Source, entry.Facts)));
             semanticHash = AnnexE1SemanticHasher.ComputeWorkbook(command, inputs, header);
 
             var operation = await ReadWorkbookByOperationAsync(connection, transaction, command.SitePosServerId, command.OperationKey, cancellationToken).ConfigureAwait(false);
@@ -241,23 +252,39 @@ public sealed class PostgresAnnexE1Repository(
           COALESCE((SELECT d.vat_exemption_amount_minor_units FROM pos.fiscal_report_discount_breakdowns d JOIN pos.controlled_codes dc ON dc.controlled_code_id=d.discount_classification_code_id WHERE d.x_z_report_id=z.x_z_report_id AND dc.code_key='senior_citizen_statutory'),0),
           COALESCE((SELECT d.vat_exemption_amount_minor_units FROM pos.fiscal_report_discount_breakdowns d JOIN pos.controlled_codes dc ON dc.controlled_code_id=d.discount_classification_code_id WHERE d.x_z_report_id=z.x_z_report_id AND dc.code_key='pwd_statutory'),0),
           fi.fiscal_identity_code,COALESCE(fi.registered_business_name,fi.taxpayer_display_name),fi.registered_business_address,fi.tin,
-          b.pos_serial_number,b.machine_identification_number,s.site_pos_server_code
+          b.pos_serial_number,b.machine_identification_number,s.site_pos_server_code,breqs.code_key
         FROM pos.fiscal_reporting_periods p JOIN pos.controlled_codes ps ON ps.controlled_code_id=p.period_status_code_id
         LEFT JOIN pos.x_z_reports z ON z.fiscal_reporting_period_id=p.fiscal_reporting_period_id AND z.report_kind_code_id=@zkind
         LEFT JOIN pos.fiscal_report_requests zreq ON zreq.fiscal_report_request_id=z.fiscal_report_request_id LEFT JOIN pos.controlled_codes zreqs ON zreqs.controlled_code_id=zreq.report_status_code_id
         LEFT JOIN pos.bir_sales_summary_reports b ON b.governing_z_report_id=z.x_z_report_id
         LEFT JOIN pos.fiscal_report_requests breq ON breq.fiscal_report_request_id=b.fiscal_report_request_id
+        LEFT JOIN pos.controlled_codes breqs ON breqs.controlled_code_id=breq.report_status_code_id
         JOIN pos.fiscal_identities fi ON fi.fiscal_identity_id=p.fiscal_identity_id JOIN pos.site_pos_servers s ON s.site_pos_server_id=p.site_pos_server_id
         WHERE p.site_pos_server_id=@site AND p.fiscal_identity_id=@identity AND p.currency_code=@currency
           AND EXTRACT(YEAR FROM p.business_day_date)=@year AND EXTRACT(MONTH FROM p.business_day_date)=@month
         ORDER BY p.period_sequence FOR SHARE OF p,fi,s
         """;
         await using var cmd=Command(c,t,sql);cmd.Parameters.AddWithValue("zkind",ZKindId);cmd.Parameters.AddWithValue("site",command.SitePosServerId);cmd.Parameters.AddWithValue("identity",command.FiscalIdentityId);cmd.Parameters.AddWithValue("currency",command.CurrencyCode);cmd.Parameters.AddWithValue("year",command.CalendarYear);cmd.Parameters.AddWithValue("month",command.CalendarMonth);
-        var result=new List<Source>();await using var r=await cmd.ExecuteReaderAsync(ct).ConfigureAwait(false);while(await r.ReadAsync(ct).ConfigureAwait(false))
+        var result=new List<Source>();
+        var missingCommittedZ=new List<DateOnly>();
+        var missingCommittedBir=new List<DateOnly>();
+        await using var r=await cmd.ExecuteReaderAsync(ct).ConfigureAwait(false);while(await r.ReadAsync(ct).ConfigureAwait(false))
         {
-            if(r.IsDBNull(4)||r.IsDBNull(5)||r.IsDBNull(8)||!string.Equals(r.GetString(3),"closed",StringComparison.Ordinal)||!string.Equals(r.GetString(7),"committed",StringComparison.Ordinal))throw new AnnexE1SafeException(AnnexE1Outcome.GoverningZNotCommitted,"Every configured period in the month requires a committed Z Reading and committed BIR Sales Summary.");
+            var businessDate=r.GetFieldValue<DateOnly>(2);
+            var zCommitted=!r.IsDBNull(4)&&!r.IsDBNull(5)&&string.Equals(r.GetString(3),"closed",StringComparison.Ordinal)&&string.Equals(r.GetString(7),"committed",StringComparison.Ordinal);
+            if(!zCommitted){missingCommittedZ.Add(businessDate);continue;}
+            var birCommitted=!r.IsDBNull(8)&&!r.IsDBNull(43)&&string.Equals(r.GetString(43),"committed",StringComparison.Ordinal);
+            if(!birCommitted){missingCommittedBir.Add(businessDate);continue;}
             result.Add(new(r.GetGuid(0),r.GetInt64(1),r.GetFieldValue<DateOnly>(2),r.GetGuid(5),r.GetString(6),r.GetGuid(8),r.GetString(9),r.IsDBNull(10)?null:r.GetString(10),r.IsDBNull(11)?null:r.GetString(11),r.GetInt64(12),r.GetInt64(13),r.GetInt64(14),r.GetInt64(15),r.GetInt64(16),r.GetInt64(17),r.GetInt64(18),r.GetInt64(19),r.GetInt64(20),r.GetInt64(21),r.GetInt64(22),r.GetInt64(23),r.GetInt64(24),r.GetInt64(25),r.GetInt64(26),r.GetInt64(27),r.GetInt64(28),r.GetInt64(29),r.GetInt64(30),r.GetInt64(31),r.GetInt64(32),r.GetInt64(33),r.GetInt64(34),r.GetInt64(35),r.GetString(36),r.IsDBNull(37)?"":r.GetString(37),r.IsDBNull(38)?"":r.GetString(38),r.IsDBNull(39)?"":r.GetString(39),r.GetString(40),r.GetString(41),r.GetString(42)));
-        } return result;
+        }
+        if(missingCommittedZ.Count>0||missingCommittedBir.Count>0)
+        {
+            var classifications=new List<string>(2);
+            if(missingCommittedZ.Count>0)classifications.Add($"missing committed Z Reading: {string.Join(", ",missingCommittedZ.Select(date=>date.ToString("yyyy-MM-dd")))}");
+            if(missingCommittedBir.Count>0)classifications.Add($"missing committed BIR Sales Summary: {string.Join(", ",missingCommittedBir.Select(date=>date.ToString("yyyy-MM-dd")))}");
+            throw new AnnexE1SafeException(AnnexE1Outcome.GoverningZNotCommitted,$"Annex E-1 cannot be generated because committed fiscal sources are incomplete; {string.Join("; ",classifications)}.");
+        }
+        return result;
     }
 
     private static async Task<IReadOnlyDictionary<string,AnnexE1PeriodFactRecord>> ReadCurrentFactsAsync(NpgsqlConnection c,NpgsqlTransaction t,Guid periodId,CancellationToken ct)

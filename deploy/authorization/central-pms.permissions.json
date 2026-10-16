@@ -14,6 +14,12 @@
     "fiscal_z_reading.close",
     "fiscal_z_reading.export",
     "fiscal_z_close_state.initialize",
-    "fiscal_document.reprint.record"
+    "fiscal_document.reprint.record",
+    "bir_sales_summary.generate",
+    "bir_sales_summary.read",
+    "bir_sales_summary.export",
+    "fiscal_annex_e.generate",
+    "fiscal_annex_e.read",
+    "fiscal_annex_e.export"
   ]
 }

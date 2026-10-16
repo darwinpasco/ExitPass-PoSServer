@@ -34,6 +34,56 @@ public sealed class BirSalesSummaryApiTests
     }
 
     [Fact]
+    public async Task CentralPmsProfileGrantsOnlyBirSummaryAndAnnexE1ConsumerOperations()
+    {
+        var permissions = ReadCentralPmsProfilePermissions();
+        var values = new Dictionary<string, string?>
+        {
+            ["PosServer:Admin:ApiKeys:0:Principal"] = "central-pms",
+            ["PosServer:Admin:ApiKeys:0:Key"] = "central-pms-key",
+            ["PosServer:Admin:ApiKeys:0:SitePosServerIds:0"] = SiteId.ToString("D"),
+            ["PosServer:Admin:ApiKeys:0:FiscalIdentityIds:0"] = IdentityId.ToString("D"),
+            ["PosServer:Admin:ApiKeys:0:CurrencyCodes:0"] = "PHP"
+        };
+        for (var index = 0; index < permissions.Length; index++)
+            values[$"PosServer:Admin:ApiKeys:0:Permissions:{index}"] = permissions[index];
+
+        var configuration = new ConfigurationBuilder().AddInMemoryCollection(values).Build();
+        var services = new ServiceCollection();
+        services.AddLogging();
+        services.AddPosServerFiscalDocumentApi(configuration);
+        using var provider = services.BuildServiceProvider();
+        var options = provider.GetRequiredService<IOptions<AuthorizationOptions>>().Value;
+        var authorization = provider.GetRequiredService<IAuthorizationService>();
+        var principal = Principal(SalesInvoiceHeaderProfileAdminAuthorization.Authenticate(
+            configuration,
+            "central-pms-key",
+            default));
+
+        foreach (var policyName in new[]
+        {
+            BirSalesSummaryAuthorization.GeneratePolicyName,
+            BirSalesSummaryAuthorization.ReadPolicyName,
+            BirSalesSummaryAuthorization.ExportPolicyName,
+            AnnexE1Authorization.GeneratePolicy,
+            AnnexE1Authorization.ReadPolicy,
+            AnnexE1Authorization.DownloadPolicy
+        })
+        {
+            Assert.True((await authorization.AuthorizeAsync(principal, null, options.GetPolicy(policyName)!)).Succeeded);
+        }
+
+        Assert.True(BirSalesSummaryAuthorization.IsInScope(principal, SiteId, IdentityId, "PHP"));
+        Assert.True(AnnexE1Authorization.IsInScope(principal, SiteId, IdentityId, "PHP"));
+        Assert.False(BirSalesSummaryAuthorization.IsInScope(principal, Guid.NewGuid(), IdentityId, "PHP"));
+        Assert.False(BirSalesSummaryAuthorization.IsInScope(principal, SiteId, Guid.NewGuid(), "PHP"));
+        Assert.False(BirSalesSummaryAuthorization.IsInScope(principal, SiteId, IdentityId, "USD"));
+        Assert.DoesNotContain(AnnexE1Authorization.RecordFactPermission, permissions);
+        Assert.DoesNotContain(AnnexE1Authorization.AttestZeroPermission, permissions);
+        Assert.DoesNotContain(AnnexE1Authorization.CorrectPermission, permissions);
+    }
+
+    [Fact]
     public async Task ScopeAndProductionFixtureAuthorityDenialsOccurBeforePersistence()
     {
         var repository = new StubRepository(new(BirSalesSummaryOutcome.Created, Record()));
@@ -88,6 +138,22 @@ public sealed class BirSalesSummaryApiTests
         ["PosServer:Admin:ApiKeys:0:FiscalIdentityIds:0"]=IdentityId.ToString("D"),
         ["PosServer:Admin:ApiKeys:0:CurrencyCodes:0"]="PHP"
     }).Build();
+
+    private static string[] ReadCentralPmsProfilePermissions()
+    {
+        var root = new DirectoryInfo(AppContext.BaseDirectory);
+        while (root is not null && !File.Exists(Path.Combine(root.FullName, "deploy", "authorization", "central-pms.permissions.json")))
+            root = root.Parent;
+        if (root is null)
+            throw new FileNotFoundException("Unable to locate the Central PMS POS permission profile.");
+
+        using var document = System.Text.Json.JsonDocument.Parse(File.ReadAllText(
+            Path.Combine(root.FullName, "deploy", "authorization", "central-pms.permissions.json")));
+        return document.RootElement.GetProperty("permissions")
+            .EnumerateArray()
+            .Select(value => value.GetString()!)
+            .ToArray();
+    }
 
     private static ClaimsPrincipal Principal(PosServerAdminApiKeyAuthenticationResult authentication)
     {

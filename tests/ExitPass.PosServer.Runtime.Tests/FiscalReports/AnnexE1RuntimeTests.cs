@@ -47,7 +47,12 @@ public sealed class AnnexE1RuntimeTests
         using var archive=new ZipArchive(new MemoryStream(first),ZipArchiveMode.Read);Assert.Equal(10,archive.Entries.Count);
         Assert.All(archive.Entries,e=>Assert.Equal(new DateTime(2000,1,1),e.LastWriteTime.DateTime));
         foreach(var entry in archive.Entries.Where(e=>e.FullName.EndsWith(".xml",StringComparison.Ordinal)))using(var stream=entry.Open())XDocument.Load(stream);
-        var sheet=Read(archive,"xl/worksheets/sheet1.xml");Assert.Contains("A1:AF17",sheet);Assert.Contains("22 = 17+18+19+20+21",sheet);Assert.Contains("23 = 8-19",sheet);Assert.Contains("24 = 6-16-8",sheet);
+        var sheet=Read(archive,"xl/worksheets/sheet1.xml");
+        Assert.Contains("<t>BIR SALES SUMMARY REPORT</t>",sheet);
+        Assert.DoesNotContain("BIR SALES SUMMARY  REPORT",sheet);
+        Assert.Contains("A1:AF17",sheet);Assert.Contains("22 = 17+18+19+20+21",sheet);Assert.Contains("23 = 8-19",sheet);Assert.Contains("24 = 6-16-8",sheet);
+        var workbook=Read(archive,"xl/workbook.xml");Assert.Contains("'E-1'!$A$1:$AF$17",workbook);
+        Assert.Equal(1,XDocument.Parse(sheet).Descendants().Count(x=>x.Name.LocalName=="row"&&x.Attribute("r")?.Value=="17"));
         var zeroInput=ZeroInput();
         using var zeroArchive=new ZipArchive(new MemoryStream(renderer.Render(header,[new AnnexE1CalculationEngine().Calculate(zeroInput)])),ZipArchiveMode.Read);
         Assert.Contains("NO_ACTIVITY",Read(zeroArchive,"xl/worksheets/sheet1.xml"));

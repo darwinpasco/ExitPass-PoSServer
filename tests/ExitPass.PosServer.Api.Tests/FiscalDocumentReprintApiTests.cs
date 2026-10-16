@@ -109,8 +109,17 @@ public sealed class FiscalDocumentReprintApiTests
             FiscalZReadingAuthorization.ClosePermission,
             FiscalReportOutputAuthorization.ZExportPermission,
             FiscalZCloseStateInitializationAuthorization.Permission,
-            FiscalDocumentReprintAuthorization.RecordPermission
+            FiscalDocumentReprintAuthorization.RecordPermission,
+            BirSalesSummaryAuthorization.GeneratePermission,
+            BirSalesSummaryAuthorization.ReadPermission,
+            BirSalesSummaryAuthorization.ExportPermission,
+            AnnexE1Authorization.GeneratePermission,
+            AnnexE1Authorization.ReadPermission,
+            AnnexE1Authorization.DownloadPermission
         ], permissions);
+        Assert.DoesNotContain(AnnexE1Authorization.RecordFactPermission, permissions);
+        Assert.DoesNotContain(AnnexE1Authorization.AttestZeroPermission, permissions);
+        Assert.DoesNotContain(AnnexE1Authorization.CorrectPermission, permissions);
         Assert.DoesNotContain(permissions, permission => permission is null || permission.Contains('*'));
         Assert.False(rootElement.TryGetProperty("principal", out _));
         Assert.False(rootElement.TryGetProperty("key", out _));

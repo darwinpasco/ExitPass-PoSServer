@@ -33,7 +33,10 @@ public sealed class BirSalesSummaryPostgresIntegrationTests
 
         await using var app = await StartApiAsync(connectionString);
         using var client = CreateClient(app);
-        var z = await CloseZAsync(client, PeriodId, "z-summary-source", 1);
+        var close = await CloseZAsync(client, PeriodId, "z-summary-source", 1);
+        var z = close.ZReading!;
+        Assert.Equal("COMMITTED", close.BirSalesSummaryCompletion?.Status);
+        Assert.NotNull(close.BirSalesSummaryCompletion?.SummaryId);
         var summaryRequest = new GenerateBirSalesSummaryRequest("summary-concurrent-a", SiteId, IdentityId, "PHP", PeriodId, z.FiscalReportReference);
         var before = await ManifestAsync(connectionString);
 
@@ -46,12 +49,11 @@ public sealed class BirSalesSummaryPostgresIntegrationTests
             client.PostAsJsonAsync("/v1/fiscal-reports/bir-sales-summaries/", summaryRequest),
             client.PostAsJsonAsync("/v1/fiscal-reports/bir-sales-summaries/", summaryRequest with { OperationKey = "summary-concurrent-b" }));
         var diagnostics = string.Join(" | ", await Task.WhenAll(competing.Select(async response => $"{(int)response.StatusCode}:{await response.Content.ReadAsStringAsync()}")));
-        Assert.True(competing.Count(response => response.StatusCode == HttpStatusCode.Created) == 1, diagnostics);
-        Assert.True(competing.Count(response => response.StatusCode == HttpStatusCode.OK) == 1, diagnostics);
-        var createdResponse = competing.Single(response => response.StatusCode == HttpStatusCode.Created);
-        var created = await createdResponse.Content.ReadFromJsonAsync<BirSalesSummaryApiResponse>();
+        Assert.True(competing.All(response => response.StatusCode == HttpStatusCode.OK), diagnostics);
+        var created = await competing[0].Content.ReadFromJsonAsync<BirSalesSummaryApiResponse>();
         Assert.NotNull(created?.Summary);
         var summary = created.Summary;
+        Assert.Equal(close.BirSalesSummaryCompletion!.SummaryId, summary.BirSalesSummaryReportId);
         Assert.Equal(z.FiscalReportId, summary.GoverningZReportId);
         Assert.Equal(z.FiscalReportReference, summary.GoverningZReadingReference);
         Assert.Equal(z.QualifyingDocumentCount, summary.TransactionCount);
@@ -103,7 +105,7 @@ public sealed class BirSalesSummaryPostgresIntegrationTests
         Assert.Equal(before.ZReports, after.ZReports); Assert.Equal(before.ZCounter, after.ZCounter);
         Assert.Equal(before.ResetCounter, after.ResetCounter); Assert.Equal(before.Gta, after.Gta);
         Assert.Equal(before.PeriodStatus, after.PeriodStatus); Assert.Equal(before.OtherReports, after.OtherReports);
-        Assert.Equal(before.Summaries + 1, after.Summaries);
+        Assert.Equal(before.Summaries, after.Summaries);
         Assert.Equal(1L, await ScalarAsync<long>(connectionString, $"SELECT count(*) FROM pos.bir_sales_summary_reports WHERE bir_sales_summary_report_id='{summary.BirSalesSummaryReportId}'"));
         Assert.Equal(1L, await ScalarAsync<long>(connectionString, $"SELECT count(*) FROM pos.fiscal_action_audit WHERE fiscal_report_request_id='{summary.FiscalReportRequestId}' AND char_length(correlation_ref)>0"));
         await AssertImmutableAsync(connectionString, summary.BirSalesSummaryReportId);
@@ -111,6 +113,44 @@ public sealed class BirSalesSummaryPostgresIntegrationTests
         await ProveAuthorizationDenialsAsync(client, summary.BirSalesSummaryReportId, summaryRequest);
         await ProveOpenAndMissingZRejectionAsync(connectionString, client);
         await ProveConflictRollbackRetryAndReconciliationAsync(connectionString, client, summary.OperationKey);
+    }
+
+    [Fact]
+    public async Task AutomaticBirFailureLeavesZCommittedAndReplayRepairsTheDerivativeSummary()
+    {
+        var connectionString = Environment.GetEnvironmentVariable(ConnectionVariable);
+        if (string.IsNullOrWhiteSpace(connectionString)) return;
+        await RebuildAsync(connectionString);
+        await ExecuteFileAsync(connectionString, Path.Combine(FindRepositoryRoot(), "tests", "ExitPass.PosServer.Api.IntegrationTests", "Fixtures", "fiscal_x_reading_runtime_fixture.sql"));
+        await SeedReportingConfigurationAsync(connectionString);
+        await using var app = await StartApiAsync(connectionString);
+        using var client = CreateClient(app);
+
+        await ExecuteAsync(connectionString, "CREATE FUNCTION pos.fail_auto_summary_proof() RETURNS trigger LANGUAGE plpgsql AS $$BEGIN RAISE EXCEPTION 'synthetic auto summary failure';END;$$; CREATE TRIGGER trg_auto_summary_proof_failure BEFORE INSERT ON pos.bir_sales_summary_reports FOR EACH ROW EXECUTE FUNCTION pos.fail_auto_summary_proof();");
+        FiscalZReadingApiResponse close;
+        try
+        {
+            close = await CloseZAsync(client, PeriodId, "z-auto-summary-failure", 1);
+        }
+        finally
+        {
+            await ExecuteAsync(connectionString, "DROP TRIGGER IF EXISTS trg_auto_summary_proof_failure ON pos.bir_sales_summary_reports; DROP FUNCTION IF EXISTS pos.fail_auto_summary_proof();");
+        }
+
+        Assert.Equal("PENDING", close.BirSalesSummaryCompletion?.Status);
+        Assert.Equal(1L, await ScalarAsync<long>(connectionString, "SELECT count(*) FROM pos.x_z_reports WHERE report_kind_code_id='1c628bc2-49c3-53e8-ae83-2082bcf28467'"));
+        Assert.Equal("closed", await ScalarAsync<string>(connectionString, $"SELECT c.code_key FROM pos.fiscal_reporting_periods p JOIN pos.controlled_codes c ON c.controlled_code_id=p.period_status_code_id WHERE p.fiscal_reporting_period_id='{PeriodId:D}'"));
+        Assert.Equal(0L, await ScalarAsync<long>(connectionString, "SELECT count(*) FROM pos.bir_sales_summary_reports"));
+
+        var replayRequest = new CloseFiscalZReadingRequest("z-auto-summary-failure",SiteId,IdentityId,"PHP",PeriodId,1);
+        var replayResponses = await Task.WhenAll(
+            client.PostAsJsonAsync("/v1/fiscal-reports/z-readings/", replayRequest),
+            client.PostAsJsonAsync("/v1/fiscal-reports/z-readings/", replayRequest));
+        Assert.All(replayResponses, response => Assert.Equal(HttpStatusCode.OK, response.StatusCode));
+        var replays = await Task.WhenAll(replayResponses.Select(response => response.Content.ReadFromJsonAsync<FiscalZReadingApiResponse>()));
+        Assert.All(replays, replay => Assert.Equal("COMMITTED", replay?.BirSalesSummaryCompletion?.Status));
+        Assert.Single(replays.Select(replay => replay?.BirSalesSummaryCompletion?.SummaryId).Distinct());
+        Assert.Equal(1L, await ScalarAsync<long>(connectionString, "SELECT count(*) FROM pos.bir_sales_summary_reports"));
     }
 
     private static async Task ProveAuthorizationDenialsAsync(HttpClient client, Guid summaryId, GenerateBirSalesSummaryRequest request)
@@ -146,12 +186,15 @@ public sealed class BirSalesSummaryPostgresIntegrationTests
         INSERT INTO pos.fiscal_reporting_periods(fiscal_reporting_period_id,fiscal_reporting_contract_version_id,site_pos_server_id,fiscal_identity_id,period_status_code_id,business_day_date,period_start_at,period_end_at,reporting_timezone_name,business_day_cutoff_local_time,currency_code,period_sequence,expected_prior_period_id,opened_at,created_by_ref,updated_by_ref)
         VALUES('85000000-0000-4000-8000-000000000010','f6766f48-62f0-513f-b9eb-e61c2f3e8c66','73000000-0000-4000-8000-000000000001','73000000-0000-4000-8000-000000000002','1a6f7021-bc84-5c01-afaa-c5d6685633c8','2026-08-07','2026-08-07T00:00:00Z','2026-08-07T01:00:00Z','Asia/Manila','00:00:00','PHP',2,'73000000-0000-4000-8000-000000000010','2026-08-07T00:00:00Z','summary-proof','summary-proof');
         """);
-        var secondZ = await CloseZAsync(client, Guid.Parse("85000000-0000-4000-8000-000000000010"), "z-summary-second", 2);
-        using var conflict = await client.PostAsJsonAsync("/v1/fiscal-reports/bir-sales-summaries/", new GenerateBirSalesSummaryRequest(committedOperationKey,SiteId,IdentityId,"PHP",secondZ.FiscalReportingPeriodId,secondZ.FiscalReportReference));
+        await using var manualApp = await StartApiAsync(cs, automaticBirSummary: false);
+        using var manualClient = CreateClient(manualApp);
+        Authorize(manualClient, "summary-production-key");
+        var secondZ = (await CloseZAsync(manualClient, Guid.Parse("85000000-0000-4000-8000-000000000010"), "z-summary-second", 2)).ZReading!;
+        using var conflict = await manualClient.PostAsJsonAsync("/v1/fiscal-reports/bir-sales-summaries/", new GenerateBirSalesSummaryRequest(committedOperationKey,SiteId,IdentityId,"PHP",secondZ.FiscalReportingPeriodId,secondZ.FiscalReportReference));
         Assert.Equal(HttpStatusCode.Conflict, conflict.StatusCode);
 
         await ExecuteAsync(cs, "ALTER TABLE pos.x_z_reports DISABLE TRIGGER trg_x_z_reports_immutable; UPDATE pos.x_z_reports SET net_sales_amount_minor_units=net_sales_amount_minor_units+1 WHERE x_z_report_id='"+secondZ.FiscalReportId+"'; ALTER TABLE pos.x_z_reports ENABLE TRIGGER trg_x_z_reports_immutable;");
-        using var mismatch = await client.PostAsJsonAsync("/v1/fiscal-reports/bir-sales-summaries/", new GenerateBirSalesSummaryRequest("summary-reconciliation",SiteId,IdentityId,"PHP",secondZ.FiscalReportingPeriodId,secondZ.FiscalReportReference));
+        using var mismatch = await manualClient.PostAsJsonAsync("/v1/fiscal-reports/bir-sales-summaries/", new GenerateBirSalesSummaryRequest("summary-reconciliation",SiteId,IdentityId,"PHP",secondZ.FiscalReportingPeriodId,secondZ.FiscalReportReference));
         Assert.Equal(HttpStatusCode.UnprocessableEntity, mismatch.StatusCode);
         Assert.Equal(0L, await ScalarAsync<long>(cs, "SELECT count(*) FROM pos.fiscal_report_requests WHERE operation_idempotency_key='summary-reconciliation'"));
         await ExecuteAsync(cs, "ALTER TABLE pos.x_z_reports DISABLE TRIGGER trg_x_z_reports_immutable; UPDATE pos.x_z_reports SET net_sales_amount_minor_units=net_sales_amount_minor_units-1 WHERE x_z_report_id='"+secondZ.FiscalReportId+"'; ALTER TABLE pos.x_z_reports ENABLE TRIGGER trg_x_z_reports_immutable;");
@@ -161,7 +204,7 @@ public sealed class BirSalesSummaryPostgresIntegrationTests
         try
         {
             var count = await ScalarAsync<long>(cs, "SELECT count(*) FROM pos.bir_sales_summary_reports");
-            using var failed = await client.PostAsJsonAsync("/v1/fiscal-reports/bir-sales-summaries/", request);
+            using var failed = await manualClient.PostAsJsonAsync("/v1/fiscal-reports/bir-sales-summaries/", request);
             var body = await failed.Content.ReadAsStringAsync();
             Assert.Equal(HttpStatusCode.ServiceUnavailable, failed.StatusCode);
             Assert.DoesNotContain("synthetic", body, StringComparison.OrdinalIgnoreCase);
@@ -172,12 +215,12 @@ public sealed class BirSalesSummaryPostgresIntegrationTests
         {
             await ExecuteAsync(cs, "DROP TRIGGER IF EXISTS trg_summary_proof_failure ON pos.bir_sales_summary_reports; DROP FUNCTION IF EXISTS pos.fail_summary_proof();");
         }
-        using var retry = await client.PostAsJsonAsync("/v1/fiscal-reports/bir-sales-summaries/", request);
+        using var retry = await manualClient.PostAsJsonAsync("/v1/fiscal-reports/bir-sales-summaries/", request);
         Assert.Equal(HttpStatusCode.Created, retry.StatusCode);
 
     }
 
-    private static async Task<FiscalZReadingRecord> CloseZAsync(HttpClient client, Guid periodId, string operation, long stateVersion)
+    private static async Task<FiscalZReadingApiResponse> CloseZAsync(HttpClient client, Guid periodId, string operation, long stateVersion)
     {
         Authorize(client, "summary-production-key");
         if (stateVersion == 1)
@@ -187,7 +230,7 @@ public sealed class BirSalesSummaryPostgresIntegrationTests
         }
         using var response = await client.PostAsJsonAsync("/v1/fiscal-reports/z-readings/", new CloseFiscalZReadingRequest(operation,SiteId,IdentityId,"PHP",periodId,stateVersion));
         var text = await response.Content.ReadAsStringAsync(); Assert.True(response.IsSuccessStatusCode,text);
-        return (await response.Content.ReadFromJsonAsync<FiscalZReadingApiResponse>())!.ZReading!;
+        return (await response.Content.ReadFromJsonAsync<FiscalZReadingApiResponse>())!;
     }
 
     private static async Task<(byte[] Bytes,string Hash)> ExportAsync(HttpClient client, Guid id, string format)
@@ -208,7 +251,45 @@ public sealed class BirSalesSummaryPostgresIntegrationTests
     private static async Task ProveAnnexE1FlowAsync(HttpClient client,string cs)
     {
         var generation=new AnnexE1GenerationRequest("annex-generate",SiteId,IdentityId,"PHP",2026,8,AnnexE1Contract.Profile,null,null,null);
-        using(var missingFacts=await client.PostAsJsonAsync("/v1/fiscal-reports/annex-e/e1/workbooks",generation))Assert.Equal(HttpStatusCode.UnprocessableEntity,missingFacts.StatusCode);
+        const string missingZPeriodId="87000000-0000-4000-8000-000000000001";
+        await ExecuteAsync(cs,$"INSERT INTO pos.fiscal_reporting_periods(fiscal_reporting_period_id,fiscal_reporting_contract_version_id,site_pos_server_id,fiscal_identity_id,period_status_code_id,business_day_date,period_start_at,period_end_at,reporting_timezone_name,business_day_cutoff_local_time,currency_code,period_sequence,expected_prior_period_id,opened_at,closing_started_at,closed_at,created_by_ref,updated_by_ref) SELECT '{missingZPeriodId}',p.fiscal_reporting_contract_version_id,p.site_pos_server_id,p.fiscal_identity_id,(SELECT c.controlled_code_id FROM pos.controlled_codes c JOIN pos.controlled_code_sets s ON s.controlled_code_set_id=c.controlled_code_set_id WHERE s.code_set_key='fiscal_reporting_period_status' AND c.code_key='closed'),'2026-08-04','2026-08-04T00:00:00Z','2026-08-05T00:00:00Z',p.reporting_timezone_name,p.business_day_cutoff_local_time,p.currency_code,p.period_sequence+1,p.fiscal_reporting_period_id,'2026-08-04T00:00:00Z','2026-08-05T00:00:00Z','2026-08-05T00:00:00Z','summary-proof','summary-proof' FROM pos.fiscal_reporting_periods p WHERE p.fiscal_reporting_period_id='{PeriodId:D}'");
+        using(var missingZ=await client.PostAsJsonAsync("/v1/fiscal-reports/annex-e/e1/workbooks",generation))
+        {
+            var body=await missingZ.Content.ReadAsStringAsync();
+            Assert.Equal(HttpStatusCode.Conflict,missingZ.StatusCode);
+            Assert.Contains("missing committed Z Reading",body,StringComparison.Ordinal);
+            Assert.Contains("2026-08-04",body,StringComparison.Ordinal);
+        }
+        await ExecuteAsync(cs,$"ALTER TABLE pos.fiscal_reporting_periods DISABLE TRIGGER trg_fiscal_reporting_periods_closed_immutable; DELETE FROM pos.fiscal_reporting_periods WHERE fiscal_reporting_period_id='{missingZPeriodId}'; ALTER TABLE pos.fiscal_reporting_periods ENABLE TRIGGER trg_fiscal_reporting_periods_closed_immutable;");
+
+        var zRequestId=await ScalarAsync<Guid>(cs,$"SELECT fiscal_report_request_id FROM pos.x_z_reports WHERE fiscal_reporting_period_id='{PeriodId:D}' AND report_kind_code_id='1c628bc2-49c3-53e8-ae83-2082bcf28467'");
+        await ExecuteAsync(cs,$"UPDATE pos.fiscal_report_requests SET report_status_code_id=(SELECT c.controlled_code_id FROM pos.controlled_codes c JOIN pos.controlled_code_sets s ON s.controlled_code_set_id=c.controlled_code_set_id WHERE s.code_set_key='fiscal_report_status' AND c.code_key='processing') WHERE fiscal_report_request_id='{zRequestId:D}'");
+        using(var uncommittedZ=await client.PostAsJsonAsync("/v1/fiscal-reports/annex-e/e1/workbooks",generation))
+        {
+            var body=await uncommittedZ.Content.ReadAsStringAsync();
+            Assert.Equal(HttpStatusCode.Conflict,uncommittedZ.StatusCode);
+            Assert.Contains("missing committed Z Reading",body,StringComparison.Ordinal);
+            Assert.Contains("2026-08-03",body,StringComparison.Ordinal);
+        }
+        await ExecuteAsync(cs,$"UPDATE pos.fiscal_report_requests SET report_status_code_id=(SELECT c.controlled_code_id FROM pos.controlled_codes c JOIN pos.controlled_code_sets s ON s.controlled_code_set_id=c.controlled_code_set_id WHERE s.code_set_key='fiscal_report_status' AND c.code_key='committed') WHERE fiscal_report_request_id='{zRequestId:D}'");
+
+        var birRequestId=await ScalarAsync<Guid>(cs,$"SELECT fiscal_report_request_id FROM pos.bir_sales_summary_reports WHERE fiscal_reporting_period_id='{PeriodId:D}'");
+        await ExecuteAsync(cs,$"UPDATE pos.fiscal_report_requests SET report_status_code_id=(SELECT c.controlled_code_id FROM pos.controlled_codes c JOIN pos.controlled_code_sets s ON s.controlled_code_set_id=c.controlled_code_set_id WHERE s.code_set_key='fiscal_report_status' AND c.code_key='processing') WHERE fiscal_report_request_id='{birRequestId:D}'");
+        using(var uncommittedBir=await client.PostAsJsonAsync("/v1/fiscal-reports/annex-e/e1/workbooks",generation))
+        {
+            var body=await uncommittedBir.Content.ReadAsStringAsync();
+            Assert.Equal(HttpStatusCode.Conflict,uncommittedBir.StatusCode);
+            Assert.Contains("missing committed BIR Sales Summary",body,StringComparison.Ordinal);
+            Assert.Contains("2026-08-03",body,StringComparison.Ordinal);
+        }
+        await ExecuteAsync(cs,$"UPDATE pos.fiscal_report_requests SET report_status_code_id=(SELECT c.controlled_code_id FROM pos.controlled_codes c JOIN pos.controlled_code_sets s ON s.controlled_code_set_id=c.controlled_code_set_id WHERE s.code_set_key='fiscal_report_status' AND c.code_key='committed') WHERE fiscal_report_request_id='{birRequestId:D}'");
+        using(var missingFacts=await client.PostAsJsonAsync("/v1/fiscal-reports/annex-e/e1/workbooks",generation))
+        {
+            var body=await missingFacts.Content.ReadAsStringAsync();
+            Assert.Equal(HttpStatusCode.UnprocessableEntity,missingFacts.StatusCode);
+            Assert.Contains("2026-08-03",body,StringComparison.Ordinal);
+            foreach(var factType in AnnexE1FactTypes.All)Assert.Contains(factType,body,StringComparison.Ordinal);
+        }
         using(var missingSource=await client.PostAsJsonAsync("/v1/fiscal-reports/annex-e/e1/workbooks",generation with{OperationKey="annex-no-source",CalendarMonth=7}))Assert.Equal(HttpStatusCode.UnprocessableEntity,missingSource.StatusCode);
         AnnexE1PeriodFactRecord? manualFact=null;
         foreach(var type in AnnexE1FactTypes.All.OrderBy(x=>x,StringComparer.Ordinal))
@@ -246,7 +327,7 @@ public sealed class BirSalesSummaryPostgresIntegrationTests
     }
 
     private static async Task RebuildAsync(string cs){await ExecuteAsync(cs,"DROP SCHEMA IF EXISTS pos CASCADE");var root=FindRepositoryRoot();foreach(var entry in File.ReadLines(Path.Combine(root,"db","rebuild","pos_sql_apply_order.txt")).Select(x=>x.Trim()).Where(x=>x.Length>0&&!x.StartsWith('#')))await ExecuteFileAsync(cs,Path.Combine(root,entry.Replace('/',Path.DirectorySeparatorChar)));foreach(var file in Directory.GetFiles(Path.Combine(root,"db","reference-data","controlled-codes","generated","sql"),"*.sql").OrderBy(x=>x,StringComparer.Ordinal))await ExecuteFileAsync(cs,file);}
-    private static async Task<WebApplication> StartApiAsync(string cs){var builder=WebApplication.CreateBuilder(new WebApplicationOptions{EnvironmentName=Environments.Production});builder.WebHost.UseKestrel().UseUrls("http://127.0.0.1:0");builder.Configuration.AddInMemoryCollection(Configuration(cs));builder.Services.AddPosServerFiscalDocumentApi(builder.Configuration);var app=builder.Build();app.UseAuthentication();app.UseAuthorization();app.MapFiscalZCloseStateInitializationEndpoints();app.MapFiscalZReadingEndpoints();app.MapBirSalesSummaryEndpoints();app.MapAnnexE1Endpoints();await app.StartAsync();return app;}
+    private static async Task<WebApplication> StartApiAsync(string cs,bool automaticBirSummary=true){var builder=WebApplication.CreateBuilder(new WebApplicationOptions{EnvironmentName=Environments.Production});builder.WebHost.UseKestrel().UseUrls("http://127.0.0.1:0");builder.Configuration.AddInMemoryCollection(Configuration(cs));builder.Services.AddPosServerFiscalDocumentApi(builder.Configuration);if(!automaticBirSummary)builder.Services.AddScoped(provider=>new FiscalZReadingService(provider.GetRequiredService<IFiscalZReadingRepository>()));var app=builder.Build();app.UseAuthentication();app.UseAuthorization();app.MapFiscalZCloseStateInitializationEndpoints();app.MapFiscalZReadingEndpoints();app.MapBirSalesSummaryEndpoints();app.MapAnnexE1Endpoints();await app.StartAsync();return app;}
     private static Dictionary<string,string?> Configuration(string cs)=>new()
     {
         {"ConnectionStrings:PosServer",cs},
