@@ -64,6 +64,73 @@ public sealed class FiscalXReadingRuntimeTests
         Assert.Equal(8_000, aggregate.Tenders.Single().AmountMinorUnits);
     }
 
+    [Theory]
+    [InlineData("cash")]
+    [InlineData("card")]
+    [InlineData("qrph")]
+    [InlineData("gcash")]
+    [InlineData("maya")]
+    [InlineData("digital_wallet")]
+    [InlineData("bank_transfer")]
+    [InlineData("other_non_cash")]
+    public void GovernedTenderClassificationsAreAcceptedWithoutRemapping(string classification)
+    {
+        var document = Document("issued", sequence: 1) with
+        {
+            Tenders = [new(classification, 8_000, "PHP")]
+        };
+
+        var aggregate = new FiscalXReadingAggregationService().Aggregate([document], [], "PHP");
+
+        var tender = Assert.Single(aggregate.Tenders);
+        Assert.Equal(classification, tender.Classification);
+        Assert.Equal(1, tender.TransactionCount);
+        Assert.Equal(8_000, tender.AmountMinorUnits);
+        Assert.Equal(8_000, aggregate.Amounts.NetSalesAmountMinorUnits);
+    }
+
+    [Theory]
+    [InlineData("qrph")]
+    [InlineData("gcash")]
+    public void DigitalTenderStillReconcilesExactlyToDocumentNet(string classification)
+    {
+        var document = Document("issued", sequence: 1) with
+        {
+            Tenders = [new(classification, 7_999, "PHP")]
+        };
+
+        var exception = Assert.Throws<FiscalXReadingSafeException>(() =>
+            new FiscalXReadingAggregationService().Aggregate([document], [], "PHP"));
+
+        Assert.Equal(FiscalXReadingOutcome.ReconciliationFailure, exception.Outcome);
+    }
+
+    [Fact]
+    public void MixedTenderAggregationPreservesCanonicalClassificationsAndTotals()
+    {
+        var cashAndQrph = Document("issued", sequence: 1) with
+        {
+            Tenders = [new("cash", 3_000, "PHP"), new("qrph", 5_000, "PHP")]
+        };
+        var cardAndGcash = Document("issued", sequence: 2) with
+        {
+            Tenders = [new("card", 2_000, "PHP"), new("gcash", 6_000, "PHP")]
+        };
+
+        var aggregate = new FiscalXReadingAggregationService().Aggregate([cashAndQrph, cardAndGcash], [], "PHP");
+
+        Assert.Collection(
+            aggregate.Tenders,
+            tender => Assert.Equal(("card", 2_000L), (tender.Classification, tender.AmountMinorUnits)),
+            tender => Assert.Equal(("cash", 3_000L), (tender.Classification, tender.AmountMinorUnits)),
+            tender => Assert.Equal(("gcash", 6_000L), (tender.Classification, tender.AmountMinorUnits)),
+            tender => Assert.Equal(("qrph", 5_000L), (tender.Classification, tender.AmountMinorUnits)));
+        Assert.All(aggregate.Tenders, tender => Assert.Equal(1, tender.TransactionCount));
+        Assert.Equal(16_000, aggregate.Tenders.Sum(tender => tender.AmountMinorUnits));
+        Assert.Equal(16_000, aggregate.Amounts.NetSalesAmountMinorUnits);
+        Assert.Equal(2, aggregate.QualifyingDocumentCount);
+    }
+
     [Fact]
     public void SeniorCitizenAndPwdRemainSeparateFromVatExemption()
     {

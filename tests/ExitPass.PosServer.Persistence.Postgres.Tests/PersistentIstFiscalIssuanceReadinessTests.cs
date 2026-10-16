@@ -171,6 +171,47 @@ public sealed class PersistentIstFiscalIssuanceReadinessTests
         Assert.Contains("ON CONFLICT (controlled_code_id) DO NOTHING", generated);
     }
 
+    [Fact]
+    public void FiscalReportingDigitalTenderCodesAreGovernedAndDeterministic()
+    {
+        var index = ReadRepoFile("db", "reference-data", "controlled-codes", "source", "controlled_code_source_index.json");
+        var family = ReadRepoFile("db", "reference-data", "controlled-codes", "source", "families", "fiscal_reporting_tender_classification.json");
+        var generated = ReadRepoFile("db", "reference-data", "controlled-codes", "generated", "sql", "005_controlled_codes_reporting_contract.sql");
+        var tenderBreakdownTable = ReadRepoFile("db", "state", "tables", "pos.fiscal_report_tender_breakdowns.sql");
+        var contract = ReadRepoFile("contracts", "pos-server", "fiscal-reporting-internal-contract.v1.json");
+        using var indexJson = JsonDocument.Parse(index);
+        using var familyJson = JsonDocument.Parse(family);
+        using var contractJson = JsonDocument.Parse(contract);
+        var namespaceId = Guid.Parse(indexJson.RootElement.GetProperty("uuid_namespace").GetString()!);
+        var codeSet = Assert.Single(familyJson.RootElement.GetProperty("code_sets").EnumerateArray());
+        var sourceCodes = codeSet.GetProperty("codes").EnumerateArray()
+            .Select(code => code.GetProperty("code_key").GetString()!)
+            .ToArray();
+        var expected = new[] { "cash", "card", "qrph", "gcash", "maya", "digital_wallet", "bank_transfer", "other_non_cash" };
+
+        Assert.Equal(expected.Order(), sourceCodes.Order());
+        var contractCodes = contractJson.RootElement.GetProperty("controlledFamilies")
+            .GetProperty("fiscal_reporting_tender_classification").EnumerateArray()
+            .Select(code => code.GetString()!).ToArray();
+        Assert.Equal(expected.Order(), contractCodes.Order());
+
+        var deterministicIds = new Dictionary<string, Guid>
+        {
+            ["qrph"] = Guid.Parse("a9dadabe-5e23-5226-9d32-42016c93b526"),
+            ["gcash"] = Guid.Parse("2c096526-1c02-5081-948c-0ade7196b61a"),
+            ["maya"] = Guid.Parse("74bed3e8-9678-560b-95cf-ead2b4d5d733")
+        };
+        foreach (var (code, expectedId) in deterministicIds)
+        {
+            var actualId = SourceUuid(namespaceId, $"pos.controlled_codes:fiscal_reporting_tender_classification:{code}");
+            Assert.Equal(expectedId, actualId);
+            Assert.Contains(expectedId.ToString("D"), generated);
+            Assert.Contains($"'fiscal_reporting_tender_classification', '{code}'", generated);
+            Assert.Contains(expectedId.ToString("D"), tenderBreakdownTable);
+        }
+        Assert.Contains("DROP CONSTRAINT IF EXISTS ck_fiscal_report_tender_breakdowns__class_family", tenderBreakdownTable);
+    }
+
     private static Guid SourceUuid(Guid namespaceId, string name)
     {
         var namespaceBytes = Convert.FromHexString(namespaceId.ToString("N"));

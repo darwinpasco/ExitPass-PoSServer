@@ -58,6 +58,9 @@ public sealed class BirSalesSummaryPostgresIntegrationTests
         Assert.Equal(z.FiscalReportReference, summary.GoverningZReadingReference);
         Assert.Equal(z.QualifyingDocumentCount, summary.TransactionCount);
         Assert.Equal(z.Amounts, summary.Amounts);
+        Assert.Contains(summary.Tenders, tender => tender.Classification == "qrph" && tender.AmountMinorUnits == 8_000);
+        Assert.Contains(summary.Tenders, tender => tender.Classification == "gcash" && tender.AmountMinorUnits == 8_571);
+        Assert.Equal(z.Tenders, summary.Tenders);
         Assert.Equal(z.CounterSnapshot, summary.CounterSnapshot);
         Assert.Equal("COMMITTED", summary.ReportStatus);
         Assert.True(summary.Immutable);
