@@ -19,13 +19,32 @@ CREATE TABLE IF NOT EXISTS pos.fiscal_report_tender_breakdowns (
         '1f429942-5bec-585b-ae4c-a5025ec59827',
         '156acddb-4eee-5653-8b47-55375928c15b',
         'd0eadc45-339d-5376-bad4-ca26167edc25',
-        '6f99281a-4847-5699-96e8-5138e82d01cb'
+        '6f99281a-4847-5699-96e8-5138e82d01cb',
+        'a9dadabe-5e23-5226-9d32-42016c93b526',
+        '2c096526-1c02-5081-948c-0ade7196b61a',
+        '74bed3e8-9678-560b-95cf-ead2b4d5d733'
     )),
     CONSTRAINT ck_fiscal_report_tender_breakdowns__values CHECK (
         tender_transaction_count >= 0 AND amount_minor_units >= 0
     ),
     CONSTRAINT ck_fiscal_report_tender_breakdowns__currency CHECK (currency_code ~ '^[A-Z]{3}$')
 );
+
+-- Reconcile existing state-based environments without changing immutable report rows.
+ALTER TABLE pos.fiscal_report_tender_breakdowns
+    DROP CONSTRAINT IF EXISTS ck_fiscal_report_tender_breakdowns__class_family;
+
+ALTER TABLE pos.fiscal_report_tender_breakdowns
+    ADD CONSTRAINT ck_fiscal_report_tender_breakdowns__class_family CHECK (tender_classification_code_id IN (
+        '47a97fd9-987d-5ea2-a8d0-d293343bf7f6',
+        '1f429942-5bec-585b-ae4c-a5025ec59827',
+        '156acddb-4eee-5653-8b47-55375928c15b',
+        'd0eadc45-339d-5376-bad4-ca26167edc25',
+        '6f99281a-4847-5699-96e8-5138e82d01cb',
+        'a9dadabe-5e23-5226-9d32-42016c93b526',
+        '2c096526-1c02-5081-948c-0ade7196b61a',
+        '74bed3e8-9678-560b-95cf-ead2b4d5d733'
+    ));
 
 CREATE INDEX IF NOT EXISTS ix_fiscal_report_tender_breakdowns__classification
     ON pos.fiscal_report_tender_breakdowns (tender_classification_code_id, x_z_report_id);

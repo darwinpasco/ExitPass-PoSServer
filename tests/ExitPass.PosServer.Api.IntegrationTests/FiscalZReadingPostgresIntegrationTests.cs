@@ -57,6 +57,8 @@ public sealed class FiscalZReadingPostgresIntegrationTests
         Assert.Equal(1, created.ZReading.CounterSnapshot.ResultingZCounterValue);
         Assert.Equal(created.ZReading.CounterSnapshot.PreviousResetCounterValue, created.ZReading.CounterSnapshot.ResultingResetCounterValue);
         Assert.Equal(2, created.ZReading.CounterSnapshot.ResultingStateVersion);
+        Assert.Contains(created.ZReading.Tenders, tender => tender.Classification == "qrph" && tender.AmountMinorUnits == 8_000);
+        Assert.Contains(created.ZReading.Tenders, tender => tender.Classification == "gcash" && tender.AmountMinorUnits == 8_571);
 
         using var replayResponse = await client.PostAsJsonAsync("/v1/fiscal-reports/z-readings/", close);
         var replay = await replayResponse.Content.ReadFromJsonAsync<FiscalZReadingApiResponse>();

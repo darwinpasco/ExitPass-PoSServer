@@ -31,7 +31,7 @@
     "fiscal_report_output_type": ["json_presentation", "print_presentation", "external_export_reference"],
     "fiscal_report_output_status": ["requested", "processing", "committed", "failed"],
     "fiscal_sequence_gap_classification": ["voided_document", "failed_issuance", "reserved_not_issued", "unexplained"],
-    "fiscal_reporting_tender_classification": ["cash", "card", "digital_wallet", "bank_transfer", "other_non_cash"],
+    "fiscal_reporting_tender_classification": ["cash", "card", "qrph", "gcash", "maya", "digital_wallet", "bank_transfer", "other_non_cash"],
     "fiscal_reporting_discount_classification": ["senior_citizen_statutory", "pwd_statutory", "other_statutory", "vat_exemption_adjustment", "coupon", "promotional"]
   },
   "businessTime": {

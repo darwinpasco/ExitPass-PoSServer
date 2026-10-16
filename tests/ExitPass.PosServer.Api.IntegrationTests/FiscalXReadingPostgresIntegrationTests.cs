@@ -51,6 +51,8 @@ public sealed class FiscalXReadingPostgresIntegrationTests
         Assert.Equal(2_143, created.XReading.Amounts.PwdDiscountAmountMinorUnits);
         Assert.Equal(1_286, created.XReading.Amounts.VatExemptionAmountMinorUnits);
         Assert.Equal(2, created.XReading.Tenders.Count);
+        Assert.Contains(created.XReading.Tenders, tender => tender.Classification == "qrph" && tender.AmountMinorUnits == 8_000);
+        Assert.Contains(created.XReading.Tenders, tender => tender.Classification == "gcash" && tender.AmountMinorUnits == 8_571);
         Assert.Single(created.XReading.FiscalNumberRanges);
         Assert.Empty(created.XReading.FiscalNumberRanges[0].Gaps);
 
