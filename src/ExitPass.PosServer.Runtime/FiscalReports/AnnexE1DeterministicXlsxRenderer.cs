@@ -54,7 +54,7 @@ public sealed class AnnexE1DeterministicXlsxRenderer
         HeaderRow(b, 6, h.PosSerialNumber); HeaderRow(b, 7, h.MachineIdentificationNumber); HeaderRow(b, 8, h.PosTerminalNumber);
         HeaderRow(b, 9, h.GeneratedAt.ToUniversalTime().ToString("yyyy-MM-dd HH:mm:ss 'UTC'", CultureInfo.InvariantCulture));
         HeaderRow(b, 10, h.GeneratedByRef); b.Append("<row r=\"11\"/>");
-        b.Append("<row r=\"12\" ht=\"21.75\"><c r=\"A12\" s=\"1\" t=\"inlineStr\"><is><t>BIR SALES SUMMARY  REPORT</t></is></c></row>");
+        b.Append("<row r=\"12\" ht=\"21.75\"><c r=\"A12\" s=\"1\" t=\"inlineStr\"><is><t>BIR SALES SUMMARY REPORT</t></is></c></row>");
         HeadingRows(b); AnnotationRow(b);
         for (var index = 0; index < rows.Count; index++) DataRow(b, 17 + index, rows[index]);
         b.Append("</sheetData><mergeCells count=\"32\">");

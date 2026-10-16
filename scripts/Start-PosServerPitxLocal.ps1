@@ -28,6 +28,8 @@ $privateRoot = if ([string]::IsNullOrWhiteSpace($env:EXITPASS_PERSISTENT_IST_ROO
 else {
     $env:EXITPASS_PERSISTENT_IST_ROOT
 }
+$annexE1ArtifactRoot = Join-Path $privateRoot 'pos-server\annex-e1'
+$annexE1ContainerArtifactRoot = '/var/lib/exitpass/annex-e1'
 $environmentFile = Join-Path $privateRoot 'runtime\restart-41-business\pos.env'
 $temporaryRoot = Join-Path ([IO.Path]::GetTempPath()) "exitpass-pos-server-pitx-local-$PID"
 $certificatePath = Join-Path $temporaryRoot 'exitpass-pos-local.pfx'
@@ -137,6 +139,21 @@ if (-not (Test-Path -LiteralPath $environmentFile)) {
 if (-not (Test-Path -LiteralPath $permissionProfilePath)) {
     throw "The Central PMS POS permission profile was not found at $permissionProfilePath."
 }
+if (Test-Path -LiteralPath $annexE1ArtifactRoot) {
+    if (-not (Test-Path -LiteralPath $annexE1ArtifactRoot -PathType Container)) {
+        throw "The Annex E-1 artifact path is not a directory: $annexE1ArtifactRoot"
+    }
+}
+else {
+    [void](New-Item -ItemType Directory -Path $annexE1ArtifactRoot -Force)
+}
+$resolvedPrivateRoot = (Resolve-Path -LiteralPath $privateRoot).Path.TrimEnd('\')
+$resolvedAnnexE1ArtifactRoot = (Resolve-Path -LiteralPath $annexE1ArtifactRoot).Path
+if (-not $resolvedAnnexE1ArtifactRoot.StartsWith(
+        "$resolvedPrivateRoot\",
+        [StringComparison]::OrdinalIgnoreCase)) {
+    throw "The Annex E-1 artifact path must remain under the private persistent IST root."
+}
 
 try {
     $permissionProfile = Get-Content -LiteralPath $permissionProfilePath -Raw | ConvertFrom-Json
@@ -241,9 +258,11 @@ try {
         --env 'ASPNETCORE_URLS=http://+:8080;https://+:8443' `
         --env 'ASPNETCORE_Kestrel__Certificates__Default__Path=/https/exitpass-pos-local.pfx' `
         --env "ASPNETCORE_Kestrel__Certificates__Default__Password=$certificatePassword" `
+        --env "PosServer__AnnexE1__ArtifactRoot=$annexE1ContainerArtifactRoot" `
         --publish '127.0.0.1:56067:8080' `
         --publish '127.0.0.1:56066:8443' `
         --mount "type=bind,source=$certificatePath,target=/https/exitpass-pos-local.pfx,readonly" `
+        --mount "type=bind,source=$resolvedAnnexE1ArtifactRoot,target=$annexE1ContainerArtifactRoot" `
         --label 'com.exitpass.local-runtime=pitx-pos-server' `
         --entrypoint 'dotnet' `
         $imageName `
@@ -253,6 +272,23 @@ try {
     }
     $containerStarted = $true
 
+    $containerInspect = (& docker.exe inspect $containerName) | ConvertFrom-Json
+    $artifactEnvironment = @($containerInspect[0].Config.Env |
+        Where-Object { $_ -ceq "PosServer__AnnexE1__ArtifactRoot=$annexE1ContainerArtifactRoot" })
+    $artifactMount = @($containerInspect[0].Mounts |
+        Where-Object {
+            $_.Type -eq 'bind' -and
+            $_.Destination -eq $annexE1ContainerArtifactRoot -and
+            $_.RW -and
+            [string]::Equals($_.Source, $resolvedAnnexE1ArtifactRoot, [StringComparison]::OrdinalIgnoreCase)
+        })
+    if ($artifactEnvironment.Count -ne 1 -or $artifactMount.Count -ne 1) {
+        throw 'The POS Server Annex E-1 persistent artifact configuration is unavailable.'
+    }
+    Invoke-CheckedCommand docker.exe @(
+        'exec', $containerName, 'test', '-w', $annexE1ContainerArtifactRoot
+    ) 'The POS Server process cannot write to the Annex E-1 persistent artifact directory.'
+
     Wait-ForHealth '/health/live'
     Wait-ForHealth '/health/ready'
 
@@ -261,6 +297,7 @@ try {
     Write-Host "HTTPS: $httpsUrl"
     Write-Host "HTTP:  $httpUrl"
     Write-Host "Database: $databaseContainer/$databaseName (volume $databaseVolume)"
+    Write-Host "Annex E-1 artifacts: $resolvedAnnexE1ArtifactRoot"
 
     if (-not $SmokeTest) {
         Write-Host 'Press Ctrl+C to stop the local POS Server.'

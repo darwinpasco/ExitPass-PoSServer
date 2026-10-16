@@ -102,6 +102,79 @@ public sealed class FiscalZReadingApiTests
         Assert.Same(record, read.ZReading);
     }
 
+    [Theory]
+    [InlineData(FiscalZReadingOutcome.Created, BirSalesSummaryOutcome.Created, 201)]
+    [InlineData(FiscalZReadingOutcome.Replayed, BirSalesSummaryOutcome.Replayed, 200)]
+    public async Task CommittedZEnsuresBirSummaryAfterZCommit(
+        FiscalZReadingOutcome zOutcome,
+        BirSalesSummaryOutcome summaryOutcome,
+        int expectedStatus)
+    {
+        var sequence = new List<string>();
+        var z = Record();
+        var summary = SummaryRecord(z);
+        var zRepository = new StubRepository(new(zOutcome, z), () => sequence.Add("z-committed"));
+        var summaryRepository = new StubBirRepository(new(summaryOutcome, summary), command =>
+        {
+            sequence.Add("bir-summary");
+            Assert.Equal($"bir-sales-summary:auto:{z.FiscalReportId:D}", command.OperationKey);
+            Assert.Equal(z.FiscalReportId, summary.GoverningZReportId);
+            Assert.Equal(z.FiscalReportReference, command.GoverningZReadingReference);
+            Assert.Equal(z.SitePosServerId, command.SitePosServerId);
+            Assert.Equal(z.FiscalIdentityId, command.FiscalIdentityId);
+            Assert.Equal(z.FiscalReportingPeriodId, command.FiscalReportingPeriodId);
+            Assert.Equal(z.CurrencyCode, command.CurrencyCode);
+        });
+        var service = new FiscalZReadingService(zRepository, new BirSalesSummaryService(summaryRepository));
+
+        var response = await FiscalZReadingEndpoint.CloseAsync(
+            new("z-operation", SiteId, IdentityId, "PHP", PeriodId, 1), service, Context());
+
+        Assert.Equal(expectedStatus, response.HttpStatusCode);
+        Assert.Equal(["z-committed", "bir-summary"], sequence);
+        Assert.Equal("COMMITTED", response.BirSalesSummaryCompletion?.Status);
+        Assert.Equal(summary.BirSalesSummaryReportId, response.BirSalesSummaryCompletion?.SummaryId);
+        Assert.Equal("bir_sales_summary_committed", response.BirSalesSummaryCompletion?.Code);
+        Assert.False(response.BirSalesSummaryCompletion?.Retryable);
+    }
+
+    [Fact]
+    public async Task BirFailureLeavesCommittedZSuccessfulAndPendingForManualRecovery()
+    {
+        var z = Record();
+        var zRepository = new StubRepository(new(FiscalZReadingOutcome.Created, z));
+        var summaryRepository = new StubBirRepository(new(
+            BirSalesSummaryOutcome.PersistenceFailure,
+            SafeMessage: "BIR sales-summary generation failed safely."));
+        var service = new FiscalZReadingService(zRepository, new BirSalesSummaryService(summaryRepository));
+
+        var response = await FiscalZReadingEndpoint.CloseAsync(
+            new("z-operation", SiteId, IdentityId, "PHP", PeriodId, 1), service, Context());
+
+        Assert.True(response.Succeeded);
+        Assert.Equal(StatusCodes.Status201Created, response.HttpStatusCode);
+        Assert.Same(z, response.ZReading);
+        Assert.Equal("PENDING", response.BirSalesSummaryCompletion?.Status);
+        Assert.Equal("bir_sales_summary_persistence_failed", response.BirSalesSummaryCompletion?.Code);
+        Assert.True(response.BirSalesSummaryCompletion?.Retryable);
+    }
+
+    [Fact]
+    public async Task FailedZDoesNotAttemptBirSummary()
+    {
+        var summaryRepository = new StubBirRepository(new(BirSalesSummaryOutcome.Created, SummaryRecord(Record())));
+        var service = new FiscalZReadingService(
+            new StubRepository(new(FiscalZReadingOutcome.ReconciliationFailure, SafeMessage: "Z reconciliation failed safely.")),
+            new BirSalesSummaryService(summaryRepository));
+
+        var response = await FiscalZReadingEndpoint.CloseAsync(
+            new("z-operation", SiteId, IdentityId, "PHP", PeriodId, 1), service, Context());
+
+        Assert.Equal(StatusCodes.Status422UnprocessableEntity, response.HttpStatusCode);
+        Assert.Equal(0, summaryRepository.GenerateCalls);
+        Assert.Null(response.BirSalesSummaryCompletion);
+    }
+
     private static IConfiguration Configuration()
     {
         var values = new Dictionary<string, string?>
@@ -136,13 +209,27 @@ public sealed class FiscalZReadingApiTests
     }
 
     private static FiscalZReadingRecord Record() => new(Guid.NewGuid(),"Z-TEST",Guid.NewGuid(),"z-operation","Z_READING",FiscalZReadingContract.ContractVersion,FiscalZReadingContract.SemanticHashVersion,SiteId,IdentityId,PeriodId,null,new(2026,8,3),DateTimeOffset.Parse("2026-08-03T00:00:00Z"),DateTimeOffset.Parse("2026-08-04T00:00:00Z"),"Asia/Manila",new(0,0),"PHP",DateTimeOffset.Parse("2026-08-04T01:00:00Z"),DateTimeOffset.Parse("2026-08-04T01:00:00Z"),DateTimeOffset.Parse("2026-08-04T01:00:00Z"),0,new(0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0),[],[],[],new(0,0,0,1,0,0,0,1,2),"CLOSED","z-correlation","Z-TEST",true);
+    private static BirSalesSummaryRecord SummaryRecord(FiscalZReadingRecord z) => new(
+        Guid.NewGuid(),Guid.NewGuid(),$"bir-sales-summary:auto:{z.FiscalReportId:D}",BirSalesSummaryContract.ReportKind,
+        BirSalesSummaryContract.ContractVersion,BirSalesSummaryContract.SemanticHashVersion,BirSalesSummaryContract.ReportingProfile,
+        z.FiscalReportId,z.FiscalReportReference,z.SitePosServerId,z.FiscalIdentityId,z.FiscalReportingPeriodId,z.BusinessDayDate,
+        z.BusinessDayDate,z.BusinessDayDate.AddDays(1),z.CurrencyCode,z.QualifyingDocumentCount,null,null,z.Amounts,z.Tenders,z.Discounts,
+        z.FiscalNumberRanges,z.CounterSnapshot,new(Guid.NewGuid(),"v1","serial","min","accreditation",new(2026,1,1),new(2027,1,1),"ptu",new(2026,1,1)),
+        z.GeneratedAt,z.CommittedAt,z.CorrelationId,"BIRSS-TEST",true);
     private static string FindSource(params string[] parts) { var directory=new DirectoryInfo(AppContext.BaseDirectory);while(directory is not null){var candidate=Path.Combine([directory.FullName,..parts]);if(File.Exists(candidate))return candidate;directory=directory.Parent;}throw new FileNotFoundException(string.Join('/',parts)); }
 
-    private sealed class StubRepository(FiscalZReadingResult result) : IFiscalZReadingRepository
+    private sealed class StubRepository(FiscalZReadingResult result, Action? onClose = null) : IFiscalZReadingRepository
     {
         public FiscalZReadingResult Result { get; set; } = result;
         public int CloseCalls { get; private set; }
-        public Task<FiscalZReadingResult> CloseAsync(FiscalZReadingCommand command,CancellationToken cancellationToken=default){CloseCalls++;return Task.FromResult(Result);}
+        public Task<FiscalZReadingResult> CloseAsync(FiscalZReadingCommand command,CancellationToken cancellationToken=default){CloseCalls++;onClose?.Invoke();return Task.FromResult(Result);}
         public Task<FiscalZReadingResult> GetByReferenceAsync(string fiscalReportReference,CancellationToken cancellationToken=default)=>Task.FromResult(Result);
+    }
+
+    private sealed class StubBirRepository(BirSalesSummaryResult result, Action<BirSalesSummaryCommand>? onGenerate = null) : IBirSalesSummaryRepository
+    {
+        public int GenerateCalls { get; private set; }
+        public Task<BirSalesSummaryResult> GenerateAsync(BirSalesSummaryCommand command,CancellationToken cancellationToken=default){GenerateCalls++;onGenerate?.Invoke(command);return Task.FromResult(result);}
+        public Task<BirSalesSummaryResult> GetByIdAsync(Guid id,CancellationToken cancellationToken=default)=>Task.FromResult(result);
     }
 }

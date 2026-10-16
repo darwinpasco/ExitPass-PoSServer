@@ -113,7 +113,15 @@ public enum FiscalZReadingOutcome
 public sealed record FiscalZReadingResult(
     FiscalZReadingOutcome Outcome,
     FiscalZReadingRecord? Record = null,
-    string? SafeMessage = null);
+    string? SafeMessage = null,
+    BirSalesSummaryCompletion? BirSalesSummaryCompletion = null);
+
+public sealed record BirSalesSummaryCompletion(
+    string Status,
+    Guid? SummaryId,
+    string Code,
+    bool Retryable,
+    string? Message = null);
 
 public interface IFiscalZReadingRepository
 {
