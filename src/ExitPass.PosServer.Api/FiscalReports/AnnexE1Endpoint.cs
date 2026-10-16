@@ -6,6 +6,7 @@ namespace ExitPass.PosServer.Api.FiscalReports;
 
 public sealed record AnnexE1FactRequest(string? OperationKey,Guid? SitePosServerId,Guid? FiscalIdentityId,string? CurrencyCode,Guid? FiscalReportingPeriodId,string? FactType,string? FactStatus,long? AmountMinorUnits,long? SourceDocumentCount,string? FirstSourceReference,string? LastSourceReference,string? SourceEventReference,string? ApprovalReference,Guid? SupersedesFactId,string? CorrectionReason);
 public sealed record AnnexE1GenerationRequest(string? OperationKey,Guid? SitePosServerId,Guid? FiscalIdentityId,string? CurrencyCode,int? CalendarYear,int? CalendarMonth,string? Profile,Guid? SupersedesWorkbookId,string? CorrectionReason,string? CorrectionApprovalReference);
+public sealed record AnnexE1CurrentWorkbookRequest(Guid? SitePosServerId,Guid? FiscalIdentityId,string? CurrencyCode,int? CalendarYear,int? CalendarMonth,string? Profile);
 public sealed record AnnexE1ApiResponse(bool Succeeded,string Code,string CorrelationId,int HttpStatusCode,AnnexE1PeriodFactRecord? Fact=null,AnnexE1WorkbookRecord? Workbook=null,string? Message=null);
 public sealed class AnnexE1Audit;
 
@@ -36,6 +37,16 @@ public static class AnnexE1Endpoint
     public static async Task<AnnexE1ApiResponse> GetAsync(Guid id,AnnexE1Service service,HttpContext context,IHostEnvironment environment,CancellationToken ct)
     {
         var correlation=Correlation(context);if(!AnnexE1Authorization.IsHostingAuthorityAllowed(context.User,environment)){Audit(context,"read","authority_denied",correlation);return Error("annex_e1_authority_denied",403,correlation);}var result=await service.GetAsync(id,ct).ConfigureAwait(false);if(result.Workbook is not null&&!AnnexE1Authorization.IsInScope(context.User,result.Workbook.SitePosServerId,result.Workbook.FiscalIdentityId,result.Workbook.CurrencyCode)){Audit(context,"read","scope_denied",correlation);return Error("annex_e1_not_found",404,correlation);}Audit(context,"read",result.Outcome.ToString(),correlation);return Map(result,correlation);
+    }
+
+    public static async Task<AnnexE1ApiResponse> GetCurrentAsync([AsParameters] AnnexE1CurrentWorkbookRequest request,AnnexE1Service service,HttpContext context,IHostEnvironment environment,CancellationToken ct)
+    {
+        var correlation=Correlation(context);
+        if(!AnnexE1Authorization.IsHostingAuthorityAllowed(context.User,environment)){Audit(context,"read_current","authority_denied",correlation);return Error("annex_e1_authority_denied",403,correlation);}
+        if(request.SitePosServerId is null||request.FiscalIdentityId is null||request.CurrencyCode is null||!AnnexE1Authorization.IsInScope(context.User,request.SitePosServerId.Value,request.FiscalIdentityId.Value,request.CurrencyCode)){Audit(context,"read_current","scope_denied",correlation);return Error("annex_e1_not_found",404,correlation);}
+        var result=await service.GetCurrentAsync(new(request.SitePosServerId.Value,request.FiscalIdentityId.Value,request.CurrencyCode,request.CalendarYear??0,request.CalendarMonth??0,request.Profile??""),ct).ConfigureAwait(false);
+        Audit(context,"read_current",result.Outcome.ToString(),correlation);
+        return Map(result,correlation);
     }
 
     public static async Task<IResult> DownloadAsync(Guid id,AnnexE1Service service,HttpContext context,IHostEnvironment environment,CancellationToken ct)

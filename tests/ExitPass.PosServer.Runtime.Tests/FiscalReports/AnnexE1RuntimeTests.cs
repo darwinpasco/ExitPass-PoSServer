@@ -70,6 +70,17 @@ public sealed class AnnexE1RuntimeTests
     }
 
     [Fact]
+    public async Task CurrentWorkbookReadValidatesExactGovernedScope()
+    {
+        var repository=new Stub();var service=new AnnexE1Service(repository);
+        var query=new AnnexE1CurrentWorkbookQuery(Guid.NewGuid(),Guid.NewGuid(),"PHP",2026,10,AnnexE1Contract.Profile);
+        Assert.Equal(AnnexE1Outcome.Replayed,(await service.GetCurrentAsync(query)).Outcome);
+        Assert.Equal(query,repository.CurrentQuery);
+        Assert.Equal(AnnexE1Outcome.InvalidRequest,(await service.GetCurrentAsync(query with{CalendarMonth=13})).Outcome);
+        Assert.Equal(AnnexE1Outcome.InvalidRequest,(await service.GetCurrentAsync(query with{Profile=""})).Outcome);
+    }
+
+    [Fact]
     public void SemanticHashIsStableAcrossOperationActorCorrelationAndGenerationTime()
     {
         var source=Input();var command=Generation();var header=Header();var first=AnnexE1SemanticHasher.ComputeWorkbook(command,[source],header);
@@ -93,5 +104,5 @@ public sealed class AnnexE1RuntimeTests
     private static AnnexE1PeriodFactCommand Fact()=>new("fact",Guid.NewGuid(),Guid.NewGuid(),"PHP",Guid.NewGuid(),AnnexE1FactTypes.ManualSiOrNetIncome,AnnexE1FactStatuses.Recorded,100,1,"MANUAL-1","MANUAL-1",null,"approval",null,null,"actor","service","correlation");
     private static AnnexE1GenerationCommand Generation()=>new("generate",Guid.NewGuid(),Guid.NewGuid(),"PHP",2026,8,AnnexE1Contract.Profile,null,null,null,"actor","service","correlation");
     private static string Read(ZipArchive archive,string name){using var reader=new StreamReader(archive.GetEntry(name)!.Open(),Encoding.UTF8);return reader.ReadToEnd();}
-    private sealed class Stub:IAnnexE1Repository{public Task<AnnexE1FactResult> RecordFactAsync(AnnexE1PeriodFactCommand c,CancellationToken t=default)=>Task.FromResult(new AnnexE1FactResult(AnnexE1Outcome.Created,new(Guid.NewGuid(),c.OperationKey,c.SitePosServerId,c.FiscalIdentityId,c.CurrencyCode,c.FiscalReportingPeriodId,new(2026,8,1),c.FactType,c.FactStatus,c.AmountMinorUnits,c.SourceDocumentCount,c.FirstSourceReference,c.LastSourceReference,c.SourceEventReference,c.ApprovalReference,new string('a',64),c.SupersedesFactId,c.CorrectionReason,DateTimeOffset.UtcNow,DateTimeOffset.UtcNow,c.RequestedByRef,c.ServiceIdentityRef,c.CorrelationId)));public Task<AnnexE1WorkbookResult> GenerateAsync(AnnexE1GenerationCommand c,CancellationToken t=default)=>Task.FromResult(new AnnexE1WorkbookResult(AnnexE1Outcome.Created));public Task<AnnexE1WorkbookResult> GetAsync(Guid i,CancellationToken t=default)=>throw new NotImplementedException();public Task<AnnexE1ArtifactResult> DownloadAsync(Guid i,CancellationToken t=default)=>throw new NotImplementedException();}
+    private sealed class Stub:IAnnexE1Repository{public AnnexE1CurrentWorkbookQuery? CurrentQuery;public Task<AnnexE1FactResult> RecordFactAsync(AnnexE1PeriodFactCommand c,CancellationToken t=default)=>Task.FromResult(new AnnexE1FactResult(AnnexE1Outcome.Created,new(Guid.NewGuid(),c.OperationKey,c.SitePosServerId,c.FiscalIdentityId,c.CurrencyCode,c.FiscalReportingPeriodId,new(2026,8,1),c.FactType,c.FactStatus,c.AmountMinorUnits,c.SourceDocumentCount,c.FirstSourceReference,c.LastSourceReference,c.SourceEventReference,c.ApprovalReference,new string('a',64),c.SupersedesFactId,c.CorrectionReason,DateTimeOffset.UtcNow,DateTimeOffset.UtcNow,c.RequestedByRef,c.ServiceIdentityRef,c.CorrelationId)));public Task<AnnexE1WorkbookResult> GenerateAsync(AnnexE1GenerationCommand c,CancellationToken t=default)=>Task.FromResult(new AnnexE1WorkbookResult(AnnexE1Outcome.Created));public Task<AnnexE1WorkbookResult> GetCurrentAsync(AnnexE1CurrentWorkbookQuery q,CancellationToken t=default){CurrentQuery=q;return Task.FromResult(new AnnexE1WorkbookResult(AnnexE1Outcome.Replayed));}public Task<AnnexE1WorkbookResult> GetAsync(Guid i,CancellationToken t=default)=>throw new NotImplementedException();public Task<AnnexE1ArtifactResult> DownloadAsync(Guid i,CancellationToken t=default)=>throw new NotImplementedException();}
 }

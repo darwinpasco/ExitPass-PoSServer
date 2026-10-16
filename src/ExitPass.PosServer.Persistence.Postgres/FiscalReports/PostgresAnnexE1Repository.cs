@@ -185,6 +185,56 @@ public sealed class PostgresAnnexE1Repository(
         catch (NpgsqlException) { return FailureWorkbook(AnnexE1Outcome.PersistenceFailure, "Annex E-1 metadata readback failed safely."); }
     }
 
+    public async Task<AnnexE1WorkbookResult> GetCurrentAsync(AnnexE1CurrentWorkbookQuery query, CancellationToken cancellationToken = default)
+    {
+        const string sql = """
+        SELECT w.annex_e1_workbook_id
+        FROM pos.annex_e1_workbooks w
+        JOIN pos.controlled_codes ws ON ws.controlled_code_id = w.workbook_status_code_id
+        JOIN pos.controlled_code_sets wss ON wss.controlled_code_set_id = ws.controlled_code_set_id
+        WHERE w.site_pos_server_id = @site
+          AND w.fiscal_identity_id = @identity
+          AND w.currency_code = @currency
+          AND w.calendar_year = @year
+          AND w.calendar_month = @month
+          AND w.profile_ref = @profile
+          AND wss.code_set_key = 'annex_e1_workbook_status'
+          AND ws.code_key = 'committed'
+          AND NOT EXISTS (
+              SELECT 1
+              FROM pos.annex_e1_workbooks child
+              WHERE child.supersedes_workbook_id = w.annex_e1_workbook_id)
+        ORDER BY w.revision DESC
+        LIMIT 2
+        """;
+
+        try
+        {
+            await using var connection = await dataSource.OpenConnectionAsync(cancellationToken).ConfigureAwait(false);
+            await using var command = Command(connection, null, sql);
+            command.Parameters.AddWithValue("site", query.SitePosServerId);
+            command.Parameters.AddWithValue("identity", query.FiscalIdentityId);
+            command.Parameters.AddWithValue("currency", query.CurrencyCode);
+            command.Parameters.AddWithValue("year", query.CalendarYear);
+            command.Parameters.AddWithValue("month", query.CalendarMonth);
+            command.Parameters.AddWithValue("profile", query.Profile);
+            var ids = new List<Guid>(2);
+            await using (var reader = await command.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false))
+                while (await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
+                    ids.Add(reader.GetGuid(0));
+
+            if (ids.Count == 0) return new(AnnexE1Outcome.NotFound);
+            if (ids.Count > 1)
+                return FailureWorkbook(AnnexE1Outcome.Conflict, "The current Annex E-1 workbook state is ambiguous.");
+            var record = await ReadWorkbookAsync(connection, null, ids[0], cancellationToken).ConfigureAwait(false);
+            return record is null ? new(AnnexE1Outcome.NotFound) : new(AnnexE1Outcome.Replayed, record);
+        }
+        catch (NpgsqlException)
+        {
+            return FailureWorkbook(AnnexE1Outcome.PersistenceFailure, "Annex E-1 current-workbook readback failed safely.");
+        }
+    }
+
     public async Task<AnnexE1ArtifactResult> DownloadAsync(Guid workbookId, CancellationToken cancellationToken = default)
     {
         try
