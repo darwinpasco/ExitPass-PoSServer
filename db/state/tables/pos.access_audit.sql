@@ -41,6 +41,21 @@ CREATE TABLE IF NOT EXISTS pos.access_audit (
         CHECK (access_context IS NULL OR jsonb_typeof(access_context) = 'object')
 );
 
+CREATE INDEX IF NOT EXISTS ix_access_audit__site_time
+    ON pos.access_audit (site_pos_server_id, occurred_at, access_audit_id);
+
+CREATE OR REPLACE FUNCTION pos.reject_access_audit_mutation()
+RETURNS trigger LANGUAGE plpgsql AS $$
+BEGIN
+    RAISE EXCEPTION 'access audit records are append-only'
+        USING ERRCODE = 'check_violation';
+END;
+$$;
+
+CREATE OR REPLACE TRIGGER trg_access_audit_immutable
+BEFORE UPDATE OR DELETE ON pos.access_audit
+FOR EACH ROW EXECUTE FUNCTION pos.reject_access_audit_mutation();
+
 COMMENT ON TABLE pos.access_audit IS
     'Access audit posture for fiscal resources. Stores access metadata and references only; raw credentials, tokens, and identity evidence are prohibited.';
 COMMENT ON COLUMN pos.access_audit.access_audit_id IS

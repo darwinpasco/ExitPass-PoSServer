@@ -77,6 +77,7 @@ public static class BirSalesSummaryEndpoint
         BirSalesSummaryService service,
         BirSalesSummaryOutputRenderer renderer,
         IBirSalesSummaryPdfContextRepository pdfContextRepository,
+        IAuditTrailRepository auditTrailRepository,
         HttpContext context,
         IHostEnvironment environment,
         ILogger<BirSalesSummaryAudit> logger,
@@ -104,6 +105,10 @@ public static class BirSalesSummaryEndpoint
                     "The governed BIR sales-summary PDF header is unavailable.", correlation), statusCode: 503);
         }
         var output = renderer.Render(read.Record, outputFormat, pdfContext);
+        var actor = context.User.FindFirstValue(ClaimTypes.NameIdentifier) ?? "unavailable";
+        await auditTrailRepository.RecordExportAsync(read.Record.SitePosServerId, "DAILY_BIR_SALES_SUMMARY",
+            read.Record.BirSalesSummaryReportId.ToString("D"), format, actor, correlation, output.Sha256, 1,
+            cancellationToken).ConfigureAwait(false);
         logger.LogInformation(
             "BIR sales-summary export completed. Summary={SummaryId} Format={Format} ContentSha256={ContentSha256} Correlation={Correlation}",
             Safe(summaryId), output.Format, output.Sha256, correlation);

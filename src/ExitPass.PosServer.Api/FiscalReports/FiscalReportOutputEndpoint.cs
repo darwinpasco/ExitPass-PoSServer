@@ -1,6 +1,7 @@
 using ExitPass.PosServer.Api.FiscalDocuments;
 using ExitPass.PosServer.Runtime.FiscalDocuments;
 using ExitPass.PosServer.Runtime.FiscalReports;
+using System.Security.Claims;
 
 namespace ExitPass.PosServer.Api.FiscalReports;
 
@@ -20,10 +21,11 @@ public static class FiscalReportOutputEndpoint
         FiscalReportPresentationService presentationService,
         FiscalReportOutputRenderer renderer,
         ISalesInvoiceHeaderProfileRepository headerProfileRepository,
+        IAuditTrailRepository auditTrailRepository,
         HttpContext context,
         ILogger<FiscalReportOutputAudit> logger,
         CancellationToken cancellationToken = default) =>
-        await GetXAsync(reference, null, null, readService, presentationService, renderer, headerProfileRepository, context, logger, cancellationToken)
+        await GetXAsync(reference, null, null, readService, presentationService, renderer, headerProfileRepository, auditTrailRepository, context, logger, cancellationToken)
             .ConfigureAwait(false);
 
     public static async Task<IResult> GetXExportAsync(
@@ -34,10 +36,11 @@ public static class FiscalReportOutputEndpoint
         FiscalReportPresentationService presentationService,
         FiscalReportOutputRenderer renderer,
         ISalesInvoiceHeaderProfileRepository headerProfileRepository,
+        IAuditTrailRepository auditTrailRepository,
         HttpContext context,
         ILogger<FiscalReportOutputAudit> logger,
         CancellationToken cancellationToken = default) =>
-        await GetXAsync(reference, format, width, readService, presentationService, renderer, headerProfileRepository, context, logger, cancellationToken)
+        await GetXAsync(reference, format, width, readService, presentationService, renderer, headerProfileRepository, auditTrailRepository, context, logger, cancellationToken)
             .ConfigureAwait(false);
 
     public static async Task<IResult> GetZPresentationAsync(
@@ -46,10 +49,11 @@ public static class FiscalReportOutputEndpoint
         FiscalReportPresentationService presentationService,
         FiscalReportOutputRenderer renderer,
         ISalesInvoiceHeaderProfileRepository headerProfileRepository,
+        IAuditTrailRepository auditTrailRepository,
         HttpContext context,
         ILogger<FiscalReportOutputAudit> logger,
         CancellationToken cancellationToken = default) =>
-        await GetZAsync(reference, null, null, readService, presentationService, renderer, headerProfileRepository, context, logger, cancellationToken)
+        await GetZAsync(reference, null, null, readService, presentationService, renderer, headerProfileRepository, auditTrailRepository, context, logger, cancellationToken)
             .ConfigureAwait(false);
 
     public static async Task<IResult> GetZExportAsync(
@@ -60,10 +64,11 @@ public static class FiscalReportOutputEndpoint
         FiscalReportPresentationService presentationService,
         FiscalReportOutputRenderer renderer,
         ISalesInvoiceHeaderProfileRepository headerProfileRepository,
+        IAuditTrailRepository auditTrailRepository,
         HttpContext context,
         ILogger<FiscalReportOutputAudit> logger,
         CancellationToken cancellationToken = default) =>
-        await GetZAsync(reference, format, width, readService, presentationService, renderer, headerProfileRepository, context, logger, cancellationToken)
+        await GetZAsync(reference, format, width, readService, presentationService, renderer, headerProfileRepository, auditTrailRepository, context, logger, cancellationToken)
             .ConfigureAwait(false);
 
     private static async Task<IResult> GetXAsync(
@@ -74,6 +79,7 @@ public static class FiscalReportOutputEndpoint
         FiscalReportPresentationService presentationService,
         FiscalReportOutputRenderer renderer,
         ISalesInvoiceHeaderProfileRepository headerProfileRepository,
+        IAuditTrailRepository auditTrailRepository,
         HttpContext context,
         ILogger<FiscalReportOutputAudit> logger,
         CancellationToken cancellationToken)
@@ -105,7 +111,8 @@ public static class FiscalReportOutputEndpoint
                 cancellationToken).ConfigureAwait(false)
             : null;
         var presented = presentationService.Present(read.Record);
-        return Complete(context, presented, renderer, outputFormat, profile, receiptProfile, correlation, logger);
+        return await CompleteAsync(context, presented, renderer, outputFormat, profile, receiptProfile, correlation, logger,
+            auditTrailRepository, format is not null, cancellationToken).ConfigureAwait(false);
     }
 
     private static async Task<IResult> GetZAsync(
@@ -116,6 +123,7 @@ public static class FiscalReportOutputEndpoint
         FiscalReportPresentationService presentationService,
         FiscalReportOutputRenderer renderer,
         ISalesInvoiceHeaderProfileRepository headerProfileRepository,
+        IAuditTrailRepository auditTrailRepository,
         HttpContext context,
         ILogger<FiscalReportOutputAudit> logger,
         CancellationToken cancellationToken)
@@ -147,10 +155,11 @@ public static class FiscalReportOutputEndpoint
                 cancellationToken).ConfigureAwait(false)
             : null;
         var presented = presentationService.Present(read.Record);
-        return Complete(context, presented, renderer, outputFormat, profile, receiptProfile, correlation, logger);
+        return await CompleteAsync(context, presented, renderer, outputFormat, profile, receiptProfile, correlation, logger,
+            auditTrailRepository, format is not null, cancellationToken).ConfigureAwait(false);
     }
 
-    private static IResult Complete(
+    private static async Task<IResult> CompleteAsync(
         HttpContext context,
         FiscalReportPresentationResult result,
         FiscalReportOutputRenderer renderer,
@@ -158,7 +167,10 @@ public static class FiscalReportOutputEndpoint
         FiscalReportPrintWidthProfile profile,
         FiscalReportReceiptProfile? receiptProfile,
         string correlation,
-        ILogger logger)
+        ILogger logger,
+        IAuditTrailRepository auditTrailRepository,
+        bool auditExport,
+        CancellationToken cancellationToken)
     {
         if (!result.Succeeded || result.Presentation is null)
         {
@@ -176,6 +188,14 @@ public static class FiscalReportOutputEndpoint
         var artifact = format == FiscalReportOutputFormat.PresentationJson
             ? renderer.CreatePresentationJson(result.Presentation)
             : renderer.CreateExport(result.Presentation, format, profile, receiptProfile);
+        if (auditExport)
+        {
+            var actor = context.User.FindFirstValue(ClaimTypes.NameIdentifier) ?? "unavailable";
+            await auditTrailRepository.RecordExportAsync(result.Presentation.SitePosServerId, result.Presentation.ReportKind,
+                result.Presentation.ReportReference, artifact.Format.ToString(), actor, correlation,
+                Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(artifact.Content)).ToLowerInvariant(), 1,
+                cancellationToken).ConfigureAwait(false);
+        }
         ApplyHeaders(context, artifact);
         logger.LogInformation(
             "Fiscal report output produced. Kind={ReportKind} Reference={ReportReference} Format={Format} OutputIdentity={OutputIdentity} Correlation={Correlation}",
