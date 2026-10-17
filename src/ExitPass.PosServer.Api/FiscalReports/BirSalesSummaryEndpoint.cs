@@ -76,6 +76,7 @@ public static class BirSalesSummaryEndpoint
         string format,
         BirSalesSummaryService service,
         BirSalesSummaryOutputRenderer renderer,
+        IBirSalesSummaryPdfContextRepository pdfContextRepository,
         HttpContext context,
         IHostEnvironment environment,
         ILogger<BirSalesSummaryAudit> logger,
@@ -94,7 +95,15 @@ public static class BirSalesSummaryEndpoint
             logger.LogWarning("BIR sales-summary export denied or hidden. Summary={SummaryId} Correlation={Correlation}", Safe(summaryId), correlation);
             return Results.Json(Error("bir_sales_summary_not_found", 404, "The requested BIR sales summary is unavailable.", correlation), statusCode: 404);
         }
-        var output = renderer.Render(read.Record, outputFormat);
+        BirSalesSummaryPdfContext? pdfContext = null;
+        if (outputFormat == BirSalesSummaryExportFormat.Pdf)
+        {
+            pdfContext = await pdfContextRepository.ReadAsync(read.Record, cancellationToken).ConfigureAwait(false);
+            if (pdfContext is null)
+                return Results.Json(Error("bir_sales_summary_pdf_context_unavailable", 503,
+                    "The governed BIR sales-summary PDF header is unavailable.", correlation), statusCode: 503);
+        }
+        var output = renderer.Render(read.Record, outputFormat, pdfContext);
         logger.LogInformation(
             "BIR sales-summary export completed. Summary={SummaryId} Format={Format} ContentSha256={ContentSha256} Correlation={Correlation}",
             Safe(summaryId), output.Format, output.Sha256, correlation);
@@ -127,6 +136,7 @@ public static class BirSalesSummaryEndpoint
     {
         if (string.Equals(format, "json", StringComparison.OrdinalIgnoreCase)) { result = BirSalesSummaryExportFormat.Json; return true; }
         if (string.Equals(format, "csv", StringComparison.OrdinalIgnoreCase)) { result = BirSalesSummaryExportFormat.Csv; return true; }
+        if (string.Equals(format, "pdf", StringComparison.OrdinalIgnoreCase)) { result = BirSalesSummaryExportFormat.Pdf; return true; }
         result = default; return false;
     }
     private static string? ResolveCorrelation(HttpContext context)

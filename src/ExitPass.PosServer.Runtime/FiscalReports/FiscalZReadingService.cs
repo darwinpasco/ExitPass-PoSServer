@@ -86,7 +86,7 @@ public sealed class FiscalZReadingService
                 null,
                 CodeFor(result.Outcome),
                 IsRetryable(result.Outcome),
-                result.SafeMessage ?? "The BIR Sales Summary is pending and can be retried from BIR Sales Summary.");
+                result.SafeMessage ?? "The Daily BIR Sales Summary is pending and can be retried from Daily BIR Sales Summary.");
         }
         catch (Exception exception) when (exception is not OutOfMemoryException and not StackOverflowException)
         {
@@ -95,7 +95,7 @@ public sealed class FiscalZReadingService
                 null,
                 "bir_sales_summary_pending",
                 true,
-                "The BIR Sales Summary is pending and can be retried from BIR Sales Summary.");
+                "The Daily BIR Sales Summary is pending and can be retried from Daily BIR Sales Summary.");
         }
     }
 

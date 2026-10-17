@@ -34,7 +34,7 @@
     "canonical fiscal documents reaggregate exactly to the governing Z",
     "Z counter and grand-total snapshot reconcile exactly"
   ],
-  "exports": ["json", "csv"],
+  "exports": ["json", "csv", "pdf"],
   "immutability": {
     "onePerGoverningZAndProfile": true,
     "update": "PROHIBITED",

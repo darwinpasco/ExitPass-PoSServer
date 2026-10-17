@@ -81,6 +81,19 @@ public sealed class BirSalesSummaryPostgresIntegrationTests
         Assert.DoesNotContain("beneficiary", readText, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("apiKey", readText, StringComparison.OrdinalIgnoreCase);
 
+        using var monthlyResponse = await client.GetAsync($"/v1/fiscal-reports/monthly-esales/?sitePosServerId={SiteId:D}&fiscalIdentityId={IdentityId:D}&currencyCode=PHP&calendarYear=2026&calendarMonth=8");
+        var monthly = await monthlyResponse.Content.ReadFromJsonAsync<MonthlyESalesApiResponse>();
+        Assert.Equal(HttpStatusCode.OK, monthlyResponse.StatusCode);
+        var monthlyRow = Assert.Single(monthly!.Report!.Rows);
+        Assert.Equal("SYN-MIN-Z010", monthlyRow.MachineIdentificationNumber);
+        Assert.Equal(summary.TransactionCount, monthlyRow.TransactionCount);
+        Assert.Equal(summary.Amounts.GrossSalesAmountMinorUnits, monthlyRow.MonthlySalesAmountMinorUnits);
+        Assert.Equal(summary.Amounts.VatableSalesAmountMinorUnits, monthlyRow.VatableSalesAmountMinorUnits);
+        Assert.Equal(summary.Amounts.VatAmountMinorUnits, monthlyRow.VatAmountMinorUnits);
+        Assert.Equal(summary.Amounts.VatExemptSalesAmountMinorUnits, monthlyRow.VatExemptSalesAmountMinorUnits);
+        Assert.Equal(summary.Amounts.ZeroRatedSalesAmountMinorUnits, monthlyRow.ZeroRatedSalesAmountMinorUnits);
+        Assert.Equal(summary.EndingSalesInvoiceReference, monthlyRow.EndingSalesInvoiceReference);
+
         var json1 = await ExportAsync(client, summary.BirSalesSummaryReportId, "json");
         var csv1 = await ExportAsync(client, summary.BirSalesSummaryReportId, "csv");
         Assert.Contains(z.FiscalReportReference, System.Text.Encoding.UTF8.GetString(json1.Bytes), StringComparison.Ordinal);
@@ -337,7 +350,7 @@ public sealed class BirSalesSummaryPostgresIntegrationTests
     }
 
     private static async Task RebuildAsync(string cs){await ExecuteAsync(cs,"DROP SCHEMA IF EXISTS pos CASCADE");var root=FindRepositoryRoot();foreach(var entry in File.ReadLines(Path.Combine(root,"db","rebuild","pos_sql_apply_order.txt")).Select(x=>x.Trim()).Where(x=>x.Length>0&&!x.StartsWith('#')))await ExecuteFileAsync(cs,Path.Combine(root,entry.Replace('/',Path.DirectorySeparatorChar)));foreach(var file in Directory.GetFiles(Path.Combine(root,"db","reference-data","controlled-codes","generated","sql"),"*.sql").OrderBy(x=>x,StringComparer.Ordinal))await ExecuteFileAsync(cs,file);}
-    private static async Task<WebApplication> StartApiAsync(string cs,bool automaticBirSummary=true){var builder=WebApplication.CreateBuilder(new WebApplicationOptions{EnvironmentName=Environments.Production});builder.WebHost.UseKestrel().UseUrls("http://127.0.0.1:0");builder.Configuration.AddInMemoryCollection(Configuration(cs));builder.Services.AddPosServerFiscalDocumentApi(builder.Configuration);if(!automaticBirSummary)builder.Services.AddScoped(provider=>new FiscalZReadingService(provider.GetRequiredService<IFiscalZReadingRepository>()));var app=builder.Build();app.UseAuthentication();app.UseAuthorization();app.MapFiscalZCloseStateInitializationEndpoints();app.MapFiscalZReadingEndpoints();app.MapBirSalesSummaryEndpoints();app.MapAnnexE1Endpoints();await app.StartAsync();return app;}
+    private static async Task<WebApplication> StartApiAsync(string cs,bool automaticBirSummary=true){var builder=WebApplication.CreateBuilder(new WebApplicationOptions{EnvironmentName=Environments.Production});builder.WebHost.UseKestrel().UseUrls("http://127.0.0.1:0");builder.Configuration.AddInMemoryCollection(Configuration(cs));builder.Services.AddPosServerFiscalDocumentApi(builder.Configuration);if(!automaticBirSummary)builder.Services.AddScoped(provider=>new FiscalZReadingService(provider.GetRequiredService<IFiscalZReadingRepository>()));var app=builder.Build();app.UseAuthentication();app.UseAuthorization();app.MapFiscalZCloseStateInitializationEndpoints();app.MapFiscalZReadingEndpoints();app.MapBirSalesSummaryEndpoints();app.MapAnnexE1Endpoints();app.MapMonthlyESalesEndpoints();await app.StartAsync();return app;}
     private static Dictionary<string,string?> Configuration(string cs)=>new()
     {
         {"ConnectionStrings:PosServer",cs},
@@ -357,6 +370,8 @@ public sealed class BirSalesSummaryPostgresIntegrationTests
         {"PosServer:Admin:ApiKeys:0:Permissions:9",AnnexE1Authorization.ReadPermission},
         {"PosServer:Admin:ApiKeys:0:Permissions:10",AnnexE1Authorization.DownloadPermission},
         {"PosServer:Admin:ApiKeys:0:Permissions:11",AnnexE1Authorization.CorrectPermission},
+        {"PosServer:Admin:ApiKeys:0:Permissions:12",MonthlyESalesAuthorization.ReadPermission},
+        {"PosServer:Admin:ApiKeys:0:Permissions:13",MonthlyESalesAuthorization.ExportPermission},
         {"PosServer:Admin:ApiKeys:0:SitePosServerIds:0",SiteId.ToString("D")},
         {"PosServer:Admin:ApiKeys:0:FiscalIdentityIds:0",IdentityId.ToString("D")},
         {"PosServer:Admin:ApiKeys:0:CurrencyCodes:0","PHP"},

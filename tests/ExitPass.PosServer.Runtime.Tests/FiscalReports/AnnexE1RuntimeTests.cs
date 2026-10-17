@@ -59,6 +59,23 @@ public sealed class AnnexE1RuntimeTests
     }
 
     [Fact]
+    public void PdfIsDeterministicAndPreservesCanonicalWorksheetGeometryAndValues()
+    {
+        var workbook=Workbook(10);var renderer=new AnnexE1PdfRenderer();
+        var first=renderer.Render(workbook);var second=renderer.Render(workbook);
+        Assert.Equal("application/pdf",first.ContentType);Assert.EndsWith(".pdf",first.FileName,StringComparison.Ordinal);
+        Assert.Equal(first.Bytes,second.Bytes);Assert.Equal(first.Sha256,second.Sha256);Assert.StartsWith("%PDF-1.4",Encoding.Latin1.GetString(first.Bytes));
+        var text=Encoding.Latin1.GetString(first.Bytes);
+        Assert.Contains("/MediaBox [0 0 841.89 595.28]",text);Assert.Equal(1,Count(text,"/Type /Page "));
+        Assert.Contains("BIR SALES SUMMARY REPORT",text);Assert.Contains("ANNEX E-1",text);
+        Assert.DoesNotContain("ANNEX E-1 PDF PRESENTATION",text);Assert.DoesNotContain("TECHNICAL UAT",text);
+        foreach(var heading in new[]{"Date","Beginning","Ending","SI/OR","Grand","Accum.","Gross","Deductions","Adjustment","VAT","Payable","Net","Sales","Overrun","/Overflow","Total","Income","Reset","Counter","Z","-Counter","Remarks"})
+            Assert.Contains(heading,text);
+        Assert.Contains("2026-08",text);Assert.Contains("-01",text);Assert.Contains("SI-1",text);Assert.Contains("150.00",text);
+        Assert.Equal(10,workbook.Rows.Count);Assert.All(workbook.Rows,row=>Assert.Equal(32,row.Positions.Count));
+    }
+
+    [Fact]
     public async Task ServiceSeparatesRecordedFactsFromKnownZeroAndCorrectionLineage()
     {
         var repository=new Stub();var service=new AnnexE1Service(repository);
@@ -100,9 +117,18 @@ public sealed class AnnexE1RuntimeTests
         FiscalRangeCount:1,FiscalGapCount:0,FactIds:Enumerable.Range(0,7).Select(_=>Guid.NewGuid()).ToArray(),
         FactSemanticHashes:Enumerable.Range(0,7).Select(_=>new string('b',64)).ToArray());
     private static AnnexE1Header Header()=>new("Synthetic Taxpayer","Synthetic Address","000-000-000","ExitPass POS Server","1.3","Z-012B","2026-08-10","SERIAL","MIN","SITE-01",DateTimeOffset.Parse("2026-08-10T00:00:00Z"),"actor");
+    private static AnnexE1WorkbookRecord Workbook(int rowCount=1)=>new(
+        Guid.Parse("613af721-3b65-4bc4-9ce3-d2a032c26ab3"),"AE1-202608-TEST-R002","operation",AnnexE1Contract.Profile,
+        AnnexE1Contract.CalculationProfile,AnnexE1Contract.RendererVersion,Guid.NewGuid(),Guid.NewGuid(),"PHP",2026,8,2,
+        new string('c',64),new string('d',64),1234,AnnexE1Contract.MimeType,"annex-e1-test-r002.xlsx",
+        Header() with{PosSerialNumber="SN-TEST",MachineIdentificationNumber="MIN-TEST"},
+        Enumerable.Range(0,rowCount).Select(index=>new AnnexE1CalculationEngine().Calculate(Input() with{PeriodSequence=index+1})).ToArray(),
+        Guid.NewGuid(),null,"presentation_correction","approval",DateTimeOffset.Parse("2026-09-01T00:00:00Z"),
+        DateTimeOffset.Parse("2026-09-01T00:00:00Z"),"correlation");
     private static AnnexE1RowInputs ZeroInput()=>Input() with{TransactionCount=0,ActiveGross=0,ReturnAmount=0,VoidAmount=0,VatableSales=0,VatAmount=0,VatExemptSales=0,ZeroRatedSales=0,SeniorCitizenDiscount=0,PwdDiscount=0,NaacDiscount=0,SoloParentDiscount=0,OtherStatutoryDiscount=0,CouponDiscount=0,PromotionalDiscount=0,SeniorCitizenVatAdjustment=0,PwdVatAdjustment=0,OtherVatAdjustment=0,VatOnReturns=0,ResidualVatAdjustment=0,ManualNetIncome=0,OverflowNetIncome=0,PreviousGta=0,ResultingGta=0,FiscalRangeCount=0,FiscalGapCount=0,BeginningFiscalNumber=null,EndingFiscalNumber=null};
     private static AnnexE1PeriodFactCommand Fact()=>new("fact",Guid.NewGuid(),Guid.NewGuid(),"PHP",Guid.NewGuid(),AnnexE1FactTypes.ManualSiOrNetIncome,AnnexE1FactStatuses.Recorded,100,1,"MANUAL-1","MANUAL-1",null,"approval",null,null,"actor","service","correlation");
     private static AnnexE1GenerationCommand Generation()=>new("generate",Guid.NewGuid(),Guid.NewGuid(),"PHP",2026,8,AnnexE1Contract.Profile,null,null,null,"actor","service","correlation");
     private static string Read(ZipArchive archive,string name){using var reader=new StreamReader(archive.GetEntry(name)!.Open(),Encoding.UTF8);return reader.ReadToEnd();}
+    private static int Count(string value,string token){var count=0;var offset=0;while((offset=value.IndexOf(token,offset,StringComparison.Ordinal))>=0){count++;offset+=token.Length;}return count;}
     private sealed class Stub:IAnnexE1Repository{public AnnexE1CurrentWorkbookQuery? CurrentQuery;public Task<AnnexE1FactResult> RecordFactAsync(AnnexE1PeriodFactCommand c,CancellationToken t=default)=>Task.FromResult(new AnnexE1FactResult(AnnexE1Outcome.Created,new(Guid.NewGuid(),c.OperationKey,c.SitePosServerId,c.FiscalIdentityId,c.CurrencyCode,c.FiscalReportingPeriodId,new(2026,8,1),c.FactType,c.FactStatus,c.AmountMinorUnits,c.SourceDocumentCount,c.FirstSourceReference,c.LastSourceReference,c.SourceEventReference,c.ApprovalReference,new string('a',64),c.SupersedesFactId,c.CorrectionReason,DateTimeOffset.UtcNow,DateTimeOffset.UtcNow,c.RequestedByRef,c.ServiceIdentityRef,c.CorrelationId)));public Task<AnnexE1WorkbookResult> GenerateAsync(AnnexE1GenerationCommand c,CancellationToken t=default)=>Task.FromResult(new AnnexE1WorkbookResult(AnnexE1Outcome.Created));public Task<AnnexE1WorkbookResult> GetCurrentAsync(AnnexE1CurrentWorkbookQuery q,CancellationToken t=default){CurrentQuery=q;return Task.FromResult(new AnnexE1WorkbookResult(AnnexE1Outcome.Replayed));}public Task<AnnexE1WorkbookResult> GetAsync(Guid i,CancellationToken t=default)=>throw new NotImplementedException();public Task<AnnexE1ArtifactResult> DownloadAsync(Guid i,CancellationToken t=default)=>throw new NotImplementedException();}
 }

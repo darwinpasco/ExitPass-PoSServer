@@ -21,6 +21,7 @@ app.MapFiscalZCloseStateInitializationEndpoints();
 app.MapFiscalZReadingEndpoints();
 app.MapFiscalReportOutputEndpoints();
 app.MapBirSalesSummaryEndpoints();
+app.MapMonthlyESalesEndpoints();
 app.MapElectronicJournalEndpoints();
 app.MapAnnexE1Endpoints();
 app.MapHealthChecks("/health/live", new HealthCheckOptions
