@@ -166,9 +166,11 @@
     "pos.apply_fiscal_z_close_state_transition",
     "pos.protect_closed_fiscal_reporting_period",
     "pos.protect_fiscal_z_close_state_mutation",
+    "pos.reject_access_audit_mutation",
     "pos.reject_canonical_reprint_mutation",
     "pos.reject_electronic_journal_mutation",
     "pos.reject_applied_stat_facts_mutation",
+    "pos.reject_fiscal_action_audit_mutation",
     "pos.reject_fiscal_reporting_snapshot_mutation",
     "pos.require_canonical_reprint_journal_event",
     "pos.validate_annex_e1_accounting_fact_append",
@@ -177,6 +179,7 @@
     "pos.validate_fiscal_z_close_transition_values"
   ],
   "expected_triggers": [
+    "pos.access_audit.trg_access_audit_immutable",
     "pos.annex_e1_period_accounting_facts.trg_annex_e1_facts_immutable",
     "pos.annex_e1_period_accounting_facts.trg_annex_e1_facts_validate",
     "pos.annex_e1_report_fact_sources.trg_annex_e1_report_fact_sources_immutable",
@@ -187,6 +190,7 @@
     "pos.electronic_journal_records.trg_electronic_journal_records_immutable",
     "pos.fiscal_document_applied_statutory_facts.trg_fiscal_doc_applied_stat_facts_immutable",
     "pos.fiscal_documents.trg_fiscal_documents_reporting_period_assignment",
+    "pos.fiscal_action_audit.trg_fiscal_action_audit_immutable",
     "pos.fiscal_report_discount_breakdowns.trg_fiscal_report_discount_breakdowns_immutable",
     "pos.fiscal_report_fiscal_number_ranges.trg_fiscal_report_fiscal_number_ranges_immutable",
     "pos.fiscal_report_sequence_gaps.trg_fiscal_report_sequence_gaps_immutable",
