@@ -22,6 +22,8 @@
     "fiscal_annex_e.read",
     "fiscal_annex_e.export",
     "monthly_esales.read",
-    "monthly_esales.export"
+    "monthly_esales.export",
+    "fiscal_audit_trail.read",
+    "fiscal_audit_trail.export"
   ]
 }

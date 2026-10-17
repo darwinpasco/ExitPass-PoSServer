@@ -35,6 +35,7 @@ public static class FiscalDocumentServiceCollectionExtensions
             services.TryAddScoped<IBirSalesSummaryRepository, UnavailableBirSalesSummaryRepository>();
             services.TryAddScoped<IBirSalesSummaryPdfContextRepository, UnavailableBirSalesSummaryRepository>();
             services.TryAddScoped<IMonthlyESalesRepository, UnavailableMonthlyESalesRepository>();
+            services.TryAddScoped<IAuditTrailRepository, UnavailableAuditTrailRepository>();
             services.TryAddScoped<IElectronicJournalRepository, UnavailableElectronicJournalRepository>();
             services.TryAddScoped<IFiscalDocumentReprintRepository, UnavailableFiscalDocumentReprintRepository>();
             services.TryAddScoped<IAnnexE1Repository, UnavailableAnnexE1Repository>();
@@ -52,6 +53,7 @@ public static class FiscalDocumentServiceCollectionExtensions
             services.TryAddScoped<IBirSalesSummaryRepository, UnavailableBirSalesSummaryRepository>();
             services.TryAddScoped<IBirSalesSummaryPdfContextRepository, UnavailableBirSalesSummaryRepository>();
             services.TryAddScoped<IMonthlyESalesRepository, UnavailableMonthlyESalesRepository>();
+            services.TryAddScoped<IAuditTrailRepository, UnavailableAuditTrailRepository>();
             services.TryAddScoped<IElectronicJournalRepository, UnavailableElectronicJournalRepository>();
             services.TryAddScoped<IFiscalDocumentReprintRepository, UnavailableFiscalDocumentReprintRepository>();
             services.TryAddScoped<IAnnexE1Repository, UnavailableAnnexE1Repository>();
@@ -73,6 +75,7 @@ public static class FiscalDocumentServiceCollectionExtensions
             services.TryAddScoped<IBirSalesSummaryRepository, PostgresBirSalesSummaryRepository>();
             services.TryAddScoped<IBirSalesSummaryPdfContextRepository, PostgresBirSalesSummaryRepository>();
             services.TryAddScoped<IMonthlyESalesRepository, PostgresMonthlyESalesRepository>();
+            services.TryAddScoped<IAuditTrailRepository, PostgresAuditTrailRepository>();
             services.TryAddScoped<IElectronicJournalRepository, PostgresElectronicJournalRepository>();
             services.TryAddScoped<IFiscalDocumentReprintRepository, PostgresFiscalDocumentReprintRepository>();
             var annexE1ArtifactRoot = configuration["PosServer:AnnexE1:ArtifactRoot"];
@@ -103,6 +106,8 @@ public static class FiscalDocumentServiceCollectionExtensions
         services.AddSingleton<BirSalesSummaryOutputRenderer>();
         services.AddScoped<MonthlyESalesService>();
         services.AddSingleton<MonthlyESalesOutputRenderer>();
+        services.AddScoped<AuditTrailService>();
+        services.AddSingleton<AuditTrailOutputRenderer>();
         services.AddScoped<ElectronicJournalService>();
         services.AddSingleton<ElectronicJournalExportRenderer>();
         services.AddScoped<ElectronicJournalInvoiceTextService>();
@@ -210,6 +215,14 @@ public static class FiscalDocumentServiceCollectionExtensions
                 MonthlyESalesAuthorization.ExportPolicyName,
                 policy => policy.AddAuthenticationSchemes(SalesInvoiceHeaderProfileAdminAuthorization.AuthenticationScheme)
                     .RequireClaim(SalesInvoiceHeaderProfileAdminAuthorization.PermissionClaimType, MonthlyESalesAuthorization.ExportPermission));
+            options.AddPolicy(
+                AuditTrailAuthorization.ReadPolicyName,
+                policy => policy.AddAuthenticationSchemes(SalesInvoiceHeaderProfileAdminAuthorization.AuthenticationScheme)
+                    .RequireClaim(SalesInvoiceHeaderProfileAdminAuthorization.PermissionClaimType, AuditTrailAuthorization.ReadPermission));
+            options.AddPolicy(
+                AuditTrailAuthorization.ExportPolicyName,
+                policy => policy.AddAuthenticationSchemes(SalesInvoiceHeaderProfileAdminAuthorization.AuthenticationScheme)
+                    .RequireClaim(SalesInvoiceHeaderProfileAdminAuthorization.PermissionClaimType, AuditTrailAuthorization.ExportPermission));
             options.AddPolicy(
                 ElectronicJournalAuthorization.ReadPolicyName,
                 policy => policy.AddAuthenticationSchemes(SalesInvoiceHeaderProfileAdminAuthorization.AuthenticationScheme)

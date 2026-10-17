@@ -49,7 +49,7 @@ public static class AnnexE1Endpoint
         return Map(result,correlation);
     }
 
-    public static async Task<IResult> DownloadAsync(Guid id,string? format,AnnexE1Service service,HttpContext context,IHostEnvironment environment,CancellationToken ct)
+    public static async Task<IResult> DownloadAsync(Guid id,string? format,AnnexE1Service service,IAuditTrailRepository auditTrailRepository,HttpContext context,IHostEnvironment environment,CancellationToken ct)
     {
         var correlation=Correlation(context);
         if(!AnnexE1Authorization.IsHostingAuthorityAllowed(context.User,environment)){Audit(context,"download","authority_denied",correlation);return Results.NotFound();}
@@ -60,9 +60,10 @@ public static class AnnexE1Endpoint
             var metadata=await service.GetAsync(id,ct).ConfigureAwait(false);
             if(metadata.Workbook is null||!AnnexE1Authorization.IsInScope(context.User,metadata.Workbook.SitePosServerId,metadata.Workbook.FiscalIdentityId,metadata.Workbook.CurrencyCode)){Audit(context,"download_pdf","not_found_or_denied",correlation);return Results.NotFound();}
             var export=new AnnexE1PdfRenderer().Render(metadata.Workbook);
+            await auditTrailRepository.RecordExportAsync(metadata.Workbook.SitePosServerId,"ANNEX_E1",metadata.Workbook.WorkbookId.ToString("D"),"pdf",Actor(context.User),correlation,export.Sha256,1,ct).ConfigureAwait(false);
             Audit(context,"download_pdf","replayed",correlation);context.Response.Headers.CacheControl="private, no-store";context.Response.Headers.ETag=$"\"sha256-{export.Sha256}\"";context.Response.Headers.XContentTypeOptions="nosniff";return Results.File(export.Bytes,export.ContentType,export.FileName,enableRangeProcessing:false);
         }
-        var result=await service.DownloadAsync(id,ct).ConfigureAwait(false);if(result.Workbook is null||result.Bytes is null||!AnnexE1Authorization.IsInScope(context.User,result.Workbook.SitePosServerId,result.Workbook.FiscalIdentityId,result.Workbook.CurrencyCode)){Audit(context,"download","not_found_or_denied",correlation);return Results.NotFound();}Audit(context,"download","replayed",correlation);context.Response.Headers.CacheControl="private, no-store";context.Response.Headers.ETag=$"\"sha256-{result.Workbook.ArtifactSha256}\"";context.Response.Headers.XContentTypeOptions="nosniff";return Results.File(result.Bytes,result.Workbook.MimeType,result.Workbook.FileName,enableRangeProcessing:false);
+        var result=await service.DownloadAsync(id,ct).ConfigureAwait(false);if(result.Workbook is null||result.Bytes is null||!AnnexE1Authorization.IsInScope(context.User,result.Workbook.SitePosServerId,result.Workbook.FiscalIdentityId,result.Workbook.CurrencyCode)){Audit(context,"download","not_found_or_denied",correlation);return Results.NotFound();}await auditTrailRepository.RecordExportAsync(result.Workbook.SitePosServerId,"ANNEX_E1",result.Workbook.WorkbookId.ToString("D"),"xlsx",Actor(context.User),correlation,result.Workbook.ArtifactSha256,1,ct).ConfigureAwait(false);Audit(context,"download","replayed",correlation);context.Response.Headers.CacheControl="private, no-store";context.Response.Headers.ETag=$"\"sha256-{result.Workbook.ArtifactSha256}\"";context.Response.Headers.XContentTypeOptions="nosniff";return Results.File(result.Bytes,result.Workbook.MimeType,result.Workbook.FileName,enableRangeProcessing:false);
     }
 
     private static AnnexE1ApiResponse Map(AnnexE1FactResult r,string c)=>r.Outcome switch{AnnexE1Outcome.Created=>new(true,"annex_e1_fact_recorded",c,201,r.Fact),AnnexE1Outcome.Replayed=>new(true,"annex_e1_fact_replayed",c,200,r.Fact),AnnexE1Outcome.Conflict=>Error("annex_e1_semantic_conflict",409,c,r.SafeMessage),AnnexE1Outcome.ScopeMismatch or AnnexE1Outcome.NotFound=>Error("annex_e1_scope_unavailable",404,c),AnnexE1Outcome.UnsupportedPrivilege=>Error("annex_e1_privilege_unsupported",422,c,r.SafeMessage),AnnexE1Outcome.InvalidRequest=>Error("annex_e1_invalid_request",400,c,r.SafeMessage),_=>Error("annex_e1_unavailable",503,c)};

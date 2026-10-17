@@ -1,5 +1,6 @@
 using ExitPass.PosServer.Api.FiscalDocuments;
 using ExitPass.PosServer.Runtime.FiscalReports;
+using System.Security.Claims;
 
 namespace ExitPass.PosServer.Api.FiscalReports;
 
@@ -27,6 +28,7 @@ public static class MonthlyESalesEndpoint
         string format,
         MonthlyESalesService service,
         MonthlyESalesOutputRenderer renderer,
+        IAuditTrailRepository auditTrailRepository,
         HttpContext context,
         IHostEnvironment environment,
         ILogger<MonthlyESalesAudit> logger,
@@ -62,6 +64,10 @@ public static class MonthlyESalesEndpoint
         }
         logger.LogInformation("Monthly eSales export completed. Year={Year} Month={Month} Format={Format} ContentSha256={Hash} Correlation={Correlation}",
             report.CalendarYear, report.CalendarMonth, output.Format, output.Sha256, correlation);
+        var actor = context.User.FindFirstValue(ClaimTypes.NameIdentifier) ?? "unavailable";
+        await auditTrailRepository.RecordExportAsync(report.SitePosServerId, "MONTHLY_ESALES",
+            $"{report.CalendarYear:D4}-{report.CalendarMonth:D2}", format, actor, correlation, output.Sha256,
+            report.Rows.Count, cancellationToken).ConfigureAwait(false);
         context.Response.Headers["X-Content-SHA256"] = output.Sha256;
         return Results.File(output.Bytes, output.ContentType, output.FileName, enableRangeProcessing: false);
     }

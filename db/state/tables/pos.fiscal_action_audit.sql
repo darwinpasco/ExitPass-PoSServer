@@ -49,6 +49,18 @@ CREATE TABLE IF NOT EXISTS pos.fiscal_action_audit (
         CHECK (audit_context IS NULL OR jsonb_typeof(audit_context) = 'object')
 );
 
+CREATE OR REPLACE FUNCTION pos.reject_fiscal_action_audit_mutation()
+RETURNS trigger LANGUAGE plpgsql AS $$
+BEGIN
+    RAISE EXCEPTION 'fiscal action audit records are append-only'
+        USING ERRCODE = 'check_violation';
+END;
+$$;
+
+CREATE OR REPLACE TRIGGER trg_fiscal_action_audit_immutable
+BEFORE UPDATE OR DELETE ON pos.fiscal_action_audit
+FOR EACH ROW EXECUTE FUNCTION pos.reject_fiscal_action_audit_mutation();
+
 COMMENT ON TABLE pos.fiscal_action_audit IS
     'Fiscal action audit evidence posture for fiscal documents, reports, exports, reprints, and adjustments. Does not publish events or grant authority.';
 COMMENT ON COLUMN pos.fiscal_action_audit.fiscal_action_audit_id IS
