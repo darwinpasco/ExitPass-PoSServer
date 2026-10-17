@@ -97,7 +97,23 @@ public interface IBirSalesSummaryRepository
 public enum BirSalesSummaryExportFormat
 {
     Json,
-    Csv
+    Csv,
+    Pdf
+}
+
+public sealed record BirSalesSummaryPdfContext(
+    string? RegisteredBusinessName,
+    string? RegisteredBusinessAddress,
+    string? TaxpayerTin,
+    string? SiteDisplayName,
+    string? ParkingLocationDisplay,
+    string? SoftwareVersion);
+
+public interface IBirSalesSummaryPdfContextRepository
+{
+    Task<BirSalesSummaryPdfContext?> ReadAsync(
+        BirSalesSummaryRecord record,
+        CancellationToken cancellationToken = default);
 }
 
 public sealed record BirSalesSummaryExport(

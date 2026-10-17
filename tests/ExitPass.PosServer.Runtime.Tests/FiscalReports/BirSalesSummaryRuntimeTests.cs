@@ -1,4 +1,5 @@
 using System.Text;
+using System.Text.RegularExpressions;
 using ExitPass.PosServer.Runtime.FiscalReports;
 using Xunit;
 
@@ -45,6 +46,7 @@ public sealed class BirSalesSummaryRuntimeTests
             var second = secondRenderer.Render(record, format);
             Assert.Equal(first.Bytes, second.Bytes);
             Assert.Equal(first.Sha256, second.Sha256);
+            Assert.Equal($"bir-sales-summary-{record.BirSalesSummaryReportId:N}.{format.ToString().ToLowerInvariant()}", first.FileName);
             var text = Encoding.UTF8.GetString(first.Bytes);
             Assert.Contains(record.GoverningZReadingReference, text, StringComparison.Ordinal);
             Assert.Contains("senior_citizen_statutory", text, StringComparison.Ordinal);
@@ -59,6 +61,40 @@ public sealed class BirSalesSummaryRuntimeTests
     public void RendererRejectsFormatsOutsideTheAuthorizedJsonCsvSet() =>
         Assert.Throws<ArgumentOutOfRangeException>(() =>
             new BirSalesSummaryOutputRenderer().Render(Record(), (BirSalesSummaryExportFormat)99));
+
+    [Fact]
+    public void PdfIsDeterministicAndPresentsCommittedSummaryWithoutRecalculation()
+    {
+        var record = Record() with
+        {
+            HeaderProfile = Record().HeaderProfile with
+            {
+                PosSerialNumber = "SN-TEST-PITX-L3-001",
+                MachineIdentificationNumber = "MIN-TEST-PITX-L3-001",
+                PtuNumber = "PTU-TEST-PITX-L3-0001",
+                BirAccreditationNumber = "ACC-TEST-2026-0001"
+            }
+        };
+        var context = new BirSalesSummaryPdfContext("Professional Parking Management Corporation",
+            "PITX, Paranaque City", "999-999-999-000", "PITX Level 3", "PITX Level 3", "ExitPass v1.3");
+        var renderer = new BirSalesSummaryOutputRenderer();
+        var first = renderer.Render(record, BirSalesSummaryExportFormat.Pdf, context);
+        var second = renderer.Render(record, BirSalesSummaryExportFormat.Pdf, context);
+        Assert.Equal(first.Bytes, second.Bytes);
+        Assert.Equal("application/pdf", first.ContentType);
+        Assert.Equal("daily-bir-sales-summary-technical-uat-20260803.pdf", first.FileName);
+        Assert.StartsWith("%PDF-1.4", Encoding.Latin1.GetString(first.Bytes), StringComparison.Ordinal);
+        var text = PdfText(first.Bytes);
+        foreach (var expected in new[] { "DAILY BIR SALES SUMMARY", "TECHNICAL UAT - NOT FOR BIR SUBMISSION",
+                     "TAXPAYER IDENTITY", "INVOICE RANGE",
+                     "Professional Parking Management Corporation", "999-999-999-000", "SN-TEST-PITX-L3-001",
+                     "MIN-TEST-PITX-L3-001", "PTU-TEST-PITX-L3-0001", "ACC-TEST-2026-0001", "2026-08-03",
+                     "SI-0001", "Gross Sales", "PHP 120.00", "Net Sales", "PHP 100.00", "CASH", "Page 1 of 1" })
+            Assert.Contains(expected, text, StringComparison.Ordinal);
+        Assert.DoesNotContain("TAXPAYER AND FISCAL IDENTITY", text, StringComparison.Ordinal);
+        Assert.DoesNotContain("FISCAL RANGE", text, StringComparison.Ordinal);
+        Assert.DoesNotContain("BIR SALES SUMMARY REPORT", text, StringComparison.Ordinal);
+    }
 
     private static BirSalesSummaryCommand Command() => new(
         "operation", SiteId, IdentityId, "PHP", PeriodId, "Z-TEST", "actor", "service", "correlation");
@@ -91,4 +127,7 @@ public sealed class BirSalesSummaryRuntimeTests
         { GenerateCalls++; LastCommand = command; return Task.FromResult(result); }
         public Task<BirSalesSummaryResult> GetByIdAsync(Guid id, CancellationToken cancellationToken = default) => Task.FromResult(result);
     }
+
+    private static string PdfText(byte[] bytes) => string.Join('\n', Regex.Matches(Encoding.Latin1.GetString(bytes), @"\((?<text>(?:\\.|[^\\)])*)\) Tj")
+        .Select(match => Regex.Unescape(match.Groups["text"].Value)));
 }

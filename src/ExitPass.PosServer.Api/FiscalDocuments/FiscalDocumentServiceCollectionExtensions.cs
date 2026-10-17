@@ -33,6 +33,8 @@ public static class FiscalDocumentServiceCollectionExtensions
             services.TryAddScoped<IFiscalZCloseStateRepository, UnavailableFiscalZCloseStateRepository>();
             services.TryAddScoped<IFiscalZReadingRepository, UnavailableFiscalZReadingRepository>();
             services.TryAddScoped<IBirSalesSummaryRepository, UnavailableBirSalesSummaryRepository>();
+            services.TryAddScoped<IBirSalesSummaryPdfContextRepository, UnavailableBirSalesSummaryRepository>();
+            services.TryAddScoped<IMonthlyESalesRepository, UnavailableMonthlyESalesRepository>();
             services.TryAddScoped<IElectronicJournalRepository, UnavailableElectronicJournalRepository>();
             services.TryAddScoped<IFiscalDocumentReprintRepository, UnavailableFiscalDocumentReprintRepository>();
             services.TryAddScoped<IAnnexE1Repository, UnavailableAnnexE1Repository>();
@@ -48,6 +50,8 @@ public static class FiscalDocumentServiceCollectionExtensions
             services.TryAddScoped<IFiscalZCloseStateRepository, UnavailableFiscalZCloseStateRepository>();
             services.TryAddScoped<IFiscalZReadingRepository, UnavailableFiscalZReadingRepository>();
             services.TryAddScoped<IBirSalesSummaryRepository, UnavailableBirSalesSummaryRepository>();
+            services.TryAddScoped<IBirSalesSummaryPdfContextRepository, UnavailableBirSalesSummaryRepository>();
+            services.TryAddScoped<IMonthlyESalesRepository, UnavailableMonthlyESalesRepository>();
             services.TryAddScoped<IElectronicJournalRepository, UnavailableElectronicJournalRepository>();
             services.TryAddScoped<IFiscalDocumentReprintRepository, UnavailableFiscalDocumentReprintRepository>();
             services.TryAddScoped<IAnnexE1Repository, UnavailableAnnexE1Repository>();
@@ -67,6 +71,8 @@ public static class FiscalDocumentServiceCollectionExtensions
             services.TryAddScoped<IFiscalZCloseStateRepository, PostgresFiscalZCloseStateRepository>();
             services.TryAddScoped<IFiscalZReadingRepository, PostgresFiscalZReadingRepository>();
             services.TryAddScoped<IBirSalesSummaryRepository, PostgresBirSalesSummaryRepository>();
+            services.TryAddScoped<IBirSalesSummaryPdfContextRepository, PostgresBirSalesSummaryRepository>();
+            services.TryAddScoped<IMonthlyESalesRepository, PostgresMonthlyESalesRepository>();
             services.TryAddScoped<IElectronicJournalRepository, PostgresElectronicJournalRepository>();
             services.TryAddScoped<IFiscalDocumentReprintRepository, PostgresFiscalDocumentReprintRepository>();
             var annexE1ArtifactRoot = configuration["PosServer:AnnexE1:ArtifactRoot"];
@@ -95,6 +101,8 @@ public static class FiscalDocumentServiceCollectionExtensions
         services.AddScoped<FiscalZReadingService>();
         services.AddScoped<BirSalesSummaryService>();
         services.AddSingleton<BirSalesSummaryOutputRenderer>();
+        services.AddScoped<MonthlyESalesService>();
+        services.AddSingleton<MonthlyESalesOutputRenderer>();
         services.AddScoped<ElectronicJournalService>();
         services.AddSingleton<ElectronicJournalExportRenderer>();
         services.AddScoped<ElectronicJournalInvoiceTextService>();
@@ -194,6 +202,14 @@ public static class FiscalDocumentServiceCollectionExtensions
                 BirSalesSummaryAuthorization.ExportPolicyName,
                 policy => policy.AddAuthenticationSchemes(SalesInvoiceHeaderProfileAdminAuthorization.AuthenticationScheme)
                     .RequireClaim(SalesInvoiceHeaderProfileAdminAuthorization.PermissionClaimType, BirSalesSummaryAuthorization.ExportPermission));
+            options.AddPolicy(
+                MonthlyESalesAuthorization.ReadPolicyName,
+                policy => policy.AddAuthenticationSchemes(SalesInvoiceHeaderProfileAdminAuthorization.AuthenticationScheme)
+                    .RequireClaim(SalesInvoiceHeaderProfileAdminAuthorization.PermissionClaimType, MonthlyESalesAuthorization.ReadPermission));
+            options.AddPolicy(
+                MonthlyESalesAuthorization.ExportPolicyName,
+                policy => policy.AddAuthenticationSchemes(SalesInvoiceHeaderProfileAdminAuthorization.AuthenticationScheme)
+                    .RequireClaim(SalesInvoiceHeaderProfileAdminAuthorization.PermissionClaimType, MonthlyESalesAuthorization.ExportPermission));
             options.AddPolicy(
                 ElectronicJournalAuthorization.ReadPolicyName,
                 policy => policy.AddAuthenticationSchemes(SalesInvoiceHeaderProfileAdminAuthorization.AuthenticationScheme)

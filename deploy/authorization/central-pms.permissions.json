@@ -20,6 +20,8 @@
     "bir_sales_summary.export",
     "fiscal_annex_e.generate",
     "fiscal_annex_e.read",
-    "fiscal_annex_e.export"
+    "fiscal_annex_e.export",
+    "monthly_esales.read",
+    "monthly_esales.export"
   ]
 }

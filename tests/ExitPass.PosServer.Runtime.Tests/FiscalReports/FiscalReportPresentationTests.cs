@@ -61,10 +61,13 @@ public sealed class FiscalReportPresentationTests
     [Fact]
     public void JsonCsvAndPdfOutputsAreDeterministicVersionedAndHashBound()
     {
-        var presentation = new FiscalReportPresentationService().Present(ZRecord()).Presentation!;
+        var presentationService = new FiscalReportPresentationService();
+        var xPresentation = presentationService.Present(XRecord()).Presentation!;
+        var presentation = presentationService.Present(ZRecord()).Presentation!;
         var renderer = new FiscalReportOutputRenderer();
 
         var presentationJson = renderer.CreatePresentationJson(presentation);
+        var xJson = renderer.CreateExport(xPresentation, FiscalReportOutputFormat.Json);
         var json1 = renderer.CreateExport(presentation, FiscalReportOutputFormat.Json);
         var json2 = renderer.CreateExport(presentation, FiscalReportOutputFormat.Json);
         var csv1 = renderer.CreateExport(presentation, FiscalReportOutputFormat.Csv);
@@ -82,6 +85,8 @@ public sealed class FiscalReportPresentationTests
         Assert.StartsWith("fiscal-report-output:sha256:v1:", json1.OutputIdentity, StringComparison.Ordinal);
         Assert.Equal("application/json; charset=utf-8", presentationJson.ContentType);
         Assert.Equal("application/json; charset=utf-8", json1.ContentType);
+        Assert.Equal("x-reading-x-20260806-0001.json", xJson.FileName);
+        Assert.Equal("z-reading-z-20260806-00000012.json", json1.FileName);
         Assert.Equal("text/csv; charset=utf-8", csv1.ContentType);
         Assert.Equal("application/pdf", pdf1.ContentType);
         Assert.EndsWith(".pdf", pdf1.FileName, StringComparison.Ordinal);

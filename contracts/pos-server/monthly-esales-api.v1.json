@@ -1,0 +1,36 @@
+{
+  "contract_version": "pos-server-monthly-esales:v1",
+  "scope": ["site_pos_server_id", "fiscal_identity_id", "PHP", "calendar_month", "machine_identification_number"],
+  "authoritative_source": "committed_bir_sales_summary",
+  "routes": [
+    {
+      "method": "GET",
+      "path": "/v1/fiscal-reports/monthly-esales/",
+      "permission": "monthly_esales.read"
+    },
+    {
+      "method": "GET",
+      "path": "/v1/fiscal-reports/monthly-esales/download?format=json|csv|pdf",
+      "permission": "monthly_esales.export"
+    }
+  ],
+  "csv_profile": {
+    "version": "bir-esales-job-aid:v1",
+    "columns": [
+      "MACHINE IDENTIFICATION NO. of CRM/POS",
+      "MONTH",
+      "YEAR",
+      "MONTHLY SALES",
+      "END RANGE OF OFFICIAL RECEIPT"
+    ],
+    "line_endings": "CRLF"
+  },
+  "pdf_profile": {
+    "purpose": "human-readable fiscal reconciliation report",
+    "page_size": "A4 portrait",
+    "authoritative_daily_source": "committed_bir_sales_summary",
+    "bir_upload_artifact": false
+  },
+  "external_submission": false,
+  "uat_artifact_is_production_submission_ready": false
+}

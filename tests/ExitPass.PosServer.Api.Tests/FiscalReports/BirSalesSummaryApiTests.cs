@@ -67,7 +67,9 @@ public sealed class BirSalesSummaryApiTests
             BirSalesSummaryAuthorization.ExportPolicyName,
             AnnexE1Authorization.GeneratePolicy,
             AnnexE1Authorization.ReadPolicy,
-            AnnexE1Authorization.DownloadPolicy
+            AnnexE1Authorization.DownloadPolicy,
+            MonthlyESalesAuthorization.ReadPolicyName,
+            MonthlyESalesAuthorization.ExportPolicyName
         })
         {
             Assert.True((await authorization.AuthorizeAsync(principal, null, options.GetPolicy(policyName)!)).Succeeded);
@@ -75,6 +77,7 @@ public sealed class BirSalesSummaryApiTests
 
         Assert.True(BirSalesSummaryAuthorization.IsInScope(principal, SiteId, IdentityId, "PHP"));
         Assert.True(AnnexE1Authorization.IsInScope(principal, SiteId, IdentityId, "PHP"));
+        Assert.True(MonthlyESalesAuthorization.IsInScope(principal, SiteId, IdentityId, "PHP"));
         Assert.False(BirSalesSummaryAuthorization.IsInScope(principal, Guid.NewGuid(), IdentityId, "PHP"));
         Assert.False(BirSalesSummaryAuthorization.IsInScope(principal, SiteId, Guid.NewGuid(), "PHP"));
         Assert.False(BirSalesSummaryAuthorization.IsInScope(principal, SiteId, IdentityId, "USD"));

@@ -108,7 +108,7 @@ public sealed class FiscalReportOutputRenderer
             FiscalReportPresentationContract.JsonExportVersion,
             identity,
             "application/json; charset=utf-8",
-            FileName(presentation, "json"),
+            FileName(presentation, "json", useExtension: true),
             "attachment",
             content);
     }
@@ -509,13 +509,17 @@ public sealed class FiscalReportOutputRenderer
     private static void WritePdf(Stream output, string value) =>
         output.Write(Encoding.ASCII.GetBytes(value));
 
-    private static string FileName(FiscalReportPresentationModel presentation, string suffix)
+    private static string FileName(
+        FiscalReportPresentationModel presentation,
+        string suffix,
+        bool useExtension = false)
     {
         var kind = presentation.ReportKind == FiscalXReadingContract.ReportKind ? "x-reading" : "z-reading";
         var safeReference = new string(presentation.ReportReference
             .Select(character => char.IsLetterOrDigit(character) || character is '-' or '_' ? char.ToLowerInvariant(character) : '-')
             .ToArray()).Trim('-');
-        return $"{kind}-{safeReference}-{suffix}";
+        var separator = useExtension ? "." : "-";
+        return $"{kind}-{safeReference}{separator}{suffix}";
     }
 
     private static string Csv(string value) =>

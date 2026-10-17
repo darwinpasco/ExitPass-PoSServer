@@ -10,10 +10,47 @@ namespace ExitPass.PosServer.Persistence.Postgres.FiscalReports;
 
 public sealed class PostgresBirSalesSummaryRepository(
     NpgsqlDataSource dataSource,
-    FiscalXReadingAggregationService aggregationService) : IBirSalesSummaryRepository
+    FiscalXReadingAggregationService aggregationService) : IBirSalesSummaryRepository, IBirSalesSummaryPdfContextRepository
 {
     private static readonly Guid BirSummaryKindId = Guid.Parse("2326447f-74c2-5ed7-83bb-e079fcee7f3d");
     private static readonly Guid ZReadingKindId = Guid.Parse("1c628bc2-49c3-53e8-ae83-2082bcf28467");
+
+    public async Task<BirSalesSummaryPdfContext?> ReadAsync(
+        BirSalesSummaryRecord record,
+        CancellationToken cancellationToken = default)
+    {
+        const string sql = """
+        SELECT fi.registered_business_name,fi.registered_business_address,fi.tin,
+               site.display_name,profile.parking_location_display,fi.software_version
+        FROM pos.fiscal_identities fi
+        JOIN pos.site_pos_servers site ON site.site_pos_server_id=@site
+        JOIN pos.sales_invoice_header_profiles profile
+          ON profile.sales_invoice_header_profile_id=@profile
+         AND profile.site_pos_server_id=site.site_pos_server_id
+         AND profile.fiscal_identity_id=fi.fiscal_identity_id
+        WHERE fi.fiscal_identity_id=@identity
+        """;
+        await using var connection = await dataSource.OpenConnectionAsync(cancellationToken).ConfigureAwait(false);
+        await using var transaction = await connection.BeginTransactionAsync(IsolationLevel.RepeatableRead, cancellationToken).ConfigureAwait(false);
+        await using (var readOnly = new NpgsqlCommand("SET TRANSACTION READ ONLY", connection, transaction))
+            await readOnly.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
+        await using var command = CreateCommand(connection, transaction, sql);
+        command.Parameters.AddWithValue("site", record.SitePosServerId);
+        command.Parameters.AddWithValue("identity", record.FiscalIdentityId);
+        command.Parameters.AddWithValue("profile", record.HeaderProfile.SalesInvoiceHeaderProfileId);
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
+        if (!await reader.ReadAsync(cancellationToken).ConfigureAwait(false)) return null;
+        var result = new BirSalesSummaryPdfContext(
+            reader.IsDBNull(0) ? null : reader.GetString(0),
+            reader.IsDBNull(1) ? null : reader.GetString(1),
+            reader.IsDBNull(2) ? null : reader.GetString(2),
+            reader.IsDBNull(3) ? null : reader.GetString(3),
+            reader.IsDBNull(4) ? null : reader.GetString(4),
+            reader.IsDBNull(5) ? null : reader.GetString(5));
+        await reader.DisposeAsync().ConfigureAwait(false);
+        await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
+        return result;
+    }
 
     public async Task<BirSalesSummaryResult> GenerateAsync(
         BirSalesSummaryCommand command,
