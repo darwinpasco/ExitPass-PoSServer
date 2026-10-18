@@ -24,6 +24,10 @@ profiles; Apply stops on any unsupported historical profile. The script is not a
 source of truth. It refuses production-like database names and stops when existing approved
 profiles, immutable snapshots, completion ancestry, or pre-existing EJ printable text require a
 separately governed decision.
+The `AnnexE1AutomaticSupersession` scope applies only the canonical Annex E-1 workbook
+successor constraint from `db/state/tables/pos.annex_e1_workbooks.sql`. It protects every
+existing workbook and report-row value with before/after manifests and does not invoke the
+older completion/Electronic Journal reconciliation steps.
 Apply also fails closed when inspection detects material schema drift outside the explicitly
 approved scope; that drift must be reviewed and authorized separately. Function reconciliation
 uses `CREATE OR REPLACE FUNCTION`, preserves its OID, owner, and security-definer posture, and
@@ -63,6 +67,13 @@ Inspect or reconcile an approved persistent IST database hosted by its PostgreSQ
   -ContainerName exitpass-pos-ist-persistent-db `
   -DatabaseName exitpass_pos_ist `
   -EvidenceDir .\db\validation\evidence\persistent-ist
+
+# Narrow forward reconciliation for automatic immutable Annex E-1 successors.
+.\db\scripts\Invoke-PosPersistentStateReconciliation.ps1 `
+  -Mode Apply -Scope AnnexE1AutomaticSupersession `
+  -ContainerName exitpass-pos-ist-persistent-db `
+  -DatabaseName exitpass_pos_ist `
+  -EvidenceDir .\db\validation\evidence\persistent-ist-annex-e1
 ```
 
 Back up the target before `-Mode Apply`. Rebuild and ControlledCodeLoad remain disposable-database

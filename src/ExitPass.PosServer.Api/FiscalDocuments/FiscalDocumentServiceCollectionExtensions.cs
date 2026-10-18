@@ -114,6 +114,7 @@ public static class FiscalDocumentServiceCollectionExtensions
         services.AddSingleton<CanonicalSalesInvoiceTextRenderer>();
         services.AddSingleton<ElectronicJournalInvoiceTextRenderer>();
         services.AddScoped<AnnexE1Service>();
+        services.AddSingleton<AnnexE1AuthoritativeSourceDeriver>();
         services.AddSingleton<AnnexE1CalculationEngine>();
         services.AddSingleton<AnnexE1DeterministicXlsxRenderer>();
         services.AddSingleton<FiscalReportPresentationService>();

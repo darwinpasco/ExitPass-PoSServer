@@ -9,19 +9,12 @@ namespace ExitPass.PosServer.Persistence.Postgres.FiscalReports;
 
 public sealed class PostgresAnnexE1Repository(
     NpgsqlDataSource dataSource,
+    AnnexE1AuthoritativeSourceDeriver sourceDeriver,
     AnnexE1CalculationEngine calculationEngine,
     AnnexE1DeterministicXlsxRenderer renderer,
     IAnnexE1ArtifactStore artifactStore) : IAnnexE1Repository
 {
     private static readonly Guid ZKindId = Guid.Parse("1c628bc2-49c3-53e8-ae83-2082bcf28467");
-    private static readonly string[] RequiredFactTypes =
-    [
-        AnnexE1FactTypes.ManualSiOrNetIncome, AnnexE1FactTypes.SalesOverrunOverflowNetIncome,
-        AnnexE1FactTypes.NaacDiscount, AnnexE1FactTypes.SoloParentDiscount,
-        AnnexE1FactTypes.OtherVatAdjustment, AnnexE1FactTypes.VatOnReturns,
-        AnnexE1FactTypes.ResidualVatAdjustment
-    ];
-
     public async Task<AnnexE1FactResult> RecordFactAsync(AnnexE1PeriodFactCommand command, CancellationToken cancellationToken = default)
     {
         var semanticHash = AnnexE1SemanticHasher.ComputeFact(command);
@@ -109,23 +102,13 @@ public sealed class PostgresAnnexE1Repository(
 
             var generatedAt = await ClockAsync(connection, transaction, cancellationToken).ConfigureAwait(false);
             var header = BuildHeader(sources, generatedAt, command.RequestedByRef);
-            var inputs = new List<AnnexE1RowInputs>(sources.Count);
             var sourceFacts = new List<(Source Source, IReadOnlyDictionary<string, AnnexE1PeriodFactRecord> Facts)>(sources.Count);
             foreach (var source in sources)
             {
                 var facts = await ReadCurrentFactsAsync(connection, transaction, source.PeriodId, cancellationToken).ConfigureAwait(false);
                 sourceFacts.Add((source, facts));
             }
-            var missingFacts = sourceFacts
-                .SelectMany(entry => RequiredFactTypes
-                    .Where(type => !entry.Facts.ContainsKey(type))
-                    .Select(type => $"{entry.Source.BusinessDate:yyyy-MM-dd}: {type}"))
-                .ToArray();
-            if (missingFacts.Length > 0)
-                throw new AnnexE1SafeException(
-                    AnnexE1Outcome.MissingAccountingFact,
-                    $"Annex E-1 governed accounting facts are incomplete for: {string.Join(", ", missingFacts)}.");
-            inputs.AddRange(sourceFacts.Select(entry => ToInputs(entry.Source, entry.Facts)));
+            var inputs = sourceFacts.Select(entry => ToInputs(entry.Source, entry.Facts)).ToArray();
             semanticHash = AnnexE1SemanticHasher.ComputeWorkbook(command, inputs, header);
 
             var operation = await ReadWorkbookByOperationAsync(connection, transaction, command.SitePosServerId, command.OperationKey, cancellationToken).ConfigureAwait(false);
@@ -135,17 +118,27 @@ public sealed class PostgresAnnexE1Repository(
                     : FailureWorkbook(AnnexE1Outcome.Conflict, "The Annex E-1 operation is already bound to different source semantics.");
 
             var current = await ReadCurrentWorkbookAsync(connection, transaction, command, cancellationToken).ConfigureAwait(false);
+            var rows = inputs.Select(calculationEngine.Calculate).ToArray();
+            var persistenceCommand = command;
             if (command.SupersedesWorkbookId is null)
             {
                 if (current is not null)
-                    return string.Equals(current.SemanticHash, semanticHash, StringComparison.Ordinal)
-                        ? new(AnnexE1Outcome.Replayed, current)
-                        : FailureWorkbook(AnnexE1Outcome.Conflict, "Changed source semantics require an explicit immutable correction.");
+                {
+                    switch (AnnexE1RevisionPlanner.Decide(current, semanticHash, rows))
+                    {
+                        case AnnexE1RevisionDecision.Replay:
+                            return new(AnnexE1Outcome.Replayed, current);
+                        case AnnexE1RevisionDecision.AutomaticSuccessor:
+                            persistenceCommand = command with { SupersedesWorkbookId = current.WorkbookId };
+                            break;
+                        default:
+                            return FailureWorkbook(AnnexE1Outcome.Conflict, "Changed existing-period semantics require an explicit immutable correction.");
+                    }
+                }
             }
             else if (current is null || current.WorkbookId != command.SupersedesWorkbookId)
                 return FailureWorkbook(AnnexE1Outcome.Conflict, "The correction must supersede the current workbook in the exact governed scope.");
 
-            var rows = inputs.Select(calculationEngine.Calculate).ToArray();
             var bytes = renderer.Render(header, rows);
             var artifactSha = Convert.ToHexString(SHA256.HashData(bytes)).ToLowerInvariant();
             var artifactKey = await artifactStore.PublishAsync(bytes, artifactSha, cancellationToken).ConfigureAwait(false);
@@ -154,8 +147,8 @@ public sealed class PostgresAnnexE1Repository(
             var reference = $"AE1-{command.CalendarYear:D4}{command.CalendarMonth:D2}-{semanticHash[..16].ToUpperInvariant()}-R{revision:D3}";
             var fileName = BuildFileName(sources[0].FiscalIdentityCode, sources[0].MachineIdentificationNumber, command.CalendarYear, command.CalendarMonth);
             var statusId = await ResolveCodeAsync(connection, transaction, "annex_e1_workbook_status", "committed", cancellationToken).ConfigureAwait(false);
-            Guid? correctionReasonId = command.CorrectionReason is null ? null : await ResolveCodeAsync(connection, transaction, "annex_e1_correction_reason", command.CorrectionReason, cancellationToken).ConfigureAwait(false);
-            await InsertWorkbookAsync(connection, transaction, command, header, workbookId, reference, revision, semanticHash, artifactSha, bytes.LongLength, artifactKey, fileName, statusId, correctionReasonId, generatedAt, cancellationToken).ConfigureAwait(false);
+            Guid? correctionReasonId = persistenceCommand.CorrectionReason is null ? null : await ResolveCodeAsync(connection, transaction, "annex_e1_correction_reason", persistenceCommand.CorrectionReason, cancellationToken).ConfigureAwait(false);
+            await InsertWorkbookAsync(connection, transaction, persistenceCommand, header, workbookId, reference, revision, semanticHash, artifactSha, bytes.LongLength, artifactKey, fileName, statusId, correctionReasonId, generatedAt, cancellationToken).ConfigureAwait(false);
             await InsertRowsAsync(connection, transaction, workbookId, rows, cancellationToken).ConfigureAwait(false);
             var record = await ReadWorkbookAsync(connection, transaction, workbookId, cancellationToken).ConfigureAwait(false)
                 ?? throw new AnnexE1SafeException(AnnexE1Outcome.PersistenceFailure, "The Annex E-1 workbook was not readable in its transaction.");
@@ -254,21 +247,20 @@ public sealed class PostgresAnnexE1Repository(
         catch (IOException) { return new(AnnexE1Outcome.ArtifactUnavailable, SafeMessage: "The immutable Annex E-1 artifact is unavailable."); }
     }
 
-    private static AnnexE1RowInputs ToInputs(Source s, IReadOnlyDictionary<string, AnnexE1PeriodFactRecord> facts)
+    private AnnexE1RowInputs ToInputs(Source s, IReadOnlyDictionary<string, AnnexE1PeriodFactRecord> facts)
     {
-        foreach (var type in RequiredFactTypes) if (!facts.ContainsKey(type)) throw new AnnexE1SafeException(AnnexE1Outcome.MissingAccountingFact, $"The required governed Annex E-1 fact '{type}' is unavailable.");
-        var zeroOnly = new[] { AnnexE1FactTypes.NaacDiscount, AnnexE1FactTypes.SoloParentDiscount, AnnexE1FactTypes.OtherVatAdjustment, AnnexE1FactTypes.VatOnReturns, AnnexE1FactTypes.ResidualVatAdjustment };
-        if (zeroOnly.Any(type => facts[type].FactStatus != AnnexE1FactStatuses.AttestedZero || facts[type].AmountMinorUnits != 0))
-            throw new AnnexE1SafeException(AnnexE1Outcome.UnsupportedPrivilege, "A nonzero or unattested unresolved Annex E-1 classification is not authorized.");
-        var ordered = RequiredFactTypes.Select(type => facts[type]).ToArray();
+        var derived = sourceDeriver.Derive(new(
+            s.ZId, s.BirId, s.BirSemanticHash, s.PreviousGta, s.ResultingGta, s.GrossSales, s.NetSales,
+            s.OtherStatutoryDiscount, s.VatExemptionAmount, s.ScVatAdjustment, s.PwdVatAdjustment,
+            s.ReturnAmount, s.RefundAmount, s.AdjustmentAmount, s.ServiceChargeAmount), facts);
         return new(s.PeriodId,s.PeriodSequence,s.ZId,s.ZReference,s.BirId,s.BirSemanticHash,s.BusinessDate,s.BeginningNumber,s.EndingNumber,
-            s.PreviousGta,s.ResultingGta,facts[AnnexE1FactTypes.ManualSiOrNetIncome].AmountMinorUnits,s.GrossSales,s.ReturnAmount,s.VoidAmount,
-            s.VatableSales,s.VatAmount,s.VatExemptSales,s.ZeroRatedSales,s.ScDiscount,s.PwdDiscount,facts[AnnexE1FactTypes.NaacDiscount].AmountMinorUnits,
-            facts[AnnexE1FactTypes.SoloParentDiscount].AmountMinorUnits,s.OtherStatutoryDiscount,s.CouponDiscount,s.PromotionalDiscount,s.ScVatAdjustment,
-            s.PwdVatAdjustment,facts[AnnexE1FactTypes.OtherVatAdjustment].AmountMinorUnits,facts[AnnexE1FactTypes.VatOnReturns].AmountMinorUnits,
-            facts[AnnexE1FactTypes.ResidualVatAdjustment].AmountMinorUnits,facts[AnnexE1FactTypes.SalesOverrunOverflowNetIncome].AmountMinorUnits,
+            s.PreviousGta,s.ResultingGta,derived.ManualNetIncome,s.GrossSales,s.ReturnAmount,s.VoidAmount,
+            s.VatableSales,s.VatAmount,s.VatExemptSales,s.ZeroRatedSales,s.ScDiscount,s.PwdDiscount,derived.NaacDiscount,
+            derived.SoloParentDiscount,s.OtherStatutoryDiscount,s.CouponDiscount,s.PromotionalDiscount,s.ScVatAdjustment,
+            s.PwdVatAdjustment,derived.OtherVatAdjustment,derived.VatOnReturns,
+            derived.ResidualVatAdjustment,derived.OverflowNetIncome,
             s.ResetCounter,s.ZCounter,s.TransactionCount,s.RefundAmount,s.AdjustmentAmount,s.ServiceChargeAmount,s.RangeCount,s.GapCount,
-            ordered.Select(f => f.FactId).ToArray(),ordered.Select(f => f.SemanticHash).ToArray());
+            derived.FactIds,derived.EvidenceSemanticHashes);
     }
 
     private static AnnexE1Header BuildHeader(IReadOnlyList<Source> sources, DateTimeOffset at, string actor)
@@ -294,13 +286,14 @@ public sealed class PostgresAnnexE1Repository(
           z.x_z_report_id,z.report_number,zreqs.code_key,b.bir_sales_summary_report_id,breq.semantic_request_hash,
           b.beginning_si_ref,b.ending_si_ref,b.previous_grand_total_amount_minor_units,b.present_grand_total_amount_minor_units,
           b.gross_sales_amount_minor_units,b.vatable_sales_amount_minor_units,b.vat_amount_minor_units,b.vat_exempt_sales_amount_minor_units,b.zero_rated_sales_amount_minor_units,
-          b.senior_citizen_discount_amount_minor_units,b.pwd_discount_amount_minor_units,b.other_statutory_discount_amount_minor_units,
+          b.senior_citizen_discount_amount_minor_units,b.pwd_discount_amount_minor_units,b.other_statutory_discount_amount_minor_units,b.vat_exemption_amount_minor_units,
           z.coupon_discount_amount_minor_units,z.promotional_discount_amount_minor_units,b.void_amount_minor_units,b.return_amount_minor_units,b.refund_amount_minor_units,b.adjustment_amount_minor_units,z.service_charge_amount_minor_units,
           b.reset_counter_value,b.z_counter_value,b.transaction_count,
           COALESCE((SELECT count(*) FROM pos.fiscal_report_fiscal_number_ranges fr WHERE fr.x_z_report_id=z.x_z_report_id),0),
           COALESCE((SELECT sum(fr.gap_count) FROM pos.fiscal_report_fiscal_number_ranges fr WHERE fr.x_z_report_id=z.x_z_report_id),0),
           COALESCE((SELECT d.vat_exemption_amount_minor_units FROM pos.fiscal_report_discount_breakdowns d JOIN pos.controlled_codes dc ON dc.controlled_code_id=d.discount_classification_code_id WHERE d.x_z_report_id=z.x_z_report_id AND dc.code_key='senior_citizen_statutory'),0),
           COALESCE((SELECT d.vat_exemption_amount_minor_units FROM pos.fiscal_report_discount_breakdowns d JOIN pos.controlled_codes dc ON dc.controlled_code_id=d.discount_classification_code_id WHERE d.x_z_report_id=z.x_z_report_id AND dc.code_key='pwd_statutory'),0),
+          b.net_sales_amount_minor_units,
           fi.fiscal_identity_code,COALESCE(fi.registered_business_name,fi.taxpayer_display_name),fi.registered_business_address,fi.tin,
           b.pos_serial_number,b.machine_identification_number,s.site_pos_server_code,breqs.code_key
         FROM pos.fiscal_reporting_periods p JOIN pos.controlled_codes ps ON ps.controlled_code_id=p.period_status_code_id
@@ -323,9 +316,9 @@ public sealed class PostgresAnnexE1Repository(
             var businessDate=r.GetFieldValue<DateOnly>(2);
             var zCommitted=!r.IsDBNull(4)&&!r.IsDBNull(5)&&string.Equals(r.GetString(3),"closed",StringComparison.Ordinal)&&string.Equals(r.GetString(7),"committed",StringComparison.Ordinal);
             if(!zCommitted){missingCommittedZ.Add(businessDate);continue;}
-            var birCommitted=!r.IsDBNull(8)&&!r.IsDBNull(43)&&string.Equals(r.GetString(43),"committed",StringComparison.Ordinal);
+            var birCommitted=!r.IsDBNull(8)&&!r.IsDBNull(45)&&string.Equals(r.GetString(45),"committed",StringComparison.Ordinal);
             if(!birCommitted){missingCommittedBir.Add(businessDate);continue;}
-            result.Add(new(r.GetGuid(0),r.GetInt64(1),r.GetFieldValue<DateOnly>(2),r.GetGuid(5),r.GetString(6),r.GetGuid(8),r.GetString(9),r.IsDBNull(10)?null:r.GetString(10),r.IsDBNull(11)?null:r.GetString(11),r.GetInt64(12),r.GetInt64(13),r.GetInt64(14),r.GetInt64(15),r.GetInt64(16),r.GetInt64(17),r.GetInt64(18),r.GetInt64(19),r.GetInt64(20),r.GetInt64(21),r.GetInt64(22),r.GetInt64(23),r.GetInt64(24),r.GetInt64(25),r.GetInt64(26),r.GetInt64(27),r.GetInt64(28),r.GetInt64(29),r.GetInt64(30),r.GetInt64(31),r.GetInt64(32),r.GetInt64(33),r.GetInt64(34),r.GetInt64(35),r.GetString(36),r.IsDBNull(37)?"":r.GetString(37),r.IsDBNull(38)?"":r.GetString(38),r.IsDBNull(39)?"":r.GetString(39),r.GetString(40),r.GetString(41),r.GetString(42)));
+            result.Add(new(r.GetGuid(0),r.GetInt64(1),r.GetFieldValue<DateOnly>(2),r.GetGuid(5),r.GetString(6),r.GetGuid(8),r.GetString(9),r.IsDBNull(10)?null:r.GetString(10),r.IsDBNull(11)?null:r.GetString(11),r.GetInt64(12),r.GetInt64(13),r.GetInt64(14),r.GetInt64(37),r.GetInt64(15),r.GetInt64(16),r.GetInt64(17),r.GetInt64(18),r.GetInt64(19),r.GetInt64(20),r.GetInt64(21),r.GetInt64(22),r.GetInt64(23),r.GetInt64(24),r.GetInt64(25),r.GetInt64(26),r.GetInt64(27),r.GetInt64(28),r.GetInt64(29),r.GetInt64(30),r.GetInt64(31),r.GetInt64(32),r.GetInt64(33),r.GetInt64(34),r.GetInt64(35),r.GetInt64(36),r.GetString(38),r.IsDBNull(39)?"":r.GetString(39),r.IsDBNull(40)?"":r.GetString(40),r.IsDBNull(41)?"":r.GetString(41),r.GetString(42),r.GetString(43),r.GetString(44)));
         }
         if(missingCommittedZ.Count>0||missingCommittedBir.Count>0)
         {
@@ -427,5 +420,5 @@ public sealed class PostgresAnnexE1Repository(
     private static AnnexE1FactResult FailureFact(AnnexE1Outcome outcome,string message)=>new(outcome,SafeMessage:message);
     private static AnnexE1WorkbookResult FailureWorkbook(AnnexE1Outcome outcome,string message)=>new(outcome,SafeMessage:message);
 
-    private sealed record Source(Guid PeriodId,long PeriodSequence,DateOnly BusinessDate,Guid ZId,string ZReference,Guid BirId,string BirSemanticHash,string? BeginningNumber,string? EndingNumber,long PreviousGta,long ResultingGta,long GrossSales,long VatableSales,long VatAmount,long VatExemptSales,long ZeroRatedSales,long ScDiscount,long PwdDiscount,long OtherStatutoryDiscount,long CouponDiscount,long PromotionalDiscount,long VoidAmount,long ReturnAmount,long RefundAmount,long AdjustmentAmount,long ServiceChargeAmount,long ResetCounter,long ZCounter,long TransactionCount,long RangeCount,long GapCount,long ScVatAdjustment,long PwdVatAdjustment,string FiscalIdentityCode,string TaxpayerName,string TaxpayerAddress,string Tin,string PosSerialNumber,string MachineIdentificationNumber,string SiteCode);
+    private sealed record Source(Guid PeriodId,long PeriodSequence,DateOnly BusinessDate,Guid ZId,string ZReference,Guid BirId,string BirSemanticHash,string? BeginningNumber,string? EndingNumber,long PreviousGta,long ResultingGta,long GrossSales,long NetSales,long VatableSales,long VatAmount,long VatExemptSales,long ZeroRatedSales,long ScDiscount,long PwdDiscount,long OtherStatutoryDiscount,long VatExemptionAmount,long CouponDiscount,long PromotionalDiscount,long VoidAmount,long ReturnAmount,long RefundAmount,long AdjustmentAmount,long ServiceChargeAmount,long ResetCounter,long ZCounter,long TransactionCount,long RangeCount,long GapCount,long ScVatAdjustment,long PwdVatAdjustment,string FiscalIdentityCode,string TaxpayerName,string TaxpayerAddress,string Tin,string PosSerialNumber,string MachineIdentificationNumber,string SiteCode);
 }

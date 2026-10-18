@@ -72,6 +72,23 @@ public sealed class SalesInvoiceHeaderProfilePersistenceTests
     }
 
     [Fact]
+    public void PersistentDatabaseReconciliationSupportsOnlyTheCanonicalAnnexE1SuccessorConstraint()
+    {
+        var reconciliation = File.ReadAllText(FindDatabaseScriptPath("Invoke-PosPersistentStateReconciliation.ps1"));
+
+        Assert.Contains("AnnexE1AutomaticSupersession", reconciliation, StringComparison.Ordinal);
+        Assert.Contains("db\\state\\tables\\pos.annex_e1_workbooks.sql", reconciliation, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("ck_annex_e1_workbooks__correction", reconciliation, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("Get-AnnexE1CorrectionConstraintInventory", reconciliation, StringComparison.Ordinal);
+        Assert.Contains("BLOCKED_INVALID_ANNEX_E1_CORRECTION_LINEAGE", reconciliation, StringComparison.Ordinal);
+        Assert.Contains("annex_e1_workbook_state_hash", reconciliation, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("annex_e1_report_state_hash", reconciliation, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("DROP CONSTRAINT $(Quote-Identifier $annexE1CorrectionConstraint)", reconciliation, StringComparison.Ordinal);
+        Assert.DoesNotContain("UPDATE pos.annex_e1_workbooks", reconciliation, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("DELETE FROM pos.annex_e1_workbooks", reconciliation, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
     public void SalesInvoiceHeaderProfileSchemaContainsRequiredLifecycleDatesAndVersionConstraints()
     {
         var schema = File.ReadAllText(FindTableSourcePath("pos.sales_invoice_header_profiles.sql"));

@@ -59,10 +59,23 @@ CREATE TABLE IF NOT EXISTS pos.annex_e1_workbooks (
     CONSTRAINT ck_annex_e1_workbooks__scope CHECK (currency_code='PHP' AND calendar_year BETWEEN 2000 AND 9999 AND calendar_month BETWEEN 1 AND 12 AND revision > 0),
     CONSTRAINT ck_annex_e1_workbooks__hashes CHECK (semantic_hash ~ '^[0-9a-f]{64}$' AND artifact_sha256 ~ '^[0-9a-f]{64}$' AND artifact_byte_length > 0),
     CONSTRAINT ck_annex_e1_workbooks__artifact CHECK (char_length(btrim(artifact_storage_key)) > 0 AND mime_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' AND file_name ~ '^ANNEX-E1_[A-Za-z0-9._-]+\.xlsx$'),
-    CONSTRAINT ck_annex_e1_workbooks__correction CHECK ((supersedes_workbook_id IS NULL AND correction_reason_code_id IS NULL AND correction_approval_reference IS NULL) OR (supersedes_workbook_id IS NOT NULL AND correction_reason_code_id IS NOT NULL AND char_length(btrim(correction_approval_reference)) > 0)),
+    CONSTRAINT ck_annex_e1_workbooks__correction CHECK (
+        (supersedes_workbook_id IS NULL AND correction_reason_code_id IS NULL AND correction_approval_reference IS NULL)
+        OR (supersedes_workbook_id IS NOT NULL AND correction_reason_code_id IS NULL AND correction_approval_reference IS NULL)
+        OR (supersedes_workbook_id IS NOT NULL AND correction_reason_code_id IS NOT NULL AND char_length(btrim(correction_approval_reference)) > 0)
+    ),
     CONSTRAINT ck_annex_e1_workbooks__timestamps CHECK (committed_at >= generated_at)
 );
 
 CREATE INDEX IF NOT EXISTS ix_annex_e1_workbooks__scope_month ON pos.annex_e1_workbooks (site_pos_server_id, fiscal_identity_id, currency_code, calendar_year, calendar_month, revision DESC);
+
+ALTER TABLE pos.annex_e1_workbooks
+    DROP CONSTRAINT IF EXISTS ck_annex_e1_workbooks__correction,
+    ADD CONSTRAINT ck_annex_e1_workbooks__correction CHECK (
+        (supersedes_workbook_id IS NULL AND correction_reason_code_id IS NULL AND correction_approval_reference IS NULL)
+        OR (supersedes_workbook_id IS NOT NULL AND correction_reason_code_id IS NULL AND correction_approval_reference IS NULL)
+        OR (supersedes_workbook_id IS NOT NULL AND correction_reason_code_id IS NOT NULL AND char_length(btrim(correction_approval_reference)) > 0)
+    );
+
 CREATE OR REPLACE TRIGGER trg_annex_e1_workbooks_immutable BEFORE UPDATE OR DELETE ON pos.annex_e1_workbooks FOR EACH ROW EXECUTE FUNCTION pos.reject_fiscal_reporting_snapshot_mutation();
 

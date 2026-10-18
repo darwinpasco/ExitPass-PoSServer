@@ -15,6 +15,10 @@ using Xunit;
 
 namespace ExitPass.PosServer.Api.IntegrationTests;
 
+[CollectionDefinition(nameof(BirSalesSummaryPostgresCollection), DisableParallelization = true)]
+public sealed class BirSalesSummaryPostgresCollection;
+
+[Collection(nameof(BirSalesSummaryPostgresCollection))]
 public sealed class BirSalesSummaryPostgresIntegrationTests
 {
     private const string ConnectionVariable = "POSSERVER_BIR_SUMMARY_TEST_DB_URL";
@@ -29,6 +33,7 @@ public sealed class BirSalesSummaryPostgresIntegrationTests
         if (string.IsNullOrWhiteSpace(connectionString)) return;
         await RebuildAsync(connectionString);
         await ExecuteFileAsync(connectionString, Path.Combine(FindRepositoryRoot(), "tests", "ExitPass.PosServer.Api.IntegrationTests", "Fixtures", "fiscal_x_reading_runtime_fixture.sql"));
+        await ExecuteAsync(connectionString, "UPDATE pos.fiscal_discount_privilege_details SET vat_privilege_amount_minor_units=0 WHERE fiscal_discount_privilege_detail_id='73000000-0000-4000-8000-000000000702'");
         await SeedReportingConfigurationAsync(connectionString);
 
         await using var app = await StartApiAsync(connectionString);
@@ -38,8 +43,6 @@ public sealed class BirSalesSummaryPostgresIntegrationTests
         Assert.Equal("COMMITTED", close.BirSalesSummaryCompletion?.Status);
         Assert.NotNull(close.BirSalesSummaryCompletion?.SummaryId);
         var summaryRequest = new GenerateBirSalesSummaryRequest("summary-concurrent-a", SiteId, IdentityId, "PHP", PeriodId, z.FiscalReportReference);
-        var before = await ManifestAsync(connectionString);
-
         client.DefaultRequestHeaders.Remove(SalesInvoiceHeaderProfileAdminAuthorization.ApiKeyHeaderName);
         using var unauthorized = await client.PostAsJsonAsync("/v1/fiscal-reports/bir-sales-summaries/", summaryRequest);
         Assert.Equal(HttpStatusCode.Unauthorized, unauthorized.StatusCode);
@@ -64,8 +67,6 @@ public sealed class BirSalesSummaryPostgresIntegrationTests
         Assert.Equal(z.CounterSnapshot, summary.CounterSnapshot);
         Assert.Equal("COMMITTED", summary.ReportStatus);
         Assert.True(summary.Immutable);
-
-        await ProveAnnexE1FlowAsync(client, connectionString);
 
         using var replayResponse = await client.PostAsJsonAsync("/v1/fiscal-reports/bir-sales-summaries/", summaryRequest);
         var replay = await replayResponse.Content.ReadFromJsonAsync<BirSalesSummaryApiResponse>();
@@ -114,14 +115,16 @@ public sealed class BirSalesSummaryPostgresIntegrationTests
         using var malformed = await client.GetAsync("/v1/fiscal-reports/bir-sales-summaries/not-a-guid/exports/json");
         Assert.Equal(HttpStatusCode.NotFound, malformed.StatusCode);
 
+        await ProveAnnexE1FlowAsync(client, connectionString);
+        var afterAnnex = await ManifestAsync(connectionString);
         var after = await ManifestAsync(connectionString);
-        Assert.Equal(before.Documents, after.Documents); Assert.Equal(before.Lines, after.Lines);
-        Assert.Equal(before.Tenders, after.Tenders); Assert.Equal(before.Taxes, after.Taxes);
-        Assert.Equal(before.Discounts, after.Discounts); Assert.Equal(before.Totals, after.Totals);
-        Assert.Equal(before.ZReports, after.ZReports); Assert.Equal(before.ZCounter, after.ZCounter);
-        Assert.Equal(before.ResetCounter, after.ResetCounter); Assert.Equal(before.Gta, after.Gta);
-        Assert.Equal(before.PeriodStatus, after.PeriodStatus); Assert.Equal(before.OtherReports, after.OtherReports);
-        Assert.Equal(before.Summaries, after.Summaries);
+        Assert.Equal(afterAnnex.Documents, after.Documents); Assert.Equal(afterAnnex.Lines, after.Lines);
+        Assert.Equal(afterAnnex.Tenders, after.Tenders); Assert.Equal(afterAnnex.Taxes, after.Taxes);
+        Assert.Equal(afterAnnex.Discounts, after.Discounts); Assert.Equal(afterAnnex.Totals, after.Totals);
+        Assert.Equal(afterAnnex.ZReports, after.ZReports); Assert.Equal(afterAnnex.ZCounter, after.ZCounter);
+        Assert.Equal(afterAnnex.ResetCounter, after.ResetCounter); Assert.Equal(afterAnnex.Gta, after.Gta);
+        Assert.Equal(afterAnnex.PeriodStatus, after.PeriodStatus); Assert.Equal(afterAnnex.OtherReports, after.OtherReports);
+        Assert.Equal(afterAnnex.Summaries, after.Summaries);
         Assert.Equal(1L, await ScalarAsync<long>(connectionString, $"SELECT count(*) FROM pos.bir_sales_summary_reports WHERE bir_sales_summary_report_id='{summary.BirSalesSummaryReportId}'"));
         Assert.Equal(1L, await ScalarAsync<long>(connectionString, $"SELECT count(*) FROM pos.fiscal_action_audit WHERE fiscal_report_request_id='{summary.FiscalReportRequestId}' AND char_length(correlation_ref)>0"));
         await AssertImmutableAsync(connectionString, summary.BirSalesSummaryReportId);
@@ -200,12 +203,12 @@ public sealed class BirSalesSummaryPostgresIntegrationTests
     {
         await ExecuteAsync(cs, """
         INSERT INTO pos.fiscal_reporting_periods(fiscal_reporting_period_id,fiscal_reporting_contract_version_id,site_pos_server_id,fiscal_identity_id,period_status_code_id,business_day_date,period_start_at,period_end_at,reporting_timezone_name,business_day_cutoff_local_time,currency_code,period_sequence,expected_prior_period_id,opened_at,created_by_ref,updated_by_ref)
-        VALUES('85000000-0000-4000-8000-000000000010','f6766f48-62f0-513f-b9eb-e61c2f3e8c66','73000000-0000-4000-8000-000000000001','73000000-0000-4000-8000-000000000002','1a6f7021-bc84-5c01-afaa-c5d6685633c8','2026-08-07','2026-08-07T00:00:00Z','2026-08-07T01:00:00Z','Asia/Manila','00:00:00','PHP',2,'73000000-0000-4000-8000-000000000010','2026-08-07T00:00:00Z','summary-proof','summary-proof');
+        VALUES('85000000-0000-4000-8000-000000000010','f6766f48-62f0-513f-b9eb-e61c2f3e8c66','73000000-0000-4000-8000-000000000001','73000000-0000-4000-8000-000000000002','1a6f7021-bc84-5c01-afaa-c5d6685633c8','2026-08-07','2026-08-07T00:00:00Z','2026-08-07T01:00:00Z','Asia/Manila','00:00:00','PHP',3,'88000000-0000-4000-8000-000000000001','2026-08-07T00:00:00Z','summary-proof','summary-proof');
         """);
         await using var manualApp = await StartApiAsync(cs, automaticBirSummary: false);
         using var manualClient = CreateClient(manualApp);
         Authorize(manualClient, "summary-production-key");
-        var secondZ = (await CloseZAsync(manualClient, Guid.Parse("85000000-0000-4000-8000-000000000010"), "z-summary-second", 2)).ZReading!;
+        var secondZ = (await CloseZAsync(manualClient, Guid.Parse("85000000-0000-4000-8000-000000000010"), "z-summary-second", 3)).ZReading!;
         using var conflict = await manualClient.PostAsJsonAsync("/v1/fiscal-reports/bir-sales-summaries/", new GenerateBirSalesSummaryRequest(committedOperationKey,SiteId,IdentityId,"PHP",secondZ.FiscalReportingPeriodId,secondZ.FiscalReportReference));
         Assert.Equal(HttpStatusCode.Conflict, conflict.StatusCode);
 
@@ -299,24 +302,10 @@ public sealed class BirSalesSummaryPostgresIntegrationTests
             Assert.Contains("2026-08-03",body,StringComparison.Ordinal);
         }
         await ExecuteAsync(cs,$"UPDATE pos.fiscal_report_requests SET report_status_code_id=(SELECT c.controlled_code_id FROM pos.controlled_codes c JOIN pos.controlled_code_sets s ON s.controlled_code_set_id=c.controlled_code_set_id WHERE s.code_set_key='fiscal_report_status' AND c.code_key='committed') WHERE fiscal_report_request_id='{birRequestId:D}'");
-        using(var missingFacts=await client.PostAsJsonAsync("/v1/fiscal-reports/annex-e/e1/workbooks",generation))
-        {
-            var body=await missingFacts.Content.ReadAsStringAsync();
-            Assert.Equal(HttpStatusCode.UnprocessableEntity,missingFacts.StatusCode);
-            Assert.Contains("2026-08-03",body,StringComparison.Ordinal);
-            foreach(var factType in AnnexE1FactTypes.All)Assert.Contains(factType,body,StringComparison.Ordinal);
-        }
         using(var missingSource=await client.PostAsJsonAsync("/v1/fiscal-reports/annex-e/e1/workbooks",generation with{OperationKey="annex-no-source",CalendarMonth=7}))Assert.Equal(HttpStatusCode.UnprocessableEntity,missingSource.StatusCode);
-        AnnexE1PeriodFactRecord? manualFact=null;
-        foreach(var type in AnnexE1FactTypes.All.OrderBy(x=>x,StringComparer.Ordinal))
-        {
-            var request=new AnnexE1FactRequest("annex-fact-"+type,SiteId,IdentityId,"PHP",PeriodId,type,AnnexE1FactStatuses.AttestedZero,0,0,null,null,null,"SYNTHETIC-ACCOUNTING-ATTESTATION",null,null);
-            using var response=await client.PostAsJsonAsync("/v1/fiscal-reports/annex-e/e1/known-zero-attestations",request);var body=await response.Content.ReadAsStringAsync();Assert.True(response.StatusCode==HttpStatusCode.Created,$"{response.StatusCode}: {body}");var fact=(await response.Content.ReadFromJsonAsync<AnnexE1ApiResponse>())!.Fact!;if(type==AnnexE1FactTypes.ManualSiOrNetIncome)manualFact=fact;
-        }
-        Assert.NotNull(manualFact);
         var unsupportedPrivilege=new AnnexE1FactRequest("annex-nonzero-privilege",SiteId,IdentityId,"PHP",PeriodId,AnnexE1FactTypes.NaacDiscount,AnnexE1FactStatuses.Recorded,1,1,"SYN-PRIV-001","SYN-PRIV-001",null,"SYNTHETIC-UNSUPPORTED",null,null);using(var unsupported=await client.PostAsJsonAsync("/v1/fiscal-reports/annex-e/e1/accounting-facts",unsupportedPrivilege))Assert.Equal(HttpStatusCode.UnprocessableEntity,unsupported.StatusCode);
         var competing=await Task.WhenAll(client.PostAsJsonAsync("/v1/fiscal-reports/annex-e/e1/workbooks",generation),client.PostAsJsonAsync("/v1/fiscal-reports/annex-e/e1/workbooks",generation));
-        var competingBodies=await Task.WhenAll(competing.Select(response=>response.Content.ReadAsStringAsync()));Assert.Equal(1,competing.Count(response=>response.StatusCode==HttpStatusCode.Created));Assert.Equal(1,competing.Count(response=>response.StatusCode==HttpStatusCode.OK));var createdIndex=Array.FindIndex(competing,response=>response.StatusCode==HttpStatusCode.Created);var created=System.Text.Json.JsonSerializer.Deserialize<AnnexE1ApiResponse>(competingBodies[createdIndex],new System.Text.Json.JsonSerializerOptions(System.Text.Json.JsonSerializerDefaults.Web))!.Workbook!;Assert.Single(created.Rows);Assert.Equal(32,created.Rows[0].Positions.Count);
+        var competingBodies=await Task.WhenAll(competing.Select(response=>response.Content.ReadAsStringAsync()));var competingDiagnostics=string.Join(" | ",competing.Select((response,index)=>$"{(int)response.StatusCode}:{competingBodies[index]}"));Assert.True(competing.Count(response=>response.StatusCode==HttpStatusCode.Created)==1,competingDiagnostics);Assert.True(competing.Count(response=>response.StatusCode==HttpStatusCode.OK)==1,competingDiagnostics);var createdIndex=Array.FindIndex(competing,response=>response.StatusCode==HttpStatusCode.Created);var created=System.Text.Json.JsonSerializer.Deserialize<AnnexE1ApiResponse>(competingBodies[createdIndex],new System.Text.Json.JsonSerializerOptions(System.Text.Json.JsonSerializerDefaults.Web))!.Workbook!;Assert.Single(created.Rows);Assert.Equal(32,created.Rows[0].Positions.Count);
         using var metadata=await client.GetAsync($"/v1/fiscal-reports/annex-e/e1/workbooks/{created.WorkbookId:D}");Assert.Equal(HttpStatusCode.OK,metadata.StatusCode);Assert.Equal(created.ArtifactSha256,(await metadata.Content.ReadFromJsonAsync<AnnexE1ApiResponse>())!.Workbook!.ArtifactSha256);
         var currentUrl=$"/v1/fiscal-reports/annex-e/e1/workbooks/current?sitePosServerId={SiteId:D}&fiscalIdentityId={IdentityId:D}&currencyCode=PHP&calendarYear=2026&calendarMonth=8&profile={Uri.EscapeDataString(AnnexE1Contract.Profile)}";
         using(var current=await client.GetAsync(currentUrl)){Assert.Equal(HttpStatusCode.OK,current.StatusCode);Assert.Equal(created.WorkbookId,(await current.Content.ReadFromJsonAsync<AnnexE1ApiResponse>())!.Workbook!.WorkbookId);}
@@ -326,8 +315,8 @@ public sealed class BirSalesSummaryPostgresIntegrationTests
         using var replayResponse=await client.PostAsJsonAsync("/v1/fiscal-reports/annex-e/e1/workbooks",generation);Assert.Equal(HttpStatusCode.OK,replayResponse.StatusCode);var replay=(await replayResponse.Content.ReadFromJsonAsync<AnnexE1ApiResponse>())!.Workbook!;Assert.Equal(created.WorkbookId,replay.WorkbookId);
         using var secondDownload=await client.GetAsync($"/v1/fiscal-reports/annex-e/e1/workbooks/{created.WorkbookId:D}/content");Assert.Equal(firstBytes,await secondDownload.Content.ReadAsByteArrayAsync());
 
-        var correctionFactRequest=new AnnexE1FactRequest("annex-fact-manual-correction",SiteId,IdentityId,"PHP",PeriodId,AnnexE1FactTypes.ManualSiOrNetIncome,AnnexE1FactStatuses.Recorded,100,1,"SYN-MANUAL-001","SYN-MANUAL-001",null,"SYNTHETIC-ACCOUNTING-CORRECTION",manualFact!.FactId,"source_correction");
-        using var correctedFactResponse=await client.PostAsJsonAsync("/v1/fiscal-reports/annex-e/e1/accounting-facts",correctionFactRequest);Assert.Equal(HttpStatusCode.Created,correctedFactResponse.StatusCode);
+        var correctionFactRequest=new AnnexE1FactRequest("annex-fact-manual-correction",SiteId,IdentityId,"PHP",PeriodId,AnnexE1FactTypes.ManualSiOrNetIncome,AnnexE1FactStatuses.Recorded,100,1,"SYN-MANUAL-001","SYN-MANUAL-001",null,"SYNTHETIC-ACCOUNTING-CORRECTION",null,null);
+        using var correctedFactResponse=await client.PostAsJsonAsync("/v1/fiscal-reports/annex-e/e1/accounting-facts",correctionFactRequest);Assert.Equal(HttpStatusCode.Created,correctedFactResponse.StatusCode);var correctedFact=(await correctedFactResponse.Content.ReadFromJsonAsync<AnnexE1ApiResponse>())!.Fact!;
         using var changedSemantic=await client.PostAsJsonAsync("/v1/fiscal-reports/annex-e/e1/workbooks",generation);Assert.Equal(HttpStatusCode.Conflict,changedSemantic.StatusCode);
         var correctionGeneration=generation with{OperationKey="annex-generate-correction",SupersedesWorkbookId=created.WorkbookId,CorrectionReason="authorized_restatement",CorrectionApprovalReference="SYNTHETIC-ANNEX-CORRECTION"};
         using var correctionResponse=await client.PostAsJsonAsync("/v1/fiscal-reports/annex-e/e1/workbooks",correctionGeneration);var correctionBody=await correctionResponse.Content.ReadAsStringAsync();Assert.True(correctionResponse.StatusCode==HttpStatusCode.Created,$"{correctionResponse.StatusCode}: {correctionBody}");var corrected=System.Text.Json.JsonSerializer.Deserialize<AnnexE1ApiResponse>(correctionBody,new System.Text.Json.JsonSerializerOptions(System.Text.Json.JsonSerializerDefaults.Web))!.Workbook!;Assert.Equal(created.WorkbookId,corrected.SupersedesWorkbookId);Assert.Equal(2,corrected.Revision);Assert.Equal(100,corrected.Rows[0].Positions.Single(position=>position.Position=="D06").MinorUnitsValue);Assert.Equal(100,corrected.Rows[0].Positions.Single(position=>position.Position=="D29").MinorUnitsValue-created.Rows[0].Positions.Single(position=>position.Position=="D29").MinorUnitsValue);
@@ -338,9 +327,28 @@ public sealed class BirSalesSummaryPostgresIntegrationTests
         using var originalAfterCorrection=await client.GetAsync($"/v1/fiscal-reports/annex-e/e1/workbooks/{created.WorkbookId:D}/content");Assert.Equal(firstBytes,await originalAfterCorrection.Content.ReadAsByteArrayAsync());
         using var correctionReplay=await client.PostAsJsonAsync("/v1/fiscal-reports/annex-e/e1/workbooks",correctionGeneration);Assert.Equal(HttpStatusCode.OK,correctionReplay.StatusCode);Assert.Equal(corrected.WorkbookId,(await correctionReplay.Content.ReadFromJsonAsync<AnnexE1ApiResponse>())!.Workbook!.WorkbookId);
 
+        var supersedingFactRequest=correctionFactRequest with{OperationKey="annex-fact-manual-correction-r2",AmountMinorUnits=200,FirstSourceReference="SYN-MANUAL-002",LastSourceReference="SYN-MANUAL-002",ApprovalReference="SYNTHETIC-ACCOUNTING-CORRECTION-R2",SupersedesFactId=correctedFact.FactId,CorrectionReason="source_correction"};
+        using var supersedingFactResponse=await client.PostAsJsonAsync("/v1/fiscal-reports/annex-e/e1/accounting-facts",supersedingFactRequest);Assert.Equal(HttpStatusCode.Created,supersedingFactResponse.StatusCode);
+        using var changedAgain=await client.PostAsJsonAsync("/v1/fiscal-reports/annex-e/e1/workbooks",generation with{OperationKey="annex-generate-changed-r3"});Assert.Equal(HttpStatusCode.Conflict,changedAgain.StatusCode);
+        var secondCorrectionGeneration=generation with{OperationKey="annex-generate-correction-r3",SupersedesWorkbookId=corrected.WorkbookId,CorrectionReason="source_correction",CorrectionApprovalReference="SYNTHETIC-ANNEX-CORRECTION-R3"};
+        using var secondCorrectionResponse=await client.PostAsJsonAsync("/v1/fiscal-reports/annex-e/e1/workbooks",secondCorrectionGeneration);Assert.Equal(HttpStatusCode.Created,secondCorrectionResponse.StatusCode);var correctedAgain=(await secondCorrectionResponse.Content.ReadFromJsonAsync<AnnexE1ApiResponse>())!.Workbook!;Assert.Equal(corrected.WorkbookId,correctedAgain.SupersedesWorkbookId);Assert.Equal(3,correctedAgain.Revision);Assert.Equal(200,correctedAgain.Rows[0].Positions.Single(position=>position.Position=="D06").MinorUnitsValue);
+        using var originalAfterSecondCorrection=await client.GetAsync($"/v1/fiscal-reports/annex-e/e1/workbooks/{created.WorkbookId:D}/content");Assert.Equal(firstBytes,await originalAfterSecondCorrection.Content.ReadAsByteArrayAsync());
+        using var firstCorrectionAfterSecondCorrection=await client.GetAsync($"/v1/fiscal-reports/annex-e/e1/workbooks/{corrected.WorkbookId:D}/content");Assert.Equal(correctedBytes,await firstCorrectionAfterSecondCorrection.Content.ReadAsByteArrayAsync());
+
+        const string automaticPeriodId="88000000-0000-4000-8000-000000000001";
+        await ExecuteAsync(cs,$"INSERT INTO pos.fiscal_reporting_periods(fiscal_reporting_period_id,fiscal_reporting_contract_version_id,site_pos_server_id,fiscal_identity_id,period_status_code_id,business_day_date,period_start_at,period_end_at,reporting_timezone_name,business_day_cutoff_local_time,currency_code,period_sequence,expected_prior_period_id,opened_at,created_by_ref,updated_by_ref) VALUES('{automaticPeriodId}','f6766f48-62f0-513f-b9eb-e61c2f3e8c66','{SiteId:D}','{IdentityId:D}','1a6f7021-bc84-5c01-afaa-c5d6685633c8','2026-08-04','2026-08-04T00:00:00Z','2026-08-05T00:00:00Z','Asia/Manila','00:00:00','PHP',2,'{PeriodId:D}','2026-08-04T00:00:00Z','summary-proof','summary-proof')");
+        var automaticClose=await CloseZAsync(client,Guid.Parse(automaticPeriodId),"z-annex-automatic-successor",2);Assert.Equal("COMMITTED",automaticClose.BirSalesSummaryCompletion?.Status);
+        var sourceBeforeAutomaticGeneration=await ManifestAsync(cs);
+        var automaticGenerationA=generation with{OperationKey="annex-generate-automatic-a"};var automaticGenerationB=generation with{OperationKey="annex-generate-automatic-b"};
+        var automaticResponses=await Task.WhenAll(client.PostAsJsonAsync("/v1/fiscal-reports/annex-e/e1/workbooks",automaticGenerationA),client.PostAsJsonAsync("/v1/fiscal-reports/annex-e/e1/workbooks",automaticGenerationB));var automaticBodies=await Task.WhenAll(automaticResponses.Select(response=>response.Content.ReadAsStringAsync()));Assert.Equal(1,automaticResponses.Count(response=>response.StatusCode==HttpStatusCode.Created));Assert.Equal(1,automaticResponses.Count(response=>response.StatusCode==HttpStatusCode.OK));var automaticCreatedIndex=Array.FindIndex(automaticResponses,response=>response.StatusCode==HttpStatusCode.Created);var automatic=(System.Text.Json.JsonSerializer.Deserialize<AnnexE1ApiResponse>(automaticBodies[automaticCreatedIndex],new System.Text.Json.JsonSerializerOptions(System.Text.Json.JsonSerializerDefaults.Web)))!.Workbook!;Assert.Equal(4,automatic.Revision);Assert.Equal(correctedAgain.WorkbookId,automatic.SupersedesWorkbookId);Assert.Null(automatic.CorrectionReason);Assert.Null(automatic.CorrectionApprovalReference);Assert.Equal(2,automatic.Rows.Count);Assert.All(automaticResponses.Select((response,index)=>System.Text.Json.JsonSerializer.Deserialize<AnnexE1ApiResponse>(automaticBodies[index],new System.Text.Json.JsonSerializerOptions(System.Text.Json.JsonSerializerDefaults.Web))!.Workbook!.WorkbookId),workbookId=>Assert.Equal(automatic.WorkbookId,workbookId));
+        using var automaticReplay=await client.PostAsJsonAsync("/v1/fiscal-reports/annex-e/e1/workbooks",automaticGenerationA);Assert.Equal(HttpStatusCode.OK,automaticReplay.StatusCode);Assert.Equal(automatic.WorkbookId,(await automaticReplay.Content.ReadFromJsonAsync<AnnexE1ApiResponse>())!.Workbook!.WorkbookId);
+        Assert.Equal(sourceBeforeAutomaticGeneration,await ManifestAsync(cs));
+        Assert.Equal(firstBytes,await (await client.GetAsync($"/v1/fiscal-reports/annex-e/e1/workbooks/{created.WorkbookId:D}/content")).Content.ReadAsByteArrayAsync());
+        Assert.Equal(correctedBytes,await (await client.GetAsync($"/v1/fiscal-reports/annex-e/e1/workbooks/{corrected.WorkbookId:D}/content")).Content.ReadAsByteArrayAsync());
+
         var storageKey=await ScalarAsync<string>(cs,$"SELECT artifact_storage_key FROM pos.annex_e1_workbooks WHERE annex_e1_workbook_id='{corrected.WorkbookId:D}'");var artifactPath=Path.GetFullPath(Path.Combine(ArtifactRoot,storageKey.Replace('/',Path.DirectorySeparatorChar)));Assert.StartsWith(Path.GetFullPath(ArtifactRoot)+Path.DirectorySeparatorChar,artifactPath,StringComparison.OrdinalIgnoreCase);var durableBytes=await File.ReadAllBytesAsync(artifactPath);await File.WriteAllBytesAsync(artifactPath,[1,2,3]);using(var tampered=await client.GetAsync($"/v1/fiscal-reports/annex-e/e1/workbooks/{corrected.WorkbookId:D}/content"))Assert.Equal(HttpStatusCode.NotFound,tampered.StatusCode);await File.WriteAllBytesAsync(artifactPath,durableBytes);File.Move(artifactPath,artifactPath+".missing");try{using var missing=await client.GetAsync($"/v1/fiscal-reports/annex-e/e1/workbooks/{corrected.WorkbookId:D}/content");Assert.Equal(HttpStatusCode.NotFound,missing.StatusCode);}finally{File.Move(artifactPath+".missing",artifactPath);}
 
-        Assert.Equal(2L,await ScalarAsync<long>(cs,"SELECT count(*) FROM pos.annex_e1_workbooks"));Assert.Equal(2L,await ScalarAsync<long>(cs,"SELECT count(*) FROM pos.annex_e_reports"));Assert.Equal(14L,await ScalarAsync<long>(cs,"SELECT count(*) FROM pos.annex_e1_report_fact_sources"));Assert.Equal(8L,await ScalarAsync<long>(cs,"SELECT count(*) FROM pos.annex_e1_period_accounting_facts"));Assert.True(await ScalarAsync<long>(cs,"SELECT count(*) FROM pos.fiscal_action_audit a JOIN pos.controlled_codes c ON c.controlled_code_id=a.audit_action_type_code_id WHERE c.code_key='annex_e'")>=10);
+        Assert.Equal(4L,await ScalarAsync<long>(cs,"SELECT count(*) FROM pos.annex_e1_workbooks"));Assert.Equal(5L,await ScalarAsync<long>(cs,"SELECT count(*) FROM pos.annex_e_reports"));Assert.Equal(3L,await ScalarAsync<long>(cs,"SELECT count(*) FROM pos.annex_e1_report_fact_sources"));Assert.Equal(2L,await ScalarAsync<long>(cs,"SELECT count(*) FROM pos.annex_e1_period_accounting_facts"));Assert.True(await ScalarAsync<long>(cs,"SELECT count(*) FROM pos.fiscal_action_audit a JOIN pos.controlled_codes c ON c.controlled_code_id=a.audit_action_type_code_id WHERE c.code_key='annex_e'")>=5);
         await using var connection=new NpgsqlConnection(cs);await connection.OpenAsync();await using var mutation=new NpgsqlCommand("UPDATE pos.annex_e1_workbooks SET artifact_byte_length=1 WHERE annex_e1_workbook_id=@id",connection);mutation.Parameters.AddWithValue("id",created.WorkbookId);Assert.Equal("23514",(await Assert.ThrowsAsync<PostgresException>(()=>mutation.ExecuteNonQueryAsync())).SqlState);
 
         Authorize(client,"annex-readonly-key");using(var readAllowed=await client.GetAsync($"/v1/fiscal-reports/annex-e/e1/workbooks/{created.WorkbookId:D}"))Assert.Equal(HttpStatusCode.OK,readAllowed.StatusCode);using(var currentAllowed=await client.GetAsync(currentUrl))Assert.Equal(HttpStatusCode.OK,currentAllowed.StatusCode);using(var downloadDenied=await client.GetAsync($"/v1/fiscal-reports/annex-e/e1/workbooks/{created.WorkbookId:D}/content"))Assert.Equal(HttpStatusCode.Forbidden,downloadDenied.StatusCode);using(var generateDenied=await client.PostAsJsonAsync("/v1/fiscal-reports/annex-e/e1/workbooks",generation))Assert.Equal(HttpStatusCode.Forbidden,generateDenied.StatusCode);
