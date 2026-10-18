@@ -15,6 +15,8 @@ canonical constraints in one transaction. Historical EJ printable text is never 
 param(
     [ValidateSet('Inspect', 'Apply')]
     [string] $Mode = 'Inspect',
+    [ValidateSet('All', 'AnnexE1AutomaticSupersession')]
+    [string] $Scope = 'All',
     [string] $ContainerName = 'exitpass-pos-ist-persistent-db',
     [string] $DatabaseName = 'exitpass_pos_ist',
     [string] $DatabaseUser = 'exitpass_ist',
@@ -27,10 +29,12 @@ $repoRoot = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path
 $fiscalDocumentStatePath = Join-Path $repoRoot 'db\state\tables\pos.fiscal_documents.sql'
 $electronicJournalStatePath = Join-Path $repoRoot 'db\state\tables\pos.electronic_journal_records.sql'
 $reportingPeriodAssignmentStatePath = Join-Path $repoRoot 'db\state\tables\pos.fiscal_document_reporting_period_assignment.sql'
+$annexE1WorkbookStatePath = Join-Path $repoRoot 'db\state\tables\pos.annex_e1_workbooks.sql'
 $expectedInventoryPath = Join-Path $repoRoot 'db\validation\pos_expected_inventory.json'
 $fiscalDocumentState = [IO.File]::ReadAllText($fiscalDocumentStatePath)
 $electronicJournalState = [IO.File]::ReadAllText($electronicJournalStatePath)
 $reportingPeriodAssignmentState = [IO.File]::ReadAllText($reportingPeriodAssignmentStatePath)
+$annexE1WorkbookState = [IO.File]::ReadAllText($annexE1WorkbookStatePath)
 $expectedInventory = [IO.File]::ReadAllText($expectedInventoryPath) | ConvertFrom-Json
 $completionConstraints = @('ck_fiscal_documents__completion_basis', 'ck_fiscal_documents__completion_ancestry')
 $printableColumn = 'printable_sales_invoice_text'
@@ -40,6 +44,7 @@ $legacyEjSemanticHashVersion = 'pos-server-electronic-journal-event-semantic:sha
 $currentEjSemanticHashVersion = 'pos-server-electronic-journal-event-semantic:sha256:v2'
 $reportingFunction = 'pos.validate_fiscal_document_reporting_period_assignment'
 $reportingTrigger = 'trg_fiscal_documents_reporting_period_assignment'
+$annexE1CorrectionConstraint = 'ck_annex_e1_workbooks__correction'
 
 if ($DatabaseName -notmatch '(?i)(ist|validation|local|test|disposable)' -or
     $DatabaseName -match '(?i)(prod|production|live|shared|authority|central_pms)') {
@@ -159,6 +164,8 @@ $canonicalTriggerContract = [ordered]@{
 $canonicalTriggerContractJson = $canonicalTriggerContract | ConvertTo-Json -Compress
 $canonicalRequiredConstraintDefinition = Get-StateConstraintDefinition $electronicJournalState $canonicalRequiredConstraint
 $canonicalRequiredConstraintNormalized = Normalize-CheckConstraintDefinition $canonicalRequiredConstraintDefinition
+$annexE1CorrectionConstraintDefinition = Get-StateConstraintDefinition $annexE1WorkbookState $annexE1CorrectionConstraint
+$annexE1CorrectionConstraintNormalized = Normalize-CheckConstraintDefinition $annexE1CorrectionConstraintDefinition
 
 function Invoke-Psql([string] $Sql, [switch] $Scalar) {
     $arguments = "exec -i $ContainerName psql -X -v ON_ERROR_STOP=1 -U $DatabaseUser -d $DatabaseName"
@@ -373,7 +380,13 @@ SELECT json_build_object(
   'x_z_report_rows', (SELECT count(*) FROM pos.x_z_reports),
   'x_z_report_ids', (SELECT coalesce(json_agg(x_z_report_id ORDER BY x_z_report_id), '[]') FROM pos.x_z_reports),
   'bir_report_rows', (SELECT count(*) FROM pos.bir_sales_summary_reports),
-  'bir_report_ids', (SELECT coalesce(json_agg(bir_sales_summary_report_id ORDER BY bir_sales_summary_report_id), '[]') FROM pos.bir_sales_summary_reports)
+  'bir_report_ids', (SELECT coalesce(json_agg(bir_sales_summary_report_id ORDER BY bir_sales_summary_report_id), '[]') FROM pos.bir_sales_summary_reports),
+  'annex_e1_workbook_rows', (SELECT count(*) FROM pos.annex_e1_workbooks),
+  'annex_e1_workbook_ids', (SELECT coalesce(json_agg(annex_e1_workbook_id ORDER BY annex_e1_workbook_id), '[]') FROM pos.annex_e1_workbooks),
+  'annex_e1_workbook_state_hash', (SELECT md5(coalesce(string_agg(to_jsonb(w)::text, ',' ORDER BY annex_e1_workbook_id), '')) FROM pos.annex_e1_workbooks w),
+  'annex_e1_report_rows', (SELECT count(*) FROM pos.annex_e_reports),
+  'annex_e1_report_ids', (SELECT coalesce(json_agg(annex_e_report_id ORDER BY annex_e_report_id), '[]') FROM pos.annex_e_reports),
+  'annex_e1_report_state_hash', (SELECT md5(coalesce(string_agg(to_jsonb(r)::text, ',' ORDER BY annex_e_report_id), '')) FROM pos.annex_e_reports r)
 )::text;
 '@
     return (Invoke-Psql $sql -Scalar | ConvertFrom-Json)
@@ -414,6 +427,49 @@ SELECT json_build_object(
         unsupported_rows = [int64]$inventory.unsupported_rows
         unsupported_versions = @($inventory.unsupported_versions)
         apply_would_replace = $null -ne $inventory.definition -and $normalizedDefinition -cne $canonicalRequiredConstraintNormalized
+        apply_would_create = $null -eq $inventory.definition
+    }
+}
+
+function Get-AnnexE1CorrectionConstraintInventory {
+    $sql = @"
+SELECT json_build_object(
+  'definition', (
+    SELECT pg_get_constraintdef(c.oid, true)
+    FROM pg_constraint c
+    WHERE c.conrelid='pos.annex_e1_workbooks'::regclass
+      AND c.conname='$annexE1CorrectionConstraint'),
+  'root_rows', (SELECT count(*) FROM pos.annex_e1_workbooks
+    WHERE supersedes_workbook_id IS NULL AND correction_reason_code_id IS NULL AND correction_approval_reference IS NULL),
+  'automatic_successor_rows', (SELECT count(*) FROM pos.annex_e1_workbooks
+    WHERE supersedes_workbook_id IS NOT NULL AND correction_reason_code_id IS NULL AND correction_approval_reference IS NULL),
+  'explicit_correction_rows', (SELECT count(*) FROM pos.annex_e1_workbooks
+    WHERE supersedes_workbook_id IS NOT NULL AND correction_reason_code_id IS NOT NULL
+      AND char_length(btrim(correction_approval_reference)) > 0),
+  'invalid_rows', (SELECT count(*) FROM pos.annex_e1_workbooks
+    WHERE NOT (
+      (supersedes_workbook_id IS NULL AND correction_reason_code_id IS NULL AND correction_approval_reference IS NULL)
+      OR (supersedes_workbook_id IS NOT NULL AND correction_reason_code_id IS NULL AND correction_approval_reference IS NULL)
+      OR (supersedes_workbook_id IS NOT NULL AND correction_reason_code_id IS NOT NULL
+          AND char_length(btrim(correction_approval_reference)) > 0)))
+)::text;
+"@
+    $inventory = Invoke-Psql $sql -Scalar | ConvertFrom-Json
+    $normalizedDefinition = if ($null -eq $inventory.definition) { $null } else {
+        Normalize-CheckConstraintDefinition ([string]$inventory.definition)
+    }
+    return [pscustomobject]@{
+        constraint_present = $null -ne $inventory.definition
+        definition_aligned = $null -ne $normalizedDefinition -and $normalizedDefinition -ceq $annexE1CorrectionConstraintNormalized
+        definition = $inventory.definition
+        normalized_sha256 = if ($null -eq $normalizedDefinition) { $null } else { Get-Sha256 $normalizedDefinition }
+        canonical_definition = $annexE1CorrectionConstraintDefinition
+        canonical_normalized_sha256 = Get-Sha256 $annexE1CorrectionConstraintNormalized
+        root_rows = [int64]$inventory.root_rows
+        automatic_successor_rows = [int64]$inventory.automatic_successor_rows
+        explicit_correction_rows = [int64]$inventory.explicit_correction_rows
+        invalid_rows = [int64]$inventory.invalid_rows
+        apply_would_replace = $null -ne $inventory.definition -and $normalizedDefinition -cne $annexE1CorrectionConstraintNormalized
         apply_would_create = $null -eq $inventory.definition
     }
 }
@@ -467,7 +523,8 @@ WITH expected_columns(table_name,column_name,expected_type,expected_nullable) AS
   VALUES ('fiscal_documents','ck_fiscal_documents__completion_basis'),
          ('fiscal_documents','ck_fiscal_documents__completion_ancestry'),
          ('electronic_journal_records','ck_ej_records__printable_sales_invoice'),
-         ('electronic_journal_records','ck_ej_records__canonical_required')
+         ('electronic_journal_records','ck_ej_records__canonical_required'),
+         ('annex_e1_workbooks','ck_annex_e1_workbooks__correction')
 )
 SELECT json_build_object(
   'missing_columns', (SELECT coalesce(json_agg(e.table_name || '.' || e.column_name ORDER BY e.table_name,e.column_name), '[]') FROM expected_columns e LEFT JOIN actual_columns a USING(table_name,column_name) WHERE a.column_name IS NULL),
@@ -480,9 +537,13 @@ SELECT json_build_object(
 '@
     $result = Invoke-Psql $sql -Scalar | ConvertFrom-Json
     $canonicalRequired = Get-CanonicalRequiredConstraintInventory
+    $annexE1Correction = Get-AnnexE1CorrectionConstraintInventory
     $result | Add-Member -NotePropertyName mismatched_constraints -NotePropertyValue @(
         if ($canonicalRequired.constraint_present -and -not $canonicalRequired.definition_aligned) {
             'electronic_journal_records.ck_ej_records__canonical_required'
+        }
+        if ($annexE1Correction.constraint_present -and -not $annexE1Correction.definition_aligned) {
+            'annex_e1_workbooks.ck_annex_e1_workbooks__correction'
         }
     )
     $result.unexpected_drift = @(Get-DatabaseObjectInventoryDrift)
@@ -509,13 +570,15 @@ $before = [ordered]@{
     ancestry_inventory = @(Get-AncestryInventory)
     printable_facts = Get-PrintableFacts
     canonical_required_constraint = Get-CanonicalRequiredConstraintInventory
+    annex_e1_correction_constraint = Get-AnnexE1CorrectionConstraintInventory
     reporting_period_assignment = Get-ReportingPeriodContractInventory
 }
 $inspection = [ordered]@{
-    mode = $Mode; container = $ContainerName; database = $DatabaseName
+    mode = $Mode; scope = $Scope; container = $ContainerName; database = $DatabaseName
     canonical_fiscal_document_state_sha256 = (Get-FileHash $fiscalDocumentStatePath -Algorithm SHA256).Hash.ToLowerInvariant()
     canonical_electronic_journal_state_sha256 = (Get-FileHash $electronicJournalStatePath -Algorithm SHA256).Hash.ToLowerInvariant()
     canonical_reporting_period_assignment_state_sha256 = (Get-FileHash $reportingPeriodAssignmentStatePath -Algorithm SHA256).Hash.ToLowerInvariant()
+    canonical_annex_e1_workbook_state_sha256 = (Get-FileHash $annexE1WorkbookStatePath -Algorithm SHA256).Hash.ToLowerInvariant()
     expected_inventory_sha256 = (Get-FileHash $expectedInventoryPath -Algorithm SHA256).Hash.ToLowerInvariant()
     schema_drift_inventory = Get-SchemaDrift
     before = $before; result = 'INSPECTED'
@@ -537,32 +600,37 @@ if ($unexpectedDrift.Count -gt 0) {
     $inspection.result = 'BLOCKED_UNEXPECTED_DATABASE_INVENTORY_DRIFT'; Write-Evidence $inspection
     throw "BLOCKED_UNEXPECTED_DATABASE_INVENTORY_DRIFT: $($unexpectedDrift.Count) unrelated database object inventory finding(s) require separate review before Apply."
 }
-if ($unresolvedAncestry.Count -gt 0) {
+if ($Scope -eq 'All' -and $unresolvedAncestry.Count -gt 0) {
     $inspection.result = 'BLOCKED_NONDETERMINISTIC_COMPLETION_ANCESTRY_BACKFILL'; Write-Evidence $inspection
     throw "BLOCKED_NONDETERMINISTIC_COMPLETION_ANCESTRY_BACKFILL: $($unresolvedAncestry.Count) historical fiscal document row(s) lack independently corroborated immutable payment-finality ancestry."
 }
-if ($zeroPayableCandidates.Count -gt 0) {
+if ($Scope -eq 'All' -and $zeroPayableCandidates.Count -gt 0) {
     $inspection.result = 'BLOCKED_ZERO_PAYABLE_STATUTORY_ANCESTRY_REQUIRES_EXPLICIT_MAPPING'; Write-Evidence $inspection
     throw "BLOCKED_ZERO_PAYABLE_STATUTORY_ANCESTRY_REQUIRES_EXPLICIT_MAPPING: $($zeroPayableCandidates.Count) historical zero-payable candidate row(s) require a separately governed authoritative mapping."
 }
-if ($before.printable_facts.column_present -and [int64]$before.printable_facts.nonnull_rows -gt 0) {
+if ($Scope -eq 'All' -and $before.printable_facts.column_present -and [int64]$before.printable_facts.nonnull_rows -gt 0) {
     $inspection.result = 'BLOCKED_PREEXISTING_EJ_PRINTABLE_TEXT'; Write-Evidence $inspection
     throw 'BLOCKED_PREEXISTING_EJ_PRINTABLE_TEXT: existing printable text requires separate immutable-source review.'
 }
-if ([int64]$before.canonical_required_constraint.unsupported_rows -gt 0) {
+if ($Scope -eq 'All' -and [int64]$before.canonical_required_constraint.unsupported_rows -gt 0) {
     $inspection.result = 'BLOCKED_UNSUPPORTED_HISTORICAL_EJ_SEMANTIC_VERSION'; Write-Evidence $inspection
     throw "BLOCKED_UNSUPPORTED_HISTORICAL_EJ_SEMANTIC_VERSION: $($before.canonical_required_constraint.unsupported_rows) canonical historical EJ row(s) use unsupported semantic version(s)."
+}
+if ([int64]$before.annex_e1_correction_constraint.invalid_rows -gt 0) {
+    $inspection.result = 'BLOCKED_INVALID_ANNEX_E1_CORRECTION_LINEAGE'; Write-Evidence $inspection
+    throw "BLOCKED_INVALID_ANNEX_E1_CORRECTION_LINEAGE: $($before.annex_e1_correction_constraint.invalid_rows) workbook row(s) violate the canonical successor/correction lineage."
 }
 if (-not $PSCmdlet.ShouldProcess("$ContainerName/$DatabaseName", 'Additively reconcile canonical POS persistent IST state')) { return }
 
 $sql = [Text.StringBuilder]::new()
 [void]$sql.AppendLine('\set ON_ERROR_STOP on')
 [void]$sql.AppendLine('BEGIN;')
-$completionBasisDefinition = (Get-StateColumnDefinition $fiscalDocumentState 'completion_basis') -replace '(?i)\s+NOT\s+NULL', '' -replace "(?i)\s+DEFAULT\s+'[^']+'", ''
-[void]$sql.AppendLine("ALTER TABLE pos.fiscal_documents ADD COLUMN IF NOT EXISTS $completionBasisDefinition;")
-[void]$sql.AppendLine("ALTER TABLE pos.fiscal_documents ADD COLUMN IF NOT EXISTS $(Get-StateColumnDefinition $fiscalDocumentState 'completion_authority_ref');")
-[void]$sql.AppendLine("ALTER TABLE pos.electronic_journal_records ADD COLUMN IF NOT EXISTS $(Get-StateColumnDefinition $electronicJournalState $printableColumn);")
-[void]$sql.AppendLine(@'
+if ($Scope -eq 'All') {
+    $completionBasisDefinition = (Get-StateColumnDefinition $fiscalDocumentState 'completion_basis') -replace '(?i)\s+NOT\s+NULL', '' -replace "(?i)\s+DEFAULT\s+'[^']+'", ''
+    [void]$sql.AppendLine("ALTER TABLE pos.fiscal_documents ADD COLUMN IF NOT EXISTS $completionBasisDefinition;")
+    [void]$sql.AppendLine("ALTER TABLE pos.fiscal_documents ADD COLUMN IF NOT EXISTS $(Get-StateColumnDefinition $fiscalDocumentState 'completion_authority_ref');")
+    [void]$sql.AppendLine("ALTER TABLE pos.electronic_journal_records ADD COLUMN IF NOT EXISTS $(Get-StateColumnDefinition $electronicJournalState $printableColumn);")
+    [void]$sql.AppendLine(@'
 DO $reconcile$
 BEGIN
   IF EXISTS (SELECT 1 FROM pos.fiscal_documents
@@ -596,26 +664,33 @@ $reconcile$;
 
 ALTER TABLE pos.fiscal_documents ALTER COLUMN completion_basis SET NOT NULL;
 '@)
-foreach ($constraint in $completionConstraints) {
-    if (-not (Test-ConstraintExists 'fiscal_documents' $constraint)) {
-        [void]$sql.AppendLine("ALTER TABLE pos.fiscal_documents ADD CONSTRAINT $(Quote-Identifier $constraint) $(Get-StateConstraintDefinition $fiscalDocumentState $constraint);")
+    foreach ($constraint in $completionConstraints) {
+        if (-not (Test-ConstraintExists 'fiscal_documents' $constraint)) {
+            [void]$sql.AppendLine("ALTER TABLE pos.fiscal_documents ADD CONSTRAINT $(Quote-Identifier $constraint) $(Get-StateConstraintDefinition $fiscalDocumentState $constraint);")
+        }
+    }
+    if (-not (Test-ConstraintExists 'electronic_journal_records' $printableConstraint)) {
+        [void]$sql.AppendLine("ALTER TABLE pos.electronic_journal_records ADD CONSTRAINT $(Quote-Identifier $printableConstraint) $(Get-StateConstraintDefinition $electronicJournalState $printableConstraint);")
+    }
+    if ($before.canonical_required_constraint.apply_would_replace) {
+        [void]$sql.AppendLine("ALTER TABLE pos.electronic_journal_records DROP CONSTRAINT $(Quote-Identifier $canonicalRequiredConstraint);")
+    }
+    if ($before.canonical_required_constraint.apply_would_replace -or $before.canonical_required_constraint.apply_would_create) {
+        [void]$sql.AppendLine("ALTER TABLE pos.electronic_journal_records ADD CONSTRAINT $(Quote-Identifier $canonicalRequiredConstraint) $canonicalRequiredConstraintDefinition;")
+    }
+    if ($before.reporting_period_assignment.apply_would_replace_function) {
+        [void]$sql.AppendLine($canonicalFunctionDefinition)
+        [void]$sql.AppendLine($canonicalFunctionComment.statement)
+    }
+    if ($before.reporting_period_assignment.apply_would_replace_trigger) {
+        [void]$sql.AppendLine($canonicalTriggerDefinition)
     }
 }
-if (-not (Test-ConstraintExists 'electronic_journal_records' $printableConstraint)) {
-    [void]$sql.AppendLine("ALTER TABLE pos.electronic_journal_records ADD CONSTRAINT $(Quote-Identifier $printableConstraint) $(Get-StateConstraintDefinition $electronicJournalState $printableConstraint);")
+if ($before.annex_e1_correction_constraint.apply_would_replace) {
+    [void]$sql.AppendLine("ALTER TABLE pos.annex_e1_workbooks DROP CONSTRAINT $(Quote-Identifier $annexE1CorrectionConstraint);")
 }
-if ($before.canonical_required_constraint.apply_would_replace) {
-    [void]$sql.AppendLine("ALTER TABLE pos.electronic_journal_records DROP CONSTRAINT $(Quote-Identifier $canonicalRequiredConstraint);")
-}
-if ($before.canonical_required_constraint.apply_would_replace -or $before.canonical_required_constraint.apply_would_create) {
-    [void]$sql.AppendLine("ALTER TABLE pos.electronic_journal_records ADD CONSTRAINT $(Quote-Identifier $canonicalRequiredConstraint) $canonicalRequiredConstraintDefinition;")
-}
-if ($before.reporting_period_assignment.apply_would_replace_function) {
-    [void]$sql.AppendLine($canonicalFunctionDefinition)
-    [void]$sql.AppendLine($canonicalFunctionComment.statement)
-}
-if ($before.reporting_period_assignment.apply_would_replace_trigger) {
-    [void]$sql.AppendLine($canonicalTriggerDefinition)
+if ($before.annex_e1_correction_constraint.apply_would_replace -or $before.annex_e1_correction_constraint.apply_would_create) {
+    [void]$sql.AppendLine("ALTER TABLE pos.annex_e1_workbooks ADD CONSTRAINT $(Quote-Identifier $annexE1CorrectionConstraint) $annexE1CorrectionConstraintDefinition;")
 }
 [void]$sql.AppendLine('COMMIT;')
 [void](Invoke-Psql $sql.ToString())
@@ -626,25 +701,32 @@ $after = [ordered]@{
     ancestry_inventory = @(Get-AncestryInventory)
     printable_facts = Get-PrintableFacts
     canonical_required_constraint = Get-CanonicalRequiredConstraintInventory
+    annex_e1_correction_constraint = Get-AnnexE1CorrectionConstraintInventory
     reporting_period_assignment = Get-ReportingPeriodContractInventory
 }
 if (($before.protected_manifest | ConvertTo-Json -Depth 20 -Compress) -cne ($after.protected_manifest | ConvertTo-Json -Depth 20 -Compress) -or
     ($before.table_row_counts | ConvertTo-Json -Depth 5 -Compress) -cne ($after.table_row_counts | ConvertTo-Json -Depth 5 -Compress)) {
     throw 'State reconciliation changed protected row counts, identities, sequences, periods, snapshots, or EJ history.'
 }
-if ([int64]$after.printable_facts.nonnull_rows -ne 0) { throw 'State reconciliation populated historical Electronic Journal printable text.' }
-if (-not $after.canonical_required_constraint.definition_aligned -or
-    [int64]$after.canonical_required_constraint.unsupported_rows -ne 0) {
-    throw 'Persistent database canonical-required constraint does not accept exactly the supported EJ V1/V2 semantic profiles.'
+if ($Scope -eq 'All') {
+    if ([int64]$after.printable_facts.nonnull_rows -ne 0) { throw 'State reconciliation populated historical Electronic Journal printable text.' }
+    if (-not $after.canonical_required_constraint.definition_aligned -or
+        [int64]$after.canonical_required_constraint.unsupported_rows -ne 0) {
+        throw 'Persistent database canonical-required constraint does not accept exactly the supported EJ V1/V2 semantic profiles.'
+    }
+    if (-not $after.reporting_period_assignment.function_definition_aligned -or
+        -not $after.reporting_period_assignment.trigger_definition_aligned) {
+        throw 'Persistent database reporting-period assignment function or trigger does not match canonical state after reconciliation.'
+    }
+    if ($null -ne $before.reporting_period_assignment.live_function -and
+        ($before.reporting_period_assignment.live_function.owner -cne $after.reporting_period_assignment.live_function.owner -or
+         [bool]$before.reporting_period_assignment.live_function.security_definer -ne [bool]$after.reporting_period_assignment.live_function.security_definer)) {
+        throw 'Reporting-period function reconciliation changed owner or security-definer posture.'
+    }
 }
-if (-not $after.reporting_period_assignment.function_definition_aligned -or
-    -not $after.reporting_period_assignment.trigger_definition_aligned) {
-    throw 'Persistent database reporting-period assignment function or trigger does not match canonical state after reconciliation.'
-}
-if ($null -ne $before.reporting_period_assignment.live_function -and
-    ($before.reporting_period_assignment.live_function.owner -cne $after.reporting_period_assignment.live_function.owner -or
-     [bool]$before.reporting_period_assignment.live_function.security_definer -ne [bool]$after.reporting_period_assignment.live_function.security_definer)) {
-    throw 'Reporting-period function reconciliation changed owner or security-definer posture.'
+if (-not $after.annex_e1_correction_constraint.definition_aligned -or
+    [int64]$after.annex_e1_correction_constraint.invalid_rows -ne 0) {
+    throw 'Persistent database Annex E-1 correction constraint does not match the canonical automatic-successor contract.'
 }
 $afterDrift = Get-SchemaDrift
 if (@($afterDrift.missing_columns).Count -ne 0 -or @($afterDrift.mismatched_types).Count -ne 0 -or

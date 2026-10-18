@@ -94,8 +94,9 @@ public sealed class AnnexE1CalculationEngine
             throw new AnnexE1SafeException(AnnexE1Outcome.UnsupportedPrivilege, "A nonzero unresolved Annex E-1 privilege or VAT-adjustment source is not authorized.");
         if (input.FiscalGapCount != 0)
             throw new AnnexE1SafeException(AnnexE1Outcome.UnsupportedClassification, "Annex E-1 generation requires a gap-free representable fiscal range.");
-        if (input.FactIds.Count != 7 || input.FactSemanticHashes.Count != 7 || input.FactSemanticHashes.Any(hash => hash.Length != 64))
-            throw new AnnexE1SafeException(AnnexE1Outcome.MissingAccountingFact, "Every required Annex E-1 accounting fact or known-zero attestation must be authoritative.");
+        if (input.FactIds.Count > AnnexE1FactTypes.Ordered.Count || input.FactIds.Distinct().Count() != input.FactIds.Count ||
+            input.FactSemanticHashes.Count != AnnexE1FactTypes.Ordered.Count || input.FactSemanticHashes.Any(hash => hash.Length != 64))
+            throw new AnnexE1SafeException(AnnexE1Outcome.MissingAccountingFact, "Every Annex E-1 operand must have authoritative fiscal-source evidence.");
     }
 
     private static AnnexE1PositionValue Money(string position, string name, long value) => new(position, name, null, value, null);

@@ -24,7 +24,7 @@ public sealed class AnnexE1RuntimeTests
     public void MissingFactsNonzeroPrivilegeExceptionalSourcesAndOverflowFailClosed()
     {
         var engine=new AnnexE1CalculationEngine();
-        Assert.Equal(AnnexE1Outcome.MissingAccountingFact,Assert.Throws<AnnexE1SafeException>(()=>engine.Calculate(Input() with{FactIds=[]})).Outcome);
+        Assert.Equal(AnnexE1Outcome.MissingAccountingFact,Assert.Throws<AnnexE1SafeException>(()=>engine.Calculate(Input() with{FactIds=[],FactSemanticHashes=[]})).Outcome);
         Assert.Equal(AnnexE1Outcome.UnsupportedPrivilege,Assert.Throws<AnnexE1SafeException>(()=>engine.Calculate(Input() with{NaacDiscount=1})).Outcome);
         Assert.Equal(AnnexE1Outcome.UnsupportedClassification,Assert.Throws<AnnexE1SafeException>(()=>engine.Calculate(Input() with{RefundAmount=1})).Outcome);
         Assert.Equal(AnnexE1Outcome.ArithmeticOverflow,Assert.Throws<AnnexE1SafeException>(()=>engine.Calculate(Input() with{ActiveGross=long.MaxValue,VoidAmount=1})).Outcome);
@@ -105,6 +105,71 @@ public sealed class AnnexE1RuntimeTests
         Assert.Equal(first,second);Assert.Matches("^[0-9a-f]{64}$",first);
     }
 
+    [Fact]
+    public void AuthoritativeCommittedSourcesDeriveAllSevenZerosWithoutAttestations()
+    {
+        var values=new AnnexE1AuthoritativeSourceDeriver().Derive(AutomaticSource(),new Dictionary<string,AnnexE1PeriodFactRecord>());
+
+        Assert.Equal(0,values.ManualNetIncome);Assert.Equal(0,values.OverflowNetIncome);
+        Assert.Equal(0,values.NaacDiscount);Assert.Equal(0,values.SoloParentDiscount);
+        Assert.Equal(0,values.OtherVatAdjustment);Assert.Equal(0,values.VatOnReturns);
+        Assert.Equal(0,values.ResidualVatAdjustment);Assert.Empty(values.FactIds);
+        Assert.Equal(7,values.EvidenceSemanticHashes.Count);Assert.All(values.EvidenceSemanticHashes,hash=>Assert.Matches("^[0-9a-f]{64}$",hash));
+    }
+
+    [Fact]
+    public void RecordedManualAndOverflowFactsRemainAuthoritativeWhileZeroAttestationsAreOptional()
+    {
+        var manual=PeriodFact(AnnexE1FactTypes.ManualSiOrNetIncome,250);
+        var overflow=PeriodFact(AnnexE1FactTypes.SalesOverrunOverflowNetIncome,75);
+        var values=new AnnexE1AuthoritativeSourceDeriver().Derive(AutomaticSource(),new Dictionary<string,AnnexE1PeriodFactRecord>
+        {
+            [manual.FactType]=manual,[overflow.FactType]=overflow
+        });
+
+        Assert.Equal(250,values.ManualNetIncome);Assert.Equal(75,values.OverflowNetIncome);
+        Assert.Equal([manual.FactId,overflow.FactId],values.FactIds);
+    }
+
+    [Theory]
+    [InlineData("other_statutory")]
+    [InlineData("return")]
+    [InlineData("adjustment")]
+    [InlineData("vat_breakdown")]
+    [InlineData("gta")]
+    public void IncompleteOrInconsistentAutomaticSourcesFailDeterministically(string defect)
+    {
+        var source=defect switch
+        {
+            "other_statutory"=>AutomaticSource() with{OtherStatutoryDiscount=1},
+            "return"=>AutomaticSource() with{ReturnAmount=1},
+            "adjustment"=>AutomaticSource() with{AdjustmentAmount=1},
+            "vat_breakdown"=>AutomaticSource() with{VatExemptionAmount=1},
+            _=>AutomaticSource() with{ResultingGta=10_999}
+        };
+
+        Assert.Equal(AnnexE1Outcome.MissingAuthoritativeSource,
+            Assert.Throws<AnnexE1SafeException>(()=>new AnnexE1AuthoritativeSourceDeriver().Derive(source,new Dictionary<string,AnnexE1PeriodFactRecord>())).Outcome);
+    }
+
+    [Fact]
+    public void RevisionPlannerReplaysUnchangedContentAndOnlyAutoSupersedesNewlyClosedPeriods()
+    {
+        var firstRow=new AnnexE1CalculationEngine().Calculate(Input());
+        var current=Workbook() with{SemanticHash=new string('c',64),Rows=[firstRow]};
+        Assert.Equal(AnnexE1RevisionDecision.Replay,AnnexE1RevisionPlanner.Decide(current,new string('c',64),[firstRow]));
+        Assert.Equal(AnnexE1RevisionDecision.Replay,AnnexE1RevisionPlanner.Decide(current,new string('e',64),[firstRow]));
+
+        var nextRow=new AnnexE1CalculationEngine().Calculate(Input() with
+        {
+            FiscalReportingPeriodId=Guid.NewGuid(),PeriodSequence=2,GoverningZReportId=Guid.NewGuid(),
+            BirSalesSummaryReportId=Guid.NewGuid(),BusinessDayDate=new(2026,8,2)
+        });
+        Assert.Equal(AnnexE1RevisionDecision.AutomaticSuccessor,AnnexE1RevisionPlanner.Decide(current,new string('e',64),[firstRow,nextRow]));
+        var changedRow=new AnnexE1CalculationEngine().Calculate(Input() with{ManualNetIncome=1});
+        Assert.Equal(AnnexE1RevisionDecision.ExplicitCorrectionRequired,AnnexE1RevisionPlanner.Decide(current,new string('e',64),[changedRow]));
+    }
+
     private static AnnexE1RowInputs Input()=>new(
         FiscalReportingPeriodId:Guid.NewGuid(),PeriodSequence:1,GoverningZReportId:Guid.NewGuid(),GoverningZReference:"Z-1",
         BirSalesSummaryReportId:Guid.NewGuid(),BirSalesSummarySemanticHash:new string('a',64),BusinessDayDate:new(2026,8,1),
@@ -127,6 +192,8 @@ public sealed class AnnexE1RuntimeTests
         DateTimeOffset.Parse("2026-09-01T00:00:00Z"),"correlation");
     private static AnnexE1RowInputs ZeroInput()=>Input() with{TransactionCount=0,ActiveGross=0,ReturnAmount=0,VoidAmount=0,VatableSales=0,VatAmount=0,VatExemptSales=0,ZeroRatedSales=0,SeniorCitizenDiscount=0,PwdDiscount=0,NaacDiscount=0,SoloParentDiscount=0,OtherStatutoryDiscount=0,CouponDiscount=0,PromotionalDiscount=0,SeniorCitizenVatAdjustment=0,PwdVatAdjustment=0,OtherVatAdjustment=0,VatOnReturns=0,ResidualVatAdjustment=0,ManualNetIncome=0,OverflowNetIncome=0,PreviousGta=0,ResultingGta=0,FiscalRangeCount=0,FiscalGapCount=0,BeginningFiscalNumber=null,EndingFiscalNumber=null};
     private static AnnexE1PeriodFactCommand Fact()=>new("fact",Guid.NewGuid(),Guid.NewGuid(),"PHP",Guid.NewGuid(),AnnexE1FactTypes.ManualSiOrNetIncome,AnnexE1FactStatuses.Recorded,100,1,"MANUAL-1","MANUAL-1",null,"approval",null,null,"actor","service","correlation");
+    private static AnnexE1AutomaticSourceEvidence AutomaticSource()=>new(Guid.NewGuid(),Guid.NewGuid(),new string('a',64),1_000,11_000,12_000,10_000,0,500,300,200,0,0,0,0);
+    private static AnnexE1PeriodFactRecord PeriodFact(string type,long amount)=>new(Guid.NewGuid(),"fact",Guid.NewGuid(),Guid.NewGuid(),"PHP",Guid.NewGuid(),new(2026,8,1),type,AnnexE1FactStatuses.Recorded,amount,1,"SRC-1","SRC-1",type==AnnexE1FactTypes.SalesOverrunOverflowNetIncome?"EVENT-1":null,"approval",new string('b',64),null,null,DateTimeOffset.UtcNow,DateTimeOffset.UtcNow,"actor","service","correlation");
     private static AnnexE1GenerationCommand Generation()=>new("generate",Guid.NewGuid(),Guid.NewGuid(),"PHP",2026,8,AnnexE1Contract.Profile,null,null,null,"actor","service","correlation");
     private static string Read(ZipArchive archive,string name){using var reader=new StreamReader(archive.GetEntry(name)!.Open(),Encoding.UTF8);return reader.ReadToEnd();}
     private static int Count(string value,string token){var count=0;var offset=0;while((offset=value.IndexOf(token,offset,StringComparison.Ordinal))>=0){count++;offset+=token.Length;}return count;}

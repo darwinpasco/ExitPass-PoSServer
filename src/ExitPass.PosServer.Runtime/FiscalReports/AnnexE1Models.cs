@@ -27,11 +27,13 @@ public static class AnnexE1FactTypes
     public const string VatOnReturns = "vat_on_returns";
     public const string ResidualVatAdjustment = "residual_vat_adjustment";
 
-    public static readonly IReadOnlySet<string> All = new HashSet<string>(StringComparer.Ordinal)
-    {
+    public static readonly IReadOnlyList<string> Ordered =
+    [
         ManualSiOrNetIncome, SalesOverrunOverflowNetIncome, NaacDiscount, SoloParentDiscount,
         OtherVatAdjustment, VatOnReturns, ResidualVatAdjustment
-    };
+    ];
+
+    public static readonly IReadOnlySet<string> All = new HashSet<string>(Ordered, StringComparer.Ordinal);
 }
 
 public static class AnnexE1FactStatuses
@@ -166,6 +168,34 @@ public sealed record AnnexE1RowInputs(
     long FiscalGapCount,
     IReadOnlyList<Guid> FactIds,
     IReadOnlyList<string> FactSemanticHashes);
+
+public sealed record AnnexE1AutomaticSourceEvidence(
+    Guid GoverningZReportId,
+    Guid BirSalesSummaryReportId,
+    string BirSalesSummarySemanticHash,
+    long PreviousGta,
+    long ResultingGta,
+    long GrossSales,
+    long NetSales,
+    long OtherStatutoryDiscount,
+    long VatExemptionAmount,
+    long SeniorCitizenVatAdjustment,
+    long PwdVatAdjustment,
+    long ReturnAmount,
+    long RefundAmount,
+    long AdjustmentAmount,
+    long ServiceChargeAmount);
+
+public sealed record AnnexE1DerivedAccountingValues(
+    long ManualNetIncome,
+    long OverflowNetIncome,
+    long NaacDiscount,
+    long SoloParentDiscount,
+    long OtherVatAdjustment,
+    long VatOnReturns,
+    long ResidualVatAdjustment,
+    IReadOnlyList<Guid> FactIds,
+    IReadOnlyList<string> EvidenceSemanticHashes);
 
 public sealed record AnnexE1Row(
     AnnexE1RowInputs Source,
