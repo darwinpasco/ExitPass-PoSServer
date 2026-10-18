@@ -132,7 +132,7 @@ public sealed class FiscalXReadingRuntimeTests
     }
 
     [Fact]
-    public void SeniorCitizenAndPwdRemainSeparateFromVatExemption()
+    public void PreviouslyCommittedStatutoryVatPrivilegesRemainVisibleAsHistoricalAdjustments()
     {
         var senior = Document("recorded", 1) with
         {
@@ -157,6 +157,27 @@ public sealed class FiscalXReadingRuntimeTests
         Assert.Contains(aggregate.Discounts, item => item.Classification == "senior_citizen_statutory");
         Assert.Contains(aggregate.Discounts, item => item.Classification == "pwd_statutory");
         Assert.Contains(aggregate.Discounts, item => item.Classification == "vat_exemption_adjustment");
+    }
+
+    [Fact]
+    public void DiscountedParkingRemainsVatableWithoutVatExemptionAdjustment()
+    {
+        var document = Document("issued", 1) with
+        {
+            Lines = [new("parking_fee", 8_929, 1_786, 857, 8_000, "PHP")],
+            Tenders = [new("digital_wallet", 8_000, "PHP")],
+            Taxes = [new("vatable", false, 7_143, 857, "PHP")],
+            Discounts = [new("statutory_peer", 1_786, 0, "PHP")],
+            Statutory = new("PWD", 1_786, 857, 8_000, "PHP")
+        };
+
+        var aggregate = new FiscalXReadingAggregationService().Aggregate([document], [], "PHP");
+
+        Assert.Equal(7_143, aggregate.Amounts.VatableSalesAmountMinorUnits);
+        Assert.Equal(857, aggregate.Amounts.VatAmountMinorUnits);
+        Assert.Equal(1_786, aggregate.Amounts.PwdDiscountAmountMinorUnits);
+        Assert.Equal(0, aggregate.Amounts.VatExemptionAmountMinorUnits);
+        Assert.DoesNotContain(aggregate.Discounts, item => item.Classification == "vat_exemption_adjustment");
     }
 
     [Fact]
@@ -187,9 +208,9 @@ public sealed class FiscalXReadingRuntimeTests
             CompletionBasis = FiscalCompletionBasisCodes.ZeroPayableStatutoryFinality,
             Lines = [new("parking_fee", 2_679, 2_679, 0, 0, "PHP")],
             Tenders = [],
-            Taxes = [new("vatable", false, 2_679, 321, "PHP")],
-            Discounts = [new("statutory_peer", 2_679, 321, "PHP")],
-            Statutory = new("SENIOR_CITIZEN", 2_679, 321, 0, "PHP")
+            Taxes = [new("vatable", false, 0, 0, "PHP")],
+            Discounts = [new("statutory_peer", 2_679, 0, "PHP")],
+            Statutory = new("SENIOR_CITIZEN", 2_679, 0, 0, "PHP")
         };
 
         var aggregate = new FiscalXReadingAggregationService().Aggregate([document], [], "PHP");
@@ -198,7 +219,8 @@ public sealed class FiscalXReadingRuntimeTests
         Assert.Equal(2_679, aggregate.Amounts.GrossSalesAmountMinorUnits);
         Assert.Equal(0, aggregate.Amounts.NetSalesAmountMinorUnits);
         Assert.Equal(2_679, aggregate.Amounts.SeniorCitizenDiscountAmountMinorUnits);
-        Assert.Equal(321, aggregate.Amounts.VatExemptionAmountMinorUnits);
+        Assert.Equal(0, aggregate.Amounts.VatAmountMinorUnits);
+        Assert.Equal(0, aggregate.Amounts.VatExemptionAmountMinorUnits);
         Assert.Empty(aggregate.Tenders);
     }
 

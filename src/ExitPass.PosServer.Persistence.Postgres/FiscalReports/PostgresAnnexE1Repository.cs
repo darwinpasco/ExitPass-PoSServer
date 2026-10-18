@@ -252,6 +252,7 @@ public sealed class PostgresAnnexE1Repository(
         var derived = sourceDeriver.Derive(new(
             s.ZId, s.BirId, s.BirSemanticHash, s.PreviousGta, s.ResultingGta, s.GrossSales, s.NetSales,
             s.OtherStatutoryDiscount, s.VatExemptionAmount, s.ScVatAdjustment, s.PwdVatAdjustment,
+            s.ParkingVatExemptionAmount,
             s.ReturnAmount, s.RefundAmount, s.AdjustmentAmount, s.ServiceChargeAmount), facts);
         return new(s.PeriodId,s.PeriodSequence,s.ZId,s.ZReference,s.BirId,s.BirSemanticHash,s.BusinessDate,s.BeginningNumber,s.EndingNumber,
             s.PreviousGta,s.ResultingGta,derived.ManualNetIncome,s.GrossSales,s.ReturnAmount,s.VoidAmount,
@@ -293,6 +294,13 @@ public sealed class PostgresAnnexE1Repository(
           COALESCE((SELECT sum(fr.gap_count) FROM pos.fiscal_report_fiscal_number_ranges fr WHERE fr.x_z_report_id=z.x_z_report_id),0),
           COALESCE((SELECT d.vat_exemption_amount_minor_units FROM pos.fiscal_report_discount_breakdowns d JOIN pos.controlled_codes dc ON dc.controlled_code_id=d.discount_classification_code_id WHERE d.x_z_report_id=z.x_z_report_id AND dc.code_key='senior_citizen_statutory'),0),
           COALESCE((SELECT d.vat_exemption_amount_minor_units FROM pos.fiscal_report_discount_breakdowns d JOIN pos.controlled_codes dc ON dc.controlled_code_id=d.discount_classification_code_id WHERE d.x_z_report_id=z.x_z_report_id AND dc.code_key='pwd_statutory'),0),
+          COALESCE((SELECT sum(dp.vat_privilege_amount_minor_units)
+            FROM pos.fiscal_documents fd
+            JOIN pos.controlled_codes fds ON fds.controlled_code_id=fd.fiscal_document_status_code_id
+            JOIN pos.fiscal_document_applied_statutory_facts sf ON sf.fiscal_document_id=fd.fiscal_document_id
+            JOIN pos.fiscal_discount_privilege_details dp ON dp.fiscal_document_id=fd.fiscal_document_id
+            WHERE fd.fiscal_reporting_period_id=p.fiscal_reporting_period_id
+              AND fd.is_active AND fds.code_key IN ('recorded','issued')),0),
           b.net_sales_amount_minor_units,
           fi.fiscal_identity_code,COALESCE(fi.registered_business_name,fi.taxpayer_display_name),fi.registered_business_address,fi.tin,
           b.pos_serial_number,b.machine_identification_number,s.site_pos_server_code,breqs.code_key
@@ -316,9 +324,9 @@ public sealed class PostgresAnnexE1Repository(
             var businessDate=r.GetFieldValue<DateOnly>(2);
             var zCommitted=!r.IsDBNull(4)&&!r.IsDBNull(5)&&string.Equals(r.GetString(3),"closed",StringComparison.Ordinal)&&string.Equals(r.GetString(7),"committed",StringComparison.Ordinal);
             if(!zCommitted){missingCommittedZ.Add(businessDate);continue;}
-            var birCommitted=!r.IsDBNull(8)&&!r.IsDBNull(45)&&string.Equals(r.GetString(45),"committed",StringComparison.Ordinal);
+            var birCommitted=!r.IsDBNull(8)&&!r.IsDBNull(46)&&string.Equals(r.GetString(46),"committed",StringComparison.Ordinal);
             if(!birCommitted){missingCommittedBir.Add(businessDate);continue;}
-            result.Add(new(r.GetGuid(0),r.GetInt64(1),r.GetFieldValue<DateOnly>(2),r.GetGuid(5),r.GetString(6),r.GetGuid(8),r.GetString(9),r.IsDBNull(10)?null:r.GetString(10),r.IsDBNull(11)?null:r.GetString(11),r.GetInt64(12),r.GetInt64(13),r.GetInt64(14),r.GetInt64(37),r.GetInt64(15),r.GetInt64(16),r.GetInt64(17),r.GetInt64(18),r.GetInt64(19),r.GetInt64(20),r.GetInt64(21),r.GetInt64(22),r.GetInt64(23),r.GetInt64(24),r.GetInt64(25),r.GetInt64(26),r.GetInt64(27),r.GetInt64(28),r.GetInt64(29),r.GetInt64(30),r.GetInt64(31),r.GetInt64(32),r.GetInt64(33),r.GetInt64(34),r.GetInt64(35),r.GetInt64(36),r.GetString(38),r.IsDBNull(39)?"":r.GetString(39),r.IsDBNull(40)?"":r.GetString(40),r.IsDBNull(41)?"":r.GetString(41),r.GetString(42),r.GetString(43),r.GetString(44)));
+            result.Add(new(r.GetGuid(0),r.GetInt64(1),r.GetFieldValue<DateOnly>(2),r.GetGuid(5),r.GetString(6),r.GetGuid(8),r.GetString(9),r.IsDBNull(10)?null:r.GetString(10),r.IsDBNull(11)?null:r.GetString(11),r.GetInt64(12),r.GetInt64(13),r.GetInt64(14),r.GetInt64(38),r.GetInt64(15),r.GetInt64(16),r.GetInt64(17),r.GetInt64(18),r.GetInt64(19),r.GetInt64(20),r.GetInt64(21),r.GetInt64(22),r.GetInt64(23),r.GetInt64(24),r.GetInt64(25),r.GetInt64(26),r.GetInt64(27),r.GetInt64(28),r.GetInt64(29),r.GetInt64(30),r.GetInt64(31),r.GetInt64(32),r.GetInt64(33),r.GetInt64(34),r.GetInt64(35),r.GetInt64(36),r.GetInt64(37),r.GetString(39),r.IsDBNull(40)?"":r.GetString(40),r.IsDBNull(41)?"":r.GetString(41),r.IsDBNull(42)?"":r.GetString(42),r.GetString(43),r.GetString(44),r.GetString(45)));
         }
         if(missingCommittedZ.Count>0||missingCommittedBir.Count>0)
         {
@@ -420,5 +428,5 @@ public sealed class PostgresAnnexE1Repository(
     private static AnnexE1FactResult FailureFact(AnnexE1Outcome outcome,string message)=>new(outcome,SafeMessage:message);
     private static AnnexE1WorkbookResult FailureWorkbook(AnnexE1Outcome outcome,string message)=>new(outcome,SafeMessage:message);
 
-    private sealed record Source(Guid PeriodId,long PeriodSequence,DateOnly BusinessDate,Guid ZId,string ZReference,Guid BirId,string BirSemanticHash,string? BeginningNumber,string? EndingNumber,long PreviousGta,long ResultingGta,long GrossSales,long NetSales,long VatableSales,long VatAmount,long VatExemptSales,long ZeroRatedSales,long ScDiscount,long PwdDiscount,long OtherStatutoryDiscount,long VatExemptionAmount,long CouponDiscount,long PromotionalDiscount,long VoidAmount,long ReturnAmount,long RefundAmount,long AdjustmentAmount,long ServiceChargeAmount,long ResetCounter,long ZCounter,long TransactionCount,long RangeCount,long GapCount,long ScVatAdjustment,long PwdVatAdjustment,string FiscalIdentityCode,string TaxpayerName,string TaxpayerAddress,string Tin,string PosSerialNumber,string MachineIdentificationNumber,string SiteCode);
+    private sealed record Source(Guid PeriodId,long PeriodSequence,DateOnly BusinessDate,Guid ZId,string ZReference,Guid BirId,string BirSemanticHash,string? BeginningNumber,string? EndingNumber,long PreviousGta,long ResultingGta,long GrossSales,long NetSales,long VatableSales,long VatAmount,long VatExemptSales,long ZeroRatedSales,long ScDiscount,long PwdDiscount,long OtherStatutoryDiscount,long VatExemptionAmount,long CouponDiscount,long PromotionalDiscount,long VoidAmount,long ReturnAmount,long RefundAmount,long AdjustmentAmount,long ServiceChargeAmount,long ResetCounter,long ZCounter,long TransactionCount,long RangeCount,long GapCount,long ScVatAdjustment,long PwdVatAdjustment,long ParkingVatExemptionAmount,string FiscalIdentityCode,string TaxpayerName,string TaxpayerAddress,string Tin,string PosSerialNumber,string MachineIdentificationNumber,string SiteCode);
 }

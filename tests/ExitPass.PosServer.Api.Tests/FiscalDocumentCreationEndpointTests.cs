@@ -162,8 +162,8 @@ public sealed class FiscalDocumentCreationEndpointTests
         Assert.NotNull(repository.LastDraft);
         Assert.NotNull(repository.LastDraft.AppliedStatutoryFiscalFacts);
         Assert.Equal("SENIOR_CITIZEN", repository.LastDraft.AppliedStatutoryFiscalFacts.EntitlementType);
-        Assert.Equal("VAT_EXEMPTION_AND_STATUTORY_DISCOUNT", repository.LastDraft.AppliedStatutoryFiscalFacts.BenefitClassification);
-        Assert.Equal(7143, repository.LastDraft.AppliedStatutoryFiscalFacts.FinalPayableAmountMinorUnits);
+        Assert.Equal("STATUTORY_DISCOUNT_ONLY", repository.LastDraft.AppliedStatutoryFiscalFacts.BenefitClassification);
+        Assert.Equal(8000, repository.LastDraft.AppliedStatutoryFiscalFacts.FinalPayableAmountMinorUnits);
     }
 
     [Fact]
@@ -933,30 +933,36 @@ public sealed class FiscalDocumentCreationEndpointTests
         {
             SiteId = facts.SiteId,
             CentralPmsParkingSessionRef = facts.ParkingSessionId?.ToString("D"),
-            PayableBasis = ValidPayableBasis() with { PayableAmountMinorUnits = 7143 },
+            PayableBasis = ValidPayableBasis() with { PayableAmountMinorUnits = 8000 },
             DocumentLines =
             [
                 ValidLine(1) with
                 {
-                    UnitAmountMinorUnits = 10000,
-                    GrossAmountMinorUnits = 10000,
-                    DiscountAmountMinorUnits = 2857,
-                    TaxAmountMinorUnits = 0,
-                    NetAmountMinorUnits = 7143
+                    UnitAmountMinorUnits = 8929,
+                    GrossAmountMinorUnits = 8929,
+                    DiscountAmountMinorUnits = 1786,
+                    TaxAmountMinorUnits = 857,
+                    NetAmountMinorUnits = 8000
                 }
             ],
-            Tenders = [ValidTender() with { AmountMinorUnits = 7143 }],
-            TaxDetails = [ValidTaxDetail() with { TaxableAmountMinorUnits = 8929, TaxAmountMinorUnits = 0 }],
+            Tenders = [ValidTender() with { AmountMinorUnits = 8000 }],
+            TaxDetails = [ValidTaxDetail() with
+            {
+                TaxableAmountMinorUnits = 7143,
+                TaxAmountMinorUnits = 857,
+                TaxRate = 12,
+                TaxContext = new Dictionary<string, string> { ["basis"] = "VAT_INCLUSIVE_NO_EXEMPTION" }
+            }],
             DiscountPrivilegeDetails =
             [
                 ValidDiscountPrivilegeDetail() with
                 {
-                    BasisAmountMinorUnits = 10000,
+                    BasisAmountMinorUnits = 8929,
                     DiscountAmountMinorUnits = 1786,
-                    VatPrivilegeAmountMinorUnits = 1071
+                    VatPrivilegeAmountMinorUnits = 0
                 }
             ],
-            Totals = [ValidTotal() with { AmountMinorUnits = 7143 }],
+            Totals = [ValidTotal() with { AmountMinorUnits = 8000 }],
             AppliedStatutoryFiscalFacts = facts
         };
     }
@@ -971,20 +977,20 @@ public sealed class FiscalDocumentCreationEndpointTests
             Guid.Parse("21000000-0000-4000-8000-000000000006"),
             Guid.Parse("21000000-0000-4000-8000-000000000007"),
             "SENIOR_CITIZEN",
-            "VAT_EXEMPTION_AND_STATUTORY_DISCOUNT",
+            "STATUTORY_DISCOUNT_ONLY",
             new AppliedStatutoryPolicyReferenceRequest(
-                "NATIONAL_LAW",
+                "LOCAL_ORDINANCE",
                 AppliedPolicyReferenceId: Guid.Parse("21000000-0000-4000-8000-000000000008"),
                 PolicyCode: "TEST-SENIOR-CITIZEN-POLICY",
-                NationalLawReference: "TEST-NATIONAL-LAW-REFERENCE"),
+                OrdinanceReference: "TEST-LOCAL-PARKING-ORDINANCE"),
             Guid.Parse("21000000-0000-4000-8000-000000000009"),
             Guid.Parse("21000000-0000-4000-8000-000000000010"),
             10000,
             8929,
-            0,
-            "VAT_EXEMPT",
+            857,
+            "VAT_INCLUSIVE_NO_EXEMPTION",
             1786,
-            7143,
+            8000,
             "PHP",
             DateTimeOffset.Parse("2026-07-29T08:15:00+08:00"),
             "WEBPAY");

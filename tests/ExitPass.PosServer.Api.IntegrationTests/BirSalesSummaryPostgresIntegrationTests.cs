@@ -115,6 +115,7 @@ public sealed class BirSalesSummaryPostgresIntegrationTests
         using var malformed = await client.GetAsync("/v1/fiscal-reports/bir-sales-summaries/not-a-guid/exports/json");
         Assert.Equal(HttpStatusCode.NotFound, malformed.StatusCode);
 
+        await ProveHistoricalParkingVatExemptionBlocksAnnexE1Async(client, connectionString);
         await ProveAnnexE1FlowAsync(client, connectionString);
         var afterAnnex = await ManifestAsync(connectionString);
         var after = await ManifestAsync(connectionString);
@@ -266,6 +267,35 @@ public sealed class BirSalesSummaryPostgresIntegrationTests
 
     private static async Task AssertImmutableAsync(string cs,Guid id){await using var c=new NpgsqlConnection(cs);await c.OpenAsync();await using(var update=new NpgsqlCommand("UPDATE pos.bir_sales_summary_reports SET net_sales_amount_minor_units=0 WHERE bir_sales_summary_report_id=@id",c)){update.Parameters.AddWithValue("id",id);Assert.Equal("23514",(await Assert.ThrowsAsync<PostgresException>(()=>update.ExecuteNonQueryAsync())).SqlState);}await using(var delete=new NpgsqlCommand("DELETE FROM pos.bir_sales_summary_reports WHERE bir_sales_summary_report_id=@id",c)){delete.Parameters.AddWithValue("id",id);Assert.Equal("23514",(await Assert.ThrowsAsync<PostgresException>(()=>delete.ExecuteNonQueryAsync())).SqlState);}}
     private static async Task<Manifest> ManifestAsync(string cs)=>new(await ScalarAsync<long>(cs,"SELECT count(*) FROM pos.fiscal_documents"),await ScalarAsync<long>(cs,"SELECT count(*) FROM pos.fiscal_document_lines"),await ScalarAsync<long>(cs,"SELECT count(*) FROM pos.fiscal_tenders"),await ScalarAsync<long>(cs,"SELECT count(*) FROM pos.fiscal_tax_details"),await ScalarAsync<long>(cs,"SELECT count(*) FROM pos.fiscal_discount_privilege_details"),await ScalarAsync<long>(cs,"SELECT count(*) FROM pos.fiscal_totals"),await ScalarAsync<long>(cs,"SELECT count(*) FROM pos.x_z_reports WHERE report_kind_code_id='1c628bc2-49c3-53e8-ae83-2082bcf28467'"),await ScalarAsync<long>(cs,"SELECT z_counter_value FROM pos.fiscal_z_close_states WHERE site_pos_server_id='73000000-0000-4000-8000-000000000001'"),await ScalarAsync<long>(cs,"SELECT reset_counter_value FROM pos.fiscal_z_close_states WHERE site_pos_server_id='73000000-0000-4000-8000-000000000001'"),await ScalarAsync<long>(cs,"SELECT grand_total_amount_minor_units FROM pos.fiscal_z_close_states WHERE site_pos_server_id='73000000-0000-4000-8000-000000000001'"),await ScalarAsync<string>(cs,"SELECT code.code_key FROM pos.fiscal_reporting_periods p JOIN pos.controlled_codes code ON code.controlled_code_id=p.period_status_code_id WHERE p.fiscal_reporting_period_id='73000000-0000-4000-8000-000000000010'"),await ScalarAsync<long>(cs,"SELECT count(*) FROM pos.x_z_reports WHERE report_kind_code_id<>'1c628bc2-49c3-53e8-ae83-2082bcf28467'"),await ScalarAsync<long>(cs,"SELECT count(*) FROM pos.bir_sales_summary_reports"));
+
+    private static async Task ProveHistoricalParkingVatExemptionBlocksAnnexE1Async(HttpClient client,string cs)
+    {
+        const string detailId = "73000000-0000-4000-8000-000000000702";
+        await ExecuteAsync(cs, $"UPDATE pos.fiscal_discount_privilege_details SET vat_privilege_amount_minor_units=268 WHERE fiscal_discount_privilege_detail_id='{detailId}'");
+        try
+        {
+            var request = new AnnexE1GenerationRequest(
+                "annex-historical-parking-vat-exemption",
+                SiteId,
+                IdentityId,
+                "PHP",
+                2026,
+                8,
+                AnnexE1Contract.Profile,
+                null,
+                null,
+                null);
+            using var response = await client.PostAsJsonAsync("/v1/fiscal-reports/annex-e/e1/workbooks", request);
+            var body = await response.Content.ReadAsStringAsync();
+            Assert.Equal(HttpStatusCode.UnprocessableEntity, response.StatusCode);
+            Assert.Contains("annex_e1_source_missing", body, StringComparison.Ordinal);
+            Assert.Contains("statutory parking transaction", body, StringComparison.Ordinal);
+        }
+        finally
+        {
+            await ExecuteAsync(cs, $"UPDATE pos.fiscal_discount_privilege_details SET vat_privilege_amount_minor_units=0 WHERE fiscal_discount_privilege_detail_id='{detailId}'");
+        }
+    }
 
     private static async Task ProveAnnexE1FlowAsync(HttpClient client,string cs)
     {

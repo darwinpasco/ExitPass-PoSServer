@@ -199,8 +199,8 @@ public sealed class FiscalDocumentCreationServiceTests
             FiscalDocumentSemanticRequestHasher.StatutoryVersion,
             FiscalDocumentSemanticRequestHasher.GetVersion(ValidStatutoryCommand()));
         Assert.Equal("SENIOR_CITIZEN", result.Draft.AppliedStatutoryFiscalFacts.EntitlementType);
-        Assert.Equal("VAT_EXEMPTION_AND_STATUTORY_DISCOUNT", result.Draft.AppliedStatutoryFiscalFacts.BenefitClassification);
-        Assert.Equal(7143, result.Draft.AppliedStatutoryFiscalFacts.FinalPayableAmountMinorUnits);
+        Assert.Equal("STATUTORY_DISCOUNT_ONLY", result.Draft.AppliedStatutoryFiscalFacts.BenefitClassification);
+        Assert.Equal(8000, result.Draft.AppliedStatutoryFiscalFacts.FinalPayableAmountMinorUnits);
     }
 
     [Fact]
@@ -224,7 +224,7 @@ public sealed class FiscalDocumentCreationServiceTests
         Assert.Equal(2679, result.Draft.DocumentLines.Single().DiscountAmountMinorUnits);
         Assert.Equal(0, result.Draft.DocumentLines.Single().TaxAmountMinorUnits);
         Assert.Equal(0, result.Draft.DocumentLines.Single().NetAmountMinorUnits);
-        Assert.Equal(321, result.Draft.TaxDetails.Single().TaxAmountMinorUnits);
+        Assert.Equal(0, result.Draft.TaxDetails.Single().TaxAmountMinorUnits);
         Assert.Equal(0, result.Draft.Totals.Single().AmountMinorUnits);
         Assert.Equal(FiscalDocumentSemanticRequestHasher.CompletionVersion,
             FiscalDocumentSemanticRequestHasher.GetVersion(ValidZeroPayableStatutoryCommand()));
@@ -339,8 +339,46 @@ public sealed class FiscalDocumentCreationServiceTests
         var result = await service.CreateAsync(
             ValidStatutoryCommand() with
             {
-                AppliedStatutoryFiscalFacts = ValidAppliedStatutoryFiscalFacts() with { FinalPayableAmountMinorUnits = 8000 }
+                AppliedStatutoryFiscalFacts = ValidAppliedStatutoryFiscalFacts() with { FinalPayableAmountMinorUnits = 7999 }
             });
+
+        Assert.False(result.Succeeded);
+        Assert.Equal(FiscalDocumentCreationErrorCode.AppliedStatutoryTotalMismatch, result.ErrorCode);
+        Assert.Equal(0, repository.CreateCount);
+    }
+
+    [Fact]
+    public async Task AppliedStatutoryParkingVatExemptionIsRejectedBeforePersistence()
+    {
+        var repository = new RecordingFiscalDocumentRepository();
+        var service = new FiscalDocumentCreationService(repository);
+
+        var result = await service.CreateAsync(
+            ValidStatutoryCommand() with
+            {
+                AppliedStatutoryFiscalFacts = ValidAppliedStatutoryFiscalFacts() with
+                {
+                    VatTreatment = "VAT_EXEMPT",
+                    BenefitClassification = "VAT_EXEMPTION_AND_STATUTORY_DISCOUNT"
+                }
+            });
+
+        Assert.False(result.Succeeded);
+        Assert.Equal(FiscalDocumentCreationErrorCode.AppliedStatutoryUnsupportedVatTreatment, result.ErrorCode);
+        Assert.Equal(0, repository.CreateCount);
+    }
+
+    [Fact]
+    public async Task AppliedStatutoryParkingVatMustReconcileToDiscountedTaxableConsideration()
+    {
+        var repository = new RecordingFiscalDocumentRepository();
+        var service = new FiscalDocumentCreationService(repository);
+        var command = ValidStatutoryCommand();
+
+        var result = await service.CreateAsync(command with
+        {
+            TaxDetails = [command.TaxDetails!.Single() with { TaxableAmountMinorUnits = 7142 }]
+        });
 
         Assert.False(result.Succeeded);
         Assert.Equal(FiscalDocumentCreationErrorCode.AppliedStatutoryTotalMismatch, result.ErrorCode);
@@ -965,30 +1003,36 @@ public sealed class FiscalDocumentCreationServiceTests
         {
             SiteId = facts.SiteId,
             CentralPmsParkingSessionRef = facts.ParkingSessionId?.ToString("D"),
-            PayableBasis = ValidPayableBasis() with { PayableAmountMinorUnits = 7143 },
+            PayableBasis = ValidPayableBasis() with { PayableAmountMinorUnits = 8000 },
             DocumentLines =
             [
                 ValidLine(1) with
                 {
-                    UnitAmountMinorUnits = 10000,
-                    GrossAmountMinorUnits = 10000,
-                    DiscountAmountMinorUnits = 2857,
-                    TaxAmountMinorUnits = 0,
-                    NetAmountMinorUnits = 7143
+                    UnitAmountMinorUnits = 8929,
+                    GrossAmountMinorUnits = 8929,
+                    DiscountAmountMinorUnits = 1786,
+                    TaxAmountMinorUnits = 857,
+                    NetAmountMinorUnits = 8000
                 }
             ],
-            Tenders = [ValidTender() with { AmountMinorUnits = 7143 }],
-            TaxDetails = [ValidTaxDetail() with { TaxableAmountMinorUnits = 8929, TaxAmountMinorUnits = 0 }],
+            Tenders = [ValidTender() with { AmountMinorUnits = 8000 }],
+            TaxDetails = [ValidTaxDetail() with
+            {
+                TaxableAmountMinorUnits = 7143,
+                TaxAmountMinorUnits = 857,
+                TaxRate = 12,
+                TaxContext = new Dictionary<string, string> { ["basis"] = "VAT_INCLUSIVE_NO_EXEMPTION" }
+            }],
             DiscountPrivilegeDetails =
             [
                 ValidDiscountPrivilegeDetail() with
                 {
-                    BasisAmountMinorUnits = 10000,
+                    BasisAmountMinorUnits = 8929,
                     DiscountAmountMinorUnits = 1786,
-                    VatPrivilegeAmountMinorUnits = 1071
+                    VatPrivilegeAmountMinorUnits = 0
                 }
             ],
-            Totals = [ValidTotal() with { AmountMinorUnits = 7143 }],
+            Totals = [ValidTotal() with { AmountMinorUnits = 8000 }],
             AppliedStatutoryFiscalFacts = facts
         };
     }
@@ -1003,20 +1047,20 @@ public sealed class FiscalDocumentCreationServiceTests
             Guid.Parse("21000000-0000-4000-8000-000000000006"),
             Guid.Parse("21000000-0000-4000-8000-000000000007"),
             "SENIOR_CITIZEN",
-            "VAT_EXEMPTION_AND_STATUTORY_DISCOUNT",
+            "STATUTORY_DISCOUNT_ONLY",
             new AppliedStatutoryPolicyReferenceInput(
-                "NATIONAL_LAW",
+                "LOCAL_ORDINANCE",
                 AppliedPolicyReferenceId: Guid.Parse("21000000-0000-4000-8000-000000000008"),
                 PolicyCode: "TEST-SENIOR-CITIZEN-POLICY",
-                NationalLawReference: "TEST-NATIONAL-LAW-REFERENCE"),
+                OrdinanceReference: "TEST-LOCAL-PARKING-ORDINANCE"),
             Guid.Parse("21000000-0000-4000-8000-000000000009"),
             Guid.Parse("21000000-0000-4000-8000-000000000010"),
             10000,
             8929,
-            0,
-            "VAT_EXEMPT",
+            857,
+            "VAT_INCLUSIVE_NO_EXEMPTION",
             1786,
-            7143,
+            8000,
             "PHP",
             DateTimeOffset.Parse("2026-07-29T08:15:00+08:00"),
             "WEBPAY");
@@ -1028,8 +1072,8 @@ public sealed class FiscalDocumentCreationServiceTests
             BenefitClassification = "FREE_PARKING",
             OriginalAmountMinorUnits = 3000,
             VatExclusiveBasisAmountMinorUnits = 2679,
-            VatAmountMinorUnits = 321,
-            VatTreatment = "VAT_EXCLUSIVE",
+            VatAmountMinorUnits = 0,
+            VatTreatment = "VAT_INCLUSIVE_NO_EXEMPTION",
             StatutoryDiscountAmountMinorUnits = 2679,
             FinalPayableAmountMinorUnits = 0
         };
@@ -1063,14 +1107,20 @@ public sealed class FiscalDocumentCreationServiceTests
                 }
             ],
             Tenders = [],
-            TaxDetails = [ValidTaxDetail() with { TaxableAmountMinorUnits = 2679, TaxAmountMinorUnits = 321, TaxRate = 12 }],
+            TaxDetails = [ValidTaxDetail() with
+            {
+                TaxableAmountMinorUnits = 0,
+                TaxAmountMinorUnits = 0,
+                TaxRate = 12,
+                TaxContext = new Dictionary<string, string> { ["basis"] = "VAT_INCLUSIVE_NO_EXEMPTION" }
+            }],
             DiscountPrivilegeDetails =
             [
                 ValidDiscountPrivilegeDetail() with
                 {
                     BasisAmountMinorUnits = 2679,
                     DiscountAmountMinorUnits = 2679,
-                    VatPrivilegeAmountMinorUnits = 321
+                    VatPrivilegeAmountMinorUnits = 0
                 }
             ],
             Totals = [ValidTotal() with { AmountMinorUnits = 0 }],

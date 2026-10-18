@@ -751,11 +751,11 @@ public sealed class FiscalDocumentApiPostgresSmokeTests
         Assert.Null(getBody.Document.SemanticRequestHash);
         Assert.Equal("pos-server-fiscal-document-create:sha256:v4", getBody.Document.SemanticRequestHashVersion);
         Assert.Equal("SENIOR_CITIZEN", getBody.Document.AppliedStatutoryFiscalFacts.EntitlementType);
-        Assert.Equal("VAT_EXEMPTION_AND_STATUTORY_DISCOUNT", getBody.Document.AppliedStatutoryFiscalFacts.BenefitClassification);
-        Assert.Equal("VAT_EXEMPT", getBody.Document.AppliedStatutoryFiscalFacts.VatTreatment);
-        Assert.Equal(7143, getBody.Document.AppliedStatutoryFiscalFacts.FinalPayableAmountMinorUnits);
+        Assert.Equal("STATUTORY_DISCOUNT_ONLY", getBody.Document.AppliedStatutoryFiscalFacts.BenefitClassification);
+        Assert.Equal("VAT_INCLUSIVE_NO_EXEMPTION", getBody.Document.AppliedStatutoryFiscalFacts.VatTreatment);
+        Assert.Equal(8000, getBody.Document.AppliedStatutoryFiscalFacts.FinalPayableAmountMinorUnits);
         Assert.Equal("OSCA-12345", getBody.Document.InvoiceCustomerInformation!.StatutoryIdNumber);
-        Assert.Equal("vat_exempt", getBody.Document.TaxDetails.Single().TaxClassificationCodeKey);
+        Assert.Equal("vatable", getBody.Document.TaxDetails.Single().TaxClassificationCodeKey);
 
         using var presentationResponse = await client.GetAsync($"/v1/fiscal-documents/{fiscalDocumentId}/digital-sales-invoice/presentation");
         var presentationBody = await presentationResponse.Content.ReadFromJsonAsync<GetDigitalSalesInvoicePresentationResponse>();
@@ -768,7 +768,7 @@ public sealed class FiscalDocumentApiPostgresSmokeTests
         Assert.Contains(
             statutorySection.Rows,
             row => row.Key == "appliedStatutoryFiscalFacts.benefitClassification" &&
-                string.Equals(row.DisplayValue, "VAT_EXEMPTION_AND_STATUTORY_DISCOUNT", StringComparison.Ordinal));
+                string.Equals(row.DisplayValue, "STATUTORY_DISCOUNT_ONLY", StringComparison.Ordinal));
         Assert.DoesNotContain(
             statutorySection.Rows,
             row => row.Key.Contains("decision", StringComparison.OrdinalIgnoreCase) ||
@@ -777,9 +777,9 @@ public sealed class FiscalDocumentApiPostgresSmokeTests
         Assert.Contains(customerSection.Rows, row =>
             row.Key == "customerInformation.statutoryIdNumber" && row.DisplayValue == "OSCA-12345");
         var vatSection = presentationBody.Presentation.Sections.Single(section => section.Name == "vatBreakdown");
-        Assert.Contains(vatSection.Rows, row => row.Key == "totals.vatableSales" && row.DisplayValue == "PHP 0.00");
-        Assert.Contains(vatSection.Rows, row => row.Key == "totals.vatAmount" && row.DisplayValue == "PHP 0.00");
-        Assert.Contains(vatSection.Rows, row => row.Key == "totals.vatExemptSales" && row.DisplayValue == "PHP 89.29");
+        Assert.Contains(vatSection.Rows, row => row.Key == "totals.vatableSales" && row.DisplayValue == "PHP 71.43");
+        Assert.Contains(vatSection.Rows, row => row.Key == "totals.vatAmount" && row.DisplayValue == "PHP 8.57");
+        Assert.Contains(vatSection.Rows, row => row.Key == "totals.vatExemptSales" && row.DisplayValue == "PHP 0.00");
         Assert.Contains(vatSection.Rows, row => row.Key == "totals.zeroRatedSales" && row.DisplayValue == "PHP 0.00");
 
         using var replayResponse = await client.PostAsJsonAsync("/v1/fiscal-documents/", request);
@@ -1790,20 +1790,20 @@ public sealed class FiscalDocumentApiPostgresSmokeTests
             siteId,
             Guid.Parse("21000000-0000-4000-8000-000000000007"),
             "SENIOR_CITIZEN",
-            "VAT_EXEMPTION_AND_STATUTORY_DISCOUNT",
+            "STATUTORY_DISCOUNT_ONLY",
             new AppliedStatutoryPolicyReferenceRequest(
-                "NATIONAL_LAW",
+                "LOCAL_ORDINANCE",
                 AppliedPolicyReferenceId: Guid.Parse("21000000-0000-4000-8000-000000000008"),
                 PolicyCode: "TEST-SENIOR-CITIZEN-POLICY",
-                NationalLawReference: "TEST-NATIONAL-LAW-REFERENCE"),
+                OrdinanceReference: "TEST-LOCAL-PARKING-ORDINANCE"),
             Guid.Parse("21000000-0000-4000-8000-000000000009"),
             Guid.Parse("21000000-0000-4000-8000-000000000010"),
             10000,
             8929,
-            0,
-            "VAT_EXEMPT",
+            857,
+            "VAT_INCLUSIVE_NO_EXEMPTION",
             1786,
-            7143,
+            8000,
             "PHP",
             DateTimeOffset.Parse("2026-07-29T08:15:00+08:00"),
             "WEBPAY");
@@ -1815,7 +1815,7 @@ public sealed class FiscalDocumentApiPostgresSmokeTests
                 $"payable-basis-{suffix}",
                 $"central-finality-{suffix}",
                 "PHP",
-                7143,
+                8000,
                 [new FiscalDiscountReferenceRequest(facts.StatutoryValidationId.ToString(), "approved", true)]),
             SitePosServerId: SitePosServerId,
             SiteId: siteId,
@@ -1834,11 +1834,11 @@ public sealed class FiscalDocumentApiPostgresSmokeTests
                     FiscalLineTypeCodeId,
                     "Parking fee",
                     1,
-                    10000,
-                    10000,
-                    2857,
-                    0,
-                    7143,
+                    8929,
+                    8929,
+                    1786,
+                    857,
+                    8000,
                     "PHP",
                     SourceRef: $"line-source-{suffix}",
                     LineContext: new Dictionary<string, string> { ["source_system"] = "central_pms" })
@@ -1847,7 +1847,7 @@ public sealed class FiscalDocumentApiPostgresSmokeTests
             [
                 new CreateFiscalTenderRequest(
                     FiscalTenderTypeCodeId,
-                    7143,
+                    8000,
                     "PHP",
                     CentralPmsPaymentAttemptRef: $"payment-attempt-{suffix}",
                     CentralPmsPaymentConfirmationRef: $"payment-confirmation-{suffix}",
@@ -1859,21 +1859,21 @@ public sealed class FiscalDocumentApiPostgresSmokeTests
             [
                 new CreateFiscalTaxDetailRequest(
                     FiscalTaxTypeCodeId,
-                    FiscalVatExemptTaxClassificationCodeId,
-                    8929,
-                    0,
+                    FiscalTaxClassificationCodeId,
+                    7143,
+                    857,
                     "PHP",
                     LineSequence: 1,
-                    TaxRate: 0,
-                    TaxContext: new Dictionary<string, string> { ["source_system"] = "central_pms" })
+                    TaxRate: 12,
+                    TaxContext: new Dictionary<string, string> { ["basis"] = "VAT_INCLUSIVE_NO_EXEMPTION" })
             ],
             DiscountPrivilegeDetails:
             [
                 new CreateFiscalDiscountPrivilegeDetailRequest(
                     FiscalDiscountPrivilegeTypeCodeId,
-                    10000,
+                    8929,
                     1786,
-                    1071,
+                    0,
                     "PHP",
                     LineSequence: 1,
                     ApprovalRef: facts.StatutoryValidationId.ToString(),
@@ -1883,7 +1883,7 @@ public sealed class FiscalDocumentApiPostgresSmokeTests
             [
                 new CreateFiscalTotalRequest(
                     FiscalTotalTypeCodeId,
-                    7143,
+                    8000,
                     "PHP",
                     new Dictionary<string, string> { ["source_system"] = "central_pms" })
             ],
@@ -1904,8 +1904,8 @@ public sealed class FiscalDocumentApiPostgresSmokeTests
             BenefitClassification = "FREE_PARKING",
             OriginalAmountMinorUnits = 3000,
             VatExclusiveBasisAmountMinorUnits = 2679,
-            VatAmountMinorUnits = 321,
-            VatTreatment = "VAT_EXCLUSIVE",
+            VatAmountMinorUnits = 0,
+            VatTreatment = "VAT_INCLUSIVE_NO_EXEMPTION",
             StatutoryDiscountAmountMinorUnits = 2679,
             FinalPayableAmountMinorUnits = 0
         };
@@ -1942,9 +1942,10 @@ public sealed class FiscalDocumentApiPostgresSmokeTests
                 paid.TaxDetails![0] with
                 {
                     TaxClassificationCodeId = FiscalTaxClassificationCodeId,
-                    TaxableAmountMinorUnits = 2679,
-                    TaxAmountMinorUnits = 321,
-                    TaxRate = 12
+                    TaxableAmountMinorUnits = 0,
+                    TaxAmountMinorUnits = 0,
+                    TaxRate = 12,
+                    TaxContext = new Dictionary<string, string> { ["basis"] = "VAT_INCLUSIVE_NO_EXEMPTION" }
                 }
             ],
             DiscountPrivilegeDetails =
@@ -1953,7 +1954,7 @@ public sealed class FiscalDocumentApiPostgresSmokeTests
                 {
                     BasisAmountMinorUnits = 2679,
                     DiscountAmountMinorUnits = 2679,
-                    VatPrivilegeAmountMinorUnits = 321
+                    VatPrivilegeAmountMinorUnits = 0
                 }
             ],
             Totals = [paid.Totals![0] with { AmountMinorUnits = 0 }],
@@ -1987,20 +1988,20 @@ public sealed class FiscalDocumentApiPostgresSmokeTests
             siteId,
             Guid.Parse("22000000-0000-4000-8000-000000000007"),
             "PWD",
-            "VAT_EXEMPTION_AND_STATUTORY_DISCOUNT",
+            "STATUTORY_DISCOUNT_ONLY",
             new AppliedStatutoryPolicyReferenceRequest(
-                "NATIONAL_LAW",
+                "LOCAL_ORDINANCE",
                 AppliedPolicyReferenceId: Guid.Parse("22000000-0000-4000-8000-000000000008"),
                 PolicyCode: "TEST-PWD-POLICY",
-                NationalLawReference: "TEST-NATIONAL-LAW-REFERENCE"),
+                OrdinanceReference: "TEST-LOCAL-PARKING-ORDINANCE"),
             Guid.Parse("22000000-0000-4000-8000-000000000009"),
             Guid.Parse("22000000-0000-4000-8000-000000000010"),
             12000,
             10714,
-            0,
-            "VAT_EXEMPT",
+            1029,
+            "VAT_INCLUSIVE_NO_EXEMPTION",
             2143,
-            8571,
+            9600,
             "PHP",
             DateTimeOffset.Parse("2026-07-29T09:25:00+08:00"),
             "ASSISTED_PAYMENT_TERMINAL",
@@ -2013,7 +2014,7 @@ public sealed class FiscalDocumentApiPostgresSmokeTests
                 $"payable-basis-{suffix}",
                 $"central-finality-{suffix}",
                 "PHP",
-                8571,
+                9600,
                 [new FiscalDiscountReferenceRequest(facts.StatutoryValidationId.ToString(), "approved", true)]),
             SitePosServerId: SitePosServerId,
             SiteId: siteId,
@@ -2032,11 +2033,11 @@ public sealed class FiscalDocumentApiPostgresSmokeTests
                     FiscalLineTypeCodeId,
                     "Parking fee",
                     1,
-                    12000,
-                    12000,
-                    3429,
-                    0,
-                    8571,
+                    10714,
+                    10714,
+                    2143,
+                    1029,
+                    9600,
                     "PHP",
                     SourceRef: $"line-source-{suffix}",
                     LineContext: new Dictionary<string, string> { ["source_system"] = "central_pms" })
@@ -2045,7 +2046,7 @@ public sealed class FiscalDocumentApiPostgresSmokeTests
             [
                 new CreateFiscalTenderRequest(
                     FiscalTenderTypeCodeId,
-                    8571,
+                    9600,
                     "PHP",
                     CentralPmsPaymentAttemptRef: $"payment-attempt-{suffix}",
                     CentralPmsPaymentConfirmationRef: $"payment-confirmation-{suffix}",
@@ -2061,21 +2062,21 @@ public sealed class FiscalDocumentApiPostgresSmokeTests
             [
                 new CreateFiscalTaxDetailRequest(
                     FiscalTaxTypeCodeId,
-                    FiscalVatExemptTaxClassificationCodeId,
-                    10714,
-                    0,
+                    FiscalTaxClassificationCodeId,
+                    8571,
+                    1029,
                     "PHP",
                     LineSequence: 1,
-                    TaxRate: 0,
-                    TaxContext: new Dictionary<string, string> { ["source_system"] = "central_pms" })
+                    TaxRate: 12,
+                    TaxContext: new Dictionary<string, string> { ["basis"] = "VAT_INCLUSIVE_NO_EXEMPTION" })
             ],
             DiscountPrivilegeDetails:
             [
                 new CreateFiscalDiscountPrivilegeDetailRequest(
                     FiscalDiscountPrivilegeTypeCodeId,
-                    12000,
+                    10714,
                     2143,
-                    1286,
+                    0,
                     "PHP",
                     LineSequence: 1,
                     ApprovalRef: facts.StatutoryValidationId.ToString(),
@@ -2085,7 +2086,7 @@ public sealed class FiscalDocumentApiPostgresSmokeTests
             [
                 new CreateFiscalTotalRequest(
                     FiscalTotalTypeCodeId,
-                    8571,
+                    9600,
                     "PHP",
                     new Dictionary<string, string> { ["source_system"] = "central_pms" })
             ],
