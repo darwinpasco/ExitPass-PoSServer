@@ -181,6 +181,7 @@ public sealed record AnnexE1AutomaticSourceEvidence(
     long VatExemptionAmount,
     long SeniorCitizenVatAdjustment,
     long PwdVatAdjustment,
+    long ParkingVatExemptionAmount,
     long ReturnAmount,
     long RefundAmount,
     long AdjustmentAmount,

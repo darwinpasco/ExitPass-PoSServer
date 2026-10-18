@@ -136,6 +136,7 @@ public sealed class AnnexE1RuntimeTests
     [InlineData("return")]
     [InlineData("adjustment")]
     [InlineData("vat_breakdown")]
+    [InlineData("parking_vat_exemption")]
     [InlineData("gta")]
     public void IncompleteOrInconsistentAutomaticSourcesFailDeterministically(string defect)
     {
@@ -145,6 +146,7 @@ public sealed class AnnexE1RuntimeTests
             "return"=>AutomaticSource() with{ReturnAmount=1},
             "adjustment"=>AutomaticSource() with{AdjustmentAmount=1},
             "vat_breakdown"=>AutomaticSource() with{VatExemptionAmount=1},
+            "parking_vat_exemption"=>AutomaticSource() with{ParkingVatExemptionAmount=1},
             _=>AutomaticSource() with{ResultingGta=10_999}
         };
 
@@ -192,7 +194,7 @@ public sealed class AnnexE1RuntimeTests
         DateTimeOffset.Parse("2026-09-01T00:00:00Z"),"correlation");
     private static AnnexE1RowInputs ZeroInput()=>Input() with{TransactionCount=0,ActiveGross=0,ReturnAmount=0,VoidAmount=0,VatableSales=0,VatAmount=0,VatExemptSales=0,ZeroRatedSales=0,SeniorCitizenDiscount=0,PwdDiscount=0,NaacDiscount=0,SoloParentDiscount=0,OtherStatutoryDiscount=0,CouponDiscount=0,PromotionalDiscount=0,SeniorCitizenVatAdjustment=0,PwdVatAdjustment=0,OtherVatAdjustment=0,VatOnReturns=0,ResidualVatAdjustment=0,ManualNetIncome=0,OverflowNetIncome=0,PreviousGta=0,ResultingGta=0,FiscalRangeCount=0,FiscalGapCount=0,BeginningFiscalNumber=null,EndingFiscalNumber=null};
     private static AnnexE1PeriodFactCommand Fact()=>new("fact",Guid.NewGuid(),Guid.NewGuid(),"PHP",Guid.NewGuid(),AnnexE1FactTypes.ManualSiOrNetIncome,AnnexE1FactStatuses.Recorded,100,1,"MANUAL-1","MANUAL-1",null,"approval",null,null,"actor","service","correlation");
-    private static AnnexE1AutomaticSourceEvidence AutomaticSource()=>new(Guid.NewGuid(),Guid.NewGuid(),new string('a',64),1_000,11_000,12_000,10_000,0,500,300,200,0,0,0,0);
+    private static AnnexE1AutomaticSourceEvidence AutomaticSource()=>new(Guid.NewGuid(),Guid.NewGuid(),new string('a',64),1_000,11_000,12_000,10_000,0,500,300,200,0,0,0,0,0);
     private static AnnexE1PeriodFactRecord PeriodFact(string type,long amount)=>new(Guid.NewGuid(),"fact",Guid.NewGuid(),Guid.NewGuid(),"PHP",Guid.NewGuid(),new(2026,8,1),type,AnnexE1FactStatuses.Recorded,amount,1,"SRC-1","SRC-1",type==AnnexE1FactTypes.SalesOverrunOverflowNetIncome?"EVENT-1":null,"approval",new string('b',64),null,null,DateTimeOffset.UtcNow,DateTimeOffset.UtcNow,"actor","service","correlation");
     private static AnnexE1GenerationCommand Generation()=>new("generate",Guid.NewGuid(),Guid.NewGuid(),"PHP",2026,8,AnnexE1Contract.Profile,null,null,null,"actor","service","correlation");
     private static string Read(ZipArchive archive,string name){using var reader=new StreamReader(archive.GetEntry(name)!.Open(),Encoding.UTF8);return reader.ReadToEnd();}

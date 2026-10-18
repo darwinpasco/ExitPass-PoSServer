@@ -62,6 +62,9 @@ public sealed class AnnexE1AuthoritativeSourceDeriver
                 AnnexE1Outcome.UnsupportedClassification,
                 "The committed source contains service-charge activity outside the bounded Annex E-1 profile.");
 
+        if (source.ParkingVatExemptionAmount != 0)
+            throw Missing("The committed source contains a VAT-exemption privilege amount on a statutory parking transaction. Parking discounts do not establish VAT exemption; the immutable fiscal record requires governed historical correction.");
+
         var classifiedVatExemption = checked(source.SeniorCitizenVatAdjustment + source.PwdVatAdjustment);
         if (source.VatExemptionAmount != classifiedVatExemption)
             throw Missing("The committed VAT-exemption total does not reconcile to the Senior Citizen and PWD VAT-adjustment breakdowns.");
@@ -116,6 +119,7 @@ public sealed class AnnexE1AuthoritativeSourceDeriver
             Number(source.VatExemptionAmount),
             Number(source.SeniorCitizenVatAdjustment),
             Number(source.PwdVatAdjustment),
+            Number(source.ParkingVatExemptionAmount),
             Number(source.ReturnAmount),
             Number(source.RefundAmount),
             Number(source.AdjustmentAmount),

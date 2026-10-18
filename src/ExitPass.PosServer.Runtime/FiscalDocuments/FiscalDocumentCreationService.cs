@@ -614,6 +614,36 @@ public sealed class FiscalDocumentCreationService
         var discountTotal = discountPrivilegeDetails.Sum(discount => discount.DiscountAmountMinorUnits);
         var vatPrivilegeTotal = discountPrivilegeDetails.Sum(discount => discount.VatPrivilegeAmountMinorUnits);
 
+        if (!string.Equals(vatTreatment, "VAT_INCLUSIVE_NO_EXEMPTION", StringComparison.Ordinal) ||
+            benefitClassification is "VAT_EXEMPTION_ONLY" or "VAT_EXEMPTION_AND_STATUTORY_DISCOUNT" ||
+            vatPrivilegeTotal != 0)
+        {
+            return (FiscalDocumentCreationResult.Failure(
+                FiscalDocumentCreationErrorCode.AppliedStatutoryUnsupportedVatTreatment,
+                "A statutory parking entitlement must remain VATable and cannot create a VAT-exemption privilege."), null);
+        }
+
+        var expectedTaxableAmount = vatExclusiveBasis - statutoryDiscountAmount;
+        var taxableTotal = taxDetails.Sum(tax => tax.TaxableAmountMinorUnits);
+        var expectedVatAmount = expectedTaxableAmount < 0
+            ? -1
+            : decimal.ToInt64(decimal.Round(
+                expectedTaxableAmount * 0.12m,
+                0,
+                MidpointRounding.AwayFromZero));
+        if (taxDetails.Count == 0 ||
+            taxDetails.Any(tax => tax.TaxRate != 12m ||
+                tax.TaxContext is null ||
+                !tax.TaxContext.TryGetValue("basis", out var basis) ||
+                !string.Equals(basis, "VAT_INCLUSIVE_NO_EXEMPTION", StringComparison.Ordinal)) ||
+            taxableTotal != expectedTaxableAmount ||
+            vatAmount != expectedVatAmount)
+        {
+            return (FiscalDocumentCreationResult.Failure(
+                FiscalDocumentCreationErrorCode.AppliedStatutoryTotalMismatch,
+                "Applied statutory parking tax facts must reconcile to the discounted VATable consideration."), null);
+        }
+
         if (finalPayableAmount != command.PayableBasis!.PayableAmountMinorUnits ||
             finalPayableAmount != tenderTotal ||
             finalPayableAmount != totalMax ||
@@ -637,7 +667,7 @@ public sealed class FiscalDocumentCreationService
             (benefitClassification != "FREE_PARKING" ||
              originalAmount <= 0 ||
              finalPayableAmount != 0 ||
-             vatExclusiveBasis + vatAmount != originalAmount ||
+             vatAmount != 0 ||
              statutoryDiscountAmount != vatExclusiveBasis ||
              !string.Equals(
                  command.AppliedStatutoryFiscalFacts!.AppliedTariffSnapshotId!.Value.ToString("D"),
