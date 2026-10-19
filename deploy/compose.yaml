@@ -74,11 +74,15 @@ services:
       POSSERVER_DB_USER: posserver_app
       POSSERVER_DB_PASSWORD_FILE: /run/secrets/postgres_app_password
       PosServer__AnnexE1__ArtifactRoot: /var/lib/exitpass/annex-e1
+      PosServer__FiscalReports__ArtifactRoot: /var/lib/exitpass/fiscal-report-artifacts
       POS_REQUIRE_COMPLETE_SALES_INVOICE_HEADER_PROFILE: ${POS_REQUIRE_COMPLETE_SALES_INVOICE_HEADER_PROFILE:-true}
     secrets:
       - postgres_app_password
     volumes:
       - pos_annex_e1:/var/lib/exitpass/annex-e1
+      - type: bind
+        source: ${POSSERVER_FISCAL_REPORT_ARTIFACT_ROOT:?Set POSSERVER_FISCAL_REPORT_ARTIFACT_ROOT to the external fiscal-report artifact directory}
+        target: /var/lib/exitpass/fiscal-report-artifacts
       - type: bind
         source: ${POSSERVER_APP_CONFIG_FILE:?Set POSSERVER_APP_CONFIG_FILE to an external production configuration file}
         target: /app/appsettings.Production.json
@@ -133,6 +137,7 @@ services:
       PGUSER: posserver_backup
       PGPASSWORD_FILE: /run/secrets/postgres_backup_password
       ANNEX_E1_ROOT: /var/lib/exitpass/annex-e1
+      FISCAL_REPORT_ARTIFACT_ROOT: /var/lib/exitpass/fiscal-report-artifacts
       BACKUP_INTERVAL_SECONDS: ${BACKUP_INTERVAL_SECONDS:-3600}
       BACKUP_START_DELAY_SECONDS: ${BACKUP_START_DELAY_SECONDS:-300}
       BACKUP_HEALTH_GRACE_SECONDS: ${BACKUP_HEALTH_GRACE_SECONDS:-900}
@@ -158,6 +163,10 @@ services:
         target: /run/config/age-recipient.txt
     volumes:
       - pos_annex_e1:/var/lib/exitpass/annex-e1:ro
+      - type: bind
+        source: ${POSSERVER_FISCAL_REPORT_ARTIFACT_ROOT:?Set POSSERVER_FISCAL_REPORT_ARTIFACT_ROOT to the external fiscal-report artifact directory}
+        target: /var/lib/exitpass/fiscal-report-artifacts
+        read_only: true
       - pos_backup_staging:/var/lib/exitpass-backup/staging
       - pos_backup_status:/var/lib/exitpass-backup/status
     tmpfs:

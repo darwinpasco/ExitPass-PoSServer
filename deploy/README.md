@@ -6,9 +6,9 @@ These assets prepare a repeatable Windows 11 Pro, Docker Desktop, and WSL 2 depl
 
 | Service | Exposure | Persistence | Purpose |
 | --- | --- | --- | --- |
-| `api` | HTTPS host binding through `api_ingress`; database access through `pos_internal` | `pos_annex_e1` | POS Server API and Annex E-1 artifact publication |
+| `api` | HTTPS host binding through `api_ingress`; database access through `pos_internal` | `pos_annex_e1`; external fiscal-report artifact directory | POS Server API and fiscal report artifact publication |
 | `postgres` | Internal Docker network only | `pos_pgdata` | PostgreSQL 16 fiscal data |
-| `backup` | No inbound ports; GCS egress only | status and failure-staging volumes; read-only Annex E-1 volume | Verified, encrypted database and artifact backup |
+| `backup` | No inbound ports; GCS egress only | status and failure-staging volumes; read-only Annex E-1 volume and fiscal-report artifact directory | Verified, encrypted database and artifact backup |
 
 The default API binding is `127.0.0.1:8443`. A LAN binding and firewall rule require separate host/network approval. PostgreSQL has no host port mapping and joins only the internal network. The API, PostgreSQL, and backup services share the internal database network; only the API joins `api_ingress`, and only the backup service joins `backup_egress`.
 
@@ -144,15 +144,16 @@ Each scheduled run:
 1. creates a PostgreSQL custom-format dump with ownership and ACL data excluded;
 2. validates the dump with `pg_restore --list`;
 3. archives the immutable Annex E-1 volume while excluding publication temporary files;
-4. verifies the artifact archive;
-5. creates component SHA-256 checksums and a JSON manifest;
-6. verifies every checksum;
-7. creates and validates a combined tar package;
-8. encrypts the package to an externally managed age X25519 recipient;
-9. verifies the encrypted checksum;
-10. uploads the encrypted package and checksum to a unique GCS path with generation-match zero;
-11. creates and validates `COMPLETE.json`, which binds the backup ID to the exact archive object, checksum object, encrypted SHA-256, and encrypted byte length;
-12. uploads `COMPLETE.json` last with generation-match zero.
+4. snapshots the fiscal-report artifact paths, verifies cataloged files against `pos.fiscal_report_artifacts`, and creates a deterministic artifact archive and per-file manifest containing relative path, byte length, and SHA-256;
+5. verifies both artifact archives;
+6. creates component SHA-256 checksums and a JSON package manifest;
+7. verifies every checksum;
+8. creates and validates a combined tar package;
+9. encrypts the package to an externally managed age X25519 recipient;
+10. verifies the encrypted checksum;
+11. uploads the encrypted package and checksum to a unique GCS path with generation-match zero;
+12. creates and validates `COMPLETE.json`, which binds the backup ID to the exact archive object, checksum object, encrypted SHA-256, and encrypted byte length;
+13. uploads `COMPLETE.json` last with generation-match zero.
 
 `COMPLETE.json` is the publication commit point. A directory containing only an archive, only a checksum, or both objects without a valid completion marker is an incomplete set and is never considered restorable. Local success status is written only after the completion-marker upload succeeds.
 
@@ -176,11 +177,11 @@ An authorized permission test must use a unique disposable prefix and must retai
 
 `BACKUP_INTERVAL_SECONDS` and `BACKUP_START_DELAY_SECONDS` control scheduling. The schedule is elapsed-time based and uses UTC timestamps. `GCS_BUCKET`, `GCS_PREFIX`, `GCS_EXPECTED_LOCATION`, and `GCS_STORAGE_CLASS` are configurable. `BACKUP_RETENTION_DAYS` is recorded in the manifest but causes no deletion; leave it `UNAPPROVED` until Records/Compliance approves bucket-side retention and legal-hold behavior.
 
-### Database and Annex E-1 consistency boundary
+### Database and fiscal artifact consistency boundary
 
-The database dump is a transactionally consistent PostgreSQL snapshot. The Annex E-1 archive is captured afterward. These are two sequential captures and are not a cross-resource atomic snapshot.
+The database dump is a transactionally consistent PostgreSQL snapshot. The Annex E-1 and fiscal-report artifact archives are captured afterward. These are sequential captures and are not a cross-resource atomic snapshot.
 
-The current Annex E-1 implementation publishes and verifies the content-addressed artifact file before inserting and committing its database record. With the database-first backup order and append-only artifact behavior, a database row included in the dump should have its referenced artifact available to the later archive. A concurrent generation can still add an unreferenced surplus artifact to the archive when its database transaction is outside the dump snapshot. This invariant depends on the current source behavior and must be re-reviewed if artifact publication or deletion behavior changes.
+The current Annex E-1 and fiscal-report implementations publish and verify content-addressed artifact files before inserting and committing their database records. With the database-first backup order and append-only artifact behavior, a database row included in the dump should have its referenced artifact available to the later archive. The backup also checks every live `pos.fiscal_report_artifacts` catalog row against storage before publication. A concurrent generation can still add an unreferenced surplus artifact to an archive when its database transaction is outside the dump snapshot. This invariant depends on the current source behavior and must be re-reviewed if artifact publication or deletion behavior changes.
 
 A quiet period is not required for routine hourly backups under that invariant, but those backups must be described as online sequential captures. A bounded application quiet period is required when an exact database/artifact set is needed for the controlled demonstration restore baseline. The operator must prevent new API writes before the backup begins and keep the system quiet until the completion marker is published. The backup service cannot enforce or attest to that quiet period and does not claim cross-resource atomicity.
 
@@ -269,6 +270,7 @@ Restoration is never performed against the running POS database. It requires:
 - a separate PostgreSQL 16 instance and network;
 - a pre-created, empty database whose name contains `restore`, `isolated`, `validation`, `disposable`, or `test`;
 - an empty artifact destination;
+- a separate empty fiscal-report artifact destination for version 2 backup sets;
 - a temporary GCS credential with bucket-scoped `roles/storage.objectViewer`;
 - the separately held age private identity;
 - a database administration password file for the isolated target.
@@ -290,12 +292,13 @@ RESTORE_PGDATABASE
 RESTORE_PGUSER
 RESTORE_PG_PASSWORD_FILE
 RESTORE_ANNEX_E1_ROOT
+RESTORE_FISCAL_REPORT_ARTIFACT_ROOT
 RESTORE_WORK_ROOT
 ```
 
 Mount `C:\ExitPass\Runtime\restore-secrets\gcs-restore-adc.json` read-only at `/run/secrets/gcp_restore_credentials`, and set both credential variables to that container path. Never mount `gcs-backup-adc.json` for restore. The restore image must use the same approved immutable backup-image digest that passed deployment preflight.
 
-The script first requires and validates `COMPLETE.json`. It rejects a missing marker, a marker for another backup ID, unexpected object paths, invalid hashes, invalid sizes, or any marker that is not `complete`. Only then does it download the exact archive and checksum, require a single matching checksum record, verify encrypted size and SHA-256, decrypt, reject unsafe archive paths and entry types, verify all internal component checksums and the PostgreSQL archive, and check the isolated destinations. It restores with `--no-owner --no-privileges` and writes `restore-result.json`. It does not create/drop a database or enable application traffic.
+The script first requires and validates `COMPLETE.json`. It rejects a missing marker, a marker for another backup ID, unexpected object paths, invalid hashes, invalid sizes, or any marker that is not `complete`. Only then does it download the exact archive and checksum, require a single matching checksum record, verify encrypted size and SHA-256, decrypt, reject unsafe archive paths and entry types, verify all internal component checksums and the PostgreSQL archive, and check the isolated destinations. For version 2 sets, it verifies every fiscal-report artifact against the per-file manifest and the restored `pos.fiscal_report_artifacts` catalog before publishing the files into the isolated destination. It restores with `--no-owner --no-privileges` and writes `restore-result.json`. It does not create/drop a database or enable application traffic.
 
 After restore, verify schema inventory, controlled codes, representative fiscal-document/X/Z/BIR/Annex reads, Electronic Journal integrity, counter continuity, artifact hashes, and byte-identical exports. A disaster-recovery promotion requires separately creating the runtime roles/grants and an explicit traffic-enable decision.
 

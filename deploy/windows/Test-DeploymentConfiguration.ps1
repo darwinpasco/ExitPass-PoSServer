@@ -76,6 +76,24 @@ function Require-ExternalFile {
     }
 }
 
+function Require-ExternalDirectory {
+    param([hashtable] $Settings, [string] $Name)
+
+    Require-Setting -Settings $Settings -Name $Name
+    $path = $Settings[$Name]
+    if (-not [System.IO.Path]::IsPathRooted($path)) {
+        throw "Setting '$Name' must use an absolute external path."
+    }
+    if (-not (Test-Path -LiteralPath $path -PathType Container)) {
+        throw "The external directory configured by '$Name' does not exist."
+    }
+    $resolvedPath = (Resolve-Path -LiteralPath $path).Path
+    $repoPrefix = [System.IO.Path]::GetFullPath($repoRoot).TrimEnd('\') + '\'
+    if ($resolvedPath.StartsWith($repoPrefix, [System.StringComparison]::OrdinalIgnoreCase)) {
+        throw "The directory configured by '$Name' must be stored outside the repository."
+    }
+}
+
 function Get-IgnorePolicyLines {
     param([string] $Path)
 
@@ -350,7 +368,8 @@ $requiredValues = @(
     'BACKUP_RPO_TARGET_SECONDS',
     'RESTORE_RTO_TARGET_SECONDS',
     'BACKUP_RETENTION_DAYS',
-    'GOOGLE_CLOUD_CLI_VERSION'
+    'GOOGLE_CLOUD_CLI_VERSION',
+    'POSSERVER_FISCAL_REPORT_ARTIFACT_ROOT'
 )
 foreach ($name in $requiredValues) {
     Require-Setting -Settings $settings -Name $name
@@ -398,6 +417,7 @@ if (-not $StaticOnly) {
     foreach ($name in $requiredFiles) {
         Require-ExternalFile -Settings $settings -Name $name
     }
+    Require-ExternalDirectory -Settings $settings -Name 'POSSERVER_FISCAL_REPORT_ARTIFACT_ROOT'
 
     $passwordPaths = @(
         $settings['POSSERVER_POSTGRES_BOOTSTRAP_PASSWORD_FILE'],
@@ -564,6 +584,24 @@ foreach ($serviceName in @('api', 'postgres')) {
         throw 'The GCP backup credential must be mounted only into the backup service.'
     }
 }
+$artifactHostRoot = [System.IO.Path]::GetFullPath($settings['POSSERVER_FISCAL_REPORT_ARTIFACT_ROOT']).TrimEnd('\')
+$apiArtifactMounts = @($compose.services.api.volumes | Where-Object {
+    $_.type -eq 'bind' -and
+    [System.IO.Path]::GetFullPath([string]$_.source).TrimEnd('\').Equals($artifactHostRoot, [System.StringComparison]::OrdinalIgnoreCase) -and
+    $_.target -eq '/var/lib/exitpass/fiscal-report-artifacts' -and
+    ($null -eq $_.PSObject.Properties['read_only'] -or $_.read_only -ne $true)
+})
+$backupArtifactMounts = @($compose.services.backup.volumes | Where-Object {
+    $_.type -eq 'bind' -and
+    [System.IO.Path]::GetFullPath([string]$_.source).TrimEnd('\').Equals($artifactHostRoot, [System.StringComparison]::OrdinalIgnoreCase) -and
+    $_.target -eq '/var/lib/exitpass/fiscal-report-artifacts' -and
+    $_.read_only -eq $true
+})
+if ($apiArtifactMounts.Count -ne 1 -or $backupArtifactMounts.Count -ne 1 -or
+    [string]$compose.services.api.environment.PosServer__FiscalReports__ArtifactRoot -ne '/var/lib/exitpass/fiscal-report-artifacts' -or
+    [string]$compose.services.backup.environment.FISCAL_REPORT_ARTIFACT_ROOT -ne '/var/lib/exitpass/fiscal-report-artifacts') {
+    throw 'The fiscal report artifact root must be mounted once read/write in API and once read-only in backup at the reviewed container path.'
+}
 $composeSource = Get-Content -Raw -LiteralPath $composeFile
 if ($composeSource -match '(?m)^\s*gcp_restore_credentials:' -or
     $composeSource -match '(?m)^\s*-\s*gcp_restore_credentials\s*$') {
@@ -598,6 +636,14 @@ if ($backupPublisher -notmatch 'COMPLETE\.json' -or $backupPublisher -notmatch '
 }
 if ($restoreUtility -notmatch 'COMPLETE\.json' -or $restoreUtility -notmatch 'exitpass-posserver-complete-backup:v1') {
     throw 'The restore utility does not require the complete-backup publication marker.'
+}
+if ($backupPublisher -notmatch 'fiscal-report-artifacts\.tar' -or
+    $backupPublisher -notmatch 'fiscal-report-artifacts-manifest\.json' -or
+    $backupPublisher -notmatch 'exitpass-posserver-fiscal-report-artifact-manifest:v1' -or
+    $restoreUtility -notmatch 'fiscal-report-artifacts\.tar' -or
+    $restoreUtility -notmatch 'fiscal-report-artifacts-manifest\.json' -or
+    $restoreUtility -notmatch 'RESTORE_FISCAL_REPORT_ARTIFACT_ROOT') {
+    throw 'The backup and restore utilities do not contain the reviewed fiscal report artifact coverage.'
 }
 if (($backupPublisher + $restoreUtility) -match '(?i)gcloud\s+storage\s+(rm|objects\s+delete)') {
     throw 'A destructive GCS command was found in backup or restore assets.'
