@@ -7,6 +7,7 @@ export CLOUDSDK_CORE_DISABLE_PROMPTS=1
 staging_root=${BACKUP_STAGING_ROOT:-/var/lib/exitpass-backup/staging}
 status_root=${BACKUP_STATUS_ROOT:-/var/lib/exitpass-backup/status}
 annex_root=${ANNEX_E1_ROOT:-/var/lib/exitpass/annex-e1}
+fiscal_report_root=${FISCAL_REPORT_ARTIFACT_ROOT:-/var/lib/exitpass/fiscal-report-artifacts}
 password_file=${PGPASSWORD_FILE:-/run/secrets/postgres_backup_password}
 recipient_file=${AGE_RECIPIENT_FILE:-/run/config/age-recipient.txt}
 
@@ -67,8 +68,20 @@ if [ ! -d "$annex_root" ]; then
     echo "Annex E-1 artifact root is missing." >&2
     exit 66
 fi
+if [ ! -d "$fiscal_report_root" ]; then
+    echo "Fiscal report artifact root is missing." >&2
+    exit 66
+fi
 if [ -n "$(find "$annex_root" -mindepth 1 ! -type f ! -type d -print -quit)" ]; then
     echo "Annex E-1 storage contains an unsupported non-file entry." >&2
+    exit 65
+fi
+if [ -n "$(find "$fiscal_report_root" -mindepth 1 ! -type f ! -type d -print -quit)" ]; then
+    echo "Fiscal report artifact storage contains an unsupported non-file entry." >&2
+    exit 65
+fi
+if find "$fiscal_report_root" -type f -printf '%P\n' | grep -Eq '(^|/)\.\.?(/|$)|[^A-Za-z0-9._/-]'; then
+    echo "Fiscal report artifact storage contains an unsafe relative path." >&2
     exit 65
 fi
 
@@ -116,6 +129,11 @@ started_at="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 database_dump="$work_dir/database.dump"
 database_list="$work_dir/database.list"
 annex_archive="$work_dir/annex-e1.tar"
+fiscal_report_archive="$work_dir/fiscal-report-artifacts.tar"
+fiscal_report_manifest="$work_dir/fiscal-report-artifacts-manifest.json"
+fiscal_report_manifest_rows="$work_dir/fiscal-report-artifacts-manifest.jsonl"
+fiscal_report_paths="$work_dir/fiscal-report-artifact-paths.txt"
+fiscal_report_catalog="$work_dir/fiscal-report-artifact-catalog.tsv"
 
 pg_dump \
     --host "$PGHOST" \
@@ -147,21 +165,81 @@ tar \
     .
 tar --list --file "$annex_archive" > /dev/null
 
+# The database dump is captured first. POS report artifacts are immutable and are published
+# before their catalog rows commit, so this subsequent path snapshot contains every file
+# referenced by the database snapshot. Later concurrent files may be included as harmless
+# unreferenced surplus, matching the existing Annex E-1 online-backup posture.
+psql --host "$PGHOST" --port "${PGPORT:-5432}" --username "$PGUSER" --dbname "$PGDATABASE" \
+    --tuples-only --no-align --field-separator '|' \
+    --command "SELECT artifact_storage_key, artifact_byte_length, artifact_sha256 FROM pos.fiscal_report_artifacts ORDER BY artifact_storage_key" \
+    > "$fiscal_report_catalog"
+find "$fiscal_report_root" -type f -printf '%P\n' | LC_ALL=C sort > "$fiscal_report_paths"
+
+while IFS='|' read -r storage_key expected_bytes expected_sha256; do
+    [ -n "$storage_key" ] || continue
+    case "$storage_key" in
+        /*|*'..'*|*[!A-Za-z0-9._/-]*)
+            echo "The fiscal report artifact catalog contains an unsafe storage key." >&2
+            exit 65
+            ;;
+    esac
+    artifact_path="$fiscal_report_root/$storage_key"
+    if [ ! -f "$artifact_path" ]; then
+        echo "A cataloged fiscal report artifact is missing from persistent storage." >&2
+        exit 74
+    fi
+    actual_bytes="$(wc -c < "$artifact_path" | tr -d ' ')"
+    actual_sha256="$(sha256sum "$artifact_path" | awk '{print $1}')"
+    if [ "$actual_bytes" != "$expected_bytes" ] || [ "$actual_sha256" != "$expected_sha256" ]; then
+        echo "A cataloged fiscal report artifact failed size or checksum validation." >&2
+        exit 74
+    fi
+done < "$fiscal_report_catalog"
+
+: > "$fiscal_report_manifest_rows"
+while IFS= read -r relative_path; do
+    [ -n "$relative_path" ] || continue
+    artifact_path="$fiscal_report_root/$relative_path"
+    artifact_bytes="$(wc -c < "$artifact_path" | tr -d ' ')"
+    artifact_sha256="$(sha256sum "$artifact_path" | awk '{print $1}')"
+    jq -nc --arg path "$relative_path" --argjson byteLength "$artifact_bytes" --arg sha256 "$artifact_sha256" \
+        '{path:$path,byteLength:$byteLength,sha256:$sha256}' >> "$fiscal_report_manifest_rows"
+done < "$fiscal_report_paths"
+jq -s '{schema:"exitpass-posserver-fiscal-report-artifact-manifest:v1",files:.}' \
+    "$fiscal_report_manifest_rows" > "$fiscal_report_manifest"
+
+tar \
+    --create \
+    --file "$fiscal_report_archive" \
+    --directory "$fiscal_report_root" \
+    --files-from "$fiscal_report_paths" \
+    --sort=name \
+    --mtime='UTC 1970-01-01' \
+    --owner=0 \
+    --group=0 \
+    --numeric-owner
+tar --list --file "$fiscal_report_archive" > /dev/null
+
 postgres_version="$(psql --host "$PGHOST" --port "${PGPORT:-5432}" --username "$PGUSER" --dbname "$PGDATABASE" --tuples-only --no-align --command 'SHOW server_version')"
 annex_file_count="$(find "$annex_root" -type f -name '*.xlsx' | wc -l | tr -d ' ')"
 annex_bytes="$(du -sb "$annex_root" | awk '{print $1}')"
+fiscal_report_file_count="$(wc -l < "$fiscal_report_paths" | tr -d ' ')"
+fiscal_report_bytes="$(jq '[.files[].byteLength] | add // 0' "$fiscal_report_manifest")"
+fiscal_report_catalog_count="$(wc -l < "$fiscal_report_catalog" | tr -d ' ')"
 completed_at="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 
 (
     cd "$work_dir"
-    sha256sum database.dump database.list annex-e1.tar > checksums.sha256
+    sha256sum database.dump database.list annex-e1.tar fiscal-report-artifacts.tar fiscal-report-artifacts-manifest.json > checksums.sha256
 )
 
 database_sha256="$(sha256sum "$database_dump" | awk '{print $1}')"
 annex_sha256="$(sha256sum "$annex_archive" | awk '{print $1}')"
+fiscal_report_archive_sha256="$(sha256sum "$fiscal_report_archive" | awk '{print $1}')"
+fiscal_report_manifest_sha256="$(sha256sum "$fiscal_report_manifest" | awk '{print $1}')"
 
 jq -n \
-    --arg schema "exitpass-posserver-backup:v1" \
+    --arg schema "exitpass-posserver-backup:v2" \
     --arg backupId "$backup_id" \
     --arg startedAt "$started_at" \
     --arg completedAt "$completed_at" \
@@ -170,8 +248,13 @@ jq -n \
     --arg postgresVersion "$postgres_version" \
     --arg databaseSha256 "$database_sha256" \
     --arg annexSha256 "$annex_sha256" \
+    --arg fiscalReportArchiveSha256 "$fiscal_report_archive_sha256" \
+    --arg fiscalReportManifestSha256 "$fiscal_report_manifest_sha256" \
     --argjson annexFileCount "$annex_file_count" \
     --argjson annexBytes "$annex_bytes" \
+    --argjson fiscalReportFileCount "$fiscal_report_file_count" \
+    --argjson fiscalReportBytes "$fiscal_report_bytes" \
+    --argjson fiscalReportCatalogCount "$fiscal_report_catalog_count" \
     --arg encryption "age-x25519" \
     --arg bucket "$GCS_BUCKET" \
     --arg prefix "$gcs_prefix" \
@@ -189,11 +272,19 @@ jq -n \
       sourceRevision: $sourceRevision,
       database: {name: $database, postgresVersion: $postgresVersion, sha256: $databaseSha256},
       annexE1: {fileCount: $annexFileCount, bytes: $annexBytes, archiveSha256: $annexSha256},
+      fiscalReportArtifacts: {
+        fileCount: $fiscalReportFileCount,
+        bytes: $fiscalReportBytes,
+        catalogRecordCountAtCapture: $fiscalReportCatalogCount,
+        archiveSha256: $fiscalReportArchiveSha256,
+        fileManifestSha256: $fiscalReportManifestSha256,
+        fileManifestSchema: "exitpass-posserver-fiscal-report-artifact-manifest:v1"
+      },
       encryption: $encryption,
       destination: {bucket: $bucket, prefix: $prefix, expectedLocation: $location, storageClass: $storageClass},
       consistency: {
         databaseSnapshot: "pg_dump consistent snapshot",
-        artifactCaptureOrder: "after database dump",
+        artifactCaptureOrder: "Annex E-1 and fiscal-report artifact path snapshot after database dump",
         crossResourceAtomic: false,
         quietPeriodEnforcedByBackupService: false
       },
@@ -215,7 +306,8 @@ encrypted_checksum="$work_dir/${backup_id}.tar.age.sha256"
 
 tar --create --file "$plain_package" --directory "$work_dir" \
     --sort=name --mtime='UTC 1970-01-01' --owner=0 --group=0 --numeric-owner \
-    manifest.json checksums.sha256 database.dump database.list annex-e1.tar
+    manifest.json checksums.sha256 database.dump database.list annex-e1.tar \
+    fiscal-report-artifacts.tar fiscal-report-artifacts-manifest.json
 tar --list --file "$plain_package" > /dev/null
 
 age --encrypt --recipient "$recipient" --output "$encrypted_package" "$plain_package"

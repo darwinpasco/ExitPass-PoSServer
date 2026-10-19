@@ -10,10 +10,10 @@
 6. The repository manifest and generated controlled-code SQL are the initialization sources of truth.
 7. PostgreSQL roles are fixed and separate: `posserver_admin`, `posserver_app`, `posserver_backup`, plus the image bootstrap superuser used only for initialization.
 8. The API uses Npgsql's `Passfile` connection-string option. The role password is supplied by an external file and is not embedded in Compose or image metadata.
-9. Annex E-1 artifacts use a named volume shared read/write with the API and read-only with the backup service.
-10. Backup packages combine a PostgreSQL custom archive, Annex E-1 artifact archive, checksums, and manifest. Packages are encrypted with age before upload.
+9. Annex E-1 artifacts use a named volume shared read/write with the API and read-only with the backup service. Fiscal report artifacts use an external durable Windows directory bind-mounted read/write into the API and read-only into the same backup service.
+10. Backup packages combine a PostgreSQL custom archive, Annex E-1 and fiscal report artifact archives, a per-file fiscal artifact manifest, checksums, and the package manifest. Packages are encrypted with age before upload.
 11. The running GCS identity has bucket-scoped `roles/storage.objectCreator` only. Every upload uses a unique object path and `if-generation-match=0` to prevent replacement.
-12. A backup becomes publish-complete only when the encrypted archive and checksum have uploaded and a validated `COMPLETE.json` marker is uploaded last. Partial object sets remain incomplete and are rejected by restore.
+12. A backup becomes publish-complete only when the encrypted archive and checksum have uploaded and a validated `COMPLETE.json` marker is uploaded last. Partial object sets remain incomplete and are rejected by restore. Fiscal report files are enumerated before archiving, hashed individually, and checked against restored database catalog rows during an isolated restore.
 13. Restoration uses a different, temporarily mounted `roles/storage.objectViewer` identity and age private identity. Neither is available to the running backup service.
 14. No destructive local or GCS retention pruning is implemented. The configured retention value is evidence for a future approved bucket-side policy.
 15. The branch remains on .NET 8. Migration to .NET 10, dependency review, regression testing, and deployment qualification are a separate follow-up task.

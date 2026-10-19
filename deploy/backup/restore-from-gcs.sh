@@ -127,6 +127,11 @@ tar --extract --file "$work_dir/package.tar" --directory "$work_dir/package"
     sha256sum --check checksums.sha256
     pg_restore --list database.dump > /dev/null
 )
+backup_schema="$(jq -r '.schema // empty' "$work_dir/package/manifest.json")"
+case "$backup_schema" in
+    exitpass-posserver-backup:v1|exitpass-posserver-backup:v2) ;;
+    *) echo "The backup package manifest schema is unsupported." >&2; exit 65;;
+esac
 tar --list --file "$work_dir/package/annex-e1.tar" > "$work_dir/annex-e1.list"
 if grep -Eq '(^/|(^|/)\.\.(/|$))' "$work_dir/annex-e1.list"; then
     echo "The Annex E-1 archive contains an unsafe path." >&2
@@ -136,6 +141,83 @@ if ! tar --list --verbose --file "$work_dir/package/annex-e1.tar" \
     | awk '{type=substr($1,1,1); if (type != "-" && type != "d") exit 1}'; then
     echo "The Annex E-1 archive contains an unsupported entry type." >&2
     exit 65
+fi
+
+fiscal_report_verify_root=""
+if [ "$backup_schema" = "exitpass-posserver-backup:v2" ]; then
+    require_value RESTORE_FISCAL_REPORT_ARTIFACT_ROOT
+    if [ ! -d "$RESTORE_FISCAL_REPORT_ARTIFACT_ROOT" ]; then
+        echo "The isolated fiscal report artifact restore directory does not exist." >&2
+        exit 66
+    fi
+    if [ -n "$(find "$RESTORE_FISCAL_REPORT_ARTIFACT_ROOT" -mindepth 1 -print -quit)" ]; then
+        echo "Refusing restore because the isolated fiscal report artifact directory is not empty." >&2
+        exit 65
+    fi
+    fiscal_report_archive="$work_dir/package/fiscal-report-artifacts.tar"
+    fiscal_report_manifest="$work_dir/package/fiscal-report-artifacts-manifest.json"
+    if [ ! -f "$fiscal_report_archive" ] || [ ! -f "$fiscal_report_manifest" ]; then
+        echo "The backup package is missing fiscal report artifact components." >&2
+        exit 65
+    fi
+    if ! jq --exit-status '
+        .schema == "exitpass-posserver-fiscal-report-artifact-manifest:v1"
+        and (.files | type == "array")
+        and ([.files[].path] | length) == ([.files[].path] | unique | length)
+        and all(.files[];
+          ((.path | type) == "string" and (.path | test("^[A-Za-z0-9._/-]+$")) and (.path | startswith("/") | not) and (.path | contains("..") | not))
+          and ((.byteLength | type) == "number" and .byteLength >= 0 and (.byteLength | floor) == .byteLength)
+          and ((.sha256 | type) == "string" and (.sha256 | test("^[0-9a-f]{64}$"))))' \
+        "$fiscal_report_manifest" > /dev/null; then
+        echo "The fiscal report artifact file manifest is invalid." >&2
+        exit 65
+    fi
+    expected_archive_sha256="$(jq -r '.fiscalReportArtifacts.archiveSha256' "$work_dir/package/manifest.json")"
+    expected_manifest_sha256="$(jq -r '.fiscalReportArtifacts.fileManifestSha256' "$work_dir/package/manifest.json")"
+    expected_file_count="$(jq -r '.fiscalReportArtifacts.fileCount' "$work_dir/package/manifest.json")"
+    expected_file_bytes="$(jq -r '.fiscalReportArtifacts.bytes' "$work_dir/package/manifest.json")"
+    actual_archive_sha256="$(sha256sum "$fiscal_report_archive" | awk '{print $1}')"
+    actual_manifest_sha256="$(sha256sum "$fiscal_report_manifest" | awk '{print $1}')"
+    manifest_file_count="$(jq '.files | length' "$fiscal_report_manifest")"
+    manifest_file_bytes="$(jq '[.files[].byteLength] | add // 0' "$fiscal_report_manifest")"
+    if [ "$actual_archive_sha256" != "$expected_archive_sha256" ] || \
+       [ "$actual_manifest_sha256" != "$expected_manifest_sha256" ] || \
+       [ "$manifest_file_count" != "$expected_file_count" ] || \
+       [ "$manifest_file_bytes" != "$expected_file_bytes" ]; then
+        echo "Fiscal report artifact package metadata is inconsistent." >&2
+        exit 65
+    fi
+    tar --list --file "$fiscal_report_archive" > "$work_dir/fiscal-report-artifacts.list"
+    if grep -Eq '(^/|(^|/)\.\.(/|$))' "$work_dir/fiscal-report-artifacts.list"; then
+        echo "The fiscal report artifact archive contains an unsafe path." >&2
+        exit 65
+    fi
+    if ! tar --list --verbose --file "$fiscal_report_archive" \
+        | awk '{type=substr($1,1,1); if (type != "-" && type != "d") exit 1}'; then
+        echo "The fiscal report artifact archive contains an unsupported entry type." >&2
+        exit 65
+    fi
+    fiscal_report_verify_root="$work_dir/fiscal-report-artifacts-verify"
+    mkdir "$fiscal_report_verify_root"
+    tar --extract --file "$fiscal_report_archive" --directory "$fiscal_report_verify_root"
+    jq -r '.files[] | [.path, (.byteLength|tostring), .sha256] | @tsv' "$fiscal_report_manifest" \
+        | LC_ALL=C sort > "$work_dir/fiscal-report-artifacts-expected.tsv"
+    cut -f 1 "$work_dir/fiscal-report-artifacts-expected.tsv" > "$work_dir/fiscal-report-artifacts-expected-paths.txt"
+    find "$fiscal_report_verify_root" -type f -printf '%P\n' | LC_ALL=C sort > "$work_dir/fiscal-report-artifacts-actual-paths.txt"
+    if ! cmp -s "$work_dir/fiscal-report-artifacts-expected-paths.txt" "$work_dir/fiscal-report-artifacts-actual-paths.txt"; then
+        echo "The fiscal report artifact archive and file manifest contain different paths." >&2
+        exit 65
+    fi
+    tab="$(printf '\t')"
+    while IFS="$tab" read -r relative_path expected_bytes expected_sha256; do
+        artifact_path="$fiscal_report_verify_root/$relative_path"
+        actual_bytes="$(wc -c < "$artifact_path" | tr -d ' ')"
+        actual_sha256="$(sha256sum "$artifact_path" | awk '{print $1}')"
+        if [ "$actual_bytes" != "$expected_bytes" ] || [ "$actual_sha256" != "$expected_sha256" ]; then
+            echo "A restored fiscal report artifact failed size or checksum validation." >&2
+            exit 74
+        fi
+    done < "$work_dir/fiscal-report-artifacts-expected.tsv"
 fi
 
 restore_password="$(tr -d '\r\n' < "$RESTORE_PG_PASSWORD_FILE")"
@@ -164,14 +246,39 @@ pg_restore \
     --no-privileges \
     "$work_dir/package/database.dump"
 
+if [ "$backup_schema" = "exitpass-posserver-backup:v2" ]; then
+    psql --host "$RESTORE_PGHOST" --port "${RESTORE_PGPORT:-5432}" --username "$RESTORE_PGUSER" --dbname "$RESTORE_PGDATABASE" \
+        --tuples-only --no-align --field-separator '|' \
+        --command "SELECT artifact_storage_key, artifact_byte_length, artifact_sha256 FROM pos.fiscal_report_artifacts ORDER BY artifact_storage_key" \
+        > "$work_dir/restored-fiscal-report-artifact-catalog.tsv"
+    while IFS='|' read -r storage_key expected_bytes expected_sha256; do
+        [ -n "$storage_key" ] || continue
+        artifact_path="$fiscal_report_verify_root/$storage_key"
+        if [ ! -f "$artifact_path" ]; then
+            echo "The restored database references a missing fiscal report artifact." >&2
+            exit 74
+        fi
+        actual_bytes="$(wc -c < "$artifact_path" | tr -d ' ')"
+        actual_sha256="$(sha256sum "$artifact_path" | awk '{print $1}')"
+        if [ "$actual_bytes" != "$expected_bytes" ] || [ "$actual_sha256" != "$expected_sha256" ]; then
+            echo "The restored database fiscal report catalog does not match the artifact archive." >&2
+            exit 74
+        fi
+    done < "$work_dir/restored-fiscal-report-artifact-catalog.tsv"
+fi
+
 tar --extract --file "$work_dir/package/annex-e1.tar" --directory "$RESTORE_ANNEX_E1_ROOT"
+if [ "$backup_schema" = "exitpass-posserver-backup:v2" ]; then
+    tar --extract --file "$work_dir/package/fiscal-report-artifacts.tar" --directory "$RESTORE_FISCAL_REPORT_ARTIFACT_ROOT"
+fi
 
 jq -n \
     --arg backupId "$BACKUP_ID" \
     --arg restoredAt "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
     --arg database "$RESTORE_PGDATABASE" \
     --arg artifactRoot "$RESTORE_ANNEX_E1_ROOT" \
-    '{status:"restored_to_isolated_target",backupId:$backupId,restoredAtUtc:$restoredAt,database:$database,artifactRoot:$artifactRoot}' \
+    --arg fiscalReportArtifactRoot "${RESTORE_FISCAL_REPORT_ARTIFACT_ROOT:-}" \
+    '{status:"restored_to_isolated_target",backupId:$backupId,restoredAtUtc:$restoredAt,database:$database,artifactRoot:$artifactRoot,fiscalReportArtifactRoot:$fiscalReportArtifactRoot}' \
     > "$work_dir/restore-result.json"
 
 echo "Backup $BACKUP_ID restored to the isolated target. Application traffic was not enabled."
