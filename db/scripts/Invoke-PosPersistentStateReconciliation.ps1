@@ -15,7 +15,7 @@ canonical constraints in one transaction. Historical EJ printable text is never 
 param(
     [ValidateSet('Inspect', 'Apply')]
     [string] $Mode = 'Inspect',
-    [ValidateSet('All', 'AnnexE1AutomaticSupersession')]
+    [ValidateSet('All', 'AnnexE1AutomaticSupersession', 'FiscalReportArtifacts')]
     [string] $Scope = 'All',
     [string] $ContainerName = 'exitpass-pos-ist-persistent-db',
     [string] $DatabaseName = 'exitpass_pos_ist',
@@ -30,11 +30,13 @@ $fiscalDocumentStatePath = Join-Path $repoRoot 'db\state\tables\pos.fiscal_docum
 $electronicJournalStatePath = Join-Path $repoRoot 'db\state\tables\pos.electronic_journal_records.sql'
 $reportingPeriodAssignmentStatePath = Join-Path $repoRoot 'db\state\tables\pos.fiscal_document_reporting_period_assignment.sql'
 $annexE1WorkbookStatePath = Join-Path $repoRoot 'db\state\tables\pos.annex_e1_workbooks.sql'
+$fiscalReportArtifactStatePath = Join-Path $repoRoot 'db\state\tables\pos.fiscal_report_artifacts.sql'
 $expectedInventoryPath = Join-Path $repoRoot 'db\validation\pos_expected_inventory.json'
 $fiscalDocumentState = [IO.File]::ReadAllText($fiscalDocumentStatePath)
 $electronicJournalState = [IO.File]::ReadAllText($electronicJournalStatePath)
 $reportingPeriodAssignmentState = [IO.File]::ReadAllText($reportingPeriodAssignmentStatePath)
 $annexE1WorkbookState = [IO.File]::ReadAllText($annexE1WorkbookStatePath)
+$fiscalReportArtifactState = [IO.File]::ReadAllText($fiscalReportArtifactStatePath)
 $expectedInventory = [IO.File]::ReadAllText($expectedInventoryPath) | ConvertFrom-Json
 $completionConstraints = @('ck_fiscal_documents__completion_basis', 'ck_fiscal_documents__completion_ancestry')
 $printableColumn = 'printable_sales_invoice_text'
@@ -192,6 +194,10 @@ function Invoke-Psql([string] $Sql, [switch] $Scalar) {
 
 function Test-ColumnExists([string] $TableName, [string] $ColumnName) {
     return (Invoke-Psql "SELECT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema='pos' AND table_name='$TableName' AND column_name='$ColumnName');" -Scalar) -eq 't'
+}
+
+function Test-TableExists([string] $TableName) {
+    return (Invoke-Psql "SELECT to_regclass('pos.$TableName') IS NOT NULL;" -Scalar) -eq 't'
 }
 
 function Test-ConstraintExists([string] $TableName, [string] $ConstraintName) {
@@ -557,6 +563,47 @@ function Get-PrintableFacts {
     return (Invoke-Psql "SELECT json_build_object('column_present',true,'null_rows',count(*) FILTER (WHERE printable_sales_invoice_text IS NULL),'nonnull_rows',count(*) FILTER (WHERE printable_sales_invoice_text IS NOT NULL))::text FROM pos.electronic_journal_records;" -Scalar | ConvertFrom-Json)
 }
 
+function Get-FiscalReportArtifactInventory {
+    if (-not (Test-TableExists 'fiscal_report_artifacts')) {
+        return [pscustomobject]@{ table_present = $false; definition_aligned = $false; row_count = $null }
+    }
+    $inventory = Invoke-Psql @'
+SELECT json_build_object(
+  'row_count', (SELECT count(*) FROM pos.fiscal_report_artifacts),
+  'constraints', (SELECT coalesce(json_agg(conname ORDER BY conname), '[]') FROM pg_constraint
+    WHERE conrelid='pos.fiscal_report_artifacts'::regclass),
+  'indexes', (SELECT coalesce(json_agg(indexname ORDER BY indexname), '[]') FROM pg_indexes
+    WHERE schemaname='pos' AND tablename='fiscal_report_artifacts'),
+  'trigger_enabled', (SELECT tgenabled FROM pg_trigger
+    WHERE tgrelid='pos.fiscal_report_artifacts'::regclass
+      AND tgname='trg_fiscal_report_artifacts_immutable' AND NOT tgisinternal)
+)::text;
+'@ -Scalar | ConvertFrom-Json
+    $requiredConstraints = @(
+        'ck_fiscal_report_artifacts__calendar', 'ck_fiscal_report_artifacts__integrity',
+        'ck_fiscal_report_artifacts__scope', 'ck_fiscal_report_artifacts__storage',
+        'fk_fiscal_report_artifacts__identity', 'fk_fiscal_report_artifacts__period',
+        'fk_fiscal_report_artifacts__site', 'fk_fiscal_report_artifacts__supersedes',
+        'pk_fiscal_report_artifacts', 'uq_fiscal_report_artifacts__scope_revision',
+        'uq_fiscal_report_artifacts__supersedes')
+    $requiredIndexes = @(
+        'ix_fiscal_report_artifacts__period', 'ix_fiscal_report_artifacts__scope_current',
+        'pk_fiscal_report_artifacts', 'uq_fiscal_report_artifacts__scope_revision',
+        'uq_fiscal_report_artifacts__supersedes')
+    $aligned = @($inventory.constraints).Count -eq $requiredConstraints.Count -and
+        @($requiredConstraints | Where-Object { $_ -notin @($inventory.constraints) }).Count -eq 0 -and
+        @($requiredIndexes | Where-Object { $_ -notin @($inventory.indexes) }).Count -eq 0 -and
+        [string]$inventory.trigger_enabled -ceq 'O'
+    return [pscustomobject]@{
+        table_present = $true
+        definition_aligned = $aligned
+        row_count = [int64]$inventory.row_count
+        constraints = @($inventory.constraints)
+        indexes = @($inventory.indexes)
+        trigger_enabled = [string]$inventory.trigger_enabled
+    }
+}
+
 function Write-Evidence([object] $Value) {
     if ([string]::IsNullOrWhiteSpace($EvidenceDir)) { return }
     [void](New-Item -ItemType Directory -Path $EvidenceDir -Force)
@@ -571,6 +618,7 @@ $before = [ordered]@{
     printable_facts = Get-PrintableFacts
     canonical_required_constraint = Get-CanonicalRequiredConstraintInventory
     annex_e1_correction_constraint = Get-AnnexE1CorrectionConstraintInventory
+    fiscal_report_artifacts = Get-FiscalReportArtifactInventory
     reporting_period_assignment = Get-ReportingPeriodContractInventory
 }
 $inspection = [ordered]@{
@@ -579,6 +627,7 @@ $inspection = [ordered]@{
     canonical_electronic_journal_state_sha256 = (Get-FileHash $electronicJournalStatePath -Algorithm SHA256).Hash.ToLowerInvariant()
     canonical_reporting_period_assignment_state_sha256 = (Get-FileHash $reportingPeriodAssignmentStatePath -Algorithm SHA256).Hash.ToLowerInvariant()
     canonical_annex_e1_workbook_state_sha256 = (Get-FileHash $annexE1WorkbookStatePath -Algorithm SHA256).Hash.ToLowerInvariant()
+    canonical_fiscal_report_artifact_state_sha256 = (Get-FileHash $fiscalReportArtifactStatePath -Algorithm SHA256).Hash.ToLowerInvariant()
     expected_inventory_sha256 = (Get-FileHash $expectedInventoryPath -Algorithm SHA256).Hash.ToLowerInvariant()
     schema_drift_inventory = Get-SchemaDrift
     before = $before; result = 'INSPECTED'
@@ -595,7 +644,12 @@ if ($Mode -eq 'Inspect') {
     $inspection | ConvertTo-Json -Depth 20
     return
 }
-$unexpectedDrift = @($inspection.schema_drift_inventory.unexpected_drift)
+$allowedArtifactBootstrapDrift = @(
+    'missing unexpected table: pos.fiscal_report_artifacts',
+    'missing unexpected trigger: pos.fiscal_report_artifacts.trg_fiscal_report_artifacts_immutable')
+$unexpectedDrift = @($inspection.schema_drift_inventory.unexpected_drift | Where-Object {
+    -not (($Scope -in @('All', 'FiscalReportArtifacts')) -and $_ -in $allowedArtifactBootstrapDrift)
+})
 if ($unexpectedDrift.Count -gt 0) {
     $inspection.result = 'BLOCKED_UNEXPECTED_DATABASE_INVENTORY_DRIFT'; Write-Evidence $inspection
     throw "BLOCKED_UNEXPECTED_DATABASE_INVENTORY_DRIFT: $($unexpectedDrift.Count) unrelated database object inventory finding(s) require separate review before Apply."
@@ -616,9 +670,13 @@ if ($Scope -eq 'All' -and [int64]$before.canonical_required_constraint.unsupport
     $inspection.result = 'BLOCKED_UNSUPPORTED_HISTORICAL_EJ_SEMANTIC_VERSION'; Write-Evidence $inspection
     throw "BLOCKED_UNSUPPORTED_HISTORICAL_EJ_SEMANTIC_VERSION: $($before.canonical_required_constraint.unsupported_rows) canonical historical EJ row(s) use unsupported semantic version(s)."
 }
-if ([int64]$before.annex_e1_correction_constraint.invalid_rows -gt 0) {
+if ($Scope -ne 'FiscalReportArtifacts' -and [int64]$before.annex_e1_correction_constraint.invalid_rows -gt 0) {
     $inspection.result = 'BLOCKED_INVALID_ANNEX_E1_CORRECTION_LINEAGE'; Write-Evidence $inspection
     throw "BLOCKED_INVALID_ANNEX_E1_CORRECTION_LINEAGE: $($before.annex_e1_correction_constraint.invalid_rows) workbook row(s) violate the canonical successor/correction lineage."
+}
+if ($before.fiscal_report_artifacts.table_present -and -not $before.fiscal_report_artifacts.definition_aligned) {
+    $inspection.result = 'BLOCKED_FISCAL_REPORT_ARTIFACT_SCHEMA_DRIFT'; Write-Evidence $inspection
+    throw 'BLOCKED_FISCAL_REPORT_ARTIFACT_SCHEMA_DRIFT: existing artifact storage metadata does not match the canonical definition.'
 }
 if (-not $PSCmdlet.ShouldProcess("$ContainerName/$DatabaseName", 'Additively reconcile canonical POS persistent IST state')) { return }
 
@@ -686,11 +744,14 @@ ALTER TABLE pos.fiscal_documents ALTER COLUMN completion_basis SET NOT NULL;
         [void]$sql.AppendLine($canonicalTriggerDefinition)
     }
 }
-if ($before.annex_e1_correction_constraint.apply_would_replace) {
+if ($Scope -ne 'FiscalReportArtifacts' -and $before.annex_e1_correction_constraint.apply_would_replace) {
     [void]$sql.AppendLine("ALTER TABLE pos.annex_e1_workbooks DROP CONSTRAINT $(Quote-Identifier $annexE1CorrectionConstraint);")
 }
-if ($before.annex_e1_correction_constraint.apply_would_replace -or $before.annex_e1_correction_constraint.apply_would_create) {
+if ($Scope -ne 'FiscalReportArtifacts' -and ($before.annex_e1_correction_constraint.apply_would_replace -or $before.annex_e1_correction_constraint.apply_would_create)) {
     [void]$sql.AppendLine("ALTER TABLE pos.annex_e1_workbooks ADD CONSTRAINT $(Quote-Identifier $annexE1CorrectionConstraint) $annexE1CorrectionConstraintDefinition;")
+}
+if ($Scope -in @('All', 'FiscalReportArtifacts') -and -not $before.fiscal_report_artifacts.table_present) {
+    [void]$sql.AppendLine($fiscalReportArtifactState)
 }
 [void]$sql.AppendLine('COMMIT;')
 [void](Invoke-Psql $sql.ToString())
@@ -702,10 +763,15 @@ $after = [ordered]@{
     printable_facts = Get-PrintableFacts
     canonical_required_constraint = Get-CanonicalRequiredConstraintInventory
     annex_e1_correction_constraint = Get-AnnexE1CorrectionConstraintInventory
+    fiscal_report_artifacts = Get-FiscalReportArtifactInventory
     reporting_period_assignment = Get-ReportingPeriodContractInventory
 }
+$existingTableCountsChanged = @($before.table_row_counts.Keys | Where-Object {
+    [int64]$after.table_row_counts[$_] -ne [int64]$before.table_row_counts[$_]
+})
 if (($before.protected_manifest | ConvertTo-Json -Depth 20 -Compress) -cne ($after.protected_manifest | ConvertTo-Json -Depth 20 -Compress) -or
-    ($before.table_row_counts | ConvertTo-Json -Depth 5 -Compress) -cne ($after.table_row_counts | ConvertTo-Json -Depth 5 -Compress)) {
+    $existingTableCountsChanged.Count -ne 0 -or
+    (-not $before.fiscal_report_artifacts.table_present -and [int64]$after.fiscal_report_artifacts.row_count -ne 0)) {
     throw 'State reconciliation changed protected row counts, identities, sequences, periods, snapshots, or EJ history.'
 }
 if ($Scope -eq 'All') {
@@ -724,9 +790,12 @@ if ($Scope -eq 'All') {
         throw 'Reporting-period function reconciliation changed owner or security-definer posture.'
     }
 }
-if (-not $after.annex_e1_correction_constraint.definition_aligned -or
-    [int64]$after.annex_e1_correction_constraint.invalid_rows -ne 0) {
+if ($Scope -ne 'FiscalReportArtifacts' -and (-not $after.annex_e1_correction_constraint.definition_aligned -or
+    [int64]$after.annex_e1_correction_constraint.invalid_rows -ne 0)) {
     throw 'Persistent database Annex E-1 correction constraint does not match the canonical automatic-successor contract.'
+}
+if (-not $after.fiscal_report_artifacts.definition_aligned) {
+    throw 'Persistent database fiscal report artifact catalog does not match the canonical definition.'
 }
 $afterDrift = Get-SchemaDrift
 if (@($afterDrift.missing_columns).Count -ne 0 -or @($afterDrift.mismatched_types).Count -ne 0 -or

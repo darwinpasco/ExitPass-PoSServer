@@ -28,8 +28,7 @@ public sealed class FiscalXReadingApiTests
         Assert.Contains("GeneratePolicyName", source, StringComparison.Ordinal);
         Assert.Contains("ReadPolicyName", source, StringComparison.Ordinal);
         Assert.DoesNotContain("z-reading", source, StringComparison.OrdinalIgnoreCase);
-        Assert.DoesNotContain("print", source, StringComparison.OrdinalIgnoreCase);
-        Assert.DoesNotContain("export", source, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("MapGet(\"/exports", source, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]

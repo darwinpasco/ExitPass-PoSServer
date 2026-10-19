@@ -39,6 +39,7 @@ public static class FiscalDocumentServiceCollectionExtensions
             services.TryAddScoped<IElectronicJournalRepository, UnavailableElectronicJournalRepository>();
             services.TryAddScoped<IFiscalDocumentReprintRepository, UnavailableFiscalDocumentReprintRepository>();
             services.TryAddScoped<IAnnexE1Repository, UnavailableAnnexE1Repository>();
+            services.TryAddScoped<IFiscalReportArtifactRepository, UnavailableFiscalReportArtifactRepository>();
         }
         else if (!IsValidNpgsqlConnectionString(connectionString))
         {
@@ -57,6 +58,7 @@ public static class FiscalDocumentServiceCollectionExtensions
             services.TryAddScoped<IElectronicJournalRepository, UnavailableElectronicJournalRepository>();
             services.TryAddScoped<IFiscalDocumentReprintRepository, UnavailableFiscalDocumentReprintRepository>();
             services.TryAddScoped<IAnnexE1Repository, UnavailableAnnexE1Repository>();
+            services.TryAddScoped<IFiscalReportArtifactRepository, UnavailableFiscalReportArtifactRepository>();
         }
         else
         {
@@ -87,6 +89,16 @@ public static class FiscalDocumentServiceCollectionExtensions
             else
             {
                 services.TryAddScoped<IAnnexE1Repository, UnavailableAnnexE1Repository>();
+            }
+            var fiscalReportArtifactRoot = configuration["PosServer:FiscalReports:ArtifactRoot"];
+            if (!string.IsNullOrWhiteSpace(fiscalReportArtifactRoot) && Path.IsPathFullyQualified(fiscalReportArtifactRoot))
+            {
+                services.TryAddSingleton<IFiscalReportArtifactStore>(_ => new FileSystemFiscalReportArtifactStore(fiscalReportArtifactRoot));
+                services.TryAddScoped<IFiscalReportArtifactRepository, PostgresFiscalReportArtifactRepository>();
+            }
+            else
+            {
+                services.TryAddScoped<IFiscalReportArtifactRepository, UnavailableFiscalReportArtifactRepository>();
             }
         }
 
@@ -119,6 +131,7 @@ public static class FiscalDocumentServiceCollectionExtensions
         services.AddSingleton<AnnexE1DeterministicXlsxRenderer>();
         services.AddSingleton<FiscalReportPresentationService>();
         services.AddSingleton<FiscalReportOutputRenderer>();
+        services.AddScoped<FiscalReportArtifactService>();
         services.TryAddSingleton<Microsoft.AspNetCore.Authorization.IAuthorizationMiddlewareResultHandler, FiscalReportOutputAuthorizationResultHandler>();
         services.AddScoped(provider => new SalesInvoiceHeaderProfileAdminService(
             provider.GetRequiredService<ISalesInvoiceHeaderProfileRepository>(),

@@ -26,14 +26,29 @@ public static class AuditTrailEndpoint
     public static async Task<IResult> ReadAsync(
         [AsParameters] AuditTrailRequest request,
         AuditTrailService service,
+        FiscalReportArtifactService artifactService,
         HttpContext context,
         CancellationToken cancellationToken)
     {
         var correlation = Correlation(context);
         if (correlation is null) return Json(Error("missing_correlation_id", 400, "A single safe X-Correlation-Id header is required.", "unavailable"));
         if (!Authorized(request, context)) return Json(Error("audit_trail_not_found", 404, "The requested Audit Trail is unavailable.", correlation));
-        var result = await service.ReadAsync(Query(request), cancellationToken).ConfigureAwait(false);
-        return Json(Map(result, correlation));
+        var query = Query(request);
+        var result = await service.ReadAsync(query, cancellationToken).ConfigureAwait(false);
+        var response = Map(result, correlation);
+        if (result.Report is null) return Json(response);
+        var report = result.Report;
+        var artifactScope = FiscalReportArtifactContract.SourceFingerprint(new
+            { report.SitePosServerId, report.From, report.To, request.ActionCode, request.Actor, request.Result, request.Reference });
+        var persisted = await artifactService.GetOrCreateAsync(new(
+            report.SitePosServerId, null, MonthlyESalesContract.CurrencyCode, "AUDIT_TRAIL", $"{artifactScope}:read", "json",
+            AuditTrailContract.JsonExportVersion, FiscalReportArtifactContract.SourceFingerprint(report)),
+            _ => Task.FromResult(new FiscalReportArtifactPayload(
+                System.Text.Json.JsonSerializer.SerializeToUtf8Bytes(response), "application/json; charset=utf-8",
+                $"audit-trail-{report.From:yyyyMMddHHmmss}-{report.To:yyyyMMddHHmmss}.json")),
+            cancellationToken).ConfigureAwait(false);
+        return persisted.Succeeded ? Json(response) : Json(Error("audit_trail_artifact_unavailable", 503,
+            persisted.SafeMessage ?? "The Audit Trail artifact could not be persisted safely.", correlation));
     }
 
     public static async Task<IResult> ExportAsync(
@@ -41,6 +56,7 @@ public static class AuditTrailEndpoint
         string format,
         AuditTrailService service,
         AuditTrailOutputRenderer renderer,
+        FiscalReportArtifactService artifactService,
         IAuditTrailRepository repository,
         HttpContext context,
         CancellationToken cancellationToken)
@@ -52,13 +68,29 @@ public static class AuditTrailEndpoint
         var result = await service.ReadAsync(Query(request), cancellationToken).ConfigureAwait(false);
         if (result.Report is null) return Json(Map(result, correlation));
 
-        var output = renderer.Render(result.Report, outputFormat);
+        var report = result.Report;
+        var subject = $"{report.From:O}/{report.To:O}/{request.ActionCode}/{request.Actor}/{request.Result}/{request.Reference}";
+        var artifactScope = FiscalReportArtifactContract.SourceFingerprint(new
+            { report.SitePosServerId, report.From, report.To, request.ActionCode, request.Actor, request.Result, request.Reference });
+        var persisted = await artifactService.GetOrCreateAsync(new(
+            report.SitePosServerId, null, MonthlyESalesContract.CurrencyCode, "AUDIT_TRAIL", $"{artifactScope}:export",
+            outputFormat.ToString().ToLowerInvariant(), AuditTrailContract.JsonExportVersion,
+            FiscalReportArtifactContract.SourceFingerprint(new { report, outputFormat })),
+            _ =>
+            {
+                var output = renderer.Render(report, outputFormat);
+                return Task.FromResult(new FiscalReportArtifactPayload(output.Bytes, output.ContentType, output.FileName));
+            }, cancellationToken).ConfigureAwait(false);
+        if (!persisted.Succeeded || persisted.Artifact is null || persisted.Bytes is null)
+            return Json(Error("audit_trail_artifact_unavailable", 503,
+                persisted.SafeMessage ?? "The Audit Trail artifact could not be persisted safely.", correlation));
+        var artifact = persisted.Artifact;
         var actor = context.User.FindFirstValue(ClaimTypes.NameIdentifier) ?? "unavailable";
-        var subject = $"{result.Report.From:O}/{result.Report.To:O}";
-        await repository.RecordExportAsync(result.Report.SitePosServerId, "AUDIT_TRAIL", subject, format, actor,
-            correlation, output.Sha256, result.Report.Rows.Count, cancellationToken).ConfigureAwait(false);
-        context.Response.Headers["X-Content-SHA256"] = output.Sha256;
-        return Results.File(output.Bytes, output.ContentType, output.FileName, enableRangeProcessing: false);
+        await repository.RecordExportAsync(report.SitePosServerId, "AUDIT_TRAIL", subject, format, actor,
+            correlation, artifact.Sha256, report.Rows.Count, cancellationToken).ConfigureAwait(false);
+        context.Response.Headers["X-Content-SHA256"] = artifact.Sha256;
+        context.Response.Headers["X-ExitPass-Artifact-Revision"] = artifact.Revision.ToString();
+        return Results.File(persisted.Bytes, artifact.ContentType, artifact.FileName, enableRangeProcessing: false);
     }
 
     private static AuditTrailQuery Query(AuditTrailRequest request) => new(

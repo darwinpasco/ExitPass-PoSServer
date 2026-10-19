@@ -37,7 +37,10 @@ public sealed class MonthlyESalesOutputRenderer
             _ => "application/pdf"
         };
         var posture = report.SubmissionReadiness == MonthlyESalesSubmissionReadiness.TechnicalUat ? "technical-uat-" : string.Empty;
-        return new(format, contentType, $"monthly-esales-{posture}{report.CalendarYear:D4}{report.CalendarMonth:D2}.{extension}",
+        var coverage = report.CoverageStatus == MonthlyESalesCoverageStatus.MonthToDate
+            ? $"mtd-through-{report.LastCoveredBusinessDate:yyyyMMdd}-"
+            : string.Empty;
+        return new(format, contentType, $"monthly-esales-{posture}{coverage}{report.CalendarYear:D4}{report.CalendarMonth:D2}.{extension}",
             bytes, Convert.ToHexString(SHA256.HashData(bytes)).ToLowerInvariant());
     }
 
@@ -97,6 +100,7 @@ public sealed class MonthlyESalesOutputRenderer
         y = Metadata(pdf, page, y, "TIN", source.Report.TaxpayerTin);
         y = Metadata(pdf, page, y, "Site / Parking Location", source.SiteDisplayName);
         y = Metadata(pdf, page, y, "Reporting Month", $"{source.Report.CalendarYear:D4}-{source.Report.CalendarMonth:D2}");
+        y = Metadata(pdf, page, y, "Coverage", source.Report.CoverageMessage);
         y = Metadata(pdf, page, y, "Report As Of (PHT)", source.ReportAsOf.ToOffset(TimeSpan.FromHours(8)).ToString("yyyy-MM-dd HH:mm:ss", CultureInfo.InvariantCulture));
         return y - 5;
     }

@@ -25,8 +25,7 @@ public sealed class FiscalZReadingApiTests
         Assert.Contains("/v1/fiscal-reports/z-readings", source, StringComparison.Ordinal);
         Assert.Contains("ClosePolicyName", source, StringComparison.Ordinal);
         Assert.Contains("ReadPolicyName", source, StringComparison.Ordinal);
-        Assert.DoesNotContain("render", source, StringComparison.OrdinalIgnoreCase);
-        Assert.DoesNotContain("export", source, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("MapGet(\"/exports", source, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]

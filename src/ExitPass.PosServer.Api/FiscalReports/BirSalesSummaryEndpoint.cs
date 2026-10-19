@@ -27,6 +27,8 @@ public static class BirSalesSummaryEndpoint
     public static async Task<BirSalesSummaryApiResponse> GenerateAsync(
         GenerateBirSalesSummaryRequest request,
         BirSalesSummaryService service,
+        BirSalesSummaryOutputRenderer renderer,
+        FiscalReportArtifactService artifactService,
         HttpContext context,
         IHostEnvironment environment,
         CancellationToken cancellationToken = default)
@@ -50,7 +52,21 @@ public static class BirSalesSummaryEndpoint
             principal,
             principal,
             correlation), cancellationToken).ConfigureAwait(false);
-        return Map(result, correlation);
+        var response = Map(result, correlation);
+        if (!response.Succeeded || response.Summary is null) return response;
+        var summary = response.Summary;
+        var persisted = await artifactService.GetOrCreateAsync(new(
+            summary.SitePosServerId, summary.FiscalIdentityId, summary.CurrencyCode, "DAILY_BIR_SALES_SUMMARY",
+            summary.BirSalesSummaryReportId.ToString("D"), "json", BirSalesSummaryContract.ExportVersion,
+            FiscalReportArtifactContract.SourceFingerprint(summary), summary.FiscalReportingPeriodId,
+            BusinessDayDate: summary.BusinessDayDate),
+            _ =>
+            {
+                var output = renderer.Render(summary, BirSalesSummaryExportFormat.Json);
+                return Task.FromResult(new FiscalReportArtifactPayload(output.Bytes, output.ContentType, output.FileName));
+            }, cancellationToken).ConfigureAwait(false);
+        return persisted.Succeeded ? response : Error("bir_sales_summary_artifact_unavailable", 503,
+            persisted.SafeMessage ?? "The BIR sales-summary artifact could not be persisted safely.", correlation);
     }
 
     public static async Task<BirSalesSummaryApiResponse> GetAsync(
@@ -76,6 +92,7 @@ public static class BirSalesSummaryEndpoint
         string format,
         BirSalesSummaryService service,
         BirSalesSummaryOutputRenderer renderer,
+        FiscalReportArtifactService artifactService,
         IBirSalesSummaryPdfContextRepository pdfContextRepository,
         IAuditTrailRepository auditTrailRepository,
         HttpContext context,
@@ -104,16 +121,33 @@ public static class BirSalesSummaryEndpoint
                 return Results.Json(Error("bir_sales_summary_pdf_context_unavailable", 503,
                     "The governed BIR sales-summary PDF header is unavailable.", correlation), statusCode: 503);
         }
-        var output = renderer.Render(read.Record, outputFormat, pdfContext);
+        var sourceFingerprint = outputFormat == BirSalesSummaryExportFormat.Json
+            ? FiscalReportArtifactContract.SourceFingerprint(read.Record)
+            : FiscalReportArtifactContract.SourceFingerprint(new { read.Record, outputFormat, pdfContext });
+        var persisted = await artifactService.GetOrCreateAsync(new(
+            read.Record.SitePosServerId, read.Record.FiscalIdentityId, read.Record.CurrencyCode, "DAILY_BIR_SALES_SUMMARY",
+            read.Record.BirSalesSummaryReportId.ToString("D"), outputFormat.ToString().ToLowerInvariant(),
+            BirSalesSummaryContract.ExportVersion, sourceFingerprint, read.Record.FiscalReportingPeriodId,
+            BusinessDayDate: read.Record.BusinessDayDate),
+            _ =>
+            {
+                var output = renderer.Render(read.Record, outputFormat, pdfContext);
+                return Task.FromResult(new FiscalReportArtifactPayload(output.Bytes, output.ContentType, output.FileName));
+            }, cancellationToken).ConfigureAwait(false);
+        if (!persisted.Succeeded || persisted.Artifact is null || persisted.Bytes is null)
+            return Results.Json(Error("bir_sales_summary_artifact_unavailable", 503,
+                persisted.SafeMessage ?? "The BIR sales-summary artifact could not be persisted safely.", correlation), statusCode: 503);
+        var artifact = persisted.Artifact;
         var actor = context.User.FindFirstValue(ClaimTypes.NameIdentifier) ?? "unavailable";
         await auditTrailRepository.RecordExportAsync(read.Record.SitePosServerId, "DAILY_BIR_SALES_SUMMARY",
-            read.Record.BirSalesSummaryReportId.ToString("D"), format, actor, correlation, output.Sha256, 1,
+            read.Record.BirSalesSummaryReportId.ToString("D"), format, actor, correlation, artifact.Sha256, 1,
             cancellationToken).ConfigureAwait(false);
         logger.LogInformation(
             "BIR sales-summary export completed. Summary={SummaryId} Format={Format} ContentSha256={ContentSha256} Correlation={Correlation}",
-            Safe(summaryId), output.Format, output.Sha256, correlation);
-        context.Response.Headers["X-Content-SHA256"] = output.Sha256;
-        return Results.File(output.Bytes, output.ContentType, output.FileName, enableRangeProcessing: false);
+            Safe(summaryId), outputFormat, artifact.Sha256, correlation);
+        context.Response.Headers["X-Content-SHA256"] = artifact.Sha256;
+        context.Response.Headers["X-ExitPass-Artifact-Revision"] = artifact.Revision.ToString();
+        return Results.File(persisted.Bytes, artifact.ContentType, artifact.FileName, enableRangeProcessing: false);
     }
 
     private static BirSalesSummaryApiResponse Map(BirSalesSummaryResult result, string correlation) => result.Outcome switch

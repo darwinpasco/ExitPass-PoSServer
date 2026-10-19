@@ -53,6 +53,7 @@ db/state/tables/pos.annex_e1_workbooks.sql
 db/state/tables/pos.annex_e_reports.sql
 db/state/tables/pos.annex_e1_report_fact_sources.sql
 db/state/tables/pos.fiscal_report_output_refs.sql
+db/state/tables/pos.fiscal_report_artifacts.sql
 db/state/tables/pos.export_schema_profile_refs.sql
 db/state/tables/pos.electronic_journal_streams.sql
 db/state/tables/pos.electronic_journal_records.sql

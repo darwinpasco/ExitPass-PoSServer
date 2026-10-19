@@ -38,10 +38,10 @@ public static class MonthlyESalesAggregator
     {
         var requestedMonth = new DateOnly(query.CalendarYear, query.CalendarMonth, 1);
         var currentMonth = new DateOnly(currentSiteDate.Year, currentSiteDate.Month, 1);
-        if (requestedMonth >= currentMonth)
+        if (requestedMonth > currentMonth)
         {
             return new(MonthlyESalesOutcome.MonthNotComplete,
-                SafeMessage: "Monthly eSales can be finalized only after the selected calendar month has ended.");
+                SafeMessage: "Monthly eSales cannot be generated for a future calendar month.");
         }
         if (sources.Count == 0)
         {
@@ -49,9 +49,20 @@ public static class MonthlyESalesAggregator
                 SafeMessage: "No configured fiscal reporting period exists for the selected calendar month.");
         }
 
-        var missingZ = sources.Where(source => !source.PeriodClosed || !source.GoverningZCommitted)
+        var isMonthToDate = requestedMonth == currentMonth;
+        var eligible = isMonthToDate
+            ? sources.Where(source => source.PeriodClosed).ToArray()
+            : sources.ToArray();
+        if (eligible.Length == 0)
+        {
+            return new(MonthlyESalesOutcome.MissingAuthoritativeSource,
+                SafeMessage: "No closed fiscal business date with committed evidence is available for the selected calendar month.");
+        }
+
+        var missingZ = eligible.Where(source => !source.PeriodClosed || !source.GoverningZCommitted)
             .Select(source => source.BusinessDayDate).Distinct().Order().ToArray();
-        var missingBir = sources.Where(source => source.PeriodClosed && source.GoverningZCommitted && !source.BirSalesSummaryCommitted)
+        var missingBir = eligible.Where(source => source.PeriodClosed && source.GoverningZCommitted &&
+                (!source.BirSalesSummaryCommitted || source.BirSalesSummaryCommittedAt is null))
             .Select(source => source.BusinessDayDate).Distinct().Order().ToArray();
         if (missingZ.Length > 0 || missingBir.Length > 0)
         {
@@ -61,10 +72,10 @@ public static class MonthlyESalesAggregator
             if (missingBir.Length > 0)
                 gaps.Add($"committed BIR Sales Summaries are missing for: {Dates(missingBir)}");
             return new(MonthlyESalesOutcome.IncompleteAuthoritativeSources,
-                SafeMessage: $"Monthly eSales cannot be finalized because {string.Join("; ", gaps)}.");
+                SafeMessage: $"Monthly eSales cannot be generated because {string.Join("; ", gaps)}.");
         }
 
-        var committed = sources.OrderBy(source => source.PeriodSequence).ToArray();
+        var committed = eligible.OrderBy(source => source.PeriodSequence).ToArray();
         var tinValues = committed.Select(source => source.TaxpayerTin?.Trim() ?? string.Empty)
             .Distinct(StringComparer.Ordinal).ToArray();
         if (tinValues.Length != 1)
@@ -89,7 +100,7 @@ public static class MonthlyESalesAggregator
             var digits = new string(tin.Where(char.IsAsciiDigit).ToArray());
             DateOnly? dueDate = null;
             string? basis = null;
-            if (digits.Length >= 9)
+            if (!isMonthToDate && digits.Length >= 9)
             {
                 var even = (digits[8] - '0') % 2 == 0;
                 var followingMonth = requestedMonth.AddMonths(1);
@@ -107,14 +118,27 @@ public static class MonthlyESalesAggregator
                     : MonthlyESalesSubmissionReadiness.TechnicalReportReady;
             var readinessMessage = readiness switch
             {
-                MonthlyESalesSubmissionReadiness.FilingMetadataIncomplete => "The report is readable, but a valid governed 9-digit taxpayer TIN is required for filing-date readiness.",
+                MonthlyESalesSubmissionReadiness.FilingMetadataIncomplete when isMonthToDate =>
+                    "This is a month-to-date report for operator review and is not a complete-month filing artifact.",
+                MonthlyESalesSubmissionReadiness.FilingMetadataIncomplete =>
+                    "The report is readable, but a valid governed 9-digit taxpayer TIN is required for filing-date readiness.",
                 MonthlyESalesSubmissionReadiness.TechnicalUat => "UAT fiscal identifier - not for BIR submission.",
                 _ => "The authoritative Monthly eSales report is prepared for operator review and export; ExitPass has not submitted it to BIR."
             };
 
+            var firstCovered = committed.Min(source => source.BusinessDayDate);
+            var lastCovered = committed.Max(source => source.BusinessDayDate);
+            var coverageAsOf = committed.Select(source => source.BirSalesSummaryCommittedAt)
+                .Where(value => value.HasValue).Select(value => value!.Value).Max();
+            var coverageStatus = isMonthToDate ? MonthlyESalesCoverageStatus.MonthToDate : MonthlyESalesCoverageStatus.CompleteMonth;
+            var coverageMessage = isMonthToDate
+                ? $"Month-to-date through closed fiscal business date {lastCovered:yyyy-MM-dd}; the calendar month remains in progress."
+                : $"Complete calendar month from {firstCovered:yyyy-MM-dd} through {lastCovered:yyyy-MM-dd}.";
+
             return new(MonthlyESalesOutcome.Succeeded, new(
                 query.SitePosServerId, query.FiscalIdentityId, query.CalendarYear, query.CalendarMonth,
-                query.CurrencyCode, tin, dueDate, basis, readiness, readinessMessage, rows));
+                query.CurrencyCode, tin, dueDate, basis, readiness, readinessMessage,
+                coverageStatus, coverageMessage, firstCovered, lastCovered, coverageAsOf, rows));
         }
         catch (MonthlyESalesSafeException exception)
         {

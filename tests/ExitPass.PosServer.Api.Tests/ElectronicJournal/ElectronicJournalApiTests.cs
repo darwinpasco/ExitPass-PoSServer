@@ -3,6 +3,7 @@ using System.Text.Json;
 using ExitPass.PosServer.Api.ElectronicJournal;
 using ExitPass.PosServer.Api.FiscalDocuments;
 using ExitPass.PosServer.Api.FiscalReports;
+using ExitPass.PosServer.Api.Tests.FiscalReports;
 using ExitPass.PosServer.Runtime.ElectronicJournal;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Configuration;
@@ -63,7 +64,7 @@ public sealed class ElectronicJournalApiTests
         var result = await ElectronicJournalEndpoint.ReadAsync(new ElectronicJournalFilterRequest
         {
             SitePosServerId = Site, FiscalIdentityId = Identity, CurrencyCode = "PHP"
-        }, service, context, new Host(Environments.Production), default);
+        }, service, TestFiscalReportArtifacts.Service(), context, new Host(Environments.Production), default);
 
         Assert.NotNull(result);
         Assert.Equal(0, repository.ReadCount);
@@ -78,7 +79,7 @@ public sealed class ElectronicJournalApiTests
         await ElectronicJournalEndpoint.ReadAsync(new ElectronicJournalFilterRequest
         {
             SitePosServerId = Site, FiscalIdentityId = Identity, CurrencyCode = "PHP"
-        }, service, context, new Host(Environments.Production), default);
+        }, service, TestFiscalReportArtifacts.Service(), context, new Host(Environments.Production), default);
 
         Assert.Equal(ElectronicJournalContract.DefaultPageSize, repository.LastQuery?.PageSize);
     }

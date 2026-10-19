@@ -49,7 +49,7 @@ public static class AnnexE1Endpoint
         return Map(result,correlation);
     }
 
-    public static async Task<IResult> DownloadAsync(Guid id,string? format,AnnexE1Service service,IAuditTrailRepository auditTrailRepository,HttpContext context,IHostEnvironment environment,CancellationToken ct)
+    public static async Task<IResult> DownloadAsync(Guid id,string? format,AnnexE1Service service,FiscalReportArtifactService artifactService,IAuditTrailRepository auditTrailRepository,HttpContext context,IHostEnvironment environment,CancellationToken ct)
     {
         var correlation=Correlation(context);
         if(!AnnexE1Authorization.IsHostingAuthorityAllowed(context.User,environment)){Audit(context,"download","authority_denied",correlation);return Results.NotFound();}
@@ -59,9 +59,12 @@ public static class AnnexE1Endpoint
         {
             var metadata=await service.GetAsync(id,ct).ConfigureAwait(false);
             if(metadata.Workbook is null||!AnnexE1Authorization.IsInScope(context.User,metadata.Workbook.SitePosServerId,metadata.Workbook.FiscalIdentityId,metadata.Workbook.CurrencyCode)){Audit(context,"download_pdf","not_found_or_denied",correlation);return Results.NotFound();}
-            var export=new AnnexE1PdfRenderer().Render(metadata.Workbook);
-            await auditTrailRepository.RecordExportAsync(metadata.Workbook.SitePosServerId,"ANNEX_E1",metadata.Workbook.WorkbookId.ToString("D"),"pdf",Actor(context.User),correlation,export.Sha256,1,ct).ConfigureAwait(false);
-            Audit(context,"download_pdf","replayed",correlation);context.Response.Headers.CacheControl="private, no-store";context.Response.Headers.ETag=$"\"sha256-{export.Sha256}\"";context.Response.Headers.XContentTypeOptions="nosniff";return Results.File(export.Bytes,export.ContentType,export.FileName,enableRangeProcessing:false);
+            var workbook=metadata.Workbook;
+            var persisted=await artifactService.GetOrCreateAsync(new(workbook.SitePosServerId,workbook.FiscalIdentityId,workbook.CurrencyCode,"ANNEX_E1",workbook.WorkbookId.ToString("D"),"pdf","pos-server-annex-e1-pdf:v1",FiscalReportArtifactContract.SourceFingerprint(workbook),CalendarYear:workbook.CalendarYear,CalendarMonth:workbook.CalendarMonth),_=>{var output=new AnnexE1PdfRenderer().Render(workbook);return Task.FromResult(new FiscalReportArtifactPayload(output.Bytes,output.ContentType,output.FileName));},ct).ConfigureAwait(false);
+            if(!persisted.Succeeded||persisted.Artifact is null||persisted.Bytes is null)return Results.Json(new{code="annex_e1_artifact_unavailable",correlationId=correlation,message=persisted.SafeMessage},statusCode:503);
+            var artifact=persisted.Artifact;
+            await auditTrailRepository.RecordExportAsync(workbook.SitePosServerId,"ANNEX_E1",workbook.WorkbookId.ToString("D"),"pdf",Actor(context.User),correlation,artifact.Sha256,1,ct).ConfigureAwait(false);
+            Audit(context,"download_pdf","replayed",correlation);context.Response.Headers.CacheControl="private, no-store";context.Response.Headers.ETag=$"\"sha256-{artifact.Sha256}\"";context.Response.Headers.XContentTypeOptions="nosniff";context.Response.Headers["X-ExitPass-Artifact-Revision"]=artifact.Revision.ToString();return Results.File(persisted.Bytes,artifact.ContentType,artifact.FileName,enableRangeProcessing:false);
         }
         var result=await service.DownloadAsync(id,ct).ConfigureAwait(false);if(result.Workbook is null||result.Bytes is null||!AnnexE1Authorization.IsInScope(context.User,result.Workbook.SitePosServerId,result.Workbook.FiscalIdentityId,result.Workbook.CurrencyCode)){Audit(context,"download","not_found_or_denied",correlation);return Results.NotFound();}await auditTrailRepository.RecordExportAsync(result.Workbook.SitePosServerId,"ANNEX_E1",result.Workbook.WorkbookId.ToString("D"),"xlsx",Actor(context.User),correlation,result.Workbook.ArtifactSha256,1,ct).ConfigureAwait(false);Audit(context,"download","replayed",correlation);context.Response.Headers.CacheControl="private, no-store";context.Response.Headers.ETag=$"\"sha256-{result.Workbook.ArtifactSha256}\"";context.Response.Headers.XContentTypeOptions="nosniff";return Results.File(result.Bytes,result.Workbook.MimeType,result.Workbook.FileName,enableRangeProcessing:false);
     }

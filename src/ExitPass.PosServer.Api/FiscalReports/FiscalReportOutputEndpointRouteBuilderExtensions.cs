@@ -13,13 +13,14 @@ public static class FiscalReportOutputEndpointRouteBuilderExtensions
             FiscalXReadingService readService,
             FiscalReportPresentationService presentationService,
             FiscalReportOutputRenderer renderer,
+            FiscalReportArtifactService artifactService,
             ISalesInvoiceHeaderProfileRepository headerProfileRepository,
             IAuditTrailRepository auditTrailRepository,
             HttpContext context,
             ILogger<FiscalReportOutputAudit> logger,
             CancellationToken cancellationToken) =>
             await FiscalReportOutputEndpoint.GetXPresentationAsync(
-                fiscalReportReference, readService, presentationService, renderer, headerProfileRepository, auditTrailRepository, context, logger, cancellationToken))
+                fiscalReportReference, readService, presentationService, renderer, artifactService, headerProfileRepository, auditTrailRepository, context, logger, cancellationToken))
             .RequireAuthorization(FiscalXReadingAuthorization.ReadPolicyName);
         x.MapGet("/{fiscalReportReference}/exports/{format}", async (
             string fiscalReportReference,
@@ -28,13 +29,14 @@ public static class FiscalReportOutputEndpointRouteBuilderExtensions
             FiscalXReadingService readService,
             FiscalReportPresentationService presentationService,
             FiscalReportOutputRenderer renderer,
+            FiscalReportArtifactService artifactService,
             ISalesInvoiceHeaderProfileRepository headerProfileRepository,
             IAuditTrailRepository auditTrailRepository,
             HttpContext context,
             ILogger<FiscalReportOutputAudit> logger,
             CancellationToken cancellationToken) =>
             await FiscalReportOutputEndpoint.GetXExportAsync(
-                fiscalReportReference, format, width, readService, presentationService, renderer, headerProfileRepository, auditTrailRepository, context, logger, cancellationToken))
+                fiscalReportReference, format, width, readService, presentationService, renderer, artifactService, headerProfileRepository, auditTrailRepository, context, logger, cancellationToken))
             .RequireAuthorization(FiscalReportOutputAuthorization.XExportPolicyName);
 
         var z = endpoints.MapGroup("/v1/fiscal-reports/z-readings");
@@ -43,13 +45,14 @@ public static class FiscalReportOutputEndpointRouteBuilderExtensions
             FiscalZReadingService readService,
             FiscalReportPresentationService presentationService,
             FiscalReportOutputRenderer renderer,
+            FiscalReportArtifactService artifactService,
             ISalesInvoiceHeaderProfileRepository headerProfileRepository,
             IAuditTrailRepository auditTrailRepository,
             HttpContext context,
             ILogger<FiscalReportOutputAudit> logger,
             CancellationToken cancellationToken) =>
             await FiscalReportOutputEndpoint.GetZPresentationAsync(
-                zReadingReference, readService, presentationService, renderer, headerProfileRepository, auditTrailRepository, context, logger, cancellationToken))
+                zReadingReference, readService, presentationService, renderer, artifactService, headerProfileRepository, auditTrailRepository, context, logger, cancellationToken))
             .RequireAuthorization(FiscalZReadingAuthorization.ReadPolicyName);
         z.MapGet("/{zReadingReference}/exports/{format}", async (
             string zReadingReference,
@@ -58,13 +61,14 @@ public static class FiscalReportOutputEndpointRouteBuilderExtensions
             FiscalZReadingService readService,
             FiscalReportPresentationService presentationService,
             FiscalReportOutputRenderer renderer,
+            FiscalReportArtifactService artifactService,
             ISalesInvoiceHeaderProfileRepository headerProfileRepository,
             IAuditTrailRepository auditTrailRepository,
             HttpContext context,
             ILogger<FiscalReportOutputAudit> logger,
             CancellationToken cancellationToken) =>
             await FiscalReportOutputEndpoint.GetZExportAsync(
-                zReadingReference, format, width, readService, presentationService, renderer, headerProfileRepository, auditTrailRepository, context, logger, cancellationToken))
+                zReadingReference, format, width, readService, presentationService, renderer, artifactService, headerProfileRepository, auditTrailRepository, context, logger, cancellationToken))
             .RequireAuthorization(FiscalReportOutputAuthorization.ZExportPolicyName);
 
         return endpoints;
