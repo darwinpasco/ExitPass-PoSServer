@@ -25,6 +25,17 @@
       "effective_start_at": "2026-09-04T00:00:00Z",
       "effective_end_at": null,
       "replaced_by_code_key": null
+    }, {
+      "code_key": "assisted_payment_terminal",
+      "display_name": "Assisted Payment Terminal",
+      "description": "Physical cashier-assisted payment terminal under a Site POS Server fiscal boundary.",
+      "source_ref": "ExitPass v1.3 canonical terminal identity",
+      "sort_order": 20,
+      "is_active": true,
+      "is_deprecated": false,
+      "effective_start_at": "2026-10-19T00:00:00Z",
+      "effective_end_at": null,
+      "replaced_by_code_key": null
     }]
   }]
 }

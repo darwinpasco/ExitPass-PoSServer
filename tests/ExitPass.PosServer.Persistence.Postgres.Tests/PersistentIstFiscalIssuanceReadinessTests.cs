@@ -32,6 +32,7 @@ public sealed class PersistentIstFiscalIssuanceReadinessTests
         Assert.Contains("ad02beb5-b8cd-4545-9ff2-5586782c686a", source);
         Assert.Contains("cb90e882-89f3-4bf3-975c-a6fb10dd765c", source);
         Assert.Contains("channel_terminal_type:webpay", source);
+        Assert.Contains("channel_terminal_type:assisted_payment_terminal", source);
         Assert.Contains("fiscal_document_type:sales_invoice", source);
         Assert.Contains("fiscal_sequence_family:sales_invoice", source);
         Assert.Contains("fiscal_sequence_policy_status:active", source);
@@ -116,6 +117,7 @@ public sealed class PersistentIstFiscalIssuanceReadinessTests
         Assert.Contains("fiscal_identity=1", source, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("approved_profile=1", source, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("webpay_terminal=1", source, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("apt_terminal=1", source, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("sequence_policy=1", source, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("sequence_state=1", source, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("reporting_contract=1", source, StringComparison.OrdinalIgnoreCase);
@@ -135,6 +137,7 @@ public sealed class PersistentIstFiscalIssuanceReadinessTests
         Assert.Contains("'fiscal_sequence_policy_status','active'", generated, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("'fiscal_sequence_state','active'", generated, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("'channel_terminal_type','webpay'", generated, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("'channel_terminal_type','assisted_payment_terminal'", generated, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("smoke", generated, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("fixture", generated, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("families/fiscal_document_type.json", index);

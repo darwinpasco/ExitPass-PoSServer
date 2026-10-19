@@ -19,6 +19,8 @@ public sealed class FiscalDocumentApiPostgresSmokeTests
     private const string ConnectionStringEnvironmentVariable = "POSSERVER_API_SMOKE_DB_URL";
     private const string SmokeApiKey = "synthetic-fiscal-document-smoke-key";
     private static readonly Guid SitePosServerId = Guid.Parse("10000000-0000-0000-0000-000000000001");
+    private static readonly Guid SiteId = Guid.Parse("21000000-0000-4000-8000-000000000006");
+    private static readonly Guid ChannelTerminalId = Guid.Parse("10000000-0000-0000-0000-000000000002");
     private static readonly Guid FiscalDocumentTypeCodeId = Guid.Parse("10000000-0000-0000-0000-000000000101");
     private static readonly Guid FiscalDocumentStatusCodeId = Guid.Parse("10000000-0000-0000-0000-000000000102");
     private static readonly Guid FiscalDocumentVoidedStatusCodeId = Guid.Parse("10000000-0000-0000-0000-000000000103");
@@ -47,6 +49,39 @@ public sealed class FiscalDocumentApiPostgresSmokeTests
     }
 
     [Fact]
+    public async Task PostFiscalDocumentRejectsTerminalOutsideCanonicalSiteAndFiscalIdentity()
+    {
+        if (!TryGetSmokeConnectionString(out var connectionString))
+        {
+            return;
+        }
+
+        await RebuildDisposableDatabaseAsync(connectionString);
+        await InsertDisposableSmokeFixtureAsync(connectionString);
+        await using var app = await StartApiAsync(connectionString);
+        using var client = CreateClient(app);
+
+        using var response = await client.PostAsJsonAsync(
+            "/v1/fiscal-documents/",
+            CreateValidRequest("foreign-terminal") with { ChannelTerminalId = Guid.NewGuid() });
+        var body = await response.Content.ReadFromJsonAsync<CreateFiscalDocumentResponse>();
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        Assert.NotNull(body);
+        Assert.False(body.Succeeded);
+        Assert.Equal("channel_terminal_mismatch", body.Code);
+        Assert.Equal("retry_after_configuration_correction", body.ErrorPosture);
+
+        await using var connection = new NpgsqlConnection(connectionString);
+        await connection.OpenAsync();
+        Assert.Equal(0, await ScalarLongAsync(
+            connection,
+            "select current_sequence_value from pos.fiscal_sequence_states where fiscal_sequence_policy_id = @id",
+            FiscalSequencePolicyId));
+        Assert.Equal(0, await ScalarLongAsync(connection, "select count(*) from pos.fiscal_documents"));
+    }
+
+    [Fact]
     public async Task PostFiscalDocumentWritesCompletePersistenceShell()
     {
         if (!TryGetSmokeConnectionString(out var connectionString))
@@ -56,11 +91,13 @@ public sealed class FiscalDocumentApiPostgresSmokeTests
 
         await RebuildDisposableDatabaseAsync(connectionString);
         await InsertDisposableSmokeFixtureAsync(connectionString);
+        await ConfigureStatutorySalesInvoiceHeaderAsync(connectionString);
 
         await using var app = await StartApiAsync(connectionString);
         using var client = CreateClient(app);
         var request = CreateValidRequest("success") with
         {
+            SiteId = SiteId,
             InvoiceCustomerInformation = new InvoiceCustomerInformationRequest(
                 "  Juan Dela Cruz  ",
                 "  100 Sample Street  ",
@@ -114,6 +151,7 @@ public sealed class FiscalDocumentApiPostgresSmokeTests
         Assert.Single(getBody.Document.Totals);
         Assert.Equal("central-finality-success", getBody.Document.PaymentFinalityRef);
         Assert.Equal("evidence-ref-success", getBody.Document.DiscountPrivilegeDetails[0].EvidenceRef);
+        Assert.Equal(ChannelTerminalId, getBody.Document.ChannelTerminalId);
         Assert.Equal(FiscalIdentityId, getBody.Document.FiscalIdentityId);
         Assert.Equal(FiscalSequencePolicyId, getBody.Document.FiscalSequencePolicyId);
         Assert.Equal(1, getBody.Document.FiscalSequenceValue);
@@ -152,6 +190,11 @@ public sealed class FiscalDocumentApiPostgresSmokeTests
         Assert.Contains(vatSection.Rows, row => row.Key == "totals.vatAmount" && row.DisplayValue == "PHP 0.00");
         Assert.Contains(vatSection.Rows, row => row.Key == "totals.vatExemptSales" && row.DisplayValue == "PHP 0.00");
         Assert.Contains(vatSection.Rows, row => row.Key == "totals.zeroRatedSales" && row.DisplayValue == "PHP 0.00");
+        var sellerSection = presentationBody.Presentation.Sections.Single(section => section.Name == "sellerSitePosIdentity");
+        Assert.Contains(
+            sellerSection.Rows,
+            row => row.Key == "sellerSitePosIdentity.channelTerminalId" &&
+                   row.DisplayValue == ChannelTerminalId.ToString("D"));
 
         using var replayResponse = await client.PostAsJsonAsync("/v1/fiscal-documents/", request);
         var replayBody = await replayResponse.Content.ReadFromJsonAsync<CreateFiscalDocumentResponse>();
@@ -237,6 +280,23 @@ public sealed class FiscalDocumentApiPostgresSmokeTests
         Assert.Equal("central-finality-success", await ScalarStringAsync(
             connection,
             "select payment_finality_ref from pos.fiscal_documents where fiscal_document_id = @id",
+            fiscalDocumentId));
+        Assert.Equal(ChannelTerminalId.ToString("D"), await ScalarStringAsync(
+            connection,
+            "select channel_terminal_id::text from pos.fiscal_documents where fiscal_document_id = @id",
+            fiscalDocumentId));
+        Assert.Equal("APT-TERMINAL-SMOKE-001", await ScalarStringAsync(
+            connection,
+            "select document_context ->> 'runtime_terminal_ref' from pos.fiscal_documents where fiscal_document_id = @id",
+            fiscalDocumentId));
+        Assert.Equal(ChannelTerminalId.ToString("D"), await ScalarStringAsync(
+            connection,
+            """
+            select d.channel_terminal_id::text
+            from pos.electronic_journal_records ej
+            join pos.fiscal_documents d on d.fiscal_document_id = ej.fiscal_document_id
+            where ej.fiscal_document_id = @id and ej.is_canonical
+            """,
             fiscalDocumentId));
         var semanticRequestHash = await ScalarStringAsync(
             connection,
@@ -1466,6 +1526,42 @@ public sealed class FiscalDocumentApiPostgresSmokeTests
         await ExecuteSqlAsync(
             connection,
             """
+            insert into pos.channel_terminals (
+                channel_terminal_id,
+                site_pos_server_id,
+                channel_terminal_code,
+                display_name,
+                channel_terminal_type_code_id,
+                is_logical_channel,
+                is_physical_terminal,
+                fiscal_identity_id,
+                is_active
+            ) values (
+                @channel_terminal_id,
+                @site_pos_server_id,
+                'APT-TERMINAL-SMOKE-001',
+                'APT Terminal Smoke Fixture',
+                'ba4b7e0c-a973-56a7-b877-15d1f8d1ce9b',
+                false,
+                true,
+                @fiscal_identity_id,
+                true
+            ) on conflict (channel_terminal_id) do update set
+                channel_terminal_code = excluded.channel_terminal_code,
+                fiscal_identity_id = excluded.fiscal_identity_id,
+                is_active = excluded.is_active,
+                updated_at = current_timestamp;
+            """,
+            command =>
+            {
+                command.Parameters.AddWithValue("channel_terminal_id", ChannelTerminalId);
+                command.Parameters.AddWithValue("site_pos_server_id", SitePosServerId);
+                command.Parameters.AddWithValue("fiscal_identity_id", FiscalIdentityId);
+            });
+
+        await ExecuteSqlAsync(
+            connection,
+            """
             insert into pos.fiscal_reporting_periods (
                 fiscal_reporting_period_id,
                 fiscal_reporting_contract_version_id,
@@ -1655,6 +1751,9 @@ public sealed class FiscalDocumentApiPostgresSmokeTests
         builder.Configuration.AddInMemoryCollection(new Dictionary<string, string?>
         {
             ["ConnectionStrings:PosServer"] = connectionString,
+            ["PosServer:FiscalReports:ArtifactRoot"] = Path.Combine(
+                Path.GetTempPath(),
+                "exitpass-terminal-identity-api-smoke-artifacts"),
             ["PosServer:Admin:ApiKeys:smoke:Principal"] = "fiscal-document-smoke",
             ["PosServer:Admin:ApiKeys:smoke:Key"] = SmokeApiKey,
             ["PosServer:Admin:ApiKeys:smoke:Permissions:0"] = FiscalDocumentAuthorization.CreatePermission,
@@ -1696,6 +1795,8 @@ public sealed class FiscalDocumentApiPostgresSmokeTests
                 12500,
                 [new FiscalDiscountReferenceRequest($"discount-validation-{suffix}", "approved", true)]),
             SitePosServerId: SitePosServerId,
+            ChannelTerminalId: ChannelTerminalId,
+            RuntimeTerminalRef: "APT-TERMINAL-SMOKE-001",
             FiscalDocumentTypeCodeId: FiscalDocumentTypeCodeId,
             FiscalDocumentStatusCodeId: FiscalDocumentStatusCodeId,
             BusinessDayDate: DateOnly.FromDateTime(DateTime.UtcNow),
@@ -1819,6 +1920,8 @@ public sealed class FiscalDocumentApiPostgresSmokeTests
                 [new FiscalDiscountReferenceRequest(facts.StatutoryValidationId.ToString(), "approved", true)]),
             SitePosServerId: SitePosServerId,
             SiteId: siteId,
+            ChannelTerminalId: ChannelTerminalId,
+            RuntimeTerminalRef: "APT-TERMINAL-SMOKE-001",
             FiscalDocumentTypeCodeId: FiscalDocumentTypeCodeId,
             FiscalDocumentStatusCodeId: FiscalDocumentStatusCodeId,
             BusinessDayDate: DateOnly.FromDateTime(DateTime.UtcNow),
@@ -2018,6 +2121,8 @@ public sealed class FiscalDocumentApiPostgresSmokeTests
                 [new FiscalDiscountReferenceRequest(facts.StatutoryValidationId.ToString(), "approved", true)]),
             SitePosServerId: SitePosServerId,
             SiteId: siteId,
+            ChannelTerminalId: ChannelTerminalId,
+            RuntimeTerminalRef: "APT-TERMINAL-SMOKE-001",
             FiscalDocumentTypeCodeId: FiscalDocumentTypeCodeId,
             FiscalDocumentStatusCodeId: FiscalDocumentStatusCodeId,
             BusinessDayDate: DateOnly.FromDateTime(DateTime.UtcNow),

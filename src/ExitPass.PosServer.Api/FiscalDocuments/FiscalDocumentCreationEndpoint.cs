@@ -178,7 +178,8 @@ public static class FiscalDocumentCreationEndpoint
             FiscalDocumentCreationErrorCode.SalesInvoiceHeaderProfileNotFound or
             FiscalDocumentCreationErrorCode.SalesInvoiceHeaderProfileAmbiguous or
             FiscalDocumentCreationErrorCode.SalesInvoiceHeaderProfileIncomplete or
-            FiscalDocumentCreationErrorCode.SalesInvoiceHeaderProfileUnsupportedVersion => "retry_after_configuration_correction",
+            FiscalDocumentCreationErrorCode.SalesInvoiceHeaderProfileUnsupportedVersion or
+            FiscalDocumentCreationErrorCode.ChannelTerminalMismatch => "retry_after_configuration_correction",
             FiscalDocumentCreationErrorCode.AppliedStatutoryFiscalFactsPersistenceSchemaNotConfigured =>
                 "retry_after_schema_upgrade",
             FiscalDocumentCreationErrorCode.AppliedStatutoryControlledCodeUnavailable =>
@@ -407,6 +408,8 @@ public static class FiscalDocumentCreationEndpoint
             FiscalDocumentCreationErrorCode.InvalidCompletionAuthority => "invalid_completion_authority",
             FiscalDocumentCreationErrorCode.InvalidInvoiceCustomerInformation =>
                 "invalid_invoice_customer_information",
+            FiscalDocumentCreationErrorCode.ChannelTerminalRequired => "channel_terminal_required",
+            FiscalDocumentCreationErrorCode.ChannelTerminalMismatch => "channel_terminal_mismatch",
             _ => "fiscal_document_creation_failed"
         };
 }

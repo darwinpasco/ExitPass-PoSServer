@@ -106,6 +106,15 @@ public sealed class FiscalDocumentCreationService
                 "Fiscal document request is missing required local fiscal schema context: sitePosServerRef, fiscalDocumentTypeCodeKey, sitePosServerId, fiscalDocumentTypeCodeId, and fiscalDocumentStatusCodeId.");
         }
 
+        if (command.ChannelTerminalId is null ||
+            command.ChannelTerminalId == Guid.Empty ||
+            string.IsNullOrWhiteSpace(command.RuntimeTerminalRef))
+        {
+            return FiscalDocumentCreationResult.Failure(
+                FiscalDocumentCreationErrorCode.ChannelTerminalRequired,
+                "Fiscal document creation requires a canonical channel terminal id and terminal identifier.");
+        }
+
         if (command.PayableBasis is null ||
             string.IsNullOrWhiteSpace(command.PayableBasis.PayableBasisRef))
         {

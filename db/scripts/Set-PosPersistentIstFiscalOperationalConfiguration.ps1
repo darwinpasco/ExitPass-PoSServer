@@ -1,10 +1,10 @@
 <#
 .SYNOPSIS
-Materializes stable PITX WebPay fiscal issuance configuration in an approved persistent IST database.
+Materializes stable PITX channel-terminal fiscal issuance configuration in an approved persistent IST database.
 
 .DESCRIPTION
 Canonical controlled-code JSON remains authoritative. This script applies only the additive generated
-fiscal-issuance code slice, then creates or reconciles the PITX WebPay terminal and Sales Invoice
+fiscal-issuance code slice, then creates or reconciles the PITX WebPay and APT terminals and Sales Invoice
 sequence policy. Existing sequence counters are never updated or reset.
 #>
 
@@ -27,7 +27,8 @@ $siteId = '2d1dcdf8-f563-537c-8542-0bde7cc9da97'
 $sitePosServerId = '3a138565-1b88-55f8-c83d-5380db6edccc'
 $fiscalIdentityId = 'ad02beb5-b8cd-4545-9ff2-5586782c686a'
 $headerProfileId = 'cb90e882-89f3-4bf3-975c-a6fb10dd765c'
-$terminalId = 'b71f74f7-8e56-5fda-b257-5d9823ab8520'
+$webPayTerminalId = 'b71f74f7-8e56-5fda-b257-5d9823ab8520'
+$aptTerminalId = '37bf9170-d797-475b-93b4-75ccca447784'
 $policyId = '2e4252dd-38f0-5424-bee2-0c864b41f6b2'
 $stateId = 'a46c9d75-5b50-5cb6-927e-d5c0b44a4edc'
 
@@ -38,6 +39,7 @@ SELECT json_build_object(
   'fiscal_identity_relationship_count', (SELECT count(*) FROM pos.site_pos_server_fiscal_identity_history WHERE site_pos_server_id='$sitePosServerId' AND fiscal_identity_id='$fiscalIdentityId' AND effective_start_at<=CURRENT_TIMESTAMP AND (effective_end_at IS NULL OR effective_end_at>CURRENT_TIMESTAMP)),
   'approved_profile_count', (SELECT count(*) FROM pos.sales_invoice_header_profiles WHERE sales_invoice_header_profile_id='$headerProfileId' AND site_id='$siteId' AND site_pos_server_id='$sitePosServerId' AND fiscal_identity_id='$fiscalIdentityId' AND lifecycle_status='APPROVED' AND effective_from<=CURRENT_TIMESTAMP AND effective_to IS NULL),
   'webpay_terminal_count', (SELECT count(*) FROM pos.channel_terminals WHERE site_pos_server_id='$sitePosServerId' AND channel_terminal_code='PITX-L3-WEBPAY-01' AND is_active),
+  'apt_terminal_count', (SELECT count(*) FROM pos.channel_terminals WHERE site_pos_server_id='$sitePosServerId' AND channel_terminal_code='apt-pitx-level-3-01' AND is_active),
   'sales_invoice_policy_count', (SELECT count(*) FROM pos.fiscal_sequence_policies WHERE site_pos_server_id='$sitePosServerId' AND policy_code='PITX-L3-SI' AND effective_start_at<=CURRENT_TIMESTAMP AND (effective_end_at IS NULL OR effective_end_at>CURRENT_TIMESTAMP)),
   'sequence_state_count', (SELECT count(*) FROM pos.fiscal_sequence_states WHERE fiscal_sequence_policy_id='$policyId'),
   'sequence_current_value', (SELECT current_sequence_value FROM pos.fiscal_sequence_states WHERE fiscal_sequence_policy_id='$policyId'),
@@ -60,7 +62,8 @@ $result = [ordered]@{
     site_pos_server_id = $sitePosServerId
     fiscal_identity_id = $fiscalIdentityId
     header_profile_id = $headerProfileId
-    channel_terminal_id = $terminalId
+    webpay_channel_terminal_id = $webPayTerminalId
+    apt_channel_terminal_id = $aptTerminalId
     fiscal_sequence_policy_id = $policyId
     fiscal_sequence_state_id = $stateId
     before = $before
@@ -99,6 +102,7 @@ BEGIN
   END IF;
   FOREACH pair IN ARRAY ARRAY[
     'channel_terminal_type:webpay',
+    'channel_terminal_type:assisted_payment_terminal',
     'pos_terminal_operational_status:active',
     'channel_terminal_health_status:online',
     'fiscal_document_type:sales_invoice',
@@ -118,8 +122,11 @@ BEGIN
       AND (c.effective_end_at IS NULL OR c.effective_end_at>CURRENT_TIMESTAMP);
     IF pair_count <> 1 THEN RAISE EXCEPTION 'Controlled code % must resolve exactly once', pair; END IF;
   END LOOP;
-  IF EXISTS (SELECT 1 FROM pos.channel_terminals WHERE site_pos_server_id='$sitePosServerId' AND channel_terminal_code='PITX-L3-WEBPAY-01' AND channel_terminal_id<>'$terminalId') THEN
+  IF EXISTS (SELECT 1 FROM pos.channel_terminals WHERE site_pos_server_id='$sitePosServerId' AND channel_terminal_code='PITX-L3-WEBPAY-01' AND channel_terminal_id<>'$webPayTerminalId') THEN
     RAISE EXCEPTION 'PITX WebPay terminal natural key has a conflicting identity';
+  END IF;
+  IF EXISTS (SELECT 1 FROM pos.channel_terminals WHERE site_pos_server_id='$sitePosServerId' AND channel_terminal_code='apt-pitx-level-3-01' AND channel_terminal_id<>'$aptTerminalId') THEN
+    RAISE EXCEPTION 'PITX APT terminal natural key has a conflicting identity';
   END IF;
   IF EXISTS (SELECT 1 FROM pos.fiscal_sequence_policies WHERE site_pos_server_id='$sitePosServerId' AND policy_code='PITX-L3-SI' AND fiscal_sequence_policy_id<>'$policyId') THEN
     RAISE EXCEPTION 'PITX Sales Invoice sequence policy natural key has a conflicting identity';
@@ -139,7 +146,7 @@ INSERT INTO pos.channel_terminals(
   channel_terminal_id,site_pos_server_id,channel_terminal_code,display_name,
   channel_terminal_type_code_id,is_logical_channel,is_physical_terminal,
   fiscal_identity_id,health_status_code_id,operational_status_code_id,is_active)
-SELECT '$terminalId','$sitePosServerId','PITX-L3-WEBPAY-01','PITX Level 3 WebPay',
+SELECT '$webPayTerminalId','$sitePosServerId','PITX-L3-WEBPAY-01','PITX Level 3 WebPay',
   type_code.controlled_code_id,true,false,'$fiscalIdentityId',
   health_code.controlled_code_id,status_code.controlled_code_id,true
 FROM pos.controlled_codes type_code
@@ -149,6 +156,40 @@ JOIN pos.controlled_code_sets health_set ON health_set.controlled_code_set_id=he
 JOIN pos.controlled_codes status_code ON status_code.code_key='active'
 JOIN pos.controlled_code_sets status_set ON status_set.controlled_code_set_id=status_code.controlled_code_set_id AND status_set.code_set_key='pos_terminal_operational_status'
 WHERE type_code.code_key='webpay'
+ON CONFLICT(channel_terminal_id) DO UPDATE SET
+  display_name=EXCLUDED.display_name,
+  channel_terminal_type_code_id=EXCLUDED.channel_terminal_type_code_id,
+  is_logical_channel=EXCLUDED.is_logical_channel,
+  is_physical_terminal=EXCLUDED.is_physical_terminal,
+  fiscal_identity_id=EXCLUDED.fiscal_identity_id,
+  health_status_code_id=EXCLUDED.health_status_code_id,
+  operational_status_code_id=EXCLUDED.operational_status_code_id,
+  is_active=EXCLUDED.is_active,
+  updated_at=CURRENT_TIMESTAMP
+WHERE (channel_terminals.display_name,channel_terminals.channel_terminal_type_code_id,
+       channel_terminals.is_logical_channel,channel_terminals.is_physical_terminal,
+       channel_terminals.fiscal_identity_id,channel_terminals.health_status_code_id,
+       channel_terminals.operational_status_code_id,channel_terminals.is_active)
+  IS DISTINCT FROM
+      (EXCLUDED.display_name,EXCLUDED.channel_terminal_type_code_id,
+       EXCLUDED.is_logical_channel,EXCLUDED.is_physical_terminal,
+       EXCLUDED.fiscal_identity_id,EXCLUDED.health_status_code_id,
+       EXCLUDED.operational_status_code_id,EXCLUDED.is_active);
+
+INSERT INTO pos.channel_terminals(
+  channel_terminal_id,site_pos_server_id,channel_terminal_code,display_name,
+  channel_terminal_type_code_id,is_logical_channel,is_physical_terminal,
+  fiscal_identity_id,health_status_code_id,operational_status_code_id,is_active)
+SELECT '$aptTerminalId','$sitePosServerId','apt-pitx-level-3-01','PITX Level 3 Assisted Payment Terminal 01',
+  type_code.controlled_code_id,false,true,'$fiscalIdentityId',
+  health_code.controlled_code_id,status_code.controlled_code_id,true
+FROM pos.controlled_codes type_code
+JOIN pos.controlled_code_sets type_set ON type_set.controlled_code_set_id=type_code.controlled_code_set_id AND type_set.code_set_key='channel_terminal_type'
+JOIN pos.controlled_codes health_code ON health_code.code_key='online'
+JOIN pos.controlled_code_sets health_set ON health_set.controlled_code_set_id=health_code.controlled_code_set_id AND health_set.code_set_key='channel_terminal_health_status'
+JOIN pos.controlled_codes status_code ON status_code.code_key='active'
+JOIN pos.controlled_code_sets status_set ON status_set.controlled_code_set_id=status_code.controlled_code_set_id AND status_set.code_set_key='pos_terminal_operational_status'
+WHERE type_code.code_key='assisted_payment_terminal'
 ON CONFLICT(channel_terminal_id) DO UPDATE SET
   display_name=EXCLUDED.display_name,
   channel_terminal_type_code_id=EXCLUDED.channel_terminal_type_code_id,
@@ -236,6 +277,7 @@ if ($before.fiscal_document_count -ne $after.fiscal_document_count -or
 }
 if ($after.site_pos_server_count -ne 1 -or $after.fiscal_identity_relationship_count -ne 1 -or
     $after.approved_profile_count -ne 1 -or $after.webpay_terminal_count -ne 1 -or
+    $after.apt_terminal_count -ne 1 -or
     $after.sales_invoice_policy_count -ne 1 -or $after.sequence_state_count -ne 1) {
     throw 'PITX static fiscal operational configuration did not resolve exactly once.'
 }

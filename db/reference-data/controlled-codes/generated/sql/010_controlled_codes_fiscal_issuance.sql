@@ -46,6 +46,7 @@ WHERE (controlled_code_sets.code_set_key,
 
 WITH source(id,set_key,code_key,name,description,sort_order) AS (VALUES
 ('717d00fa-967e-5220-9023-4a03bc84876e'::uuid,'channel_terminal_type','webpay','WebPay','Logical WebPay channel; not an independent fiscal authority.',10),
+('ba4b7e0c-a973-56a7-b877-15d1f8d1ce9b'::uuid,'channel_terminal_type','assisted_payment_terminal','Assisted Payment Terminal','Physical cashier-assisted payment terminal under a Site POS Server fiscal boundary.',20),
 ('9f868073-a648-5b1d-99c0-f96d598c4eb0'::uuid,'fiscal_document_status','issued','Issued','Original fiscal document committed with an assigned fiscal number.',10),
 ('b9fc7458-57a7-5bbe-809d-8c8b3d780b1d'::uuid,'fiscal_document_type','sales_invoice','Sales Invoice','Original Sales Invoice fiscal document.',10),
 ('09997efc-e7b4-5cfb-8904-3020e01de4a9'::uuid,'fiscal_line_type','parking_fee','Parking Fee','Parking service fee line.',10),
