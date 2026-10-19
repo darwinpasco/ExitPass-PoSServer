@@ -51,5 +51,7 @@ public enum FiscalDocumentCreationErrorCode
     FiscalCloseBoundaryLockTimeout = 46,
     FiscalCloseBoundaryRetryableConcurrencyFailure = 47,
     InvalidCompletionAuthority = 48,
-    InvalidInvoiceCustomerInformation = 49
+    InvalidInvoiceCustomerInformation = 49,
+    ChannelTerminalRequired = 50,
+    ChannelTerminalMismatch = 51
 }

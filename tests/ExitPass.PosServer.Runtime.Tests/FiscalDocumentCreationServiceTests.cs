@@ -20,6 +20,8 @@ public sealed class FiscalDocumentCreationServiceTests
         Assert.NotNull(result.Draft);
         Assert.Equal("payable-basis-001", result.Draft.PayableBasisRef);
         Assert.Equal("central-finality-001", result.Draft.UpstreamFinalityRef);
+        Assert.Equal(Guid.Parse("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"), result.Draft.ChannelTerminalId);
+        Assert.Equal("APT-TERMINAL-001", result.Draft.RuntimeTerminalRef);
         Assert.Equal("discount-validation-001", result.Draft.DiscountReferences[0].DiscountValidationRef);
         Assert.Equal(Guid.Parse("eeeeeeee-eeee-eeee-eeee-eeeeeeeeeeee"), result.Draft.DocumentLinks[0].TargetFiscalDocumentId);
         Assert.Equal(1, result.Draft.DocumentLines[0].LineSequence);
@@ -509,6 +511,7 @@ public sealed class FiscalDocumentCreationServiceTests
     [InlineData(FiscalDocumentCreationErrorCode.FiscalSequenceStateNotEffective)]
     [InlineData(FiscalDocumentCreationErrorCode.FiscalNumberAllocationFailed)]
     [InlineData(FiscalDocumentCreationErrorCode.FiscalDocumentNumberFormatFailed)]
+    [InlineData(FiscalDocumentCreationErrorCode.ChannelTerminalMismatch)]
     public async Task FiscalContextResolutionFailuresFailClosed(FiscalDocumentCreationErrorCode errorCode)
     {
         var repository = new RecordingFiscalDocumentRepository(errorCode);
@@ -531,6 +534,26 @@ public sealed class FiscalDocumentCreationServiceTests
 
         Assert.False(result.Succeeded);
         Assert.Equal(FiscalDocumentCreationErrorCode.MissingPayableBasis, result.ErrorCode);
+        Assert.Equal(0, repository.CreateCount);
+    }
+
+    [Theory]
+    [InlineData(true, false)]
+    [InlineData(false, true)]
+    public async Task MissingCanonicalChannelTerminalIdentityIsRejected(bool missingId, bool missingIdentifier)
+    {
+        var repository = new RecordingFiscalDocumentRepository();
+        var service = new FiscalDocumentCreationService(repository);
+        var command = ValidCommand() with
+        {
+            ChannelTerminalId = missingId ? null : ValidCommand().ChannelTerminalId,
+            RuntimeTerminalRef = missingIdentifier ? null : ValidCommand().RuntimeTerminalRef
+        };
+
+        var result = await service.CreateAsync(command);
+
+        Assert.False(result.Succeeded);
+        Assert.Equal(FiscalDocumentCreationErrorCode.ChannelTerminalRequired, result.ErrorCode);
         Assert.Equal(0, repository.CreateCount);
     }
 
@@ -977,6 +1000,8 @@ public sealed class FiscalDocumentCreationServiceTests
             "sales_invoice",
             ValidPayableBasis(),
             SitePosServerId: Guid.Parse("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb"),
+            ChannelTerminalId: Guid.Parse("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"),
+            RuntimeTerminalRef: "APT-TERMINAL-001",
             FiscalDocumentTypeCodeId: Guid.Parse("cccccccc-cccc-cccc-cccc-cccccccccccc"),
             FiscalDocumentStatusCodeId: Guid.Parse("dddddddd-dddd-dddd-dddd-dddddddddddd"),
             CentralPmsParkingSessionRef: "parking-session-001",

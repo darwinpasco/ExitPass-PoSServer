@@ -1,6 +1,6 @@
 <#
 .SYNOPSIS
-Evaluates fail-closed PITX WebPay Sales Invoice issuance readiness.
+Evaluates fail-closed PITX channel-terminal Sales Invoice issuance readiness.
 #>
 
 [CmdletBinding()]
@@ -60,6 +60,26 @@ WITH counts AS (
        AND (type_code.effective_end_at IS NULL OR type_code.effective_end_at>'$atUtc'::timestamptz)
        AND (status_code.effective_start_at IS NULL OR status_code.effective_start_at<='$atUtc'::timestamptz)
        AND (status_code.effective_end_at IS NULL OR status_code.effective_end_at>'$atUtc'::timestamptz)) AS webpay_terminal,
+    (SELECT count(*) FROM pos.channel_terminals terminal
+     JOIN pos.controlled_codes type_code ON type_code.controlled_code_id=terminal.channel_terminal_type_code_id
+     JOIN pos.controlled_code_sets type_set ON type_set.controlled_code_set_id=type_code.controlled_code_set_id
+     JOIN pos.controlled_codes status_code ON status_code.controlled_code_id=terminal.operational_status_code_id
+     JOIN pos.controlled_code_sets status_set ON status_set.controlled_code_set_id=status_code.controlled_code_set_id
+     WHERE terminal.site_pos_server_id='$sitePosServerId'
+       AND terminal.fiscal_identity_id='$fiscalIdentityId'
+       AND terminal.channel_terminal_code='apt-pitx-level-3-01'
+       AND NOT terminal.is_logical_channel AND terminal.is_physical_terminal AND terminal.is_active
+       AND type_set.code_set_key='channel_terminal_type' AND type_code.code_key='assisted_payment_terminal'
+       AND status_set.code_set_key='pos_terminal_operational_status' AND status_code.code_key='active'
+       AND type_set.is_active AND status_set.is_active AND type_code.is_active AND status_code.is_active
+       AND (type_set.effective_start_at IS NULL OR type_set.effective_start_at<='$atUtc'::timestamptz)
+       AND (type_set.effective_end_at IS NULL OR type_set.effective_end_at>'$atUtc'::timestamptz)
+       AND (status_set.effective_start_at IS NULL OR status_set.effective_start_at<='$atUtc'::timestamptz)
+       AND (status_set.effective_end_at IS NULL OR status_set.effective_end_at>'$atUtc'::timestamptz)
+       AND (type_code.effective_start_at IS NULL OR type_code.effective_start_at<='$atUtc'::timestamptz)
+       AND (type_code.effective_end_at IS NULL OR type_code.effective_end_at>'$atUtc'::timestamptz)
+       AND (status_code.effective_start_at IS NULL OR status_code.effective_start_at<='$atUtc'::timestamptz)
+       AND (status_code.effective_end_at IS NULL OR status_code.effective_end_at>'$atUtc'::timestamptz)) AS apt_terminal,
     (SELECT count(*) FROM pos.fiscal_sequence_policies policy
      JOIN pos.controlled_codes family ON family.controlled_code_id=policy.sequence_family_code_id
      JOIN pos.controlled_code_sets family_set ON family_set.controlled_code_set_id=family.controlled_code_set_id
@@ -134,12 +154,13 @@ SELECT json_build_object(
   'fiscal_identity_count',fiscal_identity,
   'approved_profile_count',approved_profile,
   'webpay_terminal_count',webpay_terminal,
+  'apt_terminal_count',apt_terminal,
   'sales_invoice_sequence_policy_count',sequence_policy,
   'sequence_state_count',sequence_state,
   'reporting_contract_version_count',reporting_contract,
   'current_open_reporting_period_count',open_period,
   'ready',(site_pos_server=1 AND fiscal_identity=1 AND approved_profile=1
-           AND webpay_terminal=1 AND sequence_policy=1 AND sequence_state=1
+           AND webpay_terminal=1 AND apt_terminal=1 AND sequence_policy=1 AND sequence_state=1
            AND reporting_contract=1 AND open_period=1)
 )::text
 FROM counts;
@@ -148,5 +169,5 @@ $result = Invoke-PosPersistentIstPsql $sql $ContainerName $DatabaseName $Databas
 Write-PosPersistentIstEvidence $result $EvidenceDir 'pos-persistent-ist-fiscal-issuance-readiness.json'
 $result | ConvertTo-Json -Depth 10
 if ($RequireReady -and -not $result.ready) {
-    throw 'PITX WebPay fiscal issuance readiness is NOT READY.'
+    throw 'PITX channel-terminal fiscal issuance readiness is NOT READY.'
 }

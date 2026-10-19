@@ -100,6 +100,11 @@ public sealed class PostgresFiscalDocumentRepository : IFiscalDocumentRepository
                     ResolvedFiscalIdentityId = resolvedContext.FiscalIdentityId,
                     ResolvedFiscalSequencePolicyId = resolvedContext.FiscalSequencePolicyId
                 };
+                await ValidateChannelTerminalAsync(
+                    connection,
+                    transaction,
+                    resolvedDraft,
+                    cancellationToken).ConfigureAwait(false);
                 await PostgresFiscalCloseBoundaryCoordinator.AcquireAsync(
                     connection,
                     transaction,
@@ -330,6 +335,39 @@ public sealed class PostgresFiscalDocumentRepository : IFiscalDocumentRepository
             throw new FiscalDocumentPersistenceException(
                 "Fiscal document persistence write failed.",
                 ex);
+        }
+    }
+
+    private static async Task ValidateChannelTerminalAsync(
+        NpgsqlConnection connection,
+        NpgsqlTransaction transaction,
+        FiscalDocumentDraft draft,
+        CancellationToken cancellationToken)
+    {
+        const string sql = """
+            SELECT channel_terminal_code
+            FROM pos.channel_terminals
+            WHERE channel_terminal_id = @channel_terminal_id
+              AND site_pos_server_id = @site_pos_server_id
+              AND fiscal_identity_id = @fiscal_identity_id
+              AND is_active = true
+            FOR SHARE;
+            """;
+
+        await using var command = new NpgsqlCommand(sql, connection, transaction);
+        command.Parameters.AddWithValue("channel_terminal_id", draft.ChannelTerminalId!.Value);
+        command.Parameters.AddWithValue("site_pos_server_id", draft.SitePosServerId);
+        command.Parameters.AddWithValue("fiscal_identity_id", draft.ResolvedFiscalIdentityId!.Value);
+        var registeredIdentifier = await command.ExecuteScalarAsync(cancellationToken).ConfigureAwait(false) as string;
+        if (string.IsNullOrWhiteSpace(registeredIdentifier) ||
+            !string.Equals(
+                registeredIdentifier.Trim(),
+                draft.RuntimeTerminalRef?.Trim(),
+                StringComparison.OrdinalIgnoreCase))
+        {
+            throw new FiscalDocumentFiscalContextException(
+                FiscalDocumentCreationErrorCode.ChannelTerminalMismatch,
+                "The channel terminal is not active or does not match the Site POS Server, fiscal identity, and terminal identifier.");
         }
     }
 
