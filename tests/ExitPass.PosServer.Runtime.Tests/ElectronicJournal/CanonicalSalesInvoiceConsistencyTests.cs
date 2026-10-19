@@ -115,6 +115,9 @@ public sealed class CanonicalSalesInvoiceConsistencyTests
         Assert.Contains(customer.CustomerName!, ej, StringComparison.Ordinal);
         Assert.Contains(customer.Address!, ej, StringComparison.Ordinal);
         var header = canonical.SalesInvoiceHeaderSnapshot!;
+        Assert.Equal(header.TerminalId, Row(presentation, "salesInvoiceHeaderSnapshot.terminalId").DisplayValue);
+        Assert.Equal(canonical.ChannelTerminalId, Row(presentation, "sellerSitePosIdentity.channelTerminalId").RawValue);
+        Assert.Contains(header.TerminalId!, ej, StringComparison.Ordinal);
         Assert.Equal(header.SupplierDeveloperRegisteredName, Row(presentation, "salesInvoiceHeaderSnapshot.supplierDeveloperRegisteredName").DisplayValue);
         Assert.Equal(header.SupplierDeveloperAddress, Row(presentation, "salesInvoiceHeaderSnapshot.supplierDeveloperAddress").DisplayValue);
         Assert.Equal(header.SupplierDeveloperTin, Row(presentation, "salesInvoiceHeaderSnapshot.supplierDeveloperTin").DisplayValue);

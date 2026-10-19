@@ -315,8 +315,10 @@ public sealed class DigitalSalesInvoiceEndpointTests
             new DigitalSalesInvoicePresentationAdapter());
 
         Assert.NotNull(response.CanonicalText);
-        Assert.Contains("Branch / Site", response.CanonicalText, StringComparison.Ordinal);
+        Assert.Contains("BRANCH / SITE", response.CanonicalText, StringComparison.Ordinal);
         Assert.Contains("PITX Level 3", response.CanonicalText, StringComparison.Ordinal);
+        Assert.Contains("TERMINAL ID", response.CanonicalText, StringComparison.Ordinal);
+        Assert.Contains(document.SalesInvoiceHeaderSnapshot!.TerminalId!, response.CanonicalText, StringComparison.Ordinal);
         Assert.Contains("1474119573117", response.CanonicalText, StringComparison.Ordinal);
         Assert.Contains("ABC1117", response.CanonicalText, StringComparison.Ordinal);
         Assert.Contains("2026-09-30 22:39", response.CanonicalText, StringComparison.Ordinal);
