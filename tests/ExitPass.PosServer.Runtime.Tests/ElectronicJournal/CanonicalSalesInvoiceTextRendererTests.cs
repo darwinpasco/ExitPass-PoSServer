@@ -30,7 +30,7 @@ public sealed class CanonicalSalesInvoiceTextRendererTests
         var text = new CanonicalSalesInvoiceTextRenderer().Render(Invoice()).Text;
         var requiredStructure = new[]
         {
-            "ExitPass Parking Corporation", "VAT REG TIN", "MIN", "S/N", "BRANCH / SITE", "PARKING LOCATION",
+            "ExitPass Parking Corporation", "VAT REG TIN", "MIN", "S/N", "TERMINAL ID", "BRANCH / SITE", "PARKING LOCATION",
             "SALES INVOICE", "ORIGINAL", "SI NO", "ISSUED", "BUSINESS DATE", "CASHIER", "System",
             "TICKET", "PLATE", "ENTRY", "PAYMENT", "DURATION", "PARKING FEE", "SUBTOTAL", "DISCOUNT",
             "VATABLE SALES", "VAT AMOUNT", "VAT EXEMPT SALES", "ZERO RATED SALES", "TOTAL",
@@ -61,6 +61,27 @@ public sealed class CanonicalSalesInvoiceTextRendererTests
         Assert.DoesNotContain("# Description", text, StringComparison.Ordinal);
         Assert.DoesNotContain("Type       Provider", text, StringComparison.Ordinal);
         Assert.Equal(1, Count(text, "THANK YOU FOR CHOOSING OUR SERVICE"));
+        Assert.All(text.Split("\r\n", StringSplitOptions.RemoveEmptyEntries), line => Assert.True(line.Length <= 35, line));
+    }
+
+    [Theory]
+    [InlineData("PITX-L3-WEBPAY-01")]
+    [InlineData("apt-pitx-level-3-01")]
+    public void RendererUsesTheImmutableHeaderSnapshotTerminalReference(string terminalReference)
+    {
+        var invoice = Invoice();
+        invoice = invoice with
+        {
+            SalesInvoiceHeaderSnapshot = invoice.SalesInvoiceHeaderSnapshot! with
+            {
+                TerminalId = terminalReference
+            }
+        };
+
+        var text = new CanonicalSalesInvoiceTextRenderer().Render(invoice).Text;
+
+        Assert.Contains("TERMINAL ID", text, StringComparison.Ordinal);
+        Assert.Contains(terminalReference, text, StringComparison.Ordinal);
         Assert.All(text.Split("\r\n", StringSplitOptions.RemoveEmptyEntries), line => Assert.True(line.Length <= 35, line));
     }
 
