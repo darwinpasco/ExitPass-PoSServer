@@ -3,7 +3,7 @@
   "expected_schemas": [
     "pos"
   ],
-  "expected_table_count": 69,
+  "expected_table_count": 70,
   "expected_tables": [
     "pos.access_audit",
     "pos.annex_e1_period_accounting_facts",
@@ -45,6 +45,7 @@
     "pos.fiscal_operation_exceptions",
     "pos.fiscal_operation_retries",
     "pos.fiscal_report_output_refs",
+    "pos.fiscal_report_artifacts",
     "pos.fiscal_report_discount_breakdowns",
     "pos.fiscal_report_fiscal_number_ranges",
     "pos.fiscal_report_requests",
@@ -139,7 +140,8 @@
       "pos.annex_e1_workbooks",
       "pos.annex_e_reports",
       "pos.annex_e1_report_fact_sources",
-      "pos.fiscal_report_output_refs"
+      "pos.fiscal_report_output_refs",
+      "pos.fiscal_report_artifacts"
     ],
     "slice_7_ej_poslog_json_exports": [
       "pos.electronic_journal_streams",
@@ -185,6 +187,7 @@
     "pos.annex_e1_report_fact_sources.trg_annex_e1_report_fact_sources_immutable",
     "pos.annex_e1_workbooks.trg_annex_e1_workbooks_immutable",
     "pos.annex_e_reports.trg_annex_e_reports_immutable",
+    "pos.fiscal_report_artifacts.trg_fiscal_report_artifacts_immutable",
     "pos.bir_sales_summary_reports.trg_bir_sales_summary_reports_immutable",
     "pos.electronic_journal_access_audit.trg_electronic_journal_access_audit_immutable",
     "pos.electronic_journal_records.trg_electronic_journal_records_immutable",
@@ -226,6 +229,8 @@
     "pos.fiscal_report_discount_breakdowns.ix_fiscal_report_discount_breakdowns__classification",
     "pos.fiscal_report_fiscal_number_ranges.ix_fiscal_report_fiscal_number_ranges__identity_series",
     "pos.fiscal_report_output_refs.ix_fiscal_report_output_refs__status",
+    "pos.fiscal_report_artifacts.ix_fiscal_report_artifacts__period",
+    "pos.fiscal_report_artifacts.ix_fiscal_report_artifacts__scope_current",
     "pos.fiscal_report_requests.ix_fiscal_report_requests__period_kind_status",
     "pos.fiscal_report_requests.ix_fiscal_report_requests__site_business_date",
     "pos.fiscal_report_sequence_gaps.ix_fiscal_report_sequence_gaps__classification",
@@ -262,6 +267,7 @@
     "pos.fiscal_report_discount_breakdowns.uq_fiscal_report_discount_breakdowns__report_class",
     "pos.fiscal_report_fiscal_number_ranges.uq_fiscal_report_fiscal_number_ranges__report_policy_series",
     "pos.fiscal_report_requests.uq_fiscal_report_requests__site_operation",
+    "pos.fiscal_report_artifacts.uq_fiscal_report_artifacts__scope_revision",
     "pos.fiscal_report_sequence_gaps.uq_fiscal_report_sequence_gaps__range_value",
     "pos.fiscal_report_tender_breakdowns.uq_fiscal_report_tender_breakdowns__report_class",
     "pos.fiscal_documents.fk_fiscal_documents__reporting_period_scope",

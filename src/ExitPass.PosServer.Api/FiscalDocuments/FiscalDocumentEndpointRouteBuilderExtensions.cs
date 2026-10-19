@@ -1,4 +1,7 @@
+using ExitPass.PosServer.Runtime.ElectronicJournal;
 using ExitPass.PosServer.Runtime.FiscalDocuments;
+using ExitPass.PosServer.Runtime.FiscalReports;
+using System.Text;
 
 namespace ExitPass.PosServer.Api.FiscalDocuments;
 
@@ -11,10 +14,71 @@ public static class FiscalDocumentEndpointRouteBuilderExtensions
         group.MapPost("/", async (
             CreateFiscalDocumentRequest request,
             FiscalDocumentCreationService service,
+            DigitalSalesInvoiceRenderService renderService,
+            FiscalReportArtifactService artifactService,
             CancellationToken cancellationToken) =>
         {
             var response = await FiscalDocumentCreationEndpoint.CreateAsync(request, service, cancellationToken)
                 .ConfigureAwait(false);
+
+            if (response.Succeeded && response.FiscalDocumentId is { } documentId)
+            {
+                var rendered = await renderService.RenderAsync(documentId, cancellationToken).ConfigureAwait(false);
+                if (!rendered.Succeeded || rendered.Render is null)
+                {
+                    response = response with
+                    {
+                        Succeeded = false,
+                        Code = "fiscal_document_artifact_unavailable",
+                        Message = "The committed Sales Invoice artifact could not be prepared safely.",
+                        ErrorPosture = "retry_idempotently_after_service_recovery",
+                        HttpStatusCode = StatusCodes.Status503ServiceUnavailable
+                    };
+                }
+                else
+                {
+                    var invoice = rendered.Render;
+                    var currency = invoice.FiscalContent?.CurrencyCode ?? invoice.Lines.Select(line => line.CurrencyCode).FirstOrDefault() ?? "PHP";
+                    var text = invoice.OriginalCanonicalText;
+                    if (string.IsNullOrWhiteSpace(text))
+                    {
+                        try { text = new CanonicalSalesInvoiceTextRenderer().Render(invoice).Text; }
+                        catch (InvalidOperationException) { text = null; }
+                    }
+                    if (string.IsNullOrWhiteSpace(text))
+                    {
+                        response = response with
+                        {
+                            Succeeded = false,
+                            Code = "fiscal_document_artifact_unavailable",
+                            Message = "The committed Sales Invoice artifact could not be rendered safely.",
+                            ErrorPosture = "retry_idempotently_after_service_recovery",
+                            HttpStatusCode = StatusCodes.Status503ServiceUnavailable
+                        };
+                    }
+                    else
+                    {
+                        var persisted = await artifactService.GetOrCreateAsync(new(
+                            invoice.SitePosServerId, invoice.FiscalIdentityId, currency, "SALES_INVOICE", documentId.ToString("D"),
+                            "txt", "pos-server-sales-invoice-canonical-text:v1", FiscalReportArtifactContract.SourceFingerprint(invoice),
+                            BusinessDayDate: invoice.BusinessDayDate),
+                            _ => Task.FromResult(new FiscalReportArtifactPayload(
+                                Encoding.UTF8.GetBytes(text), "text/plain; charset=utf-8", $"sales-invoice-{documentId:D}.txt")),
+                            cancellationToken).ConfigureAwait(false);
+                        if (!persisted.Succeeded)
+                        {
+                            response = response with
+                            {
+                                Succeeded = false,
+                                Code = "fiscal_document_artifact_unavailable",
+                                Message = persisted.SafeMessage ?? "The committed Sales Invoice artifact could not be persisted safely.",
+                                ErrorPosture = "retry_idempotently_after_service_recovery",
+                                HttpStatusCode = StatusCodes.Status503ServiceUnavailable
+                            };
+                        }
+                    }
+                }
+            }
 
             return Results.Json(response, statusCode: response.HttpStatusCode);
         }).RequireAuthorization(FiscalDocumentAuthorization.CreatePolicyName);

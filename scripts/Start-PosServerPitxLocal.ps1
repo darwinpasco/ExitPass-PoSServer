@@ -30,6 +30,8 @@ else {
 }
 $annexE1ArtifactRoot = Join-Path $privateRoot 'pos-server\annex-e1'
 $annexE1ContainerArtifactRoot = '/var/lib/exitpass/annex-e1'
+$fiscalReportArtifactRoot = Join-Path $privateRoot 'pos-server\fiscal-report-artifacts'
+$fiscalReportContainerArtifactRoot = '/var/lib/exitpass/fiscal-report-artifacts'
 $environmentFile = Join-Path $privateRoot 'runtime\restart-41-business\pos.env'
 $temporaryRoot = Join-Path ([IO.Path]::GetTempPath()) "exitpass-pos-server-pitx-local-$PID"
 $certificatePath = Join-Path $temporaryRoot 'exitpass-pos-local.pfx'
@@ -154,6 +156,20 @@ if (-not $resolvedAnnexE1ArtifactRoot.StartsWith(
         [StringComparison]::OrdinalIgnoreCase)) {
     throw "The Annex E-1 artifact path must remain under the private persistent IST root."
 }
+if (Test-Path -LiteralPath $fiscalReportArtifactRoot) {
+    if (-not (Test-Path -LiteralPath $fiscalReportArtifactRoot -PathType Container)) {
+        throw "The fiscal report artifact path is not a directory: $fiscalReportArtifactRoot"
+    }
+}
+else {
+    [void](New-Item -ItemType Directory -Path $fiscalReportArtifactRoot -Force)
+}
+$resolvedFiscalReportArtifactRoot = (Resolve-Path -LiteralPath $fiscalReportArtifactRoot).Path
+if (-not $resolvedFiscalReportArtifactRoot.StartsWith(
+        "$resolvedPrivateRoot\",
+        [StringComparison]::OrdinalIgnoreCase)) {
+    throw "The fiscal report artifact path must remain under the private persistent IST root."
+}
 
 try {
     $permissionProfile = Get-Content -LiteralPath $permissionProfilePath -Raw | ConvertFrom-Json
@@ -259,10 +275,12 @@ try {
         --env 'ASPNETCORE_Kestrel__Certificates__Default__Path=/https/exitpass-pos-local.pfx' `
         --env "ASPNETCORE_Kestrel__Certificates__Default__Password=$certificatePassword" `
         --env "PosServer__AnnexE1__ArtifactRoot=$annexE1ContainerArtifactRoot" `
+        --env "PosServer__FiscalReports__ArtifactRoot=$fiscalReportContainerArtifactRoot" `
         --publish '127.0.0.1:56067:8080' `
         --publish '127.0.0.1:56066:8443' `
         --mount "type=bind,source=$certificatePath,target=/https/exitpass-pos-local.pfx,readonly" `
         --mount "type=bind,source=$resolvedAnnexE1ArtifactRoot,target=$annexE1ContainerArtifactRoot" `
+        --mount "type=bind,source=$resolvedFiscalReportArtifactRoot,target=$fiscalReportContainerArtifactRoot" `
         --label 'com.exitpass.local-runtime=pitx-pos-server' `
         --entrypoint 'dotnet' `
         $imageName `
@@ -288,6 +306,21 @@ try {
     Invoke-CheckedCommand docker.exe @(
         'exec', $containerName, 'test', '-w', $annexE1ContainerArtifactRoot
     ) 'The POS Server process cannot write to the Annex E-1 persistent artifact directory.'
+    $reportArtifactEnvironment = @($containerInspect[0].Config.Env |
+        Where-Object { $_ -ceq "PosServer__FiscalReports__ArtifactRoot=$fiscalReportContainerArtifactRoot" })
+    $reportArtifactMount = @($containerInspect[0].Mounts |
+        Where-Object {
+            $_.Type -eq 'bind' -and
+            $_.Destination -eq $fiscalReportContainerArtifactRoot -and
+            $_.RW -and
+            [string]::Equals($_.Source, $resolvedFiscalReportArtifactRoot, [StringComparison]::OrdinalIgnoreCase)
+        })
+    if ($reportArtifactEnvironment.Count -ne 1 -or $reportArtifactMount.Count -ne 1) {
+        throw 'The POS Server persistent fiscal report artifact configuration is unavailable.'
+    }
+    Invoke-CheckedCommand docker.exe @(
+        'exec', $containerName, 'test', '-w', $fiscalReportContainerArtifactRoot
+    ) 'The POS Server process cannot write to the persistent fiscal report artifact directory.'
 
     Wait-ForHealth '/health/live'
     Wait-ForHealth '/health/ready'
@@ -298,6 +331,7 @@ try {
     Write-Host "HTTP:  $httpUrl"
     Write-Host "Database: $databaseContainer/$databaseName (volume $databaseVolume)"
     Write-Host "Annex E-1 artifacts: $resolvedAnnexE1ArtifactRoot"
+    Write-Host "Fiscal report artifacts: $resolvedFiscalReportArtifactRoot"
 
     if (-not $SmokeTest) {
         Write-Host 'Press Ctrl+C to stop the local POS Server.'

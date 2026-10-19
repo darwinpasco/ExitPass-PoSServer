@@ -71,17 +71,17 @@ public sealed class FiscalReportOutputApiTests
         var service = new FiscalXReadingService(new XRepository(new(FiscalXReadingOutcome.Replayed, record)));
 
         var presentation = await ExecuteAsync(context => FiscalReportOutputEndpoint.GetXPresentationAsync(
-            record.FiscalReportReference, service, new(), new(), new ProfileRepository(), new AuditRepository(), context, NullLogger<FiscalReportOutputAudit>.Instance));
+            record.FiscalReportReference, service, new(), new(), TestFiscalReportArtifacts.Service(), new ProfileRepository(), new AuditRepository(), context, NullLogger<FiscalReportOutputAudit>.Instance));
         var export1 = await ExecuteAsync(context => FiscalReportOutputEndpoint.GetXExportAsync(
-            record.FiscalReportReference, "csv", null, service, new(), new(), new ProfileRepository(), new AuditRepository(), context, NullLogger<FiscalReportOutputAudit>.Instance));
+            record.FiscalReportReference, "csv", null, service, new(), new(), TestFiscalReportArtifacts.Service(), new ProfileRepository(), new AuditRepository(), context, NullLogger<FiscalReportOutputAudit>.Instance));
         var export2 = await ExecuteAsync(context => FiscalReportOutputEndpoint.GetXExportAsync(
-            record.FiscalReportReference, "csv", null, service, new(), new(), new ProfileRepository(), new AuditRepository(), context, NullLogger<FiscalReportOutputAudit>.Instance));
+            record.FiscalReportReference, "csv", null, service, new(), new(), TestFiscalReportArtifacts.Service(), new ProfileRepository(), new AuditRepository(), context, NullLogger<FiscalReportOutputAudit>.Instance));
         var json = await ExecuteAsync(context => FiscalReportOutputEndpoint.GetXExportAsync(
-            record.FiscalReportReference, "json", null, service, new(), new(), new ProfileRepository(), new AuditRepository(), context, NullLogger<FiscalReportOutputAudit>.Instance));
+            record.FiscalReportReference, "json", null, service, new(), new(), TestFiscalReportArtifacts.Service(), new ProfileRepository(), new AuditRepository(), context, NullLogger<FiscalReportOutputAudit>.Instance));
         var pdf1 = await ExecuteAsync(context => FiscalReportOutputEndpoint.GetXExportAsync(
-            record.FiscalReportReference, "pdf", null, service, new(), new(), new ProfileRepository(), new AuditRepository(), context, NullLogger<FiscalReportOutputAudit>.Instance));
+            record.FiscalReportReference, "pdf", null, service, new(), new(), TestFiscalReportArtifacts.Service(), new ProfileRepository(), new AuditRepository(), context, NullLogger<FiscalReportOutputAudit>.Instance));
         var pdf2 = await ExecuteAsync(context => FiscalReportOutputEndpoint.GetXExportAsync(
-            record.FiscalReportReference, "pdf", "57mm", service, new(), new(), new ProfileRepository(), new AuditRepository(), context, NullLogger<FiscalReportOutputAudit>.Instance));
+            record.FiscalReportReference, "pdf", "57mm", service, new(), new(), TestFiscalReportArtifacts.Service(), new ProfileRepository(), new AuditRepository(), context, NullLogger<FiscalReportOutputAudit>.Instance));
 
         Assert.Equal(StatusCodes.Status200OK, presentation.StatusCode);
         Assert.Equal("application/json; charset=utf-8", presentation.ContentType);
@@ -116,9 +116,9 @@ public sealed class FiscalReportOutputApiTests
         var missing = new FiscalXReadingService(new XRepository(new(FiscalXReadingOutcome.NotFound)));
 
         var denied = await ExecuteAsync(context => FiscalReportOutputEndpoint.GetXPresentationAsync(
-            record.FiscalReportReference, found, new(), new(), new ProfileRepository(), new AuditRepository(), context, NullLogger<FiscalReportOutputAudit>.Instance), Guid.NewGuid());
+            record.FiscalReportReference, found, new(), new(), TestFiscalReportArtifacts.Service(), new ProfileRepository(), new AuditRepository(), context, NullLogger<FiscalReportOutputAudit>.Instance), Guid.NewGuid());
         var absent = await ExecuteAsync(context => FiscalReportOutputEndpoint.GetXPresentationAsync(
-            record.FiscalReportReference, missing, new(), new(), new ProfileRepository(), new AuditRepository(), context, NullLogger<FiscalReportOutputAudit>.Instance));
+            record.FiscalReportReference, missing, new(), new(), TestFiscalReportArtifacts.Service(), new ProfileRepository(), new AuditRepository(), context, NullLogger<FiscalReportOutputAudit>.Instance));
 
         Assert.Equal(StatusCodes.Status404NotFound, denied.StatusCode);
         Assert.Equal(absent.StatusCode, denied.StatusCode);
@@ -134,11 +134,11 @@ public sealed class FiscalReportOutputApiTests
         var unavailable = new FiscalXReadingService(new XRepository(new(FiscalXReadingOutcome.PersistenceFailure)));
 
         var unsupported = await ExecuteAsync(context => FiscalReportOutputEndpoint.GetXExportAsync(
-            valid.FiscalReportReference, "text", null, service, new(), new(), new ProfileRepository(), new AuditRepository(), context, NullLogger<FiscalReportOutputAudit>.Instance));
+            valid.FiscalReportReference, "text", null, service, new(), new(), TestFiscalReportArtifacts.Service(), new ProfileRepository(), new AuditRepository(), context, NullLogger<FiscalReportOutputAudit>.Instance));
         var invalid = await ExecuteAsync(context => FiscalReportOutputEndpoint.GetXPresentationAsync(
-            valid.FiscalReportReference, malformed, new(), new(), new ProfileRepository(), new AuditRepository(), context, NullLogger<FiscalReportOutputAudit>.Instance));
+            valid.FiscalReportReference, malformed, new(), new(), TestFiscalReportArtifacts.Service(), new ProfileRepository(), new AuditRepository(), context, NullLogger<FiscalReportOutputAudit>.Instance));
         var failed = await ExecuteAsync(context => FiscalReportOutputEndpoint.GetXPresentationAsync(
-            valid.FiscalReportReference, unavailable, new(), new(), new ProfileRepository(), new AuditRepository(), context, NullLogger<FiscalReportOutputAudit>.Instance));
+            valid.FiscalReportReference, unavailable, new(), new(), TestFiscalReportArtifacts.Service(), new ProfileRepository(), new AuditRepository(), context, NullLogger<FiscalReportOutputAudit>.Instance));
 
         Assert.Equal(StatusCodes.Status400BadRequest, unsupported.StatusCode);
         Assert.Equal(StatusCodes.Status422UnprocessableEntity, invalid.StatusCode);
@@ -153,13 +153,13 @@ public sealed class FiscalReportOutputApiTests
         var record = ZRecord();
         var service = new FiscalZReadingService(new ZRepository(new(FiscalZReadingOutcome.Replayed, record)));
         var allowed = await ExecuteAsync(context => FiscalReportOutputEndpoint.GetZPresentationAsync(
-            record.FiscalReportReference, service, new(), new(), new ProfileRepository(), new AuditRepository(), context, NullLogger<FiscalReportOutputAudit>.Instance));
+            record.FiscalReportReference, service, new(), new(), TestFiscalReportArtifacts.Service(), new ProfileRepository(), new AuditRepository(), context, NullLogger<FiscalReportOutputAudit>.Instance));
         var pdf = await ExecuteAsync(context => FiscalReportOutputEndpoint.GetZExportAsync(
-            record.FiscalReportReference, "pdf", null, service, new(), new(), new ProfileRepository(), new AuditRepository(), context, NullLogger<FiscalReportOutputAudit>.Instance));
+            record.FiscalReportReference, "pdf", null, service, new(), new(), TestFiscalReportArtifacts.Service(), new ProfileRepository(), new AuditRepository(), context, NullLogger<FiscalReportOutputAudit>.Instance));
         var json = await ExecuteAsync(context => FiscalReportOutputEndpoint.GetZExportAsync(
-            record.FiscalReportReference, "json", null, service, new(), new(), new ProfileRepository(), new AuditRepository(), context, NullLogger<FiscalReportOutputAudit>.Instance));
+            record.FiscalReportReference, "json", null, service, new(), new(), TestFiscalReportArtifacts.Service(), new ProfileRepository(), new AuditRepository(), context, NullLogger<FiscalReportOutputAudit>.Instance));
         var denied = await ExecuteAsync(context => FiscalReportOutputEndpoint.GetZPresentationAsync(
-            record.FiscalReportReference, service, new(), new(), new ProfileRepository(), new AuditRepository(), context, NullLogger<FiscalReportOutputAudit>.Instance), currency: "USD");
+            record.FiscalReportReference, service, new(), new(), TestFiscalReportArtifacts.Service(), new ProfileRepository(), new AuditRepository(), context, NullLogger<FiscalReportOutputAudit>.Instance), currency: "USD");
 
         Assert.Equal(StatusCodes.Status200OK, allowed.StatusCode);
         Assert.Contains("resultingZCounterValue\":12", Encoding.UTF8.GetString(allowed.Body), StringComparison.Ordinal);

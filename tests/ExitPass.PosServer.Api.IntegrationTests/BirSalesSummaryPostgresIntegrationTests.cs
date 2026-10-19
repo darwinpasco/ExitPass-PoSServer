@@ -42,6 +42,8 @@ public sealed class BirSalesSummaryPostgresIntegrationTests
         var z = close.ZReading!;
         Assert.Equal("COMMITTED", close.BirSalesSummaryCompletion?.Status);
         Assert.NotNull(close.BirSalesSummaryCompletion?.SummaryId);
+        Assert.Equal(1L, await ScalarAsync<long>(connectionString,
+            $"SELECT count(*) FROM pos.fiscal_report_artifacts WHERE report_type='DAILY_BIR_SALES_SUMMARY' AND scope_reference='{close.BirSalesSummaryCompletion!.SummaryId:D}' AND format='json'"));
         var summaryRequest = new GenerateBirSalesSummaryRequest("summary-concurrent-a", SiteId, IdentityId, "PHP", PeriodId, z.FiscalReportReference);
         client.DefaultRequestHeaders.Remove(SalesInvoiceHeaderProfileAdminAuthorization.ApiKeyHeaderName);
         using var unauthorized = await client.PostAsJsonAsync("/v1/fiscal-reports/bir-sales-summaries/", summaryRequest);
@@ -393,6 +395,7 @@ public sealed class BirSalesSummaryPostgresIntegrationTests
     {
         {"ConnectionStrings:PosServer",cs},
         {"PosServer:AnnexE1:ArtifactRoot",ArtifactRoot},
+        {"PosServer:FiscalReports:ArtifactRoot",FiscalReportArtifactRoot},
         {"PosServer:Admin:ApiKeys:0:Principal","summary-production"},
         {"PosServer:Admin:ApiKeys:0:Key","summary-production-key"},
         {"PosServer:Admin:ApiKeys:0:AuthorityClass","PRODUCTION"},
@@ -443,4 +446,5 @@ public sealed class BirSalesSummaryPostgresIntegrationTests
     private static async Task ExecuteFileAsync(string cs,string path)=>await ExecuteAsync(cs,await File.ReadAllTextAsync(path));private static async Task ExecuteAsync(string cs,string sql){await using var c=new NpgsqlConnection(cs);await c.OpenAsync();await using var cmd=new NpgsqlCommand(sql,c){CommandTimeout=120};await cmd.ExecuteNonQueryAsync();}private static async Task<T> ScalarAsync<T>(string cs,string sql){await using var c=new NpgsqlConnection(cs);await c.OpenAsync();await using var cmd=new NpgsqlCommand(sql,c);return(T)(await cmd.ExecuteScalarAsync())!;}private static string FindRepositoryRoot(){var d=new DirectoryInfo(AppContext.BaseDirectory);while(d is not null){if(File.Exists(Path.Combine(d.FullName,"ExitPass.PosServer.sln")))return d.FullName;d=d.Parent;}throw new DirectoryNotFoundException();}
     private sealed record Manifest(long Documents,long Lines,long Tenders,long Taxes,long Discounts,long Totals,long ZReports,long ZCounter,long ResetCounter,long Gta,string PeriodStatus,long OtherReports,long Summaries);
     private static string ArtifactRoot=>Path.Combine(Path.GetTempPath(),"exitpass-z012b-annex-e1-proof");
+    private static string FiscalReportArtifactRoot=>Path.Combine(Path.GetTempPath(),"exitpass-z012b-fiscal-report-artifact-proof");
 }

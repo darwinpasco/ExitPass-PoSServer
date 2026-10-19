@@ -20,12 +20,13 @@ public static class FiscalReportOutputEndpoint
         FiscalXReadingService readService,
         FiscalReportPresentationService presentationService,
         FiscalReportOutputRenderer renderer,
+        FiscalReportArtifactService artifactService,
         ISalesInvoiceHeaderProfileRepository headerProfileRepository,
         IAuditTrailRepository auditTrailRepository,
         HttpContext context,
         ILogger<FiscalReportOutputAudit> logger,
         CancellationToken cancellationToken = default) =>
-        await GetXAsync(reference, null, null, readService, presentationService, renderer, headerProfileRepository, auditTrailRepository, context, logger, cancellationToken)
+        await GetXAsync(reference, null, null, readService, presentationService, renderer, artifactService, headerProfileRepository, auditTrailRepository, context, logger, cancellationToken)
             .ConfigureAwait(false);
 
     public static async Task<IResult> GetXExportAsync(
@@ -35,12 +36,13 @@ public static class FiscalReportOutputEndpoint
         FiscalXReadingService readService,
         FiscalReportPresentationService presentationService,
         FiscalReportOutputRenderer renderer,
+        FiscalReportArtifactService artifactService,
         ISalesInvoiceHeaderProfileRepository headerProfileRepository,
         IAuditTrailRepository auditTrailRepository,
         HttpContext context,
         ILogger<FiscalReportOutputAudit> logger,
         CancellationToken cancellationToken = default) =>
-        await GetXAsync(reference, format, width, readService, presentationService, renderer, headerProfileRepository, auditTrailRepository, context, logger, cancellationToken)
+        await GetXAsync(reference, format, width, readService, presentationService, renderer, artifactService, headerProfileRepository, auditTrailRepository, context, logger, cancellationToken)
             .ConfigureAwait(false);
 
     public static async Task<IResult> GetZPresentationAsync(
@@ -48,12 +50,13 @@ public static class FiscalReportOutputEndpoint
         FiscalZReadingService readService,
         FiscalReportPresentationService presentationService,
         FiscalReportOutputRenderer renderer,
+        FiscalReportArtifactService artifactService,
         ISalesInvoiceHeaderProfileRepository headerProfileRepository,
         IAuditTrailRepository auditTrailRepository,
         HttpContext context,
         ILogger<FiscalReportOutputAudit> logger,
         CancellationToken cancellationToken = default) =>
-        await GetZAsync(reference, null, null, readService, presentationService, renderer, headerProfileRepository, auditTrailRepository, context, logger, cancellationToken)
+        await GetZAsync(reference, null, null, readService, presentationService, renderer, artifactService, headerProfileRepository, auditTrailRepository, context, logger, cancellationToken)
             .ConfigureAwait(false);
 
     public static async Task<IResult> GetZExportAsync(
@@ -63,12 +66,13 @@ public static class FiscalReportOutputEndpoint
         FiscalZReadingService readService,
         FiscalReportPresentationService presentationService,
         FiscalReportOutputRenderer renderer,
+        FiscalReportArtifactService artifactService,
         ISalesInvoiceHeaderProfileRepository headerProfileRepository,
         IAuditTrailRepository auditTrailRepository,
         HttpContext context,
         ILogger<FiscalReportOutputAudit> logger,
         CancellationToken cancellationToken = default) =>
-        await GetZAsync(reference, format, width, readService, presentationService, renderer, headerProfileRepository, auditTrailRepository, context, logger, cancellationToken)
+        await GetZAsync(reference, format, width, readService, presentationService, renderer, artifactService, headerProfileRepository, auditTrailRepository, context, logger, cancellationToken)
             .ConfigureAwait(false);
 
     private static async Task<IResult> GetXAsync(
@@ -78,6 +82,7 @@ public static class FiscalReportOutputEndpoint
         FiscalXReadingService readService,
         FiscalReportPresentationService presentationService,
         FiscalReportOutputRenderer renderer,
+        FiscalReportArtifactService artifactService,
         ISalesInvoiceHeaderProfileRepository headerProfileRepository,
         IAuditTrailRepository auditTrailRepository,
         HttpContext context,
@@ -111,7 +116,7 @@ public static class FiscalReportOutputEndpoint
                 cancellationToken).ConfigureAwait(false)
             : null;
         var presented = presentationService.Present(read.Record);
-        return await CompleteAsync(context, presented, renderer, outputFormat, profile, receiptProfile, correlation, logger,
+        return await CompleteAsync(context, presented, renderer, artifactService, outputFormat, profile, receiptProfile, correlation, logger,
             auditTrailRepository, format is not null, cancellationToken).ConfigureAwait(false);
     }
 
@@ -122,6 +127,7 @@ public static class FiscalReportOutputEndpoint
         FiscalZReadingService readService,
         FiscalReportPresentationService presentationService,
         FiscalReportOutputRenderer renderer,
+        FiscalReportArtifactService artifactService,
         ISalesInvoiceHeaderProfileRepository headerProfileRepository,
         IAuditTrailRepository auditTrailRepository,
         HttpContext context,
@@ -155,7 +161,7 @@ public static class FiscalReportOutputEndpoint
                 cancellationToken).ConfigureAwait(false)
             : null;
         var presented = presentationService.Present(read.Record);
-        return await CompleteAsync(context, presented, renderer, outputFormat, profile, receiptProfile, correlation, logger,
+        return await CompleteAsync(context, presented, renderer, artifactService, outputFormat, profile, receiptProfile, correlation, logger,
             auditTrailRepository, format is not null, cancellationToken).ConfigureAwait(false);
     }
 
@@ -163,6 +169,7 @@ public static class FiscalReportOutputEndpoint
         HttpContext context,
         FiscalReportPresentationResult result,
         FiscalReportOutputRenderer renderer,
+        FiscalReportArtifactService artifactService,
         FiscalReportOutputFormat format,
         FiscalReportPrintWidthProfile profile,
         FiscalReportReceiptProfile? receiptProfile,
@@ -185,26 +192,60 @@ public static class FiscalReportOutputEndpoint
             return Error(context, response.Item1, result.SafeMessage, correlation, response.Item2);
         }
 
-        var artifact = format == FiscalReportOutputFormat.PresentationJson
-            ? renderer.CreatePresentationJson(result.Presentation)
-            : renderer.CreateExport(result.Presentation, format, profile, receiptProfile);
+        var presentation = result.Presentation;
+        var artifactScope = format == FiscalReportOutputFormat.Pdf
+            ? $"{presentation.ReportReference}:{profile.ToString().ToLowerInvariant()}"
+            : presentation.ReportReference;
+        var persisted = await artifactService.GetOrCreateAsync(new(
+            presentation.SitePosServerId, presentation.FiscalIdentityId, presentation.CurrencyCode,
+            presentation.ReportKind, artifactScope, format.ToString().ToLowerInvariant(),
+            format switch
+            {
+                FiscalReportOutputFormat.PresentationJson => presentation.PresentationContractVersion,
+                FiscalReportOutputFormat.Json => FiscalReportPresentationContract.JsonExportVersion,
+                FiscalReportOutputFormat.Csv => FiscalReportPresentationContract.CsvExportVersion,
+                _ => FiscalReportPresentationContract.PdfExportVersion
+            },
+            format == FiscalReportOutputFormat.PresentationJson
+                ? FiscalReportArtifactContract.SourceFingerprint(presentation)
+                : FiscalReportArtifactContract.SourceFingerprint(new { presentation, format, profile, receiptProfile }),
+            presentation.FiscalReportingPeriodId, BusinessDayDate: presentation.BusinessDayDate),
+            _ =>
+            {
+                var output = format == FiscalReportOutputFormat.PresentationJson
+                    ? renderer.CreatePresentationJson(presentation)
+                    : renderer.CreateExport(presentation, format, profile, receiptProfile);
+                return Task.FromResult(new FiscalReportArtifactPayload(output.Content, output.ContentType, output.FileName));
+            }, cancellationToken).ConfigureAwait(false);
+        if (!persisted.Succeeded || persisted.Artifact is null || persisted.Bytes is null)
+            return Error(context, "fiscal_report_artifact_unavailable",
+                persisted.SafeMessage ?? "The fiscal report artifact could not be persisted safely.", correlation,
+                StatusCodes.Status503ServiceUnavailable);
+        var artifact = persisted.Artifact;
         if (auditExport)
         {
             var actor = context.User.FindFirstValue(ClaimTypes.NameIdentifier) ?? "unavailable";
             await auditTrailRepository.RecordExportAsync(result.Presentation.SitePosServerId, result.Presentation.ReportKind,
                 result.Presentation.ReportReference, artifact.Format.ToString(), actor, correlation,
-                Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(artifact.Content)).ToLowerInvariant(), 1,
+                artifact.Sha256, 1,
                 cancellationToken).ConfigureAwait(false);
         }
-        ApplyHeaders(context, artifact);
+        context.Response.Headers.CacheControl = "private, no-store";
+        context.Response.Headers.ETag = $"\"fiscal-report-output-sha256-v1-{artifact.Sha256}\"";
+        context.Response.Headers["X-Content-Type-Options"] = "nosniff";
+        context.Response.Headers["X-ExitPass-Output-Identity"] = artifact.Sha256;
+        context.Response.Headers["X-ExitPass-Output-Contract"] = artifact.ArtifactVersion;
+        if (format != FiscalReportOutputFormat.PresentationJson)
+            context.Response.Headers.ContentDisposition = $"attachment; filename=\"{artifact.FileName}\"";
+        context.Response.Headers["X-ExitPass-Artifact-Revision"] = artifact.Revision.ToString();
         logger.LogInformation(
             "Fiscal report output produced. Kind={ReportKind} Reference={ReportReference} Format={Format} OutputIdentity={OutputIdentity} Correlation={Correlation}",
             result.Presentation.ReportKind,
             result.Presentation.ReportReference,
-            artifact.Format,
-            artifact.OutputIdentity,
+            format,
+            artifact.Sha256,
             correlation);
-        return Results.Bytes(artifact.Content, artifact.ContentType);
+        return Results.Bytes(persisted.Bytes, artifact.ContentType);
     }
 
     private static bool TryResolveOutput(

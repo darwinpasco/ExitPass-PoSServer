@@ -47,7 +47,10 @@ public sealed class PostgresMonthlyESalesRepository(NpgsqlDataSource dataSource)
             var aggregate = MonthlyESalesAggregator.Build(query, currentSiteDate.Value, sources);
             if (aggregate.Report is null)
                 return new(aggregate.Outcome, SafeMessage: aggregate.SafeMessage);
-            var pdf = BuildPdfReport(aggregate.Report, sources);
+            var committedSources = sources.Where(source =>
+                source.PeriodClosed && source.GoverningZCommitted && source.BirSalesSummaryCommitted &&
+                source.BirSalesSummaryCommittedAt.HasValue).ToArray();
+            var pdf = BuildPdfReport(aggregate.Report, committedSources);
             await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
             return pdf;
         }

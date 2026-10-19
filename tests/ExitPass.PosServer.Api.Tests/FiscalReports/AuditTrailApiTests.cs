@@ -38,11 +38,11 @@ public sealed class AuditTrailApiTests
         var repository = new StubRepository();
         var service = new AuditTrailService(repository);
         var wrongSite = await Execute(context => AuditTrailEndpoint.ReadAsync(
-            new(Guid.NewGuid(), From, To, null, null, null, null), service, context, default));
+            new(Guid.NewGuid(), From, To, null, null, null, null), service, TestFiscalReportArtifacts.Service(), context, default));
         var unbounded = await Execute(context => AuditTrailEndpoint.ReadAsync(
-            new(Site, null, null, null, null, null, null), service, context, default));
+            new(Site, null, null, null, null, null, null), service, TestFiscalReportArtifacts.Service(), context, default));
         var success = await Execute(context => AuditTrailEndpoint.ReadAsync(
-            new(Site, From, To, "fiscal_document_committed", "System", "ALLOWED", "SI-00000116"), service, context, default));
+            new(Site, From, To, "fiscal_document_committed", "System", "ALLOWED", "SI-00000116"), service, TestFiscalReportArtifacts.Service(), context, default));
 
         Assert.Equal(StatusCodes.Status404NotFound, wrongSite.StatusCode);
         Assert.Equal(StatusCodes.Status400BadRequest, unbounded.StatusCode);
@@ -59,7 +59,7 @@ public sealed class AuditTrailApiTests
     {
         var repository = new StubRepository();
         var response = await Execute(context => AuditTrailEndpoint.ExportAsync(
-            new(Site, From, To, null, null, null, null), format, new(repository), new(), repository, context, default));
+            new(Site, From, To, null, null, null, null), format, new(repository), new(), TestFiscalReportArtifacts.Service(), repository, context, default));
 
         Assert.Equal(StatusCodes.Status200OK, response.StatusCode);
         Assert.Equal(contentType, response.ContentType);
@@ -75,7 +75,7 @@ public sealed class AuditTrailApiTests
     {
         var repository = new StubRepository();
         var response = await Execute(context => AuditTrailEndpoint.ExportAsync(
-            new(Site, From, To, null, null, null, null), "xml", new(repository), new(), repository, context, default));
+            new(Site, From, To, null, null, null, null), "xml", new(repository), new(), TestFiscalReportArtifacts.Service(), repository, context, default));
         Assert.Equal(StatusCodes.Status400BadRequest, response.StatusCode);
         Assert.Equal(0, repository.ReadCalls);
         Assert.Equal(0, repository.ExportCalls);

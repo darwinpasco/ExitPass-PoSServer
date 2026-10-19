@@ -91,11 +91,11 @@ public sealed class BirSalesSummaryApiTests
     {
         var repository = new StubRepository(new(BirSalesSummaryOutcome.Created, Record()));
         var service = new BirSalesSummaryService(repository);
-        var wrongScope = await BirSalesSummaryEndpoint.GenerateAsync(Request() with { CurrencyCode = "USD" }, service, Context("PRODUCTION"), new Host("Development"));
+        var wrongScope = await BirSalesSummaryEndpoint.GenerateAsync(Request() with { CurrencyCode = "USD" }, service, new(), TestFiscalReportArtifacts.Service(), Context("PRODUCTION"), new Host("Development"));
         Assert.Equal(403, wrongScope.HttpStatusCode);
         Assert.Equal(0, repository.GenerateCalls);
 
-        var fixture = await BirSalesSummaryEndpoint.GenerateAsync(Request(), service, Context("FIXTURE"), new Host(Environments.Production));
+        var fixture = await BirSalesSummaryEndpoint.GenerateAsync(Request(), service, new(), TestFiscalReportArtifacts.Service(), Context("FIXTURE"), new Host(Environments.Production));
         Assert.Equal(403, fixture.HttpStatusCode);
         Assert.Equal(0, repository.GenerateCalls);
     }
@@ -105,15 +105,15 @@ public sealed class BirSalesSummaryApiTests
     {
         var repository = new StubRepository(new(BirSalesSummaryOutcome.Created, Record()));
         var service = new BirSalesSummaryService(repository);
-        var created = await BirSalesSummaryEndpoint.GenerateAsync(Request(), service, Context("PRODUCTION"), new Host(Environments.Production));
+        var created = await BirSalesSummaryEndpoint.GenerateAsync(Request(), service, new(), TestFiscalReportArtifacts.Service(), Context("PRODUCTION"), new Host(Environments.Production));
         Assert.Equal(201, created.HttpStatusCode);
 
         repository.Result = new(BirSalesSummaryOutcome.Replayed, Record());
-        Assert.Equal(200, (await BirSalesSummaryEndpoint.GenerateAsync(Request(), service, Context("PRODUCTION"), new Host(Environments.Production))).HttpStatusCode);
+        Assert.Equal(200, (await BirSalesSummaryEndpoint.GenerateAsync(Request(), service, new(), TestFiscalReportArtifacts.Service(), Context("PRODUCTION"), new Host(Environments.Production))).HttpStatusCode);
         repository.Result = new(BirSalesSummaryOutcome.PeriodNotClosed, SafeMessage: "The period is not closed.");
-        Assert.Equal(409, (await BirSalesSummaryEndpoint.GenerateAsync(Request(), service, Context("PRODUCTION"), new Host(Environments.Production))).HttpStatusCode);
+        Assert.Equal(409, (await BirSalesSummaryEndpoint.GenerateAsync(Request(), service, new(), TestFiscalReportArtifacts.Service(), Context("PRODUCTION"), new Host(Environments.Production))).HttpStatusCode);
         repository.Result = new(BirSalesSummaryOutcome.ReconciliationFailure, SafeMessage: "Reconciliation failed safely.");
-        var failure = await BirSalesSummaryEndpoint.GenerateAsync(Request(), service, Context("PRODUCTION"), new Host(Environments.Production));
+        var failure = await BirSalesSummaryEndpoint.GenerateAsync(Request(), service, new(), TestFiscalReportArtifacts.Service(), Context("PRODUCTION"), new Host(Environments.Production));
         Assert.Equal(422, failure.HttpStatusCode);
         var text = System.Text.Json.JsonSerializer.Serialize(failure);
         Assert.DoesNotContain("sql", text, StringComparison.OrdinalIgnoreCase);

@@ -15,6 +15,12 @@ public static class MonthlyESalesSubmissionReadiness
     public const string TechnicalReportReady = "TECHNICAL_REPORT_READY";
 }
 
+public static class MonthlyESalesCoverageStatus
+{
+    public const string MonthToDate = "MONTH_TO_DATE";
+    public const string CompleteMonth = "COMPLETE_MONTH";
+}
+
 public sealed record MonthlyESalesQuery(
     Guid SitePosServerId,
     Guid FiscalIdentityId,
@@ -101,6 +107,11 @@ public sealed record MonthlyESalesReport(
     string? SubmissionDueDateBasis,
     string SubmissionReadiness,
     string SubmissionReadinessMessage,
+    string CoverageStatus,
+    string CoverageMessage,
+    DateOnly FirstCoveredBusinessDate,
+    DateOnly LastCoveredBusinessDate,
+    DateTimeOffset CoverageAsOf,
     IReadOnlyList<MonthlyESalesRow> Rows);
 
 public enum MonthlyESalesOutcome

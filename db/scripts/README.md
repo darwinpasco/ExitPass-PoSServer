@@ -74,6 +74,13 @@ Inspect or reconcile an approved persistent IST database hosted by its PostgreSQ
   -ContainerName exitpass-pos-ist-persistent-db `
   -DatabaseName exitpass_pos_ist `
   -EvidenceDir .\db\validation\evidence\persistent-ist-annex-e1
+
+# Narrow additive reconciliation for durable fiscal report artifact metadata.
+.\db\scripts\Invoke-PosPersistentStateReconciliation.ps1 `
+  -Mode Apply -Scope FiscalReportArtifacts `
+  -ContainerName exitpass-pos-ist-persistent-db `
+  -DatabaseName exitpass_pos_ist `
+  -EvidenceDir .\db\validation\evidence\persistent-ist-fiscal-report-artifacts
 ```
 
 Back up the target before `-Mode Apply`. Rebuild and ControlledCodeLoad remain disposable-database

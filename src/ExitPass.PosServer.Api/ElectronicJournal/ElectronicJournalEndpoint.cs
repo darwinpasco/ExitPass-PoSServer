@@ -1,6 +1,7 @@
 using System.Security.Claims;
 using ExitPass.PosServer.Api.FiscalDocuments;
 using ExitPass.PosServer.Runtime.ElectronicJournal;
+using ExitPass.PosServer.Runtime.FiscalReports;
 
 namespace ExitPass.PosServer.Api.ElectronicJournal;
 
@@ -35,6 +36,7 @@ public static class ElectronicJournalEndpoint
         ElectronicJournalFilterRequest request,
         ElectronicJournalInvoiceTextService invoiceTextService,
         ElectronicJournalService accessService,
+        FiscalReportArtifactService artifactService,
         HttpContext context,
         IHostEnvironment environment,
         CancellationToken cancellationToken)
@@ -45,6 +47,16 @@ public static class ElectronicJournalEndpoint
         var result = await invoiceTextService.ReadAsync(query, false, cancellationToken).ConfigureAwait(false);
         var support = Support();
         if (result.Invoices is null) return MapFailure(context, result.Outcome, result.SafeMessage, preflight.Correlation!, support);
+        var readResponse = new ElectronicJournalInvoiceTextResponse(true, "electronic_journal_invoice_text_read", preflight.Correlation!, support, result.Invoices);
+        var persisted = await artifactService.GetOrCreateAsync(new(
+            query.SitePosServerId, query.FiscalIdentityId, query.CurrencyCode, "ELECTRONIC_JOURNAL_INVOICE_TEXT",
+            FiscalReportArtifactContract.SourceFingerprint(query), "json", "pos-server-electronic-journal-invoice-text-json:v1",
+            FiscalReportArtifactContract.SourceFingerprint(result.Invoices), query.FiscalReportingPeriodId),
+            _ => Task.FromResult(new FiscalReportArtifactPayload(
+                System.Text.Json.JsonSerializer.SerializeToUtf8Bytes(readResponse), "application/json; charset=utf-8", "electronic-journal-invoice-text.json")),
+            cancellationToken).ConfigureAwait(false);
+        if (!persisted.Succeeded) return Error(context, "electronic_journal_artifact_unavailable",
+            persisted.SafeMessage, preflight.Correlation!, support, 503);
         try
         {
             await accessService.RecordAccessAsync(query.SitePosServerId, query.FiscalIdentityId, query.CurrencyCode, "read", "allowed",
@@ -52,13 +64,14 @@ public static class ElectronicJournalEndpoint
         }
         catch { return Unavailable(context, preflight.Correlation!, support); }
         NoStore(context);
-        return Results.Json(new ElectronicJournalInvoiceTextResponse(true, "electronic_journal_invoice_text_read", preflight.Correlation!, support, result.Invoices));
+        return Results.Json(readResponse);
     }
 
     public static async Task<IResult> ExportInvoiceTextAsync(
         ElectronicJournalFilterRequest request,
         ElectronicJournalInvoiceTextService invoiceTextService,
         ElectronicJournalService accessService,
+        FiscalReportArtifactService artifactService,
         HttpContext context,
         IHostEnvironment environment,
         CancellationToken cancellationToken)
@@ -71,6 +84,18 @@ public static class ElectronicJournalEndpoint
         if (result.Invoices is null) return MapFailure(context, result.Outcome, result.SafeMessage, preflight.Correlation!, support);
         if (result.Export is null)
             return Error(context, "electronic_journal_no_invoice_activity", "No issued Sales Invoice text exists for the requested period.", preflight.Correlation!, support, 404);
+        var export = result.Export;
+        var scope = FiscalReportArtifactContract.SourceFingerprint(query);
+        var persisted = await artifactService.GetOrCreateAsync(new(
+            query.SitePosServerId, query.FiscalIdentityId, query.CurrencyCode, "ELECTRONIC_JOURNAL_INVOICE_TEXT",
+            scope, "txt", "pos-server-electronic-journal-invoice-text:v1",
+            FiscalReportArtifactContract.SourceFingerprint(result.Invoices), query.FiscalReportingPeriodId),
+            _ => Task.FromResult(new FiscalReportArtifactPayload(export.Bytes, export.ContentType, export.FileName)),
+            cancellationToken).ConfigureAwait(false);
+        if (!persisted.Succeeded || persisted.Artifact is null || persisted.Bytes is null)
+            return Error(context, "electronic_journal_artifact_unavailable",
+                persisted.SafeMessage ?? "The Electronic Journal artifact could not be persisted safely.",
+                preflight.Correlation!, support, 503);
         try
         {
             await accessService.RecordAccessAsync(query.SitePosServerId, query.FiscalIdentityId, query.CurrencyCode, "export", "allowed",
@@ -78,14 +103,17 @@ public static class ElectronicJournalEndpoint
         }
         catch { return Unavailable(context, preflight.Correlation!, support); }
         NoStore(context);
-        context.Response.Headers.ContentDisposition = $"attachment; filename=\"{result.Export.FileName}\"";
+        context.Response.Headers.ContentDisposition = $"attachment; filename=\"{persisted.Artifact.FileName}\"";
+        context.Response.Headers["X-Content-SHA256"] = persisted.Artifact.Sha256;
+        context.Response.Headers["X-ExitPass-Artifact-Revision"] = persisted.Artifact.Revision.ToString();
         context.Response.Headers["X-ExitPass-Output-Contract"] = "pos-server-electronic-journal-invoice-text:v1";
-        return Results.Bytes(result.Export.Bytes, result.Export.ContentType);
+        return Results.Bytes(persisted.Bytes, persisted.Artifact.ContentType);
     }
 
     public static async Task<IResult> ReadAsync(
         ElectronicJournalFilterRequest request,
         ElectronicJournalService service,
+        FiscalReportArtifactService artifactService,
         HttpContext context,
         IHostEnvironment environment,
         CancellationToken cancellationToken)
@@ -96,6 +124,16 @@ public static class ElectronicJournalEndpoint
         var result = await service.ReadAsync(query, cancellationToken).ConfigureAwait(false);
         var support = Support();
         if (result.Page is null) return MapFailure(context, result.Outcome, result.SafeMessage, preflight.Correlation!, support);
+        var readResponse = new ElectronicJournalReadResponse(true, "electronic_journal_read", preflight.Correlation!, support, result.Page);
+        var persisted = await artifactService.GetOrCreateAsync(new(
+            query.SitePosServerId, query.FiscalIdentityId, query.CurrencyCode, "ELECTRONIC_JOURNAL",
+            FiscalReportArtifactContract.SourceFingerprint(query), "json", ElectronicJournalContract.ExportVersion,
+            FiscalReportArtifactContract.SourceFingerprint(result.Page), query.FiscalReportingPeriodId),
+            _ => Task.FromResult(new FiscalReportArtifactPayload(
+                System.Text.Json.JsonSerializer.SerializeToUtf8Bytes(readResponse), "application/json; charset=utf-8", "electronic-journal.json")),
+            cancellationToken).ConfigureAwait(false);
+        if (!persisted.Succeeded) return Error(context, "electronic_journal_artifact_unavailable",
+            persisted.SafeMessage, preflight.Correlation!, support, 503);
         try
         {
             await service.RecordAccessAsync(query.SitePosServerId, query.FiscalIdentityId, query.CurrencyCode, "read", "allowed",
@@ -103,13 +141,14 @@ public static class ElectronicJournalEndpoint
         }
         catch { return Unavailable(context, preflight.Correlation!, support); }
         NoStore(context);
-        return Results.Json(new ElectronicJournalReadResponse(true, "electronic_journal_read", preflight.Correlation!, support, result.Page));
+        return Results.Json(readResponse);
     }
 
     public static async Task<IResult> ExportAsync(
         string format,
         ElectronicJournalFilterRequest request,
         ElectronicJournalService service,
+        FiscalReportArtifactService artifactService,
         HttpContext context,
         IHostEnvironment environment,
         CancellationToken cancellationToken)
@@ -122,18 +161,30 @@ public static class ElectronicJournalEndpoint
         var (result, export) = await service.ExportAsync(query, outputFormat, cancellationToken).ConfigureAwait(false);
         var support = Support();
         if (export is null) return MapFailure(context, result.Outcome, result.SafeMessage, preflight.Correlation!, support);
+        var scope = FiscalReportArtifactContract.SourceFingerprint(query);
+        var persisted = await artifactService.GetOrCreateAsync(new(
+            query.SitePosServerId, query.FiscalIdentityId, query.CurrencyCode, "ELECTRONIC_JOURNAL", scope,
+            outputFormat.ToString().ToLowerInvariant(), ElectronicJournalContract.ExportVersion,
+            FiscalReportArtifactContract.SourceFingerprint(new { result.Page, outputFormat }), query.FiscalReportingPeriodId),
+            _ => Task.FromResult(new FiscalReportArtifactPayload(export.Bytes, export.ContentType, export.FileName)),
+            cancellationToken).ConfigureAwait(false);
+        if (!persisted.Succeeded || persisted.Artifact is null || persisted.Bytes is null)
+            return Error(context, "electronic_journal_artifact_unavailable",
+                persisted.SafeMessage ?? "The Electronic Journal artifact could not be persisted safely.",
+                preflight.Correlation!, support, 503);
         try
         {
             await service.RecordAccessAsync(query.SitePosServerId, query.FiscalIdentityId, query.CurrencyCode, "export", "allowed",
                 preflight.Actor!, preflight.Actor!, preflight.Correlation!, support, result.Page!.Events.Count, cancellationToken).ConfigureAwait(false);
         }
         catch { return Unavailable(context, preflight.Correlation!, support); }
-        NoStore(context); context.Response.Headers.ETag = export.ETag;
-        context.Response.Headers["X-Content-SHA256"] = export.ContentSha256;
-        context.Response.Headers["X-ExitPass-Output-Identity"] = export.OutputIdentity;
+        NoStore(context); context.Response.Headers.ETag = $"\"sha256-{persisted.Artifact.Sha256}\"";
+        context.Response.Headers["X-Content-SHA256"] = persisted.Artifact.Sha256;
+        context.Response.Headers["X-ExitPass-Output-Identity"] = persisted.Artifact.Sha256;
+        context.Response.Headers["X-ExitPass-Artifact-Revision"] = persisted.Artifact.Revision.ToString();
         context.Response.Headers["X-ExitPass-Output-Contract"] = ElectronicJournalContract.ExportVersion;
-        context.Response.Headers.ContentDisposition = $"attachment; filename=\"{export.FileName}\"";
-        return Results.Bytes(export.Bytes, export.ContentType);
+        context.Response.Headers.ContentDisposition = $"attachment; filename=\"{persisted.Artifact.FileName}\"";
+        return Results.Bytes(persisted.Bytes, persisted.Artifact.ContentType);
     }
 
     public static async Task<IResult> VerifyAsync(

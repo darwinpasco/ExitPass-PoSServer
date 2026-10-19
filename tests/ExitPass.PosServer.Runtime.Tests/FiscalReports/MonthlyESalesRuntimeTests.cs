@@ -34,10 +34,19 @@ public sealed class MonthlyESalesRuntimeTests
     }
 
     [Fact]
-    public void CurrentAndFutureMonthsAreNotFinal()
+    public void CurrentMonthIsMonthToDateAndFutureMonthIsRejected()
     {
-        Assert.Equal(MonthlyESalesOutcome.MonthNotComplete,
-            MonthlyESalesAggregator.Build(Query() with { CalendarMonth = 10 }, new(2026,10,16), [Source(new(2026,10,1),1)]).Outcome);
+        var current = MonthlyESalesAggregator.Build(Query() with { CalendarMonth = 10 }, new(2026,10,16),
+        [
+            Source(new(2026,10,1),1,gross:10_000),
+            Source(new(2026,10,16),2,gross:90_000) with { PeriodClosed = false, GoverningZCommitted = false, BirSalesSummaryCommitted = false, BirSalesSummaryCommittedAt = null }
+        ]);
+        Assert.Equal(MonthlyESalesOutcome.Succeeded, current.Outcome);
+        Assert.Equal(MonthlyESalesCoverageStatus.MonthToDate, current.Report!.CoverageStatus);
+        Assert.Equal(10_000, Assert.Single(current.Report.Rows).MonthlySalesAmountMinorUnits);
+        Assert.Equal(new DateOnly(2026, 10, 1), current.Report.LastCoveredBusinessDate);
+        Assert.Null(current.Report.SubmissionDueDate);
+        Assert.Contains("month-to-date", current.Report.SubmissionReadinessMessage, StringComparison.OrdinalIgnoreCase);
         Assert.Equal(MonthlyESalesOutcome.MonthNotComplete,
             MonthlyESalesAggregator.Build(Query() with { CalendarMonth = 11 }, new(2026,10,16), [Source(new(2026,11,1),1)]).Outcome);
     }
