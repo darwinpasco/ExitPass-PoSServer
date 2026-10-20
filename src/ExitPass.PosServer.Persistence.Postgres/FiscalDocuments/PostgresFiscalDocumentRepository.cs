@@ -11,6 +11,12 @@ namespace ExitPass.PosServer.Persistence.Postgres.FiscalDocuments;
 
 public sealed class PostgresFiscalDocumentRepository : IFiscalDocumentRepository
 {
+    private const int SalesInvoiceSequenceWidth = 14;
+
+    private sealed record ChannelTerminalIdentity(
+        string TerminalIdentifier,
+        string TerminalSerialNumber);
+
     private static readonly HashSet<string> VoidableStatusCodeKeys = new(StringComparer.OrdinalIgnoreCase)
     {
         "issued",
@@ -100,7 +106,7 @@ public sealed class PostgresFiscalDocumentRepository : IFiscalDocumentRepository
                     ResolvedFiscalIdentityId = resolvedContext.FiscalIdentityId,
                     ResolvedFiscalSequencePolicyId = resolvedContext.FiscalSequencePolicyId
                 };
-                await ValidateChannelTerminalAsync(
+                var channelTerminal = await ValidateChannelTerminalAsync(
                     connection,
                     transaction,
                     resolvedDraft,
@@ -153,6 +159,7 @@ public sealed class PostgresFiscalDocumentRepository : IFiscalDocumentRepository
                     transaction,
                     resolvedDraft,
                     assignment.FiscalNumberAssignedAt,
+                    channelTerminal,
                     cancellationToken).ConfigureAwait(false);
                 resolvedDraft = resolvedDraft with { SalesInvoiceHeaderSnapshot = headerSnapshot };
 
@@ -338,14 +345,14 @@ public sealed class PostgresFiscalDocumentRepository : IFiscalDocumentRepository
         }
     }
 
-    private static async Task ValidateChannelTerminalAsync(
+    private static async Task<ChannelTerminalIdentity> ValidateChannelTerminalAsync(
         NpgsqlConnection connection,
         NpgsqlTransaction transaction,
         FiscalDocumentDraft draft,
         CancellationToken cancellationToken)
     {
         const string sql = """
-            SELECT channel_terminal_code
+            SELECT channel_terminal_code, terminal_serial_number
             FROM pos.channel_terminals
             WHERE channel_terminal_id = @channel_terminal_id
               AND site_pos_server_id = @site_pos_server_id
@@ -358,7 +365,16 @@ public sealed class PostgresFiscalDocumentRepository : IFiscalDocumentRepository
         command.Parameters.AddWithValue("channel_terminal_id", draft.ChannelTerminalId!.Value);
         command.Parameters.AddWithValue("site_pos_server_id", draft.SitePosServerId);
         command.Parameters.AddWithValue("fiscal_identity_id", draft.ResolvedFiscalIdentityId!.Value);
-        var registeredIdentifier = await command.ExecuteScalarAsync(cancellationToken).ConfigureAwait(false) as string;
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
+        if (!await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
+        {
+            throw new FiscalDocumentFiscalContextException(
+                FiscalDocumentCreationErrorCode.ChannelTerminalMismatch,
+                "The channel terminal is not active or does not match the Site POS Server and fiscal identity.");
+        }
+
+        var registeredIdentifier = reader.GetString(0);
+        var terminalSerialNumber = reader.IsDBNull(1) ? null : reader.GetString(1);
         if (string.IsNullOrWhiteSpace(registeredIdentifier) ||
             !string.Equals(
                 registeredIdentifier.Trim(),
@@ -369,6 +385,15 @@ public sealed class PostgresFiscalDocumentRepository : IFiscalDocumentRepository
                 FiscalDocumentCreationErrorCode.ChannelTerminalMismatch,
                 "The channel terminal is not active or does not match the Site POS Server, fiscal identity, and terminal identifier.");
         }
+
+        if (string.IsNullOrWhiteSpace(terminalSerialNumber))
+        {
+            throw new FiscalDocumentFiscalContextException(
+                FiscalDocumentCreationErrorCode.ChannelTerminalMismatch,
+                "The registered channel terminal does not have a persistent terminal serial number.");
+        }
+
+        return new ChannelTerminalIdentity(registeredIdentifier.Trim(), terminalSerialNumber.Trim());
     }
 
     public async Task<FiscalDocumentVoidPersistenceResult> VoidAsync(
@@ -607,6 +632,13 @@ public sealed class PostgresFiscalDocumentRepository : IFiscalDocumentRepository
             _ => await ResolveMissingPolicyErrorAsync(connection, transaction, draft, cancellationToken).ConfigureAwait(false)
         };
 
+        if (fiscalSequencePolicy.PaddingLength != SalesInvoiceSequenceWidth)
+        {
+            throw new FiscalDocumentFiscalContextException(
+                FiscalDocumentCreationErrorCode.FiscalDocumentNumberFormatFailed,
+                $"Sales Invoice sequence policy must use exactly {SalesInvoiceSequenceWidth} numeric digits.");
+        }
+
         return new FiscalDocumentResolvedContext(
             fiscalIdentityId,
             fiscalSequencePolicy.FiscalSequencePolicyId,
@@ -649,6 +681,12 @@ public sealed class PostgresFiscalDocumentRepository : IFiscalDocumentRepository
         }
 
         var nextSequenceValue = checked(currentSequenceValue + 1);
+        if (nextSequenceValue.ToString(CultureInfo.InvariantCulture).Length > SalesInvoiceSequenceWidth)
+        {
+            throw new FiscalDocumentFiscalContextException(
+                FiscalDocumentCreationErrorCode.FiscalDocumentNumberFormatFailed,
+                "Sales Invoice sequence exceeds the configured 14-digit numeric capacity.");
+        }
         var sequenceText = resolvedContext.PaddingLength is > 0
             ? nextSequenceValue.ToString(CultureInfo.InvariantCulture).PadLeft(resolvedContext.PaddingLength.Value, '0')
             : nextSequenceValue.ToString(CultureInfo.InvariantCulture);
@@ -681,6 +719,7 @@ public sealed class PostgresFiscalDocumentRepository : IFiscalDocumentRepository
         NpgsqlTransaction transaction,
         FiscalDocumentDraft draft,
         DateTimeOffset effectiveAt,
+        ChannelTerminalIdentity channelTerminal,
         CancellationToken cancellationToken)
     {
         if (draft.SiteId is null && requireCompleteSalesInvoiceHeaderProfile)
@@ -713,9 +752,10 @@ public sealed class PostgresFiscalDocumentRepository : IFiscalDocumentRepository
         {
             return salesInvoiceHeaderProfileService.CreateSnapshot(
                 resolution.Profile,
-                draft.RuntimeTerminalRef,
+                channelTerminal.TerminalIdentifier,
                 effectiveAt,
-                effectiveAt);
+                effectiveAt,
+                channelTerminal.TerminalSerialNumber);
         }
 
         if (!requireCompleteSalesInvoiceHeaderProfile)
@@ -915,7 +955,8 @@ public sealed class PostgresFiscalDocumentRepository : IFiscalDocumentRepository
             ReadDateTimeOffset(reader, 20),
             reader.GetString(21),
             reader.GetString(22),
-            reader.GetString(23));
+            reader.GetString(23),
+            reader.IsDBNull(24) ? null : reader.GetString(24));
     }
 
     private static async Task<AppliedStatutoryFiscalFactsSnapshot?> ReadAppliedStatutoryFactsAsync(
@@ -1389,6 +1430,7 @@ public sealed class PostgresFiscalDocumentRepository : IFiscalDocumentRepository
         command.Parameters.AddWithValue("machine_identification_number", snapshot.MachineIdentificationNumber);
         command.Parameters.AddWithValue("parking_location_display", snapshot.ParkingLocationDisplay);
         command.Parameters.AddWithValue("terminal_id", (object?)snapshot.TerminalId ?? DBNull.Value);
+        command.Parameters.AddWithValue("terminal_serial_number", (object?)snapshot.TerminalSerialNumber ?? DBNull.Value);
         command.Parameters.AddWithValue("bir_accreditation_number", snapshot.BirAccreditationNumber);
         command.Parameters.AddWithValue("bir_accreditation_issued_date", snapshot.BirAccreditationIssuedDate);
         command.Parameters.AddWithValue("bir_accreditation_valid_until", snapshot.BirAccreditationValidUntil);

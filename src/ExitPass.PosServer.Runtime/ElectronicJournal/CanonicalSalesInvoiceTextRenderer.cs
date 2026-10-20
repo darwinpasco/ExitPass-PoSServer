@@ -43,6 +43,7 @@ public sealed class CanonicalSalesInvoiceTextRenderer
         AddValue(lines, "MIN", header.MachineIdentificationNumber);
         AddValue(lines, "S/N", header.PosSerialNumber);
         AddValue(lines, "TERMINAL ID", header.TerminalId);
+        AddValue(lines, "TERMINAL S/N", header.TerminalSerialNumber);
         AddValue(lines, "BRANCH / SITE", fiscal.BranchOrSite);
         AddValue(lines, "PARKING LOCATION", header.ParkingLocationDisplay);
 

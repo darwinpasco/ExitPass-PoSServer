@@ -19,6 +19,7 @@ app.MapSalesInvoiceHeaderProfileAdminEndpoints();
 app.MapFiscalXReadingEndpoints();
 app.MapFiscalZCloseStateInitializationEndpoints();
 app.MapFiscalZReadingEndpoints();
+app.MapFiscalZCounterResetEndpoints();
 app.MapFiscalReportOutputEndpoints();
 app.MapBirSalesSummaryEndpoints();
 app.MapMonthlyESalesEndpoints();

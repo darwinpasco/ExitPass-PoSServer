@@ -113,13 +113,39 @@ LANGUAGE plpgsql
 AS $$
 DECLARE
     evidence_count integer;
+    transition_type uuid;
+    previous_z bigint;
+    resulting_z bigint;
+    previous_reset bigint;
+    resulting_reset bigint;
+    previous_gta bigint;
+    resulting_gta bigint;
 BEGIN
-    SELECT count(DISTINCT state_identity_code_id) INTO evidence_count
-    FROM pos.fiscal_z_close_state_transition_values
-    WHERE fiscal_z_close_state_transition_id = NEW.fiscal_z_close_state_transition_id;
+    SELECT count(DISTINCT value.state_identity_code_id),
+           max(value.previous_counter_value) FILTER (WHERE value.state_identity_code_id = 'baf7bb67-9f11-5b2f-a750-e5689a5f0142'),
+           max(value.resulting_counter_value) FILTER (WHERE value.state_identity_code_id = 'baf7bb67-9f11-5b2f-a750-e5689a5f0142'),
+           max(value.previous_counter_value) FILTER (WHERE value.state_identity_code_id = 'a1dddcd8-aab5-51a8-bb64-f610edbdc1eb'),
+           max(value.resulting_counter_value) FILTER (WHERE value.state_identity_code_id = 'a1dddcd8-aab5-51a8-bb64-f610edbdc1eb'),
+           max(value.previous_amount_minor_units) FILTER (WHERE value.state_identity_code_id = 'e01e75a6-6ee9-5bdf-9bf4-0a38476f8805'),
+           max(value.resulting_amount_minor_units) FILTER (WHERE value.state_identity_code_id = 'e01e75a6-6ee9-5bdf-9bf4-0a38476f8805')
+    INTO evidence_count, previous_z, resulting_z, previous_reset, resulting_reset, previous_gta, resulting_gta
+    FROM pos.fiscal_z_close_state_transition_values value
+    WHERE value.fiscal_z_close_state_transition_id = NEW.fiscal_z_close_state_transition_id;
 
     IF evidence_count <> 3 THEN
         RAISE EXCEPTION 'fiscal Z close state transition requires exactly three governed values'
+            USING ERRCODE = 'check_violation';
+    END IF;
+
+    transition_type := NEW.transition_type_code_id;
+    IF transition_type = '52a28fc9-7c24-5810-8f98-30dbc7c134b9'
+       AND (resulting_z <> previous_z + 1 OR resulting_reset <> previous_reset OR resulting_gta < previous_gta) THEN
+        RAISE EXCEPTION 'fiscal Z close transition values are inconsistent'
+            USING ERRCODE = 'check_violation';
+    END IF;
+    IF transition_type = '5f17db5b-119f-5c18-8d3d-91153aed17b2'
+       AND (resulting_z <> 0 OR resulting_reset <> previous_reset + 1 OR resulting_gta <> previous_gta) THEN
+        RAISE EXCEPTION 'fiscal Z counter reset values are inconsistent'
             USING ERRCODE = 'check_violation';
     END IF;
     RETURN NULL;
@@ -149,8 +175,11 @@ BEGIN
     FROM pos.fiscal_z_close_state_transitions
     WHERE fiscal_z_close_state_transition_id = p_transition_id;
 
-    IF transition_row.transition_type_code_id <> '52a28fc9-7c24-5810-8f98-30dbc7c134b9' THEN
-        RAISE EXCEPTION 'only governed Z close transitions may advance initialized state'
+    IF transition_row.transition_type_code_id NOT IN (
+        '52a28fc9-7c24-5810-8f98-30dbc7c134b9',
+        '5f17db5b-119f-5c18-8d3d-91153aed17b2'
+    ) THEN
+        RAISE EXCEPTION 'only governed Z close or counter reset transitions may advance initialized state'
             USING ERRCODE = 'check_violation';
     END IF;
 
@@ -193,4 +222,4 @@ END;
 $$;
 
 COMMENT ON TABLE pos.fiscal_z_close_state_transition_values IS 'Immutable per-identity before/result evidence. Contains no generic JSON, customer data, or credentials.';
-COMMENT ON FUNCTION pos.apply_fiscal_z_close_state_transition(uuid) IS 'Expected-version state transition primitive for future Z close. Z-007B does not call it from an API or execute a period close.';
+COMMENT ON FUNCTION pos.apply_fiscal_z_close_state_transition(uuid) IS 'Expected-version state transition primitive for governed Z close and explicit manual Z-counter reset.';

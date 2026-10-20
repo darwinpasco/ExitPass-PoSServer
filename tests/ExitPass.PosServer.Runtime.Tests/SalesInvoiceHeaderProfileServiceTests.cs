@@ -154,7 +154,8 @@ public sealed class SalesInvoiceHeaderProfileServiceTests
     [Fact]
     public void SnapshotIncludesTaxpayerBirPtuSiteVersionsAndRuntimeTerminal()
     {
-        var snapshot = service.CreateSnapshot(ValidProfile(), "RUNTIME-TERMINAL-001", EffectiveAt, EffectiveAt.AddSeconds(1));
+        var snapshot = service.CreateSnapshot(
+            ValidProfile(), "RUNTIME-TERMINAL-001", EffectiveAt, EffectiveAt.AddSeconds(1), "APT-HARDWARE-001");
 
         Assert.Equal("GOVERNED TEST BUSINESS NAME", snapshot.RegisteredBusinessName);
         Assert.Equal("TEST-BIR-ACCREDITATION-0001", snapshot.BirAccreditationNumber);
@@ -166,6 +167,7 @@ public sealed class SalesInvoiceHeaderProfileServiceTests
         Assert.Equal("GOVERNED TEST SOFTWARE ADDRESS", snapshot.SupplierDeveloperAddress);
         Assert.Equal("TEST-SUPPLIER-TIN-0001", snapshot.SupplierDeveloperTin);
         Assert.Equal("RUNTIME-TERMINAL-001", snapshot.TerminalId);
+        Assert.Equal("APT-HARDWARE-001", snapshot.TerminalSerialNumber);
         Assert.Equal(SalesInvoiceHeaderProfileVersions.TemplateVersion, snapshot.TemplateVersion);
         Assert.Equal(SalesInvoiceHeaderProfileVersions.PresentationVersion, snapshot.PresentationVersion);
     }

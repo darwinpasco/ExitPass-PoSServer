@@ -158,7 +158,7 @@ public sealed class CanonicalSalesInvoiceConsistencyTests
             new DateOnly(2026, 1, 15), new DateOnly(2031, 1, 15), "PTU-001", new DateOnly(2026, 2, 10),
             "THIS SERVES AS YOUR SALES INVOICE", "Customer service: support@example.test",
             "digital-sales-invoice-json-v1", "digital-sales-invoice-presentation-json-v1", issuedAt, issuedAt,
-            "ExitPass Software Inc.", "Supplier Address, Philippines", "987-654-321-000");
+            "ExitPass Software Inc.", "Supplier Address, Philippines", "987-654-321-000", "APT-HARDWARE-001");
         var statutoryFacts = statutory
             ? new AppliedStatutoryFiscalFactsSnapshot(
                 Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(),

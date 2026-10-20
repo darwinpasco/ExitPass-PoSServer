@@ -116,6 +116,7 @@ public sealed class DigitalSalesInvoicePresentationAdapter
             Row("salesInvoiceHeaderSnapshot.machineIdentificationNumber", "MIN", "identifier", FieldPosture(contract, "salesInvoiceHeaderSnapshot.machineIdentificationNumber"), snapshot?.MachineIdentificationNumber),
             Row("salesInvoiceHeaderSnapshot.parkingLocationDisplay", "Parking Location", "text", FieldPosture(contract, "salesInvoiceHeaderSnapshot.parkingLocationDisplay"), snapshot?.ParkingLocationDisplay),
             Row("salesInvoiceHeaderSnapshot.terminalId", "Terminal ID", "identifier", FieldPosture(contract, "salesInvoiceHeaderSnapshot.terminalId"), snapshot?.TerminalId),
+            Row("salesInvoiceHeaderSnapshot.terminalSerialNumber", "Terminal S/N", "identifier", FieldPosture(contract, "salesInvoiceHeaderSnapshot.terminalSerialNumber"), snapshot?.TerminalSerialNumber),
             Row("salesInvoiceHeaderSnapshot.supplierDeveloperRegisteredName", "Supplier / Developer Registered Name", "text", FieldPosture(contract, "salesInvoiceHeaderSnapshot.supplierDeveloperRegisteredName"), snapshot?.SupplierDeveloperRegisteredName),
             Row("salesInvoiceHeaderSnapshot.supplierDeveloperAddress", "Supplier / Developer Address", "text", FieldPosture(contract, "salesInvoiceHeaderSnapshot.supplierDeveloperAddress"), snapshot?.SupplierDeveloperAddress),
             Row("salesInvoiceHeaderSnapshot.supplierDeveloperTin", "Supplier / Developer TIN", "identifier", FieldPosture(contract, "salesInvoiceHeaderSnapshot.supplierDeveloperTin"), snapshot?.SupplierDeveloperTin),

@@ -131,7 +131,8 @@ public sealed class SalesInvoiceHeaderProfileService
         SalesInvoiceHeaderProfile profile,
         string? terminalId,
         DateTimeOffset effectiveAt,
-        DateTimeOffset snapshotCreatedAt)
+        DateTimeOffset snapshotCreatedAt,
+        string? terminalSerialNumber = null)
     {
         ArgumentNullException.ThrowIfNull(profile);
 
@@ -165,6 +166,7 @@ public sealed class SalesInvoiceHeaderProfileService
             snapshotCreatedAt,
             profile.SupplierDeveloperRegisteredName!.Trim(),
             profile.SupplierDeveloperAddress!.Trim(),
-            profile.SupplierDeveloperTin!.Trim());
+            profile.SupplierDeveloperTin!.Trim(),
+            string.IsNullOrWhiteSpace(terminalSerialNumber) ? null : terminalSerialNumber.Trim());
     }
 }

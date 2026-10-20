@@ -398,7 +398,8 @@ public sealed class PostgresFiscalDocumentReader : IFiscalDocumentReader
             reader.GetFieldValue<DateTimeOffset>(20),
             reader.GetString(21),
             reader.GetString(22),
-            reader.GetString(23));
+            reader.GetString(23),
+            reader.IsDBNull(24) ? null : reader.GetString(24));
     }
 
     private static async Task<IReadOnlyList<FiscalDocumentLinkReadModel>> ReadLinksAsync(

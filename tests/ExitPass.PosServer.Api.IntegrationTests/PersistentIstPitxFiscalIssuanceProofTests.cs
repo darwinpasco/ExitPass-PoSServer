@@ -57,7 +57,7 @@ public sealed class PersistentIstPitxFiscalIssuanceProofTests
         Assert.Equal(FiscalIdentityId, body.FiscalIdentityId);
         Assert.Equal(SequencePolicyId, body.FiscalSequencePolicyId);
         Assert.Equal(1, body.FiscalSequenceValue);
-        Assert.Equal("SI-00000001", body.FiscalDocumentNumber);
+        Assert.Equal("SI-00000000000001", body.FiscalDocumentNumber);
         Assert.NotNull(body.FiscalDocumentId);
         if (existingDocumentId is not null)
         {
@@ -74,7 +74,7 @@ public sealed class PersistentIstPitxFiscalIssuanceProofTests
         Assert.Equal("idempotent_replay", replay.ResultClassification);
         Assert.Equal(body.FiscalDocumentId, replay.FiscalDocumentId);
         Assert.Equal(1, replay.FiscalSequenceValue);
-        Assert.Equal("SI-00000001", replay.FiscalDocumentNumber);
+        Assert.Equal("SI-00000000000001", replay.FiscalDocumentNumber);
         await AssertIssuedStateAsync(connectionString, body.FiscalDocumentId.Value);
     }
 
