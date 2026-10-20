@@ -148,7 +148,7 @@ ALTER TABLE pos.electronic_journal_records
             '77905f62-7d61-521d-bdc3-7c7d57b31efe', 'ea266ad1-9c7e-5291-b2a7-54eec88a0716',
             '92818433-ecd7-5948-8100-caec955b44e9', '6df85374-d609-58f1-8da5-ae8d6ed2ed35',
             'c428ea97-f423-5445-851e-1402909a6f9c', 'fc645aa9-f76b-5d46-8a67-374feef818cb',
-            'ddff6062-b8e4-5f6f-af79-3c2ebc042bc0'
+            'ddff6062-b8e4-5f6f-af79-3c2ebc042bc0', '5f9aaef4-bb76-5a7b-998b-9fb4183a62b6'
         )
     ),
     ADD CONSTRAINT ck_ej_records__status_family CHECK (
@@ -185,6 +185,7 @@ ALTER TABLE pos.electronic_journal_records
             WHEN 'c428ea97-f423-5445-851e-1402909a6f9c' THEN fiscal_report_request_id IS NOT NULL AND x_z_report_id IS NOT NULL
             WHEN 'fc645aa9-f76b-5d46-8a67-374feef818cb' THEN fiscal_report_request_id IS NOT NULL AND bir_sales_summary_report_id IS NOT NULL
             WHEN 'ddff6062-b8e4-5f6f-af79-3c2ebc042bc0' THEN fiscal_report_request_id IS NOT NULL
+            WHEN '5f9aaef4-bb76-5a7b-998b-9fb4183a62b6' THEN fiscal_reporting_period_id IS NOT NULL
             ELSE false
         END
     );

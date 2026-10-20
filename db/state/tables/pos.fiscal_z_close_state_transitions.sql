@@ -24,6 +24,7 @@ CREATE TABLE IF NOT EXISTS pos.fiscal_z_close_state_transitions (
     actor_ref text NOT NULL,
     service_identity_ref text NOT NULL,
     correlation_ref text NOT NULL,
+    reason_text text NULL,
     committed_at timestamptz NOT NULL,
     created_at timestamptz NOT NULL DEFAULT CURRENT_TIMESTAMP,
     CONSTRAINT pk_fiscal_z_close_state_transitions PRIMARY KEY (fiscal_z_close_state_transition_id),
@@ -62,7 +63,8 @@ CREATE TABLE IF NOT EXISTS pos.fiscal_z_close_state_transitions (
     CONSTRAINT ck_fiscal_z_close_state_transitions__type_family CHECK (
         transition_type_code_id IN (
             '21880ca5-b803-5abc-959f-def2f232ad73',
-            '52a28fc9-7c24-5810-8f98-30dbc7c134b9'
+            '52a28fc9-7c24-5810-8f98-30dbc7c134b9',
+            '5f17db5b-119f-5c18-8d3d-91153aed17b2'
         )
     ),
     CONSTRAINT ck_fiscal_z_close_state_transitions__provenance_family CHECK (
@@ -98,6 +100,15 @@ CREATE TABLE IF NOT EXISTS pos.fiscal_z_close_state_transitions (
             AND resulting_z_report_id IS NOT NULL
             AND resulting_z_report_kind_code_id = '1c628bc2-49c3-53e8-ae83-2082bcf28467'
         )
+        OR
+        (
+            transition_type_code_id = '5f17db5b-119f-5c18-8d3d-91153aed17b2'
+            AND initialization_provenance_code_id IS NULL
+            AND expected_state_version >= 1
+            AND previous_reporting_period_id IS NOT DISTINCT FROM resulting_reporting_period_id
+            AND previous_z_report_id IS NOT DISTINCT FROM resulting_z_report_id
+            AND previous_z_report_kind_code_id IS NOT DISTINCT FROM resulting_z_report_kind_code_id
+        )
     ),
     CONSTRAINT ck_fiscal_z_close_state_transitions__z_kind CHECK (
         (previous_z_report_kind_code_id IS NULL OR previous_z_report_kind_code_id = '1c628bc2-49c3-53e8-ae83-2082bcf28467')
@@ -107,7 +118,8 @@ CREATE TABLE IF NOT EXISTS pos.fiscal_z_close_state_transitions (
         semantic_request_hash ~ '^[0-9a-f]{64}$'
         AND semantic_hash_version IN (
             'pos-server-fiscal-z-close-state-initialize:sha256:v1',
-            'pos-server-fiscal-z-close-state-transition:sha256:v1'
+            'pos-server-fiscal-z-close-state-transition:sha256:v1',
+            'pos-server-fiscal-z-counter-reset:sha256:v1'
         )
     ),
     CONSTRAINT ck_fiscal_z_close_state_transitions__refs CHECK (
@@ -116,8 +128,81 @@ CREATE TABLE IF NOT EXISTS pos.fiscal_z_close_state_transitions (
         AND char_length(btrim(actor_ref)) > 0
         AND char_length(btrim(service_identity_ref)) > 0
         AND char_length(btrim(correlation_ref)) > 0
+        AND (
+            (
+                transition_type_code_id = '5f17db5b-119f-5c18-8d3d-91153aed17b2'
+                AND reason_text IS NOT NULL
+                AND char_length(btrim(reason_text)) BETWEEN 1 AND 500
+                AND reason_text !~ E'[\\r\\n]'
+            )
+            OR
+            (
+                transition_type_code_id <> '5f17db5b-119f-5c18-8d3d-91153aed17b2'
+                AND reason_text IS NULL
+            )
+        )
     )
 );
+
+ALTER TABLE pos.fiscal_z_close_state_transitions
+    ADD COLUMN IF NOT EXISTS reason_text text NULL;
+
+ALTER TABLE pos.fiscal_z_close_state_transitions
+    DROP CONSTRAINT IF EXISTS ck_fiscal_z_close_state_transitions__type_family,
+    DROP CONSTRAINT IF EXISTS ck_fiscal_z_close_state_transitions__posture,
+    DROP CONSTRAINT IF EXISTS ck_fiscal_z_close_state_transitions__hash,
+    DROP CONSTRAINT IF EXISTS ck_fiscal_z_close_state_transitions__refs;
+
+ALTER TABLE pos.fiscal_z_close_state_transitions
+    ADD CONSTRAINT ck_fiscal_z_close_state_transitions__type_family CHECK (
+        transition_type_code_id IN (
+            '21880ca5-b803-5abc-959f-def2f232ad73',
+            '52a28fc9-7c24-5810-8f98-30dbc7c134b9',
+            '5f17db5b-119f-5c18-8d3d-91153aed17b2'
+        )
+    ),
+    ADD CONSTRAINT ck_fiscal_z_close_state_transitions__posture CHECK (
+        (transition_type_code_id = '21880ca5-b803-5abc-959f-def2f232ad73'
+         AND initialization_provenance_code_id IS NOT NULL
+         AND expected_state_version = 0 AND resulting_state_version = 1
+         AND previous_reporting_period_id IS NULL AND resulting_reporting_period_id IS NULL
+         AND previous_z_report_id IS NULL AND previous_z_report_kind_code_id IS NULL
+         AND resulting_z_report_id IS NULL AND resulting_z_report_kind_code_id IS NULL)
+        OR
+        (transition_type_code_id = '52a28fc9-7c24-5810-8f98-30dbc7c134b9'
+         AND initialization_provenance_code_id IS NULL AND expected_state_version >= 1
+         AND resulting_reporting_period_id IS NOT NULL AND resulting_z_report_id IS NOT NULL
+         AND resulting_z_report_kind_code_id = '1c628bc2-49c3-53e8-ae83-2082bcf28467')
+        OR
+        (transition_type_code_id = '5f17db5b-119f-5c18-8d3d-91153aed17b2'
+         AND initialization_provenance_code_id IS NULL AND expected_state_version >= 1
+         AND previous_reporting_period_id IS NOT DISTINCT FROM resulting_reporting_period_id
+         AND previous_z_report_id IS NOT DISTINCT FROM resulting_z_report_id
+         AND previous_z_report_kind_code_id IS NOT DISTINCT FROM resulting_z_report_kind_code_id)
+    ),
+    ADD CONSTRAINT ck_fiscal_z_close_state_transitions__hash CHECK (
+        semantic_request_hash ~ '^[0-9a-f]{64}$'
+        AND semantic_hash_version IN (
+            'pos-server-fiscal-z-close-state-initialize:sha256:v1',
+            'pos-server-fiscal-z-close-state-transition:sha256:v1',
+            'pos-server-fiscal-z-counter-reset:sha256:v1'
+        )
+    ),
+    ADD CONSTRAINT ck_fiscal_z_close_state_transitions__refs CHECK (
+        char_length(btrim(operation_ref)) > 0
+        AND char_length(btrim(approval_ref)) > 0
+        AND char_length(btrim(actor_ref)) > 0
+        AND char_length(btrim(service_identity_ref)) > 0
+        AND char_length(btrim(correlation_ref)) > 0
+        AND (
+            (transition_type_code_id = '5f17db5b-119f-5c18-8d3d-91153aed17b2'
+             AND reason_text IS NOT NULL
+             AND char_length(btrim(reason_text)) BETWEEN 1 AND 500
+             AND reason_text !~ E'[\\r\\n]')
+            OR
+            (transition_type_code_id <> '5f17db5b-119f-5c18-8d3d-91153aed17b2' AND reason_text IS NULL)
+        )
+    );
 
 CREATE INDEX IF NOT EXISTS ix_fiscal_z_close_state_transitions__state_committed
     ON pos.fiscal_z_close_state_transitions (fiscal_z_close_state_id, committed_at DESC);

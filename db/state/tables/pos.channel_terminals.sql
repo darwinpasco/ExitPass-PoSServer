@@ -6,6 +6,7 @@ CREATE TABLE IF NOT EXISTS pos.channel_terminals (
     channel_terminal_id uuid NOT NULL,
     site_pos_server_id uuid NOT NULL,
     channel_terminal_code text NOT NULL,
+    terminal_serial_number text NULL,
     display_name text NOT NULL,
     channel_terminal_type_code_id uuid NULL,
     is_logical_channel boolean NOT NULL DEFAULT false,
@@ -32,6 +33,9 @@ CREATE TABLE IF NOT EXISTS pos.channel_terminals (
     CONSTRAINT uq_channel_terminals__site_code UNIQUE (site_pos_server_id, channel_terminal_code),
     CONSTRAINT ck_channel_terminals__channel_terminal_code_not_blank CHECK (char_length(btrim(channel_terminal_code)) > 0),
     CONSTRAINT ck_channel_terminals__display_name_not_blank CHECK (char_length(btrim(display_name)) > 0),
+    CONSTRAINT ck_channel_terminals__terminal_serial_number_not_blank CHECK (
+        terminal_serial_number IS NULL OR char_length(btrim(terminal_serial_number)) > 0
+    ),
     CONSTRAINT ck_channel_terminals__external_ref_not_blank CHECK (
         external_channel_terminal_ref IS NULL OR char_length(btrim(external_channel_terminal_ref)) > 0
     ),
@@ -40,8 +44,13 @@ CREATE TABLE IF NOT EXISTS pos.channel_terminals (
     )
 );
 
+CREATE UNIQUE INDEX IF NOT EXISTS uq_channel_terminals__active_serial
+    ON pos.channel_terminals (site_pos_server_id, lower(btrim(terminal_serial_number)))
+    WHERE is_active = true AND terminal_serial_number IS NOT NULL;
+
 COMMENT ON TABLE pos.channel_terminals IS 'Child endpoint registry under Site POS Server. Supports logical WebPay, APM, cashier POS, EC/continuity, operator-assisted, and future channel posture without creating independent terminal fiscal authority.';
 COMMENT ON COLUMN pos.channel_terminals.is_logical_channel IS 'Indicates logical channel posture, such as WebPay, without creating separate fiscal authority.';
 COMMENT ON COLUMN pos.channel_terminals.is_physical_terminal IS 'Indicates physical terminal posture when applicable; not an independent fiscal authority.';
+COMMENT ON COLUMN pos.channel_terminals.terminal_serial_number IS 'Persistent terminal serial number, distinct from the canonical terminal identifier and POS Server machine serial number.';
 COMMENT ON COLUMN pos.channel_terminals.health_status_code_id IS 'Health/ONLINE/OFFLINE observability code reference only; does not approve offline fiscal issuance.';
 

@@ -74,6 +74,7 @@ public static class PostgresFiscalDocumentSql
             machine_identification_number,
             parking_location_display,
             terminal_id,
+            terminal_serial_number,
             bir_accreditation_number,
             bir_accreditation_issued_date,
             bir_accreditation_valid_until,
@@ -103,6 +104,7 @@ public static class PostgresFiscalDocumentSql
             @machine_identification_number,
             @parking_location_display,
             @terminal_id,
+            @terminal_serial_number,
             @bir_accreditation_number,
             @bir_accreditation_issued_date,
             @bir_accreditation_valid_until,
@@ -259,7 +261,8 @@ public static class PostgresFiscalDocumentSql
             snapshot_created_at,
             supplier_developer_registered_name,
             supplier_developer_address,
-            supplier_developer_tin
+            supplier_developer_tin,
+            terminal_serial_number
         from pos.fiscal_document_header_snapshots
         where fiscal_document_id = @fiscal_document_id;
         """;

@@ -2,6 +2,7 @@ using System.Net;
 using System.Net.Http.Json;
 using ExitPass.PosServer.Api.FiscalDocuments;
 using ExitPass.PosServer.Api.FiscalReports;
+using ExitPass.PosServer.Persistence.Postgres.FiscalReports;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Hosting.Server;
@@ -474,6 +475,192 @@ public sealed class FiscalZReadingPostgresIntegrationTests
             $"SELECT state_version FROM pos.fiscal_z_close_states WHERE site_pos_server_id='{SiteId:D}' AND fiscal_identity_id='{IdentityId:D}' AND currency_code='PHP'"));
     }
 
+    [Fact]
+    public async Task ManualResetIsAuditedIdempotentPreservesFiscalHistoryAndRestartsZAtOne()
+    {
+        var connectionString = Environment.GetEnvironmentVariable(ConnectionVariable);
+        if (string.IsNullOrWhiteSpace(connectionString)) return;
+
+        var secondPeriodId = Guid.Parse("73000000-0000-4000-8000-000000000013");
+        await RebuildAsync(connectionString);
+        await ExecuteFileAsync(connectionString, Path.Combine(
+            FindRepositoryRoot(), "tests", "ExitPass.PosServer.Api.IntegrationTests", "Fixtures",
+            "fiscal_x_reading_runtime_fixture.sql"));
+        await ExecuteAsync(connectionString, $"""
+            INSERT INTO pos.site_pos_server_fiscal_identity_history(
+                site_pos_server_fiscal_identity_history_id,site_pos_server_id,fiscal_identity_id,
+                effective_start_at,assignment_reason_text)
+            VALUES('73000000-0000-4000-8000-000000000090','{SiteId:D}','{IdentityId:D}',
+                '2026-01-01T00:00:00Z','Synthetic reset proof scope');
+            """);
+
+        await using var app = await StartApiAsync(connectionString);
+        using var client = CreateClient(app);
+        Authorize(client);
+        using var initializedResponse = await client.PostAsJsonAsync(
+            "/v1/admin/fiscal-z-close-states/initialize",
+            new InitializeFiscalZCloseStateRequest(
+                "reset-proof-legacy-state", SiteId, IdentityId, "PHP", "verified_legacy_import",
+                0, 30, 100_000, "approved-disposable-reset-proof"));
+        Assert.True(initializedResponse.IsSuccessStatusCode, await initializedResponse.Content.ReadAsStringAsync());
+
+        using var historicalZResponse = await client.PostAsJsonAsync(
+            "/v1/fiscal-reports/z-readings/",
+            new CloseFiscalZReadingRequest("reset-proof-z31", SiteId, IdentityId, "PHP", PeriodId, 1));
+        var historicalZText = await historicalZResponse.Content.ReadAsStringAsync();
+        var historicalZ = System.Text.Json.JsonSerializer.Deserialize<FiscalZReadingApiResponse>(
+            historicalZText, new System.Text.Json.JsonSerializerOptions { PropertyNameCaseInsensitive = true })!.ZReading!;
+        Assert.NotNull(historicalZ);
+        Assert.Equal(31, historicalZ.CounterSnapshot.ResultingZCounterValue);
+        Assert.Equal(0, historicalZ.CounterSnapshot.ResultingResetCounterValue);
+
+        await ExecuteAsync(connectionString, $"""
+            INSERT INTO pos.fiscal_reporting_periods(
+                fiscal_reporting_period_id,fiscal_reporting_contract_version_id,site_pos_server_id,
+                fiscal_identity_id,period_status_code_id,business_day_date,period_start_at,period_end_at,
+                reporting_timezone_name,business_day_cutoff_local_time,currency_code,period_sequence,
+                expected_prior_period_id,opened_at,created_by_ref,updated_by_ref)
+            VALUES('{secondPeriodId:D}','f6766f48-62f0-513f-b9eb-e61c2f3e8c66','{SiteId:D}','{IdentityId:D}',
+                '1a6f7021-bc84-5c01-afaa-c5d6685633c8','2026-08-04','2026-08-04T00:00:00Z',
+                '2026-08-04T02:00:00Z','Asia/Manila','00:00:00','PHP',2,'{PeriodId:D}',
+                '2026-08-04T00:00:00Z','reset-proof','reset-proof');
+            """);
+
+        var gtaBefore = await ScalarAsync<long>(connectionString,
+            $"SELECT grand_total_amount_minor_units FROM pos.fiscal_z_close_states WHERE site_pos_server_id='{SiteId:D}'");
+        var sequenceBefore = await ScalarAsync<string>(connectionString,
+            "SELECT string_agg(fiscal_sequence_value::text,',' ORDER BY fiscal_sequence_value) FROM pos.fiscal_documents");
+        var historicalNumberBefore = await ScalarAsync<string>(connectionString,
+            $"SELECT report_number FROM pos.x_z_reports WHERE x_z_report_id='{historicalZ.FiscalReportId:D}'");
+
+        using var anonymousClient = CreateClient(app);
+        using var unauthorized = await anonymousClient.PostAsJsonAsync(
+            "/v1/admin/fiscal-z-counter/reset",
+            new ResetFiscalZCounterRequest("reset-proof", SiteId, IdentityId, "PHP", 2, "BIR demonstration", true));
+        Assert.Equal(HttpStatusCode.Unauthorized, unauthorized.StatusCode);
+
+        using var notConfirmed = await client.PostAsJsonAsync(
+            "/v1/admin/fiscal-z-counter/reset",
+            new ResetFiscalZCounterRequest("reset-proof", SiteId, IdentityId, "PHP", 2, "BIR demonstration", false));
+        Assert.Equal(HttpStatusCode.BadRequest, notConfirmed.StatusCode);
+
+        client.DefaultRequestHeaders.Add("X-Actor-Reference", "fiscal-administrator");
+        var resetRequest = new ResetFiscalZCounterRequest(
+            "reset-proof", SiteId, IdentityId, "PHP", 2, "BIR demonstration", true);
+        using var resetResponse = await client.PostAsJsonAsync("/v1/admin/fiscal-z-counter/reset", resetRequest);
+        var resetText = await resetResponse.Content.ReadAsStringAsync();
+        Assert.Equal(HttpStatusCode.Created, resetResponse.StatusCode);
+        var reset = System.Text.Json.JsonSerializer.Deserialize<FiscalZCounterApiResponse>(
+            resetText, new System.Text.Json.JsonSerializerOptions { PropertyNameCaseInsensitive = true })!;
+        Assert.Equal(31, reset.Reset!.PreviousZCounterValue);
+        Assert.Equal(0, reset.Reset.ResultingZCounterValue);
+        Assert.Equal(0, reset.Reset.PreviousResetCounterValue);
+        Assert.Equal(1, reset.Reset.ResultingResetCounterValue);
+        Assert.Equal(gtaBefore, reset.Reset.PreviousGrandTotalAmountMinorUnits);
+        Assert.Equal(gtaBefore, reset.Reset.ResultingGrandTotalAmountMinorUnits);
+        Assert.Equal("fiscal-administrator", reset.Reset.AdministratorReference);
+        Assert.Equal("BIR demonstration", reset.Reset.Reason);
+        Assert.Equal(0, reset.State!.ZCounterValue);
+        Assert.Equal(1, reset.State.ResetCounterValue);
+
+        using var replayResponse = await client.PostAsJsonAsync("/v1/admin/fiscal-z-counter/reset", resetRequest);
+        Assert.Equal(HttpStatusCode.OK, replayResponse.StatusCode);
+        Assert.Equal(1L, await ScalarAsync<long>(connectionString,
+            "SELECT count(*) FROM pos.fiscal_z_close_state_transitions WHERE operation_ref='reset-proof'"));
+        Assert.Equal(1L, await ScalarAsync<long>(connectionString,
+            "SELECT count(*) FROM pos.electronic_journal_records WHERE journal_record_type_code_id='5f9aaef4-bb76-5a7b-998b-9fb4183a62b6'"));
+
+        using var semanticConflict = await client.PostAsJsonAsync(
+            "/v1/admin/fiscal-z-counter/reset", resetRequest with { Reason = "Changed reason" });
+        Assert.Equal(HttpStatusCode.Conflict, semanticConflict.StatusCode);
+
+        Assert.Equal(sequenceBefore, await ScalarAsync<string>(connectionString,
+            "SELECT string_agg(fiscal_sequence_value::text,',' ORDER BY fiscal_sequence_value) FROM pos.fiscal_documents"));
+        Assert.Equal(gtaBefore, await ScalarAsync<long>(connectionString,
+            $"SELECT grand_total_amount_minor_units FROM pos.fiscal_z_close_states WHERE site_pos_server_id='{SiteId:D}'"));
+        Assert.Equal(historicalNumberBefore, await ScalarAsync<string>(connectionString,
+            $"SELECT report_number FROM pos.x_z_reports WHERE x_z_report_id='{historicalZ.FiscalReportId:D}'"));
+
+        using var nextZResponse = await client.PostAsJsonAsync(
+            "/v1/fiscal-reports/z-readings/",
+            new CloseFiscalZReadingRequest("reset-proof-z1", SiteId, IdentityId, "PHP", secondPeriodId, 3));
+        var nextZText = await nextZResponse.Content.ReadAsStringAsync();
+        var nextZ = System.Text.Json.JsonSerializer.Deserialize<FiscalZReadingApiResponse>(
+            nextZText, new System.Text.Json.JsonSerializerOptions { PropertyNameCaseInsensitive = true })!.ZReading!;
+        Assert.NotNull(nextZ);
+        Assert.Equal(0, nextZ.CounterSnapshot.PreviousZCounterValue);
+        Assert.Equal(1, nextZ.CounterSnapshot.ResultingZCounterValue);
+        Assert.Equal(1, nextZ.CounterSnapshot.PreviousResetCounterValue);
+        Assert.Equal(1, nextZ.CounterSnapshot.ResultingResetCounterValue);
+        Assert.Equal(historicalNumberBefore, await ScalarAsync<string>(connectionString,
+            $"SELECT report_number FROM pos.x_z_reports WHERE x_z_report_id='{historicalZ.FiscalReportId:D}'"));
+
+        var concurrentResetResponses = await Task.WhenAll(
+            client.PostAsJsonAsync("/v1/admin/fiscal-z-counter/reset",
+                new ResetFiscalZCounterRequest("reset-proof-concurrent-a", SiteId, IdentityId, "PHP", 4, "Concurrent reset proof", true)),
+            client.PostAsJsonAsync("/v1/admin/fiscal-z-counter/reset",
+                new ResetFiscalZCounterRequest("reset-proof-concurrent-b", SiteId, IdentityId, "PHP", 4, "Concurrent reset proof", true)));
+        Assert.Single(concurrentResetResponses, response => response.StatusCode == HttpStatusCode.Created);
+        Assert.Single(concurrentResetResponses, response => response.StatusCode == HttpStatusCode.Conflict);
+        Assert.Equal(5L, await ScalarAsync<long>(connectionString,
+            $"SELECT state_version FROM pos.fiscal_z_close_states WHERE site_pos_server_id='{SiteId:D}'"));
+
+        await using (var lockConnection = new NpgsqlConnection(connectionString))
+        {
+            await lockConnection.OpenAsync();
+            await using var lockTransaction = await lockConnection.BeginTransactionAsync();
+            await PostgresFiscalCloseBoundaryCoordinator.AcquireAsync(
+                lockConnection, lockTransaction, SiteId, IdentityId, "PHP", default);
+            using var blockedByClose = await client.PostAsJsonAsync(
+                "/v1/admin/fiscal-z-counter/reset",
+                new ResetFiscalZCounterRequest("reset-proof-active-close", SiteId, IdentityId, "PHP", 5, "Active close proof", true));
+            var blockedText = await blockedByClose.Content.ReadAsStringAsync();
+            Assert.Equal(HttpStatusCode.Conflict, blockedByClose.StatusCode);
+            Assert.Contains("fiscal_z_counter_operation_in_progress", blockedText, StringComparison.Ordinal);
+            await lockTransaction.RollbackAsync();
+        }
+
+        var resetEventId = reset.Reset.ResetEventId;
+        await using (var connection = new NpgsqlConnection(connectionString))
+        {
+            await connection.OpenAsync();
+            await using var immutable = new NpgsqlCommand(
+                "UPDATE pos.fiscal_z_close_state_transitions SET reason_text='tampered' WHERE fiscal_z_close_state_transition_id=@id", connection);
+            immutable.Parameters.AddWithValue("id", resetEventId);
+            Assert.Equal("23514", (await Assert.ThrowsAsync<PostgresException>(() => immutable.ExecuteNonQueryAsync())).SqlState);
+        }
+
+        await ExecuteAsync(connectionString, """
+            CREATE FUNCTION pos.fail_reset_journal_proof() RETURNS trigger LANGUAGE plpgsql AS $$
+            BEGIN
+                IF NEW.journal_record_type_code_id='5f9aaef4-bb76-5a7b-998b-9fb4183a62b6' THEN
+                    RAISE EXCEPTION 'synthetic reset journal proof failure';
+                END IF;
+                RETURN NEW;
+            END;$$;
+            CREATE TRIGGER trg_reset_journal_proof_failure BEFORE INSERT ON pos.electronic_journal_records
+            FOR EACH ROW EXECUTE FUNCTION pos.fail_reset_journal_proof();
+            """);
+        var stateBeforeFailure = await ScalarAsync<string>(connectionString,
+            $"SELECT z_counter_value||':'||reset_counter_value||':'||grand_total_amount_minor_units||':'||state_version FROM pos.fiscal_z_close_states WHERE site_pos_server_id='{SiteId:D}'");
+        try
+        {
+            using var failedReset = await client.PostAsJsonAsync(
+                "/v1/admin/fiscal-z-counter/reset",
+                new ResetFiscalZCounterRequest("reset-proof-failure", SiteId, IdentityId, "PHP", 5, "Rollback proof", true));
+            Assert.Equal(HttpStatusCode.ServiceUnavailable, failedReset.StatusCode);
+            Assert.Equal(stateBeforeFailure, await ScalarAsync<string>(connectionString,
+                $"SELECT z_counter_value||':'||reset_counter_value||':'||grand_total_amount_minor_units||':'||state_version FROM pos.fiscal_z_close_states WHERE site_pos_server_id='{SiteId:D}'"));
+            Assert.Equal(0L, await ScalarAsync<long>(connectionString,
+                "SELECT count(*) FROM pos.fiscal_z_close_state_transitions WHERE operation_ref='reset-proof-failure'"));
+        }
+        finally
+        {
+            await ExecuteAsync(connectionString,
+                "DROP TRIGGER IF EXISTS trg_reset_journal_proof_failure ON pos.electronic_journal_records; DROP FUNCTION IF EXISTS pos.fail_reset_journal_proof();");
+        }
+    }
+
     private static async Task ProveCompetingCloseAsync(string connectionString, HttpClient client)
     {
         const string sql = """
@@ -563,9 +750,10 @@ public sealed class FiscalZReadingPostgresIntegrationTests
             ["ConnectionStrings:PosServer"]=connectionString,["PosServer:Admin:ApiKeys:0:Principal"]="z-proof-service",["PosServer:Admin:ApiKeys:0:Key"]="synthetic-z-proof-key",
             ["PosServer:Admin:ApiKeys:0:Permissions:0"]=FiscalZCloseStateInitializationAuthorization.Permission,["PosServer:Admin:ApiKeys:0:Permissions:1"]=FiscalZReadingAuthorization.ClosePermission,["PosServer:Admin:ApiKeys:0:Permissions:2"]=FiscalZReadingAuthorization.ReadPermission,
             ["PosServer:Admin:ApiKeys:0:Permissions:3"]=FiscalXReadingAuthorization.GeneratePermission,["PosServer:Admin:ApiKeys:0:Permissions:4"]=FiscalXReadingAuthorization.ReadPermission,
+            ["PosServer:Admin:ApiKeys:0:Permissions:5"]=FiscalZCounterResetAuthorization.ReadPermission,["PosServer:Admin:ApiKeys:0:Permissions:6"]=FiscalZCounterResetAuthorization.ResetPermission,
             ["PosServer:Admin:ApiKeys:0:SitePosServerIds:0"]=SiteId.ToString("D"),["PosServer:Admin:ApiKeys:0:SitePosServerIds:1"]=SiteBId.ToString("D"),["PosServer:Admin:ApiKeys:0:FiscalIdentityIds:0"]=IdentityId.ToString("D"),["PosServer:Admin:ApiKeys:0:CurrencyCodes:0"]="PHP"
         });
-        builder.Services.AddPosServerFiscalDocumentApi(builder.Configuration);var app=builder.Build();app.UseAuthentication();app.UseAuthorization();app.MapFiscalZCloseStateInitializationEndpoints();app.MapFiscalXReadingEndpoints();app.MapFiscalZReadingEndpoints();await app.StartAsync();return app;
+        builder.Services.AddPosServerFiscalDocumentApi(builder.Configuration);var app=builder.Build();app.UseAuthentication();app.UseAuthorization();app.MapFiscalZCloseStateInitializationEndpoints();app.MapFiscalXReadingEndpoints();app.MapFiscalZReadingEndpoints();app.MapFiscalZCounterResetEndpoints();await app.StartAsync();return app;
     }
 
     private static HttpClient CreateClient(WebApplication app){var address=app.Services.GetRequiredService<IServer>().Features.Get<IServerAddressesFeature>()!.Addresses.Single();return new(){BaseAddress=new(address)};}

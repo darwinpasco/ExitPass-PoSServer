@@ -14,7 +14,8 @@ public sealed record LockedFiscalZCloseState(
     long StateVersion,
     Guid? LastClosedReportingPeriodId,
     Guid? LastCommittedZReportId,
-    string LastTransitionOperationReference);
+    string LastTransitionOperationReference,
+    Guid FiscalReportingContractVersionId);
 
 public sealed record FiscalZClosePeriodSequenceGuard(
     Guid ReportingPeriodId,
@@ -42,7 +43,7 @@ public static class PostgresFiscalZCloseTransitionFoundation
             SELECT fiscal_z_close_state_id, site_pos_server_id, fiscal_identity_id, currency_code,
                    reset_counter_value, z_counter_value, grand_total_amount_minor_units,
                    state_version, last_closed_reporting_period_id, last_committed_z_report_id,
-                   last_transition_operation_ref
+                   last_transition_operation_ref, fiscal_reporting_contract_version_id
             FROM pos.fiscal_z_close_states
             WHERE site_pos_server_id = @site
               AND fiscal_identity_id = @identity
@@ -65,7 +66,7 @@ public static class PostgresFiscalZCloseTransitionFoundation
             reader.GetGuid(0), reader.GetGuid(1), reader.GetGuid(2), reader.GetString(3),
             reader.GetInt64(4), reader.GetInt64(5), reader.GetInt64(6), reader.GetInt64(7),
             reader.IsDBNull(8) ? null : reader.GetGuid(8),
-            reader.IsDBNull(9) ? null : reader.GetGuid(9), reader.GetString(10));
+            reader.IsDBNull(9) ? null : reader.GetGuid(9), reader.GetString(10), reader.GetGuid(11));
     }
 
     public static async Task<FiscalZClosePeriodSequenceGuard> ReadPeriodSequenceGuardAsync(

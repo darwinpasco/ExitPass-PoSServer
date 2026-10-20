@@ -8,7 +8,7 @@ BEGIN;
 WITH source(controlled_code_set_id, code_set_key, display_name, description) AS (VALUES
     ('fb9705bc-286f-5048-ac65-09394a26a7a0'::uuid, 'fiscal_z_state_identity', 'Fiscal Z State Identity', 'Strong identities for immutable transition-value evidence.'),
     ('6d19aed1-3a64-5a85-8e45-13937ecf50dd'::uuid, 'fiscal_z_state_initialization_provenance', 'Fiscal Z State Initialization Provenance', 'Approved provenance for explicit canonical Z state initialization.'),
-    ('ee4d2af8-cdd7-5474-92db-a80e6250e954'::uuid, 'fiscal_z_state_transition_type', 'Fiscal Z State Transition Type', 'Initialization foundation and future atomic Z-close transition identity.')
+    ('ee4d2af8-cdd7-5474-92db-a80e6250e954'::uuid, 'fiscal_z_state_transition_type', 'Fiscal Z State Transition Type', 'Initialization, atomic Z-close, and controlled manual Z-counter reset transition identities.')
 )
 INSERT INTO pos.controlled_code_sets (
     controlled_code_set_id, code_set_key, display_name, description,
@@ -37,7 +37,8 @@ WITH source(controlled_code_id, set_key, code_key, display_name, description, so
     ('8f31c890-2aa2-50ef-a815-0e0c8cf90983'::uuid, 'fiscal_z_state_initialization_provenance', 'approved_new_scope_zero', 'Approved New Scope Zero', 'Explicit approved initialization of reset, Z, and GTA values to zero.', 10),
     ('9ce30367-0ff0-5c5e-8d48-b4a3b3b9df71'::uuid, 'fiscal_z_state_initialization_provenance', 'verified_legacy_import', 'Verified Legacy Import', 'Explicit import of verified pre-existing reset, Z, and GTA values.', 20),
     ('21880ca5-b803-5abc-959f-def2f232ad73'::uuid, 'fiscal_z_state_transition_type', 'initialization', 'Initialization', 'Explicit new-scope zero initialization or verified legacy import.', 10),
-    ('52a28fc9-7c24-5810-8f98-30dbc7c134b9'::uuid, 'fiscal_z_state_transition_type', 'z_close', 'Z Close', 'Future atomic Z-close state transition; Z-007B does not execute it.', 20)
+    ('52a28fc9-7c24-5810-8f98-30dbc7c134b9'::uuid, 'fiscal_z_state_transition_type', 'z_close', 'Z Close', 'Atomic fiscal-period close that advances the Z counter and accumulated grand total.', 20),
+    ('5f17db5b-119f-5c18-8d3d-91153aed17b2'::uuid, 'fiscal_z_state_transition_type', 'z_counter_reset', 'Z Counter Reset', 'Explicit authorized manual reset that sets the Z counter to zero, advances the Reset Counter, and preserves accumulated grand total.', 30)
 )
 INSERT INTO pos.controlled_codes (
     controlled_code_id, controlled_code_set_id, code_key, display_name, description,

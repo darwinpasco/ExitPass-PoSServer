@@ -83,7 +83,8 @@ public sealed record SalesInvoiceHeaderSnapshot(
     DateTimeOffset SnapshotCreatedAt,
     string SupplierDeveloperRegisteredName,
     string SupplierDeveloperAddress,
-    string SupplierDeveloperTin);
+    string SupplierDeveloperTin,
+    string? TerminalSerialNumber = null);
 
 public sealed record SalesInvoiceHeaderProfileCompletenessResult(
     bool IsComplete,

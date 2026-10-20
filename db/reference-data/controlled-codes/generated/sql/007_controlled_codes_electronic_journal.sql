@@ -42,7 +42,8 @@ WITH source(controlled_code_id, set_key, code_key, display_name, description, so
     ('6df85374-d609-58f1-8da5-ae8d6ed2ed35'::uuid,'electronic_journal_event_type','x_reading_committed','X Reading Committed','An immutable X Reading observation committed atomically.',60),
     ('c428ea97-f423-5445-851e-1402909a6f9c'::uuid,'electronic_journal_event_type','z_reading_committed','Z Reading Committed','An immutable Z Reading, period close, counter, and GTA transition committed atomically.',70),
     ('fc645aa9-f76b-5d46-8a67-374feef818cb'::uuid,'electronic_journal_event_type','bir_sales_summary_committed','BIR Sales Summary Committed','An immutable BIR sales summary bound to its governing Z Reading committed atomically.',80),
-    ('ddff6062-b8e4-5f6f-af79-3c2ebc042bc0'::uuid,'electronic_journal_event_type','fiscal_report_exported','Fiscal Report Exported','A controlled fiscal-report export when a merged profile explicitly classifies export as a fiscal event.',90),
+      ('ddff6062-b8e4-5f6f-af79-3c2ebc042bc0'::uuid,'electronic_journal_event_type','fiscal_report_exported','Fiscal Report Exported','A controlled fiscal-report export when a merged profile explicitly classifies export as a fiscal event.',90),
+      ('5f9aaef4-bb76-5a7b-998b-9fb4183a62b6'::uuid,'electronic_journal_event_type','z_counter_reset_committed','Z Counter Reset Committed','An authorized manual Z-counter reset committed atomically with immutable counter, GTA, actor, and reason evidence.',100),
     ('07022b0a-3ef9-5f82-880a-d27a569f5e7b'::uuid,'electronic_journal_record_status','committed','Committed','The source transition and event are durably committed in one transaction.',10),
     ('bf711168-63d1-539e-9e8f-6de908978b3e'::uuid,'electronic_journal_retention_policy','fiscal_reconstruction_hold','Fiscal Reconstruction Hold','Retain and prohibit deletion pending an approved archival, legal-hold, and purge contract.',10)
 )

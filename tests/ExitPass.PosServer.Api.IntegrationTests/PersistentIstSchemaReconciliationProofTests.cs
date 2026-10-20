@@ -168,7 +168,7 @@ public sealed class PersistentIstSchemaReconciliationProofTests
         Assert.Equal("newly_created", body.ResultClassification);
         Assert.NotNull(body.FiscalDocumentId);
         Assert.Equal(11, body.FiscalSequenceValue);
-        Assert.Equal("SI-00000011", body.FiscalDocumentNumber);
+        Assert.Equal("SI-00000000000011", body.FiscalDocumentNumber);
         Assert.Equal("PAYMENT_FINALITY", body.CompletionBasis);
         Assert.Equal("e308ac46-10c9-4afa-8666-4f96eaa64dbd", body.CompletionAuthorityRef);
         Assert.False(string.IsNullOrWhiteSpace(body.ElectronicJournalEventReference));

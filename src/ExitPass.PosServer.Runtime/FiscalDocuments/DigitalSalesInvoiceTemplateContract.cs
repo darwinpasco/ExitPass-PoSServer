@@ -57,6 +57,7 @@ public static class DigitalSalesInvoiceTemplateContract
         Field("salesInvoiceHeaderSnapshot.machineIdentificationNumber", "optional"),
         Field("salesInvoiceHeaderSnapshot.parkingLocationDisplay", "optional"),
         Field("salesInvoiceHeaderSnapshot.terminalId", "optional"),
+        Field("salesInvoiceHeaderSnapshot.terminalSerialNumber", "optional"),
         Field("salesInvoiceHeaderSnapshot.supplierDeveloperRegisteredName", "optional"),
         Field("salesInvoiceHeaderSnapshot.supplierDeveloperAddress", "optional"),
         Field("salesInvoiceHeaderSnapshot.supplierDeveloperTin", "optional"),

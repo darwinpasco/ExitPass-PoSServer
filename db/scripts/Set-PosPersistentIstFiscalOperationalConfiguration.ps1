@@ -15,6 +15,10 @@ param(
     [string] $ContainerName = 'exitpass-pos-ist-persistent-db',
     [string] $DatabaseName = 'exitpass_pos_ist',
     [string] $DatabaseUser = 'exitpass_ist',
+    [ValidatePattern('^[A-Za-z0-9][A-Za-z0-9._-]{2,127}$')]
+    [string] $WebPayTerminalSerialNumber,
+    [ValidatePattern('^[A-Za-z0-9][A-Za-z0-9._-]{2,127}$')]
+    [string] $AptTerminalSerialNumber,
     [string] $EvidenceDir
 )
 
@@ -39,8 +43,11 @@ SELECT json_build_object(
   'fiscal_identity_relationship_count', (SELECT count(*) FROM pos.site_pos_server_fiscal_identity_history WHERE site_pos_server_id='$sitePosServerId' AND fiscal_identity_id='$fiscalIdentityId' AND effective_start_at<=CURRENT_TIMESTAMP AND (effective_end_at IS NULL OR effective_end_at>CURRENT_TIMESTAMP)),
   'approved_profile_count', (SELECT count(*) FROM pos.sales_invoice_header_profiles WHERE sales_invoice_header_profile_id='$headerProfileId' AND site_id='$siteId' AND site_pos_server_id='$sitePosServerId' AND fiscal_identity_id='$fiscalIdentityId' AND lifecycle_status='APPROVED' AND effective_from<=CURRENT_TIMESTAMP AND effective_to IS NULL),
   'webpay_terminal_count', (SELECT count(*) FROM pos.channel_terminals WHERE site_pos_server_id='$sitePosServerId' AND channel_terminal_code='PITX-L3-WEBPAY-01' AND is_active),
+  'webpay_terminal_serial', (SELECT to_jsonb(terminal)->>'terminal_serial_number' FROM pos.channel_terminals terminal WHERE channel_terminal_id='$webPayTerminalId'),
   'apt_terminal_count', (SELECT count(*) FROM pos.channel_terminals WHERE site_pos_server_id='$sitePosServerId' AND channel_terminal_code='apt-pitx-level-3-01' AND is_active),
+  'apt_terminal_serial', (SELECT to_jsonb(terminal)->>'terminal_serial_number' FROM pos.channel_terminals terminal WHERE channel_terminal_id='$aptTerminalId'),
   'sales_invoice_policy_count', (SELECT count(*) FROM pos.fiscal_sequence_policies WHERE site_pos_server_id='$sitePosServerId' AND policy_code='PITX-L3-SI' AND effective_start_at<=CURRENT_TIMESTAMP AND (effective_end_at IS NULL OR effective_end_at>CURRENT_TIMESTAMP)),
+  'sales_invoice_padding_length', (SELECT padding_length FROM pos.fiscal_sequence_policies WHERE fiscal_sequence_policy_id='$policyId'),
   'sequence_state_count', (SELECT count(*) FROM pos.fiscal_sequence_states WHERE fiscal_sequence_policy_id='$policyId'),
   'sequence_current_value', (SELECT current_sequence_value FROM pos.fiscal_sequence_states WHERE fiscal_sequence_policy_id='$policyId'),
   'sequence_last_reserved_value', (SELECT last_reserved_sequence_value FROM pos.fiscal_sequence_states WHERE fiscal_sequence_policy_id='$policyId'),
@@ -78,6 +85,10 @@ if ($Mode -eq 'Inspect') {
 if (-not $PSCmdlet.ShouldProcess("$ContainerName/$DatabaseName", 'Apply additive canonical fiscal codes and stable PITX fiscal operational configuration')) {
     return
 }
+if ([string]::IsNullOrWhiteSpace($WebPayTerminalSerialNumber) -or
+    [string]::IsNullOrWhiteSpace($AptTerminalSerialNumber)) {
+    throw 'Apply requires the approved WebPay and physical APT terminal serial numbers.'
+}
 
 $repoRoot = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path
 $codeSqlPath = Join-Path $repoRoot 'db\reference-data\controlled-codes\generated\sql\010_controlled_codes_fiscal_issuance.sql'
@@ -85,6 +96,28 @@ $codeSqlPath = Join-Path $repoRoot 'db\reference-data\controlled-codes\generated
 
 $applySql = @"
 BEGIN;
+
+ALTER TABLE pos.channel_terminals
+  ADD COLUMN IF NOT EXISTS terminal_serial_number text NULL;
+ALTER TABLE pos.fiscal_document_header_snapshots
+  ADD COLUMN IF NOT EXISTS terminal_serial_number text NULL;
+
+DO `$`$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname='ck_channel_terminals__terminal_serial_number_not_blank' AND conrelid='pos.channel_terminals'::regclass) THEN
+    ALTER TABLE pos.channel_terminals ADD CONSTRAINT ck_channel_terminals__terminal_serial_number_not_blank
+      CHECK (terminal_serial_number IS NULL OR char_length(btrim(terminal_serial_number)) > 0);
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname='ck_fiscal_header_snapshot__terminal_serial_not_blank' AND conrelid='pos.fiscal_document_header_snapshots'::regclass) THEN
+    ALTER TABLE pos.fiscal_document_header_snapshots ADD CONSTRAINT ck_fiscal_header_snapshot__terminal_serial_not_blank
+      CHECK (terminal_serial_number IS NULL OR char_length(btrim(terminal_serial_number)) > 0);
+  END IF;
+END
+`$`$;
+
+CREATE UNIQUE INDEX IF NOT EXISTS uq_channel_terminals__active_serial
+  ON pos.channel_terminals (site_pos_server_id, lower(btrim(terminal_serial_number)))
+  WHERE is_active=true AND terminal_serial_number IS NOT NULL;
 
 DO `$`$
 DECLARE
@@ -143,10 +176,10 @@ WHERE site_pos_server_id='$sitePosServerId'
       IS DISTINCT FROM ('Asia/Manila','07:00:00'::time);
 
 INSERT INTO pos.channel_terminals(
-  channel_terminal_id,site_pos_server_id,channel_terminal_code,display_name,
+  channel_terminal_id,site_pos_server_id,channel_terminal_code,terminal_serial_number,display_name,
   channel_terminal_type_code_id,is_logical_channel,is_physical_terminal,
   fiscal_identity_id,health_status_code_id,operational_status_code_id,is_active)
-SELECT '$webPayTerminalId','$sitePosServerId','PITX-L3-WEBPAY-01','PITX Level 3 WebPay',
+SELECT '$webPayTerminalId','$sitePosServerId','PITX-L3-WEBPAY-01','$WebPayTerminalSerialNumber','PITX Level 3 WebPay',
   type_code.controlled_code_id,true,false,'$fiscalIdentityId',
   health_code.controlled_code_id,status_code.controlled_code_id,true
 FROM pos.controlled_codes type_code
@@ -157,6 +190,7 @@ JOIN pos.controlled_codes status_code ON status_code.code_key='active'
 JOIN pos.controlled_code_sets status_set ON status_set.controlled_code_set_id=status_code.controlled_code_set_id AND status_set.code_set_key='pos_terminal_operational_status'
 WHERE type_code.code_key='webpay'
 ON CONFLICT(channel_terminal_id) DO UPDATE SET
+  terminal_serial_number=EXCLUDED.terminal_serial_number,
   display_name=EXCLUDED.display_name,
   channel_terminal_type_code_id=EXCLUDED.channel_terminal_type_code_id,
   is_logical_channel=EXCLUDED.is_logical_channel,
@@ -166,21 +200,21 @@ ON CONFLICT(channel_terminal_id) DO UPDATE SET
   operational_status_code_id=EXCLUDED.operational_status_code_id,
   is_active=EXCLUDED.is_active,
   updated_at=CURRENT_TIMESTAMP
-WHERE (channel_terminals.display_name,channel_terminals.channel_terminal_type_code_id,
+WHERE (channel_terminals.terminal_serial_number,channel_terminals.display_name,channel_terminals.channel_terminal_type_code_id,
        channel_terminals.is_logical_channel,channel_terminals.is_physical_terminal,
        channel_terminals.fiscal_identity_id,channel_terminals.health_status_code_id,
        channel_terminals.operational_status_code_id,channel_terminals.is_active)
   IS DISTINCT FROM
-      (EXCLUDED.display_name,EXCLUDED.channel_terminal_type_code_id,
+      (EXCLUDED.terminal_serial_number,EXCLUDED.display_name,EXCLUDED.channel_terminal_type_code_id,
        EXCLUDED.is_logical_channel,EXCLUDED.is_physical_terminal,
        EXCLUDED.fiscal_identity_id,EXCLUDED.health_status_code_id,
        EXCLUDED.operational_status_code_id,EXCLUDED.is_active);
 
 INSERT INTO pos.channel_terminals(
-  channel_terminal_id,site_pos_server_id,channel_terminal_code,display_name,
+  channel_terminal_id,site_pos_server_id,channel_terminal_code,terminal_serial_number,display_name,
   channel_terminal_type_code_id,is_logical_channel,is_physical_terminal,
   fiscal_identity_id,health_status_code_id,operational_status_code_id,is_active)
-SELECT '$aptTerminalId','$sitePosServerId','apt-pitx-level-3-01','PITX Level 3 Assisted Payment Terminal 01',
+SELECT '$aptTerminalId','$sitePosServerId','apt-pitx-level-3-01','$AptTerminalSerialNumber','PITX Level 3 Assisted Payment Terminal 01',
   type_code.controlled_code_id,false,true,'$fiscalIdentityId',
   health_code.controlled_code_id,status_code.controlled_code_id,true
 FROM pos.controlled_codes type_code
@@ -191,6 +225,7 @@ JOIN pos.controlled_codes status_code ON status_code.code_key='active'
 JOIN pos.controlled_code_sets status_set ON status_set.controlled_code_set_id=status_code.controlled_code_set_id AND status_set.code_set_key='pos_terminal_operational_status'
 WHERE type_code.code_key='assisted_payment_terminal'
 ON CONFLICT(channel_terminal_id) DO UPDATE SET
+  terminal_serial_number=EXCLUDED.terminal_serial_number,
   display_name=EXCLUDED.display_name,
   channel_terminal_type_code_id=EXCLUDED.channel_terminal_type_code_id,
   is_logical_channel=EXCLUDED.is_logical_channel,
@@ -200,12 +235,12 @@ ON CONFLICT(channel_terminal_id) DO UPDATE SET
   operational_status_code_id=EXCLUDED.operational_status_code_id,
   is_active=EXCLUDED.is_active,
   updated_at=CURRENT_TIMESTAMP
-WHERE (channel_terminals.display_name,channel_terminals.channel_terminal_type_code_id,
+WHERE (channel_terminals.terminal_serial_number,channel_terminals.display_name,channel_terminals.channel_terminal_type_code_id,
        channel_terminals.is_logical_channel,channel_terminals.is_physical_terminal,
        channel_terminals.fiscal_identity_id,channel_terminals.health_status_code_id,
        channel_terminals.operational_status_code_id,channel_terminals.is_active)
   IS DISTINCT FROM
-      (EXCLUDED.display_name,EXCLUDED.channel_terminal_type_code_id,
+      (EXCLUDED.terminal_serial_number,EXCLUDED.display_name,EXCLUDED.channel_terminal_type_code_id,
        EXCLUDED.is_logical_channel,EXCLUDED.is_physical_terminal,
        EXCLUDED.fiscal_identity_id,EXCLUDED.health_status_code_id,
        EXCLUDED.operational_status_code_id,EXCLUDED.is_active);
@@ -216,7 +251,7 @@ INSERT INTO pos.fiscal_sequence_policies(
   suffix_text,padding_length,current_policy_status_code_id,effective_start_at,policy_context)
 SELECT '$policyId','$sitePosServerId',family.controlled_code_id,document_type.controlled_code_id,
   'PITX-L3-SI','PITX Level 3 Sales Invoice',
-  'Persistent non-production IST Sales Invoice sequence policy.','SI-',NULL,8,
+                'Persistent non-production IST Sales Invoice sequence policy.','SI-',NULL,14,
   policy_status.controlled_code_id,'2026-09-04T00:00:00Z','{"environment":"IST","site_code":"PITX-LEVEL-3"}'::jsonb
 FROM pos.controlled_codes family
 JOIN pos.controlled_code_sets family_set ON family_set.controlled_code_set_id=family.controlled_code_set_id AND family_set.code_set_key='fiscal_sequence_family'
@@ -278,7 +313,10 @@ if ($before.fiscal_document_count -ne $after.fiscal_document_count -or
 if ($after.site_pos_server_count -ne 1 -or $after.fiscal_identity_relationship_count -ne 1 -or
     $after.approved_profile_count -ne 1 -or $after.webpay_terminal_count -ne 1 -or
     $after.apt_terminal_count -ne 1 -or
-    $after.sales_invoice_policy_count -ne 1 -or $after.sequence_state_count -ne 1) {
+    $after.webpay_terminal_serial -cne $WebPayTerminalSerialNumber -or
+    $after.apt_terminal_serial -cne $AptTerminalSerialNumber -or
+    $after.sales_invoice_policy_count -ne 1 -or $after.sales_invoice_padding_length -ne 14 -or
+    $after.sequence_state_count -ne 1) {
     throw 'PITX static fiscal operational configuration did not resolve exactly once.'
 }
 if ($before.sequence_state_count -eq 1 -and

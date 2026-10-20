@@ -32,6 +32,7 @@ public static class FiscalDocumentServiceCollectionExtensions
             services.TryAddScoped<ICloseableFiscalBusinessDateRepository, UnavailableCloseableFiscalBusinessDateRepository>();
             services.TryAddScoped<IFiscalZCloseStateRepository, UnavailableFiscalZCloseStateRepository>();
             services.TryAddScoped<IFiscalZReadingRepository, UnavailableFiscalZReadingRepository>();
+            services.TryAddScoped<IFiscalZCounterResetRepository, UnavailableFiscalZCounterResetRepository>();
             services.TryAddScoped<IBirSalesSummaryRepository, UnavailableBirSalesSummaryRepository>();
             services.TryAddScoped<IBirSalesSummaryPdfContextRepository, UnavailableBirSalesSummaryRepository>();
             services.TryAddScoped<IMonthlyESalesRepository, UnavailableMonthlyESalesRepository>();
@@ -51,6 +52,7 @@ public static class FiscalDocumentServiceCollectionExtensions
             services.TryAddScoped<ICloseableFiscalBusinessDateRepository, UnavailableCloseableFiscalBusinessDateRepository>();
             services.TryAddScoped<IFiscalZCloseStateRepository, UnavailableFiscalZCloseStateRepository>();
             services.TryAddScoped<IFiscalZReadingRepository, UnavailableFiscalZReadingRepository>();
+            services.TryAddScoped<IFiscalZCounterResetRepository, UnavailableFiscalZCounterResetRepository>();
             services.TryAddScoped<IBirSalesSummaryRepository, UnavailableBirSalesSummaryRepository>();
             services.TryAddScoped<IBirSalesSummaryPdfContextRepository, UnavailableBirSalesSummaryRepository>();
             services.TryAddScoped<IMonthlyESalesRepository, UnavailableMonthlyESalesRepository>();
@@ -74,6 +76,7 @@ public static class FiscalDocumentServiceCollectionExtensions
             services.TryAddScoped<ICloseableFiscalBusinessDateRepository, PostgresCloseableFiscalBusinessDateRepository>();
             services.TryAddScoped<IFiscalZCloseStateRepository, PostgresFiscalZCloseStateRepository>();
             services.TryAddScoped<IFiscalZReadingRepository, PostgresFiscalZReadingRepository>();
+            services.TryAddScoped<IFiscalZCounterResetRepository, PostgresFiscalZCounterResetRepository>();
             services.TryAddScoped<IBirSalesSummaryRepository, PostgresBirSalesSummaryRepository>();
             services.TryAddScoped<IBirSalesSummaryPdfContextRepository, PostgresBirSalesSummaryRepository>();
             services.TryAddScoped<IMonthlyESalesRepository, PostgresMonthlyESalesRepository>();
@@ -114,6 +117,7 @@ public static class FiscalDocumentServiceCollectionExtensions
         services.AddScoped<CloseableFiscalBusinessDateService>();
         services.AddScoped<FiscalZCloseStateInitializationService>();
         services.AddScoped<FiscalZReadingService>();
+        services.AddScoped<FiscalZCounterResetService>();
         services.AddScoped<BirSalesSummaryService>();
         services.AddSingleton<BirSalesSummaryOutputRenderer>();
         services.AddScoped<MonthlyESalesService>();
@@ -199,6 +203,16 @@ public static class FiscalDocumentServiceCollectionExtensions
                 policy => policy
                     .AddAuthenticationSchemes(SalesInvoiceHeaderProfileAdminAuthorization.AuthenticationScheme)
                     .RequireClaim(SalesInvoiceHeaderProfileAdminAuthorization.PermissionClaimType, FiscalZReadingAuthorization.ReadPermission));
+            options.AddPolicy(
+                FiscalZCounterResetAuthorization.ReadPolicyName,
+                policy => policy
+                    .AddAuthenticationSchemes(SalesInvoiceHeaderProfileAdminAuthorization.AuthenticationScheme)
+                    .RequireClaim(SalesInvoiceHeaderProfileAdminAuthorization.PermissionClaimType, FiscalZCounterResetAuthorization.ReadPermission));
+            options.AddPolicy(
+                FiscalZCounterResetAuthorization.ResetPolicyName,
+                policy => policy
+                    .AddAuthenticationSchemes(SalesInvoiceHeaderProfileAdminAuthorization.AuthenticationScheme)
+                    .RequireClaim(SalesInvoiceHeaderProfileAdminAuthorization.PermissionClaimType, FiscalZCounterResetAuthorization.ResetPermission));
             options.AddPolicy(
                 FiscalReportOutputAuthorization.XExportPolicyName,
                 policy => policy

@@ -360,7 +360,8 @@ public sealed class DigitalSalesInvoicePresentationAdapterTests
             DateTimeOffset.Parse("2026-07-18T08:00:01Z"),
             "GOVERNED TEST SOFTWARE SUPPLIER",
             "GOVERNED TEST SOFTWARE ADDRESS",
-            "TEST-SUPPLIER-TIN-0001");
+            "TEST-SUPPLIER-TIN-0001",
+            "APT-HARDWARE-001");
         var render = ValidRenderModel(assignedNumber: true) with { SalesInvoiceHeaderSnapshot = snapshot };
         var adapter = new DigitalSalesInvoicePresentationAdapter();
 
@@ -374,6 +375,7 @@ public sealed class DigitalSalesInvoicePresentationAdapterTests
         Assert.Contains(rows, row => row.Key == "salesInvoiceHeaderSnapshot.supplierDeveloperRegisteredName" && row.DisplayValue == "GOVERNED TEST SOFTWARE SUPPLIER");
         Assert.Contains(rows, row => row.Key == "salesInvoiceHeaderSnapshot.supplierDeveloperAddress" && row.DisplayValue == "GOVERNED TEST SOFTWARE ADDRESS");
         Assert.Contains(rows, row => row.Key == "salesInvoiceHeaderSnapshot.supplierDeveloperTin" && row.DisplayValue == "TEST-SUPPLIER-TIN-0001");
+        Assert.Contains(rows, row => row.Key == "salesInvoiceHeaderSnapshot.terminalSerialNumber" && row.DisplayValue == "APT-HARDWARE-001");
         Assert.DoesNotContain(rows, row =>
             row.Key.StartsWith("salesInvoiceHeaderSnapshot.supplierDeveloper", StringComparison.Ordinal) &&
             row.Posture == "not_available");

@@ -30,7 +30,7 @@ public sealed class CanonicalSalesInvoiceTextRendererTests
         var text = new CanonicalSalesInvoiceTextRenderer().Render(Invoice()).Text;
         var requiredStructure = new[]
         {
-            "ExitPass Parking Corporation", "VAT REG TIN", "MIN", "S/N", "TERMINAL ID", "BRANCH / SITE", "PARKING LOCATION",
+            "ExitPass Parking Corporation", "VAT REG TIN", "MIN", "S/N", "TERMINAL ID", "TERMINAL S/N", "BRANCH / SITE", "PARKING LOCATION",
             "SALES INVOICE", "ORIGINAL", "SI NO", "ISSUED", "BUSINESS DATE", "CASHIER", "System",
             "TICKET", "PLATE", "ENTRY", "PAYMENT", "DURATION", "PARKING FEE", "SUBTOTAL", "DISCOUNT",
             "VATABLE SALES", "VAT AMOUNT", "VAT EXEMPT SALES", "ZERO RATED SALES", "TOTAL",
@@ -52,6 +52,7 @@ public sealed class CanonicalSalesInvoiceTextRendererTests
         Assert.Contains("2026-09-10 08:00", text, StringComparison.Ordinal);
         Assert.Contains("PAYMENT", text, StringComparison.Ordinal);
         Assert.Contains("PRINT DATE", text, StringComparison.Ordinal);
+        Assert.Contains("APT-HARDWARE-001", text, StringComparison.Ordinal);
         Assert.Equal(3, Count(text, "2026-09-10 09:00"));
         Assert.Contains("DURATION                   01:00:00", text, StringComparison.Ordinal);
         Assert.DoesNotContain("PHT", text, StringComparison.Ordinal);
@@ -516,7 +517,7 @@ public sealed class CanonicalSalesInvoiceTextRendererTests
             new DateOnly(2026, 2, 10), "THIS SERVES AS YOUR SALES INVOICE",
             "Customer service: support@example.test", "digital-sales-invoice-json-v1",
             "digital-sales-invoice-presentation-json-v1", issuedAt, issuedAt, "ExitPass Software Inc.",
-            "Supplier Address, Philippines", "987-654-321-000");
+            "Supplier Address, Philippines", "987-654-321-000", "APT-HARDWARE-001");
 
         return new DigitalSalesInvoiceRenderModel(
             Guid.Parse("aaaaaaaa-0000-4000-8000-000000000001"), Guid.NewGuid(), Guid.NewGuid(), fiscalIdentityId,

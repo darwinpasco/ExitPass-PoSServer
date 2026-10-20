@@ -122,7 +122,7 @@ public sealed class FiscalDocumentApiPostgresSmokeTests
         Assert.Equal(FiscalDocumentStatusCodeId, body.FiscalDocumentStatusCodeId);
         Assert.Equal(FiscalSequencePolicyId, body.FiscalSequencePolicyId);
         Assert.Equal(1, body.FiscalSequenceValue);
-        Assert.Equal("SI-00000001-A", body.FiscalDocumentNumber);
+        Assert.Equal("SI-00000000000001-A", body.FiscalDocumentNumber);
         Assert.Equal("api-smoke-sequence-policy", body.FiscalSeries);
         Assert.Equal("SI-", body.FiscalNumberPrefixText);
         Assert.Equal("-A", body.FiscalNumberSuffixText);
@@ -152,10 +152,12 @@ public sealed class FiscalDocumentApiPostgresSmokeTests
         Assert.Equal("central-finality-success", getBody.Document.PaymentFinalityRef);
         Assert.Equal("evidence-ref-success", getBody.Document.DiscountPrivilegeDetails[0].EvidenceRef);
         Assert.Equal(ChannelTerminalId, getBody.Document.ChannelTerminalId);
+        Assert.Equal("APT-TERMINAL-SMOKE-001", getBody.Document.SalesInvoiceHeaderSnapshot?.TerminalId);
+        Assert.Equal("APT-HARDWARE-SMOKE-001", getBody.Document.SalesInvoiceHeaderSnapshot?.TerminalSerialNumber);
         Assert.Equal(FiscalIdentityId, getBody.Document.FiscalIdentityId);
         Assert.Equal(FiscalSequencePolicyId, getBody.Document.FiscalSequencePolicyId);
         Assert.Equal(1, getBody.Document.FiscalSequenceValue);
-        Assert.Equal("SI-00000001-A", getBody.Document.FiscalDocumentNumber);
+        Assert.Equal("SI-00000000000001-A", getBody.Document.FiscalDocumentNumber);
         Assert.Equal("api-smoke-sequence-policy", getBody.Document.FiscalSeries);
         Assert.Equal("SI-", getBody.Document.FiscalNumberPrefixText);
         Assert.Equal("-A", getBody.Document.FiscalNumberSuffixText);
@@ -195,6 +197,11 @@ public sealed class FiscalDocumentApiPostgresSmokeTests
             sellerSection.Rows,
             row => row.Key == "sellerSitePosIdentity.channelTerminalId" &&
                    row.DisplayValue == ChannelTerminalId.ToString("D"));
+        var headerSection = presentationBody.Presentation.Sections.Single(section => section.Name == "salesInvoiceHeaderSnapshot");
+        Assert.Contains(
+            headerSection.Rows,
+            row => row.Key == "salesInvoiceHeaderSnapshot.terminalSerialNumber" &&
+                   row.DisplayValue == "APT-HARDWARE-SMOKE-001");
 
         using var replayResponse = await client.PostAsJsonAsync("/v1/fiscal-documents/", request);
         var replayBody = await replayResponse.Content.ReadFromJsonAsync<CreateFiscalDocumentResponse>();
@@ -208,7 +215,7 @@ public sealed class FiscalDocumentApiPostgresSmokeTests
         Assert.Equal(fiscalDocumentId, replayBody.FiscalDocumentId);
         Assert.Equal(FiscalDocumentStatusCodeId, replayBody.FiscalDocumentStatusCodeId);
         Assert.Equal(1, replayBody.FiscalSequenceValue);
-        Assert.Equal("SI-00000001-A", replayBody.FiscalDocumentNumber);
+        Assert.Equal("SI-00000000000001-A", replayBody.FiscalDocumentNumber);
 
         var conflictRequest = request with
         {
@@ -251,7 +258,7 @@ public sealed class FiscalDocumentApiPostgresSmokeTests
         Assert.Equal("accepted", voidBody.Code);
         Assert.Equal("newly_voided", voidBody.ResultClassification);
         Assert.Equal(fiscalDocumentId, voidBody.FiscalDocumentId);
-        Assert.Equal("SI-00000001-A", voidBody.FiscalDocumentNumber);
+        Assert.Equal("SI-00000000000001-A", voidBody.FiscalDocumentNumber);
         Assert.Equal(1, voidBody.FiscalSequenceValue);
         Assert.Equal("voided", voidBody.FiscalDocumentStatus);
         Assert.Equal("recorded", voidBody.VoidStatus);
@@ -1530,6 +1537,7 @@ public sealed class FiscalDocumentApiPostgresSmokeTests
                 channel_terminal_id,
                 site_pos_server_id,
                 channel_terminal_code,
+                terminal_serial_number,
                 display_name,
                 channel_terminal_type_code_id,
                 is_logical_channel,
@@ -1540,6 +1548,7 @@ public sealed class FiscalDocumentApiPostgresSmokeTests
                 @channel_terminal_id,
                 @site_pos_server_id,
                 'APT-TERMINAL-SMOKE-001',
+                'APT-HARDWARE-SMOKE-001',
                 'APT Terminal Smoke Fixture',
                 'ba4b7e0c-a973-56a7-b877-15d1f8d1ce9b',
                 false,
@@ -1548,6 +1557,7 @@ public sealed class FiscalDocumentApiPostgresSmokeTests
                 true
             ) on conflict (channel_terminal_id) do update set
                 channel_terminal_code = excluded.channel_terminal_code,
+                terminal_serial_number = excluded.terminal_serial_number,
                 fiscal_identity_id = excluded.fiscal_identity_id,
                 is_active = excluded.is_active,
                 updated_at = current_timestamp;
@@ -1628,7 +1638,7 @@ public sealed class FiscalDocumentApiPostgresSmokeTests
                 'API Smoke Sequence Policy',
                 'SI-',
                 '-A',
-                8,
+                14,
                 @policy_status_code_id,
                 '2026-01-01T00:00:00Z',
                 '{}'::jsonb

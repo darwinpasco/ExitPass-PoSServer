@@ -58,6 +58,7 @@ public static class SalesInvoiceHeaderProfileAdminAuthorization
                         FiscalXReadingAuthorization.IsXReadingPermission(permission) ||
                         FiscalZCloseStateInitializationAuthorization.IsScopedPermission(permission) ||
                          FiscalZReadingAuthorization.IsZReadingPermission(permission) ||
+                         FiscalZCounterResetAuthorization.IsZCounterPermission(permission) ||
                          ElectronicJournalAuthorization.IsElectronicJournalPermission(permission) ||
                          FiscalDocumentReprintAuthorization.IsReprintPermission(permission)) &&
                     (sitePosServerScopes.Length == 0 || fiscalIdentityScopes.Length == 0)))
@@ -65,6 +66,11 @@ public static class SalesInvoiceHeaderProfileAdminAuthorization
                 return PosServerAdminApiKeyConfiguration.Invalid("invalid_admin_api_key_configuration");
             }
             if (permissions.Any(FiscalZReadingAuthorization.IsZReadingPermission) &&
+                (currencyScopes.Length == 0 || !currencyScopes.All(IsValidCurrencyScope)))
+            {
+                return PosServerAdminApiKeyConfiguration.Invalid("invalid_admin_api_key_configuration");
+            }
+            if (permissions.Any(FiscalZCounterResetAuthorization.IsZCounterPermission) &&
                 (currencyScopes.Length == 0 || !currencyScopes.All(IsValidCurrencyScope)))
             {
                 return PosServerAdminApiKeyConfiguration.Invalid("invalid_admin_api_key_configuration");
