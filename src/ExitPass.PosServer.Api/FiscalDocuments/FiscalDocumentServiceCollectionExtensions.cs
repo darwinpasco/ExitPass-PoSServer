@@ -25,6 +25,7 @@ public static class FiscalDocumentServiceCollectionExtensions
         if (string.IsNullOrWhiteSpace(connectionString))
         {
             services.TryAddScoped<IFiscalDocumentRepository, PersistenceNotConfiguredFiscalDocumentRepository>();
+            services.TryAddScoped<IFiscalBusinessDateResolutionRepository, UnavailableFiscalBusinessDateResolutionRepository>();
             services.TryAddScoped<IFiscalDocumentReader, PersistenceNotConfiguredFiscalDocumentReader>();
             services.TryAddScoped<ISalesInvoiceHeaderProfileRepository, PersistenceNotConfiguredSalesInvoiceHeaderProfileRepository>();
             services.TryAddScoped<IFiscalXReadingRepository, UnavailableFiscalXReadingRepository>();
@@ -45,6 +46,7 @@ public static class FiscalDocumentServiceCollectionExtensions
         else if (!IsValidNpgsqlConnectionString(connectionString))
         {
             services.TryAddScoped<IFiscalDocumentRepository, InvalidPersistenceConfigurationFiscalDocumentRepository>();
+            services.TryAddScoped<IFiscalBusinessDateResolutionRepository, UnavailableFiscalBusinessDateResolutionRepository>();
             services.TryAddScoped<IFiscalDocumentReader, InvalidPersistenceConfigurationFiscalDocumentReader>();
             services.TryAddScoped<ISalesInvoiceHeaderProfileRepository, PersistenceNotConfiguredSalesInvoiceHeaderProfileRepository>();
             services.TryAddScoped<IFiscalXReadingRepository, UnavailableFiscalXReadingRepository>();
@@ -69,6 +71,7 @@ public static class FiscalDocumentServiceCollectionExtensions
                 new PostgresFiscalDocumentRepository(
                     provider.GetRequiredService<NpgsqlDataSource>(),
                     IsSalesInvoiceHeaderProfileRequired(configuration)));
+            services.TryAddScoped<IFiscalBusinessDateResolutionRepository, PostgresFiscalBusinessDateResolutionRepository>();
             services.TryAddScoped<IFiscalDocumentReader, PostgresFiscalDocumentReader>();
             services.TryAddScoped<ISalesInvoiceHeaderProfileRepository, PostgresSalesInvoiceHeaderProfileRepository>();
             services.TryAddScoped<IFiscalXReadingRepository, PostgresFiscalXReadingRepository>();
@@ -106,6 +109,7 @@ public static class FiscalDocumentServiceCollectionExtensions
         }
 
         services.AddScoped<FiscalDocumentCreationService>();
+        services.AddScoped<FiscalBusinessDateResolutionService>();
         services.AddScoped<FiscalDocumentVoidService>();
         services.AddScoped<FiscalDocumentReprintService>();
         services.AddScoped<FiscalDocumentReadService>();
