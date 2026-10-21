@@ -11,6 +11,9 @@ public static class FiscalDocumentEndpointRouteBuilderExtensions
     {
         var group = endpoints.MapGroup("/v1/fiscal-documents");
 
+        group.MapPost("/business-date-resolution", FiscalBusinessDateResolutionEndpoint.ResolveAsync)
+            .RequireAuthorization(FiscalDocumentAuthorization.CreatePolicyName);
+
         group.MapPost("/", async (
             CreateFiscalDocumentRequest request,
             FiscalDocumentCreationService service,

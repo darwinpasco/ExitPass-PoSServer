@@ -82,6 +82,56 @@ public sealed class FiscalDocumentApiPostgresSmokeTests
     }
 
     [Fact]
+    public async Task ResolveFiscalBusinessDate_UsesConfiguredBoundaryAndReadsIdempotencyWithoutMutation()
+    {
+        if (!TryGetSmokeConnectionString(out var connectionString))
+        {
+            return;
+        }
+
+        await RebuildDisposableDatabaseAsync(connectionString);
+        await InsertDisposableSmokeFixtureAsync(connectionString);
+        await using (var configurationConnection = new NpgsqlConnection(connectionString))
+        {
+            await configurationConnection.OpenAsync();
+            await ExecuteSqlAsync(
+                configurationConnection,
+                "update pos.site_pos_servers set reporting_timezone_name='Asia/Manila', business_day_cutoff_local_time='07:00:00' where site_pos_server_id=@site",
+                command => command.Parameters.AddWithValue("site", SitePosServerId));
+        }
+        await using var app = await StartApiAsync(connectionString);
+        using var client = CreateClient(app);
+        const string upstreamFinalityReference =
+            "terminal-cash-payment-confirmation:938f78bd-ad6b-4f6f-882d-ca98affbaa5a:sales_invoice";
+
+        using var response = await client.PostAsJsonAsync(
+            "/v1/fiscal-documents/business-date-resolution",
+            new ResolveFiscalBusinessDateRequest(
+                SitePosServerId,
+                FiscalDocumentTypeCodeId,
+                DateTimeOffset.Parse("2026-10-20T23:43:18Z"),
+                upstreamFinalityReference));
+        var body = await response.Content.ReadFromJsonAsync<ResolveFiscalBusinessDateResponse>();
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.NotNull(body);
+        Assert.True(body.Succeeded);
+        Assert.Equal(new DateOnly(2026, 10, 21), body.BusinessDayDate);
+        Assert.Equal(DateTimeOffset.Parse("2026-10-20T23:00:00Z"), body.PeriodStartAt);
+        Assert.Equal(DateTimeOffset.Parse("2026-10-21T23:00:00Z"), body.PeriodEndAt);
+        Assert.Equal("Asia/Manila", body.ReportingTimezoneName);
+        Assert.Equal(new TimeOnly(7, 0), body.BusinessDayCutoffLocalTime);
+        Assert.False(body.IdempotencyRecordExists);
+        Assert.Null(body.LinkedFiscalDocumentId);
+        Assert.Null(body.ExistingSemanticRequestHash);
+
+        await using var connection = new NpgsqlConnection(connectionString);
+        await connection.OpenAsync();
+        Assert.Equal(0L, await ScalarLongAsync(connection, "select count(*) from pos.fiscal_documents"));
+        Assert.Equal(0L, await ScalarLongAsync(connection, "select count(*) from pos.idempotency_records"));
+    }
+
+    [Fact]
     public async Task PostFiscalDocumentWritesCompletePersistenceShell()
     {
         if (!TryGetSmokeConnectionString(out var connectionString))
