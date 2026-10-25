@@ -62,7 +62,32 @@ public sealed record AppliedStatutoryFiscalFactsRequest(
     string? Currency,
     DateTimeOffset? AppliedAt,
     string? SourcePaymentChannel,
-    Guid? TerminalCashTenderId = null)
+    Guid? TerminalCashTenderId = null,
+    int? StatutoryDiscountRateBasisPoints = null,
+    long? PercentageDiscountAmountMinorUnits = null,
+    long? NonPercentageBenefitAmountMinorUnits = null,
+    bool PercentageComponentSeparatelyProven = false,
+    StatutoryBeneficiaryIdentityRequest? BeneficiaryIdentity = null)
+{
+    [JsonExtensionData]
+    public IDictionary<string, JsonElement>? ExtensionData { get; init; }
+}
+
+public sealed record StatutoryBeneficiaryIdentityRequest(
+    string? BeneficiaryFullName,
+    string? StatutoryIdType,
+    string? StatutoryIdNumber,
+    string? BeneficiaryTin,
+    string? CapturedByActorRef,
+    string? CapturedByChannel,
+    DateTimeOffset? CapturedAt,
+    string? LastUpdatedByActorRef,
+    string? LastUpdatedByChannel,
+    DateTimeOffset? LastUpdatedAt,
+    string? ReviewedByActorRef,
+    DateTimeOffset? ReviewedAt,
+    string? ApprovalDecisionReference,
+    string? CorrelationReference)
 {
     [JsonExtensionData]
     public IDictionary<string, JsonElement>? ExtensionData { get; init; }

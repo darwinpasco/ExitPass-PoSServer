@@ -319,6 +319,28 @@ public static class FiscalDocumentCreationEndpoint
                 request.AppliedAt,
                 request.SourcePaymentChannel,
                 request.TerminalCashTenderId,
+                request.StatutoryDiscountRateBasisPoints,
+                request.PercentageDiscountAmountMinorUnits,
+                request.NonPercentageBenefitAmountMinorUnits,
+                request.PercentageComponentSeparatelyProven,
+                request.BeneficiaryIdentity is null
+                    ? null
+                    : new StatutoryBeneficiaryIdentityInput(
+                        request.BeneficiaryIdentity.BeneficiaryFullName,
+                        request.BeneficiaryIdentity.StatutoryIdType,
+                        request.BeneficiaryIdentity.StatutoryIdNumber,
+                        request.BeneficiaryIdentity.BeneficiaryTin,
+                        request.BeneficiaryIdentity.CapturedByActorRef,
+                        request.BeneficiaryIdentity.CapturedByChannel,
+                        request.BeneficiaryIdentity.CapturedAt,
+                        request.BeneficiaryIdentity.LastUpdatedByActorRef,
+                        request.BeneficiaryIdentity.LastUpdatedByChannel,
+                        request.BeneficiaryIdentity.LastUpdatedAt,
+                        request.BeneficiaryIdentity.ReviewedByActorRef,
+                        request.BeneficiaryIdentity.ReviewedAt,
+                        request.BeneficiaryIdentity.ApprovalDecisionReference,
+                        request.BeneficiaryIdentity.CorrelationReference,
+                        request.BeneficiaryIdentity.ExtensionData?.Keys.Order(StringComparer.Ordinal).ToArray()),
                 request.ExtensionData?.Keys.Order(StringComparer.Ordinal).ToArray());
 
     private static AppliedStatutoryPolicyReferenceInput? MapPolicyReference(

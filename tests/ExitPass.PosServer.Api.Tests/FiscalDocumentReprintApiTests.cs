@@ -117,7 +117,11 @@ public sealed class FiscalDocumentReprintApiTests
             AnnexE1Authorization.ReadPermission,
             AnnexE1Authorization.DownloadPermission,
             MonthlyESalesAuthorization.ReadPermission,
-            MonthlyESalesAuthorization.ExportPermission
+            MonthlyESalesAuthorization.ExportPermission,
+            AuditTrailAuthorization.ReadPermission,
+            AuditTrailAuthorization.ExportPermission,
+            StatutorySalesBookAuthorization.ReadPermission,
+            StatutorySalesBookAuthorization.ExportPermission
         ], permissions);
         Assert.DoesNotContain(AnnexE1Authorization.RecordFactPermission, permissions);
         Assert.DoesNotContain(AnnexE1Authorization.AttestZeroPermission, permissions);

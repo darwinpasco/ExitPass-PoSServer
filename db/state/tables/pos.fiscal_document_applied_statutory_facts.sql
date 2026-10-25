@@ -27,6 +27,10 @@ CREATE TABLE IF NOT EXISTS pos.fiscal_document_applied_statutory_facts (
     vat_amount_minor_units bigint NOT NULL,
     vat_treatment_code_id uuid NOT NULL,
     statutory_discount_amount_minor_units bigint NOT NULL,
+    statutory_discount_rate_basis_points integer NULL,
+    percentage_discount_amount_minor_units bigint NOT NULL DEFAULT 0,
+    non_percentage_benefit_amount_minor_units bigint NOT NULL DEFAULT 0,
+    percentage_component_separately_proven boolean NOT NULL DEFAULT false,
     final_payable_amount_minor_units bigint NOT NULL,
     currency_code char(3) NOT NULL,
     applied_at timestamptz NOT NULL,
@@ -117,7 +121,20 @@ CREATE TABLE IF NOT EXISTS pos.fiscal_document_applied_statutory_facts (
         AND vat_exclusive_basis_amount_minor_units >= 0
         AND vat_amount_minor_units >= 0
         AND statutory_discount_amount_minor_units >= 0
+        AND percentage_discount_amount_minor_units >= 0
+        AND non_percentage_benefit_amount_minor_units >= 0
         AND final_payable_amount_minor_units >= 0
+    ),
+    CONSTRAINT ck_fiscal_doc_applied_stat_facts__percentage_rate CHECK (
+        statutory_discount_rate_basis_points IS NULL OR statutory_discount_rate_basis_points IN (500, 2000)
+    ),
+    CONSTRAINT ck_fiscal_doc_applied_stat_facts__percentage_components CHECK (
+        percentage_discount_amount_minor_units + non_percentage_benefit_amount_minor_units <= statutory_discount_amount_minor_units
+        AND ((statutory_discount_rate_basis_points IS NULL
+              AND percentage_discount_amount_minor_units = 0
+              AND NOT percentage_component_separately_proven)
+          OR (statutory_discount_rate_basis_points IS NOT NULL
+              AND (percentage_component_separately_proven OR percentage_discount_amount_minor_units = 0)))
     ),
     CONSTRAINT ck_fiscal_doc_applied_stat_facts__final_amount CHECK (
         final_payable_amount_minor_units <= original_amount_minor_units
@@ -167,6 +184,43 @@ CREATE INDEX IF NOT EXISTS ix_fiscal_doc_applied_stat_facts__source_channel
 CREATE INDEX IF NOT EXISTS ix_fiscal_doc_applied_stat_facts__terminal_cash
     ON pos.fiscal_document_applied_statutory_facts (terminal_cash_tender_id)
     WHERE terminal_cash_tender_id IS NOT NULL;
+
+-- Idempotent upgrade path for established POS databases created before Annex E-2/E-3.
+ALTER TABLE pos.fiscal_document_applied_statutory_facts
+    ADD COLUMN IF NOT EXISTS statutory_discount_rate_basis_points integer NULL,
+    ADD COLUMN IF NOT EXISTS percentage_discount_amount_minor_units bigint NOT NULL DEFAULT 0,
+    ADD COLUMN IF NOT EXISTS non_percentage_benefit_amount_minor_units bigint NOT NULL DEFAULT 0,
+    ADD COLUMN IF NOT EXISTS percentage_component_separately_proven boolean NOT NULL DEFAULT false;
+
+DO $$
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1 FROM pg_constraint
+        WHERE conrelid = 'pos.fiscal_document_applied_statutory_facts'::regclass
+          AND conname = 'ck_fiscal_doc_applied_stat_facts__percentage_rate'
+    ) THEN
+        ALTER TABLE pos.fiscal_document_applied_statutory_facts
+            ADD CONSTRAINT ck_fiscal_doc_applied_stat_facts__percentage_rate
+            CHECK (statutory_discount_rate_basis_points IS NULL OR statutory_discount_rate_basis_points IN (500, 2000));
+    END IF;
+    IF NOT EXISTS (
+        SELECT 1 FROM pg_constraint
+        WHERE conrelid = 'pos.fiscal_document_applied_statutory_facts'::regclass
+          AND conname = 'ck_fiscal_doc_applied_stat_facts__percentage_components'
+    ) THEN
+        ALTER TABLE pos.fiscal_document_applied_statutory_facts
+            ADD CONSTRAINT ck_fiscal_doc_applied_stat_facts__percentage_components
+            CHECK (
+                percentage_discount_amount_minor_units + non_percentage_benefit_amount_minor_units <= statutory_discount_amount_minor_units
+                AND ((statutory_discount_rate_basis_points IS NULL
+                      AND percentage_discount_amount_minor_units = 0
+                      AND NOT percentage_component_separately_proven)
+                  OR (statutory_discount_rate_basis_points IS NOT NULL
+                      AND (percentage_component_separately_proven OR percentage_discount_amount_minor_units = 0)))
+            );
+    END IF;
+END;
+$$;
 
 CREATE OR REPLACE FUNCTION pos.reject_applied_stat_facts_mutation()
 RETURNS trigger

@@ -43,6 +43,47 @@ public sealed class PostgresAuditTrailRepository(NpgsqlDataSource dataSource) : 
         }
     }
 
+    public async Task RecordAccessAsync(
+        Guid sitePosServerId,
+        string reportKind,
+        string subjectReference,
+        string actorReference,
+        string correlationReference,
+        int rowCount,
+        CancellationToken cancellationToken = default)
+    {
+        await using var connection = await dataSource.OpenConnectionAsync(cancellationToken).ConfigureAwait(false);
+        await using var command = new NpgsqlCommand("""
+            INSERT INTO pos.access_audit(
+                access_audit_id,site_pos_server_id,access_subject_type_code_id,access_action_code_id,
+                access_result_code_id,subject_record_ref,accessor_ref,request_ref,occurred_at,access_context,created_at)
+            SELECT @id,@site,subject.controlled_code_id,action.controlled_code_id,result.controlled_code_id,
+                   @subject,@actor,@correlation,clock_timestamp(),@context,clock_timestamp()
+            FROM pos.controlled_codes subject
+            JOIN pos.controlled_code_sets subject_set ON subject_set.controlled_code_set_id=subject.controlled_code_set_id
+            CROSS JOIN pos.controlled_codes action
+            JOIN pos.controlled_code_sets action_set ON action_set.controlled_code_set_id=action.controlled_code_set_id
+            CROSS JOIN pos.controlled_codes result
+            JOIN pos.controlled_code_sets result_set ON result_set.controlled_code_set_id=result.controlled_code_set_id
+            WHERE subject_set.code_set_key='fiscal_report_output_type' AND subject.code_key='external_export_reference'
+              AND action_set.code_set_key='electronic_journal_access_action' AND action.code_key='read'
+              AND result_set.code_set_key='electronic_journal_access_result' AND result.code_key='allowed';
+            """, connection);
+        command.Parameters.AddWithValue("id", Guid.NewGuid());
+        command.Parameters.AddWithValue("site", sitePosServerId);
+        command.Parameters.AddWithValue("subject", Safe(subjectReference, 200));
+        command.Parameters.AddWithValue("actor", Safe(actorReference, 200));
+        command.Parameters.AddWithValue("correlation", Safe(correlationReference, 200));
+        command.Parameters.Add("context", NpgsqlDbType.Jsonb).Value = JsonSerializer.Serialize(new
+        {
+            schemaVersion = "pos-server-fiscal-report-access:v1",
+            reportKind = Safe(reportKind, 80),
+            rowCount
+        });
+        if (await command.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false) != 1)
+            throw new InvalidOperationException("Fiscal report read audit classification is unavailable.");
+    }
+
     public async Task RecordExportAsync(
         Guid sitePosServerId,
         string reportKind,

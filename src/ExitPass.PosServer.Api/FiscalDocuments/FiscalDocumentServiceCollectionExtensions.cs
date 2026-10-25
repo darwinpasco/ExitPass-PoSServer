@@ -37,6 +37,7 @@ public static class FiscalDocumentServiceCollectionExtensions
             services.TryAddScoped<IBirSalesSummaryRepository, UnavailableBirSalesSummaryRepository>();
             services.TryAddScoped<IBirSalesSummaryPdfContextRepository, UnavailableBirSalesSummaryRepository>();
             services.TryAddScoped<IMonthlyESalesRepository, UnavailableMonthlyESalesRepository>();
+            services.TryAddScoped<IStatutorySalesBookRepository, UnavailableStatutorySalesBookRepository>();
             services.TryAddScoped<IAuditTrailRepository, UnavailableAuditTrailRepository>();
             services.TryAddScoped<IElectronicJournalRepository, UnavailableElectronicJournalRepository>();
             services.TryAddScoped<IFiscalDocumentReprintRepository, UnavailableFiscalDocumentReprintRepository>();
@@ -58,6 +59,7 @@ public static class FiscalDocumentServiceCollectionExtensions
             services.TryAddScoped<IBirSalesSummaryRepository, UnavailableBirSalesSummaryRepository>();
             services.TryAddScoped<IBirSalesSummaryPdfContextRepository, UnavailableBirSalesSummaryRepository>();
             services.TryAddScoped<IMonthlyESalesRepository, UnavailableMonthlyESalesRepository>();
+            services.TryAddScoped<IStatutorySalesBookRepository, UnavailableStatutorySalesBookRepository>();
             services.TryAddScoped<IAuditTrailRepository, UnavailableAuditTrailRepository>();
             services.TryAddScoped<IElectronicJournalRepository, UnavailableElectronicJournalRepository>();
             services.TryAddScoped<IFiscalDocumentReprintRepository, UnavailableFiscalDocumentReprintRepository>();
@@ -67,10 +69,16 @@ public static class FiscalDocumentServiceCollectionExtensions
         else
         {
             services.TryAddSingleton(_ => NpgsqlDataSource.Create(connectionString));
+            services.TryAddSingleton<IStatutoryBeneficiaryIdentityProtector>(_ =>
+                new AesGcmStatutoryBeneficiaryIdentityProtector(
+                    configuration["PosServer:StatutoryBeneficiary:ProtectionKeyBase64"] ?? configuration["POSSERVER_STATUTORY_BENEFICIARY_KEY_BASE64"],
+                    configuration["PosServer:StatutoryBeneficiary:ProtectionKeyReference"] ?? configuration["POSSERVER_STATUTORY_BENEFICIARY_KEY_REFERENCE"],
+                    configuration["PosServer:StatutoryBeneficiary:ProtectionKeyVersion"] ?? configuration["POSSERVER_STATUTORY_BENEFICIARY_KEY_VERSION"]));
             services.TryAddScoped<IFiscalDocumentRepository>(provider =>
                 new PostgresFiscalDocumentRepository(
                     provider.GetRequiredService<NpgsqlDataSource>(),
-                    IsSalesInvoiceHeaderProfileRequired(configuration)));
+                    IsSalesInvoiceHeaderProfileRequired(configuration),
+                    provider.GetRequiredService<IStatutoryBeneficiaryIdentityProtector>()));
             services.TryAddScoped<IFiscalBusinessDateResolutionRepository, PostgresFiscalBusinessDateResolutionRepository>();
             services.TryAddScoped<IFiscalDocumentReader, PostgresFiscalDocumentReader>();
             services.TryAddScoped<ISalesInvoiceHeaderProfileRepository, PostgresSalesInvoiceHeaderProfileRepository>();
@@ -83,6 +91,7 @@ public static class FiscalDocumentServiceCollectionExtensions
             services.TryAddScoped<IBirSalesSummaryRepository, PostgresBirSalesSummaryRepository>();
             services.TryAddScoped<IBirSalesSummaryPdfContextRepository, PostgresBirSalesSummaryRepository>();
             services.TryAddScoped<IMonthlyESalesRepository, PostgresMonthlyESalesRepository>();
+            services.TryAddScoped<IStatutorySalesBookRepository, PostgresStatutorySalesBookRepository>();
             services.TryAddScoped<IAuditTrailRepository, PostgresAuditTrailRepository>();
             services.TryAddScoped<IElectronicJournalRepository, PostgresElectronicJournalRepository>();
             services.TryAddScoped<IFiscalDocumentReprintRepository, PostgresFiscalDocumentReprintRepository>();
@@ -126,6 +135,8 @@ public static class FiscalDocumentServiceCollectionExtensions
         services.AddSingleton<BirSalesSummaryOutputRenderer>();
         services.AddScoped<MonthlyESalesService>();
         services.AddSingleton<MonthlyESalesOutputRenderer>();
+        services.AddScoped<StatutorySalesBookService>();
+        services.AddSingleton<StatutorySalesBookOutputRenderer>();
         services.AddScoped<AuditTrailService>();
         services.AddSingleton<AuditTrailOutputRenderer>();
         services.AddScoped<ElectronicJournalService>();
@@ -247,6 +258,14 @@ public static class FiscalDocumentServiceCollectionExtensions
                 MonthlyESalesAuthorization.ExportPolicyName,
                 policy => policy.AddAuthenticationSchemes(SalesInvoiceHeaderProfileAdminAuthorization.AuthenticationScheme)
                     .RequireClaim(SalesInvoiceHeaderProfileAdminAuthorization.PermissionClaimType, MonthlyESalesAuthorization.ExportPermission));
+            options.AddPolicy(
+                StatutorySalesBookAuthorization.ReadPolicyName,
+                policy => policy.AddAuthenticationSchemes(SalesInvoiceHeaderProfileAdminAuthorization.AuthenticationScheme)
+                    .RequireClaim(SalesInvoiceHeaderProfileAdminAuthorization.PermissionClaimType, StatutorySalesBookAuthorization.ReadPermission));
+            options.AddPolicy(
+                StatutorySalesBookAuthorization.ExportPolicyName,
+                policy => policy.AddAuthenticationSchemes(SalesInvoiceHeaderProfileAdminAuthorization.AuthenticationScheme)
+                    .RequireClaim(SalesInvoiceHeaderProfileAdminAuthorization.PermissionClaimType, StatutorySalesBookAuthorization.ExportPermission));
             options.AddPolicy(
                 AuditTrailAuthorization.ReadPolicyName,
                 policy => policy.AddAuthenticationSchemes(SalesInvoiceHeaderProfileAdminAuthorization.AuthenticationScheme)

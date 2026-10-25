@@ -206,6 +206,37 @@ public sealed class FiscalDocumentCreationServiceTests
     }
 
     [Fact]
+    public async Task UnseparatedMixedLocalBenefitRemainsFiscalizableWithoutBeneficiarySnapshot()
+    {
+        var repository = new RecordingFiscalDocumentRepository();
+        var service = new FiscalDocumentCreationService(repository);
+        var facts = ValidAppliedStatutoryFiscalFacts() with
+        {
+            PolicyReference = ValidAppliedStatutoryFiscalFacts().PolicyReference! with
+            {
+                ResolutionBasis = "LOCAL_ORDINANCE",
+                NationalLawReference = null,
+                OrdinanceReference = "SYNTHETIC-MIXED-LGU-POLICY"
+            },
+            StatutoryDiscountRateBasisPoints = 2000,
+            PercentageDiscountAmountMinorUnits = 0,
+            NonPercentageBenefitAmountMinorUnits = 1786,
+            PercentageComponentSeparatelyProven = false,
+            BeneficiaryIdentity = null
+        };
+
+        var result = await service.CreateAsync(ValidStatutoryCommand() with { AppliedStatutoryFiscalFacts = facts });
+
+        Assert.True(result.Succeeded, $"{result.ErrorCode}: {result.Message}");
+        Assert.NotNull(result.Draft?.AppliedStatutoryFiscalFacts);
+        Assert.Equal(2000, result.Draft.AppliedStatutoryFiscalFacts.StatutoryDiscountRateBasisPoints);
+        Assert.Equal(0, result.Draft.AppliedStatutoryFiscalFacts.PercentageDiscountAmountMinorUnits);
+        Assert.Equal(1786, result.Draft.AppliedStatutoryFiscalFacts.NonPercentageBenefitAmountMinorUnits);
+        Assert.False(result.Draft.AppliedStatutoryFiscalFacts.PercentageComponentSeparatelyProven);
+        Assert.Null(result.Draft.AppliedStatutoryFiscalFacts.BeneficiaryIdentity);
+    }
+
+    [Fact]
     public async Task ZeroPayableStatutoryCompletionCreatesFiscalDocumentWithoutPaymentOrTender()
     {
         var repository = new RecordingFiscalDocumentRepository();

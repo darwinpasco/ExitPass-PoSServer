@@ -25,14 +25,18 @@ public sealed class PostgresFiscalDocumentRepository : IFiscalDocumentRepository
 
     private readonly NpgsqlDataSource dataSource;
     private readonly bool requireCompleteSalesInvoiceHeaderProfile;
+    private readonly IStatutoryBeneficiaryIdentityProtector statutoryBeneficiaryIdentityProtector;
     private readonly SalesInvoiceHeaderProfileService salesInvoiceHeaderProfileService = new();
 
     public PostgresFiscalDocumentRepository(
         NpgsqlDataSource dataSource,
-        bool requireCompleteSalesInvoiceHeaderProfile = false)
+        bool requireCompleteSalesInvoiceHeaderProfile = false,
+        IStatutoryBeneficiaryIdentityProtector? statutoryBeneficiaryIdentityProtector = null)
     {
         this.dataSource = dataSource ?? throw new ArgumentNullException(nameof(dataSource));
         this.requireCompleteSalesInvoiceHeaderProfile = requireCompleteSalesInvoiceHeaderProfile;
+        this.statutoryBeneficiaryIdentityProtector = statutoryBeneficiaryIdentityProtector ??
+            new UnavailableStatutoryBeneficiaryIdentityProtector();
     }
 
     public async Task<FiscalDocumentPersistenceResult> CreateAsync(
@@ -272,6 +276,27 @@ public sealed class PostgresFiscalDocumentRepository : IFiscalDocumentRepository
                         resolvedDraft,
                         statutoryCodeIds);
                     await statutoryCommand.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
+
+                    if (resolvedDraft.AppliedStatutoryFiscalFacts.BeneficiaryIdentity is not null)
+                    {
+                        if (!statutoryBeneficiaryIdentityProtector.IsConfigured)
+                        {
+                            throw new FiscalDocumentFiscalContextException(
+                                FiscalDocumentCreationErrorCode.StatutoryBeneficiaryIdentityProtectionUnavailable,
+                                "Statutory beneficiary identity protection is unavailable.");
+                        }
+
+                        var protectedIdentity = statutoryBeneficiaryIdentityProtector.Protect(
+                            resolvedDraft.FiscalDocumentId,
+                            resolvedDraft.AppliedStatutoryFiscalFacts.StatutoryDiscountDecisionCommandId,
+                            resolvedDraft.AppliedStatutoryFiscalFacts.BeneficiaryIdentity);
+                        await using var beneficiaryCommand = new NpgsqlCommand(
+                            PostgresFiscalDocumentSql.InsertStatutoryBeneficiaryIdentitySnapshot,
+                            connection,
+                            transaction);
+                        AddStatutoryBeneficiaryIdentityParameters(beneficiaryCommand, resolvedDraft, protectedIdentity);
+                        await beneficiaryCommand.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
+                    }
                 }
 
                 await using var sequenceStateCommand = new NpgsqlCommand(
@@ -1512,12 +1537,17 @@ public sealed class PostgresFiscalDocumentRepository : IFiscalDocumentRepository
             reader.GetInt64(19),
             reader.GetString(20),
             reader.GetInt64(21),
-            reader.GetInt64(22),
-            reader.GetString(23),
-            ReadDateTimeOffset(reader, 24),
-            reader.GetString(25),
-            reader.IsDBNull(26) ? null : reader.GetGuid(26),
-            ReadDateTimeOffset(reader, 27));
+            reader.GetInt64(26),
+            reader.GetString(27),
+            ReadDateTimeOffset(reader, 28),
+            reader.GetString(29),
+            reader.IsDBNull(30) ? null : reader.GetGuid(30),
+            reader.IsDBNull(22) ? null : reader.GetInt32(22),
+            reader.GetInt64(23),
+            reader.GetInt64(24),
+            reader.GetBoolean(25),
+            BeneficiaryIdentity: null,
+            SnapshotCreatedAt: ReadDateTimeOffset(reader, 31));
 
     private sealed record FiscalSequencePolicyCandidate(
         Guid FiscalSequencePolicyId,
@@ -1773,11 +1803,35 @@ public sealed class PostgresFiscalDocumentRepository : IFiscalDocumentRepository
         command.Parameters.AddWithValue("vat_amount_minor_units", facts.VatAmountMinorUnits);
         command.Parameters.AddWithValue("vat_treatment_code_id", codeIds.VatTreatmentCodeId);
         command.Parameters.AddWithValue("statutory_discount_amount_minor_units", facts.StatutoryDiscountAmountMinorUnits);
+        command.Parameters.AddWithValue("statutory_discount_rate_basis_points", (object?)facts.StatutoryDiscountRateBasisPoints ?? DBNull.Value);
+        command.Parameters.AddWithValue("percentage_discount_amount_minor_units", facts.PercentageDiscountAmountMinorUnits);
+        command.Parameters.AddWithValue("non_percentage_benefit_amount_minor_units", facts.NonPercentageBenefitAmountMinorUnits);
+        command.Parameters.AddWithValue("percentage_component_separately_proven", facts.PercentageComponentSeparatelyProven);
         command.Parameters.AddWithValue("final_payable_amount_minor_units", facts.FinalPayableAmountMinorUnits);
         command.Parameters.AddWithValue("currency_code", facts.Currency);
         command.Parameters.AddWithValue("applied_at", facts.AppliedAt);
         command.Parameters.AddWithValue("source_payment_channel_code_id", codeIds.SourcePaymentChannelCodeId);
         command.Parameters.AddWithValue("terminal_cash_tender_id", (object?)facts.TerminalCashTenderId ?? DBNull.Value);
         command.Parameters.AddWithValue("snapshot_created_at", snapshotCreatedAt);
+    }
+
+    private static void AddStatutoryBeneficiaryIdentityParameters(
+        NpgsqlCommand command,
+        FiscalDocumentDraft draft,
+        ProtectedStatutoryBeneficiaryIdentity protectedIdentity)
+    {
+        var facts = draft.AppliedStatutoryFiscalFacts ?? throw new InvalidOperationException("Applied statutory facts are required.");
+        var identity = facts.BeneficiaryIdentity ?? throw new InvalidOperationException("Statutory beneficiary identity is required.");
+        command.Parameters.AddWithValue("snapshot_id", Guid.NewGuid());
+        command.Parameters.AddWithValue("fiscal_document_id", draft.FiscalDocumentId);
+        command.Parameters.AddWithValue("decision_id", facts.StatutoryDiscountDecisionCommandId);
+        command.Parameters.AddWithValue("statutory_id_type", identity.StatutoryIdType);
+        command.Parameters.Add("protected_identity_envelope", NpgsqlDbType.Bytea).Value = protectedIdentity.Envelope;
+        command.Parameters.AddWithValue("protection_key_reference", protectedIdentity.KeyReference);
+        command.Parameters.AddWithValue("protection_key_version", protectedIdentity.KeyVersion);
+        command.Parameters.AddWithValue("envelope_format_version", protectedIdentity.EnvelopeFormatVersion);
+        command.Parameters.AddWithValue("capture_source", identity.CapturedByChannel);
+        command.Parameters.AddWithValue("correlation_reference", identity.CorrelationReference);
+        command.Parameters.AddWithValue("recorded_at", facts.SnapshotCreatedAt ?? DateTimeOffset.UtcNow);
     }
 }

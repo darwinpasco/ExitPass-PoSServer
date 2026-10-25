@@ -291,6 +291,10 @@ public static class PostgresFiscalDocumentSql
             facts.vat_amount_minor_units,
             vat_treatment.code_key,
             facts.statutory_discount_amount_minor_units,
+            facts.statutory_discount_rate_basis_points,
+            facts.percentage_discount_amount_minor_units,
+            facts.non_percentage_benefit_amount_minor_units,
+            facts.percentage_component_separately_proven,
             facts.final_payable_amount_minor_units,
             facts.currency_code,
             facts.applied_at,
@@ -470,6 +474,10 @@ public static class PostgresFiscalDocumentSql
             vat_amount_minor_units,
             vat_treatment_code_id,
             statutory_discount_amount_minor_units,
+            statutory_discount_rate_basis_points,
+            percentage_discount_amount_minor_units,
+            non_percentage_benefit_amount_minor_units,
+            percentage_component_separately_proven,
             final_payable_amount_minor_units,
             currency_code,
             applied_at,
@@ -503,6 +511,10 @@ public static class PostgresFiscalDocumentSql
             @vat_amount_minor_units,
             @vat_treatment_code_id,
             @statutory_discount_amount_minor_units,
+            @statutory_discount_rate_basis_points,
+            @percentage_discount_amount_minor_units,
+            @non_percentage_benefit_amount_minor_units,
+            @percentage_component_separately_proven,
             @final_payable_amount_minor_units,
             @currency_code,
             @applied_at,
@@ -511,6 +523,26 @@ public static class PostgresFiscalDocumentSql
             @snapshot_created_at,
             @snapshot_created_at,
             @snapshot_created_at
+        );
+        """;
+
+    public const string InsertStatutoryBeneficiaryIdentitySnapshot = """
+        insert into pos.fiscal_document_statutory_beneficiary_snapshots (
+            fiscal_document_statutory_beneficiary_snapshot_id,
+            fiscal_document_id,
+            statutory_discount_decision_command_id,
+            statutory_id_type,
+            protected_identity_envelope,
+            protection_key_reference,
+            protection_key_version,
+            envelope_format_version,
+            capture_source,
+            correlation_reference,
+            recorded_at
+        ) values (
+            @snapshot_id, @fiscal_document_id, @decision_id, @statutory_id_type,
+            @protected_identity_envelope, @protection_key_reference, @protection_key_version,
+            @envelope_format_version, @capture_source, @correlation_reference, @recorded_at
         );
         """;
 

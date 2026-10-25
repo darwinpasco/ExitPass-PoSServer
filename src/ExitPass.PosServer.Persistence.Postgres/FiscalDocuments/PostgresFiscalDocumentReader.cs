@@ -350,12 +350,17 @@ public sealed class PostgresFiscalDocumentReader : IFiscalDocumentReader
             reader.GetInt64(19),
             reader.GetString(20),
             reader.GetInt64(21),
-            reader.GetInt64(22),
-            reader.GetString(23),
-            reader.GetFieldValue<DateTimeOffset>(24),
-            reader.GetString(25),
-            GetNullableGuid(reader, 26),
-            reader.GetFieldValue<DateTimeOffset>(27));
+            reader.GetInt64(26),
+            reader.GetString(27),
+            reader.GetFieldValue<DateTimeOffset>(28),
+            reader.GetString(29),
+            GetNullableGuid(reader, 30),
+            reader.IsDBNull(22) ? null : reader.GetInt32(22),
+            reader.GetInt64(23),
+            reader.GetInt64(24),
+            reader.GetBoolean(25),
+            BeneficiaryIdentity: null,
+            SnapshotCreatedAt: reader.GetFieldValue<DateTimeOffset>(31));
     }
 
     private static async Task<SalesInvoiceHeaderSnapshot?> ReadHeaderSnapshotAsync(

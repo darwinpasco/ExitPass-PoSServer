@@ -98,6 +98,15 @@ public interface IAuditTrailRepository
 {
     Task<AuditTrailResult> ReadAsync(AuditTrailQuery query, CancellationToken cancellationToken = default);
 
+    Task RecordAccessAsync(
+        Guid sitePosServerId,
+        string reportKind,
+        string subjectReference,
+        string actorReference,
+        string correlationReference,
+        int rowCount,
+        CancellationToken cancellationToken = default);
+
     Task RecordExportAsync(
         Guid sitePosServerId,
         string reportKind,
