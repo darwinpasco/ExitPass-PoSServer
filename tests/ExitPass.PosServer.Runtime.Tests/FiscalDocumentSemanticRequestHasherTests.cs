@@ -215,7 +215,7 @@ public sealed class FiscalDocumentSemanticRequestHasherTests
     }
 
     [Fact]
-    public void AppliedStatutoryFactsUseSha256V2WithoutChangingOrdinaryV1()
+    public void AppliedStatutoryFactsUseSha256V3WithoutChangingOrdinaryV1()
     {
         var ordinary = RepresentativeCommand();
         var statutory = StatutoryCommand();
@@ -223,7 +223,7 @@ public sealed class FiscalDocumentSemanticRequestHasherTests
         Assert.Equal("sha256:v1", FiscalDocumentSemanticRequestHasher.GetVersion(ordinary));
         Assert.Equal(ExpectedRepresentativeHash, FiscalDocumentSemanticRequestHasher.Hash(ordinary));
         Assert.Equal(
-            "pos-server-fiscal-document-create:sha256:v2",
+            "pos-server-fiscal-document-create:sha256:v3",
             FiscalDocumentSemanticRequestHasher.GetVersion(statutory));
 
         var canonicalSource = FiscalDocumentSemanticRequestHasher.Canonicalize(statutory);
@@ -251,7 +251,7 @@ public sealed class FiscalDocumentSemanticRequestHasherTests
     [InlineData("final")]
     [InlineData("source")]
     [InlineData("terminal_cash")]
-    public void AppliedStatutoryMaterialFactChangesChangeSha256V2Hash(string mutation)
+    public void AppliedStatutoryMaterialFactChangesChangeSha256V3Hash(string mutation)
     {
         var original = StatutoryCommand();
         var changed = mutation switch
@@ -336,7 +336,7 @@ public sealed class FiscalDocumentSemanticRequestHasherTests
     [InlineData("FREE_PARKING")]
     [InlineData("REDUCED_PARKING_RATE")]
     [InlineData("CAPPED_PARKING_FEE")]
-    public void AppliedStatutorySha256V2CanonicalizesEveryGovernedBenefitClassification(string benefitClassification)
+    public void AppliedStatutorySha256V3CanonicalizesEveryGovernedBenefitClassification(string benefitClassification)
     {
         var command = StatutoryCommand() with
         {
@@ -350,7 +350,7 @@ public sealed class FiscalDocumentSemanticRequestHasherTests
         var hash = FiscalDocumentSemanticRequestHasher.Hash(command);
 
         Assert.Equal(
-            "pos-server-fiscal-document-create:sha256:v2",
+            "pos-server-fiscal-document-create:sha256:v3",
             FiscalDocumentSemanticRequestHasher.GetVersion(command));
         Assert.Contains(
             $"\"benefit_classification\":\"{benefitClassification}\"",

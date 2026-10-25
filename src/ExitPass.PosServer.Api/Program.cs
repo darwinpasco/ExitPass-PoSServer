@@ -26,6 +26,7 @@ app.MapMonthlyESalesEndpoints();
 app.MapAuditTrailEndpoints();
 app.MapElectronicJournalEndpoints();
 app.MapAnnexE1Endpoints();
+app.MapStatutorySalesBookEndpoints();
 app.MapHealthChecks("/health/live", new HealthCheckOptions
 {
     Predicate = _ => false

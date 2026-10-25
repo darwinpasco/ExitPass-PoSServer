@@ -53,5 +53,6 @@ public enum FiscalDocumentCreationErrorCode
     InvalidCompletionAuthority = 48,
     InvalidInvoiceCustomerInformation = 49,
     ChannelTerminalRequired = 50,
-    ChannelTerminalMismatch = 51
+    ChannelTerminalMismatch = 51,
+    StatutoryBeneficiaryIdentityProtectionUnavailable = 52
 }

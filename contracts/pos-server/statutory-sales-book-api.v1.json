@@ -1,0 +1,24 @@
+{
+  "profile": "pos-server-statutory-sales-book-api:v1",
+  "routes": [
+    {
+      "method": "GET",
+      "path": "/v1/fiscal-reports/annex-e/{e2|e3}",
+      "permission": "fiscal_statutory_sales_book.read"
+    },
+    {
+      "method": "GET",
+      "path": "/v1/fiscal-reports/annex-e/{e2|e3}/download?format=xlsx|pdf",
+      "permission": "fiscal_statutory_sales_book.export"
+    }
+  ],
+  "scope": ["sitePosServerId", "fiscalIdentityId", "channelTerminalId", "currencyCode", "calendarYear", "calendarMonth"],
+  "response": {
+    "reportStatus": ["PRELIMINARY", "FINAL"],
+    "emptyReportSupported": true,
+    "beneficiaryFields": ["beneficiaryFullName", "statutoryIdType", "statutoryIdNumber", "beneficiaryTin"],
+    "monetaryUnit": "minor_units"
+  },
+  "browserContainsBeneficiaryPii": true,
+  "privacy": "Authorized Management Platform fiscal-reporting session only; private no-store responses and exports."
+}

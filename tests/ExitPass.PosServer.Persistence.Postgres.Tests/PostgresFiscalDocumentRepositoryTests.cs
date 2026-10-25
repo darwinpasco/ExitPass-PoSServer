@@ -570,7 +570,7 @@ public sealed class PostgresFiscalDocumentRepositoryTests
         var statutoryJson = PostgresFiscalDocumentSql.CreateIdempotencyContextJson(ValidStatutoryDraft(), idempotency);
 
         Assert.Contains("sha256:v1", ordinaryJson, StringComparison.Ordinal);
-        Assert.Contains("pos-server-fiscal-document-create:sha256:v2", statutoryJson, StringComparison.Ordinal);
+        Assert.Contains(FiscalDocumentSemanticRequestHasher.StatutoryVersion, statutoryJson, StringComparison.Ordinal);
         Assert.DoesNotContain("beneficiary_name", statutoryJson, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("evidence_image", statutoryJson, StringComparison.OrdinalIgnoreCase);
     }

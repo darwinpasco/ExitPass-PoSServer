@@ -467,6 +467,7 @@ public sealed class FiscalDocumentCreationService
         }
 
         if ((facts.UnknownFieldNames?.Count ?? 0) > 0 ||
+            (facts.BeneficiaryIdentity?.UnknownFieldNames?.Count ?? 0) > 0 ||
             (facts.PolicyReference?.UnknownFieldNames?.Count ?? 0) > 0 ||
             ContainsSensitiveEvidence(facts) ||
             ContainsSensitiveEvidence(facts.PolicyReference))
@@ -579,17 +580,60 @@ public sealed class FiscalDocumentCreationService
         var vatAmount = facts.VatAmountMinorUnits.Value;
         var statutoryDiscountAmount = facts.StatutoryDiscountAmountMinorUnits.Value;
         var finalPayableAmount = facts.FinalPayableAmountMinorUnits.Value;
+        var percentageDiscountAmount = facts.PercentageDiscountAmountMinorUnits ?? 0;
+        var nonPercentageBenefitAmount = facts.NonPercentageBenefitAmountMinorUnits ?? 0;
 
         if (originalAmount < 0 ||
             vatExclusiveBasis < 0 ||
             vatAmount < 0 ||
             statutoryDiscountAmount < 0 ||
+            percentageDiscountAmount < 0 ||
+            nonPercentageBenefitAmount < 0 ||
             finalPayableAmount < 0 ||
             facts.AppliedTariffSnapshotId == facts.OriginalTariffSnapshotId)
         {
             return (FiscalDocumentCreationResult.Failure(
                 FiscalDocumentCreationErrorCode.AppliedStatutoryFactsNotFinal,
                 "Applied statutory fiscal facts must represent a final nonnegative payment-time application snapshot."), null);
+        }
+
+        if (percentageDiscountAmount + nonPercentageBenefitAmount > statutoryDiscountAmount ||
+            facts.StatutoryDiscountRateBasisPoints is not null and not (500 or 2000) ||
+            facts.StatutoryDiscountRateBasisPoints is null && percentageDiscountAmount != 0 ||
+            facts.StatutoryDiscountRateBasisPoints is not null &&
+                !facts.PercentageComponentSeparatelyProven && percentageDiscountAmount != 0)
+        {
+            return (FiscalDocumentCreationResult.Failure(
+                FiscalDocumentCreationErrorCode.AppliedStatutoryFactsNotFinal,
+                "Applied statutory percentage facts are incomplete, unsupported, or do not reconcile."), null);
+        }
+
+        StatutoryBeneficiaryIdentitySnapshot? beneficiaryIdentity = null;
+        var isStatutorySalesBookCandidate = facts.StatutoryDiscountRateBasisPoints is 500 or 2000 &&
+            percentageDiscountAmount > 0 && facts.PercentageComponentSeparatelyProven;
+        if (isStatutorySalesBookCandidate)
+        {
+            if (!string.Equals(policyResolutionBasis, "LOCAL_ORDINANCE", StringComparison.Ordinal) ||
+                facts.BeneficiaryIdentity is null)
+            {
+                return (FiscalDocumentCreationResult.Failure(
+                    FiscalDocumentCreationErrorCode.AppliedStatutoryFactsIncomplete,
+                    "A local-ordinance percentage benefit requires an authoritative beneficiary identity snapshot."), null);
+            }
+
+            beneficiaryIdentity = NormalizeBeneficiaryIdentity(facts.BeneficiaryIdentity);
+            if (beneficiaryIdentity is null)
+            {
+                return (FiscalDocumentCreationResult.Failure(
+                    FiscalDocumentCreationErrorCode.AppliedStatutoryFactsIncomplete,
+                    "The authoritative statutory beneficiary identity snapshot is incomplete."), null);
+            }
+        }
+        else if (facts.BeneficiaryIdentity is not null)
+        {
+            return (FiscalDocumentCreationResult.Failure(
+                FiscalDocumentCreationErrorCode.AppliedStatutoryFactsNotFinal,
+                "Beneficiary identity is accepted only for a proven local 5% or 20% statutory sales-book row."), null);
         }
 
         if (!string.Equals(
@@ -711,7 +755,62 @@ public sealed class FiscalDocumentCreationService
             facts.AppliedAt.Value.ToUniversalTime(),
             sourcePaymentChannel,
             facts.TerminalCashTenderId,
+            facts.StatutoryDiscountRateBasisPoints,
+            percentageDiscountAmount,
+            nonPercentageBenefitAmount,
+            facts.PercentageComponentSeparatelyProven,
+            beneficiaryIdentity,
             DateTimeOffset.UtcNow));
+    }
+
+    private static StatutoryBeneficiaryIdentitySnapshot? NormalizeBeneficiaryIdentity(
+        StatutoryBeneficiaryIdentityInput input)
+    {
+        static string? Text(string? value, int maximumLength)
+        {
+            if (string.IsNullOrWhiteSpace(value)) return null;
+            var normalized = string.Join(' ', value.Trim().Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries));
+            return normalized.Length <= maximumLength && !normalized.Contains('\r') && !normalized.Contains('\n')
+                ? normalized
+                : null;
+        }
+
+        var fullName = Text(input.BeneficiaryFullName, 256);
+        var idType = NormalizeRequiredCode(input.StatutoryIdType);
+        var idNumber = Text(input.StatutoryIdNumber, 128);
+        var tin = Text(input.BeneficiaryTin, 32);
+        var capturedBy = Text(input.CapturedByActorRef, 200);
+        var capturedChannel = NormalizeRequiredCode(input.CapturedByChannel);
+        var updatedBy = Text(input.LastUpdatedByActorRef, 200);
+        var updatedChannel = NormalizeRequiredCode(input.LastUpdatedByChannel);
+        var reviewedBy = Text(input.ReviewedByActorRef, 200);
+        var approval = Text(input.ApprovalDecisionReference, 200);
+        var correlation = Text(input.CorrelationReference, 200);
+
+        if (fullName is null || idNumber is null || idType.Length == 0 ||
+            capturedBy is null || updatedBy is null || reviewedBy is null || approval is null || correlation is null ||
+            input.CapturedAt is null || input.LastUpdatedAt is null || input.ReviewedAt is null ||
+            !StatutoryBeneficiaryCaptureChannels.IsAuthoritative(capturedChannel) ||
+            !StatutoryBeneficiaryCaptureChannels.IsAuthoritative(updatedChannel))
+        {
+            return null;
+        }
+
+        return new(
+            fullName,
+            idType,
+            idNumber,
+            tin,
+            capturedBy,
+            capturedChannel,
+            input.CapturedAt.Value.ToUniversalTime(),
+            updatedBy,
+            updatedChannel,
+            input.LastUpdatedAt.Value.ToUniversalTime(),
+            reviewedBy,
+            input.ReviewedAt.Value.ToUniversalTime(),
+            approval,
+            correlation);
     }
 
     private static string NormalizeRequiredCode(string? value) =>

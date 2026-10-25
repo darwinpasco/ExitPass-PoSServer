@@ -50,6 +50,13 @@ internal sealed class A4FiscalReportPdf
             .Append(Number(width)).Append(' ').Append(Number(height)).Append(" re f 0 g\n");
     }
 
+    public void FillRect(int page, double x, double y, double width, double height, double red, double green, double blue)
+    {
+        pages[page].Content.Append(Number(red)).Append(' ').Append(Number(green)).Append(' ').Append(Number(blue)).Append(" rg ")
+            .Append(Number(x)).Append(' ').Append(Number(y)).Append(' ')
+            .Append(Number(width)).Append(' ').Append(Number(height)).Append(" re f 0 g\n");
+    }
+
     public void StrokeRect(int page, double x, double y, double width, double height, double lineWidth = 0.5)
     {
         pages[page].Content.Append(Number(lineWidth)).Append(" w ")

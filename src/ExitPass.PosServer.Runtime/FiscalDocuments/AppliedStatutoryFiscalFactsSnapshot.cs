@@ -23,6 +23,11 @@ public sealed record AppliedStatutoryFiscalFactsSnapshot(
     DateTimeOffset AppliedAt,
     string SourcePaymentChannel,
     Guid? TerminalCashTenderId = null,
+    int? StatutoryDiscountRateBasisPoints = null,
+    long PercentageDiscountAmountMinorUnits = 0,
+    long NonPercentageBenefitAmountMinorUnits = 0,
+    bool PercentageComponentSeparatelyProven = false,
+    StatutoryBeneficiaryIdentitySnapshot? BeneficiaryIdentity = null,
     DateTimeOffset? SnapshotCreatedAt = null);
 
 public sealed record AppliedStatutoryPolicyReferenceSnapshot(

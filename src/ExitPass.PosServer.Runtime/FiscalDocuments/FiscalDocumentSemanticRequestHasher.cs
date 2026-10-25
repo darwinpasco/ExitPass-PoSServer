@@ -10,7 +10,7 @@ public static class FiscalDocumentSemanticRequestHasher
 {
     public const string Algorithm = "SHA-256";
     public const string Version = "sha256:v1";
-    public const string StatutoryVersion = "pos-server-fiscal-document-create:sha256:v2";
+    public const string StatutoryVersion = "pos-server-fiscal-document-create:sha256:v3";
     public const string CompletionVersion = "pos-server-fiscal-document-create:sha256:v3";
     public const string InvoiceCustomerInformationVersion = "pos-server-fiscal-document-create:sha256:v4";
     public const string Status = "calculated";
@@ -258,6 +258,11 @@ public static class FiscalDocumentSemanticRequestHasher
             ["site_group_id"] = facts.SiteGroupId,
             ["site_id"] = facts.SiteId,
             ["source_payment_channel"] = NormalizeCode(facts.SourcePaymentChannel),
+            ["statutory_discount_rate_basis_points"] = facts.StatutoryDiscountRateBasisPoints,
+            ["percentage_discount_amount_minor_units"] = facts.PercentageDiscountAmountMinorUnits,
+            ["non_percentage_benefit_amount_minor_units"] = facts.NonPercentageBenefitAmountMinorUnits,
+            ["percentage_component_separately_proven"] = facts.PercentageComponentSeparatelyProven,
+            ["beneficiary_identity"] = NormalizeBeneficiaryIdentity(facts.BeneficiaryIdentity),
             ["statutory_discount_amount_minor_units"] = facts.StatutoryDiscountAmountMinorUnits,
             ["statutory_discount_decision_command_id"] = facts.StatutoryDiscountDecisionCommandId,
             ["statutory_payable_basis_application_command_id"] = facts.StatutoryPayableBasisApplicationCommandId,
@@ -268,6 +273,35 @@ public static class FiscalDocumentSemanticRequestHasher
             ["vat_exclusive_basis_amount_minor_units"] = facts.VatExclusiveBasisAmountMinorUnits,
             ["vat_treatment"] = NormalizeCode(facts.VatTreatment)
         };
+
+    private static SortedDictionary<string, object?>? NormalizeBeneficiaryIdentity(
+        StatutoryBeneficiaryIdentityInput? identity)
+    {
+        if (identity is null) return null;
+        return new()
+        {
+            ["approval_decision_reference"] = Normalize(identity.ApprovalDecisionReference),
+            ["beneficiary_full_name"] = NormalizeHumanName(identity.BeneficiaryFullName),
+            ["beneficiary_tin"] = Normalize(identity.BeneficiaryTin),
+            ["captured_at"] = identity.CapturedAt?.ToUniversalTime().ToString("O", CultureInfo.InvariantCulture),
+            ["captured_by_actor_ref"] = Normalize(identity.CapturedByActorRef),
+            ["captured_by_channel"] = NormalizeCode(identity.CapturedByChannel),
+            ["correlation_reference"] = Normalize(identity.CorrelationReference),
+            ["last_updated_at"] = identity.LastUpdatedAt?.ToUniversalTime().ToString("O", CultureInfo.InvariantCulture),
+            ["last_updated_by_actor_ref"] = Normalize(identity.LastUpdatedByActorRef),
+            ["last_updated_by_channel"] = NormalizeCode(identity.LastUpdatedByChannel),
+            ["reviewed_at"] = identity.ReviewedAt?.ToUniversalTime().ToString("O", CultureInfo.InvariantCulture),
+            ["reviewed_by_actor_ref"] = Normalize(identity.ReviewedByActorRef),
+            ["statutory_id_number"] = Normalize(identity.StatutoryIdNumber),
+            ["statutory_id_type"] = NormalizeCode(identity.StatutoryIdType)
+        };
+    }
+
+    private static string? NormalizeHumanName(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value)) return null;
+        return string.Join(' ', value.Trim().Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries));
+    }
 
     private static SortedDictionary<string, object?>? NormalizePolicyReference(
         AppliedStatutoryPolicyReferenceInput? policyReference)

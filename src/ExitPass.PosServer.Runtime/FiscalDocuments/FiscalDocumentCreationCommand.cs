@@ -64,6 +64,11 @@ public sealed record AppliedStatutoryFiscalFactsInput(
     DateTimeOffset? AppliedAt,
     string? SourcePaymentChannel,
     Guid? TerminalCashTenderId = null,
+    int? StatutoryDiscountRateBasisPoints = null,
+    long? PercentageDiscountAmountMinorUnits = null,
+    long? NonPercentageBenefitAmountMinorUnits = null,
+    bool PercentageComponentSeparatelyProven = false,
+    StatutoryBeneficiaryIdentityInput? BeneficiaryIdentity = null,
     IReadOnlyList<string>? UnknownFieldNames = null);
 
 public sealed record AppliedStatutoryPolicyReferenceInput(

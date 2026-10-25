@@ -907,6 +907,8 @@ public sealed class FiscalDocumentCreationEndpointTests
             "sales_invoice",
             ValidPayableBasis(),
             SitePosServerId: Guid.Parse("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb"),
+            ChannelTerminalId: Guid.Parse("abababab-abab-4bab-8bab-abababababab"),
+            RuntimeTerminalRef: "PITX-L3-WEBPAY-01",
             FiscalDocumentTypeCodeId: Guid.Parse("cccccccc-cccc-cccc-cccc-cccccccccccc"),
             FiscalDocumentStatusCodeId: Guid.Parse("dddddddd-dddd-dddd-dddd-dddddddddddd"),
             CentralPmsParkingSessionRef: "parking-session-001",
