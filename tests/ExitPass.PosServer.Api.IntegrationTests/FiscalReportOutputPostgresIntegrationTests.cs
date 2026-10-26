@@ -13,13 +13,14 @@ using Xunit;
 
 namespace ExitPass.PosServer.Api.IntegrationTests;
 
-public sealed class FiscalReportOutputPostgresIntegrationTests
+public sealed class FiscalReportOutputPostgresIntegrationTests : IDisposable
 {
     private const string ConnectionVariable = "POSSERVER_REPORT_OUTPUT_TEST_DB_URL";
     private static readonly Guid SiteId = Guid.Parse("73000000-0000-4000-8000-000000000001");
     private static readonly Guid IdentityId = Guid.Parse("73000000-0000-4000-8000-000000000002");
     private static readonly Guid PeriodId = Guid.Parse("73000000-0000-4000-8000-000000000010");
     private static readonly DateTimeOffset ObservedAt = DateTimeOffset.Parse("2026-08-03T12:00:00Z");
+    private readonly string artifactRoot = Path.Combine(Path.GetTempPath(), "exitpass-report-output-artifacts-" + Guid.NewGuid().ToString("N"));
 
     [Fact]
     public async Task ActualXAndZOutputsAreDeterministicScopedPrivateAndReadOnlyAcrossRestart()
@@ -188,11 +189,11 @@ public sealed class FiscalReportOutputPostgresIntegrationTests
             await ExecuteFileAsync(connectionString, file);
     }
 
-    private static async Task<WebApplication> StartApiAsync(string connectionString)
+    private async Task<WebApplication> StartApiAsync(string connectionString)
     {
         var builder = WebApplication.CreateBuilder();
         builder.WebHost.UseKestrel().UseUrls("http://127.0.0.1:0");
-        builder.Configuration.AddInMemoryCollection(Configuration(connectionString));
+        builder.Configuration.AddInMemoryCollection(Configuration(connectionString, artifactRoot));
         builder.Services.AddPosServerFiscalDocumentApi(builder.Configuration);
         var app = builder.Build();
         app.UseAuthentication();
@@ -205,9 +206,13 @@ public sealed class FiscalReportOutputPostgresIntegrationTests
         return app;
     }
 
-    private static Dictionary<string, string?> Configuration(string connectionString)
+    private static Dictionary<string, string?> Configuration(string connectionString, string artifactRoot)
     {
-        var values = new Dictionary<string, string?> { ["ConnectionStrings:PosServer"] = connectionString };
+        var values = new Dictionary<string, string?>
+        {
+            ["ConnectionStrings:PosServer"] = connectionString,
+            ["PosServer:FiscalReports:ArtifactRoot"] = artifactRoot
+        };
         AddKey(values, 0, "output", "synthetic-output-key", SiteId, IdentityId,
             FiscalXReadingAuthorization.GeneratePermission, FiscalXReadingAuthorization.ReadPermission,
             FiscalReportOutputAuthorization.XExportPermission, FiscalZCloseStateInitializationAuthorization.Permission,
@@ -255,5 +260,10 @@ public sealed class FiscalReportOutputPostgresIntegrationTests
     {
         public IReadOnlyList<Artifact> All => [Presentation, Json, Csv, Pdf];
         public IEnumerable<string> AllText => All.Select(value => value.Text);
+    }
+
+    public void Dispose()
+    {
+        if (Directory.Exists(artifactRoot)) Directory.Delete(artifactRoot, true);
     }
 }

@@ -3,6 +3,7 @@ using System.Net.Http.Json;
 using ExitPass.PosServer.Api.FiscalDocuments;
 using ExitPass.PosServer.Api.FiscalReports;
 using ExitPass.PosServer.Persistence.Postgres.FiscalReports;
+using ExitPass.PosServer.Runtime.FiscalReports;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Hosting.Server;
@@ -14,13 +15,14 @@ using Xunit;
 
 namespace ExitPass.PosServer.Api.IntegrationTests;
 
-public sealed class FiscalZReadingPostgresIntegrationTests
+public sealed class FiscalZReadingPostgresIntegrationTests : IDisposable
 {
     private const string ConnectionVariable = "POSSERVER_Z_READING_TEST_DB_URL";
     private static readonly Guid SiteId = Guid.Parse("73000000-0000-4000-8000-000000000001");
     private static readonly Guid SiteBId = Guid.Parse("73000000-0000-4000-8000-000000000101");
     private static readonly Guid IdentityId = Guid.Parse("73000000-0000-4000-8000-000000000002");
     private static readonly Guid PeriodId = Guid.Parse("73000000-0000-4000-8000-000000000010");
+    private readonly string artifactRoot = Path.Combine(Path.GetTempPath(), "exitpass-z-reading-artifacts-" + Guid.NewGuid().ToString("N"));
 
     [Fact]
     public async Task ZReadingApiClosesAtomicallyReplaysConflictsReadsAndPreservesUnrelatedState()
@@ -53,6 +55,9 @@ public sealed class FiscalZReadingPostgresIntegrationTests
         Assert.NotNull(created?.ZReading);
         Assert.Equal("CLOSED", created.ZReading.PeriodStatus);
         Assert.Equal(16_571, created.ZReading.Amounts.NetSalesAmountMinorUnits);
+        Assert.Equal(FiscalXReadingContract.SnapshotDetailVersion, created.ZReading.SnapshotDetailVersion);
+        Assert.Equal(new FiscalReportDocumentCounts(2, 0, null, null, null), created.ZReading.DocumentCounts);
+        Assert.Equal("z-proof-service", created.ZReading.RequestedByRef);
         Assert.Equal(created.ZReading.Amounts.NetSalesAmountMinorUnits, created.ZReading.CounterSnapshot.CurrentPeriodGrandTotalAmountMinorUnits);
         Assert.Equal(0, created.ZReading.CounterSnapshot.PreviousZCounterValue);
         Assert.Equal(1, created.ZReading.CounterSnapshot.ResultingZCounterValue);
@@ -84,6 +89,8 @@ public sealed class FiscalZReadingPostgresIntegrationTests
         Assert.Equal(created.ZReading.CounterSnapshot, read?.ZReading?.CounterSnapshot);
         Assert.Equal(created.ZReading.Tenders, read?.ZReading?.Tenders);
         Assert.Equal(created.ZReading.Discounts, read?.ZReading?.Discounts);
+        Assert.Equal(created.ZReading.DocumentCounts, read?.ZReading?.DocumentCounts);
+        Assert.Equal(created.ZReading.SnapshotDetailVersion, read?.ZReading?.SnapshotDetailVersion);
         Assert.Equal(
             System.Text.Json.JsonSerializer.Serialize(created.ZReading.FiscalNumberRanges),
             System.Text.Json.JsonSerializer.Serialize(read?.ZReading?.FiscalNumberRanges));
@@ -127,10 +134,23 @@ public sealed class FiscalZReadingPostgresIntegrationTests
         Assert.True(await ScalarAsync<long>(connectionString, $"SELECT count(*) FROM pos.fiscal_report_discount_breakdowns WHERE x_z_report_id='{created.ZReading.FiscalReportId}'") > 0);
         Assert.True(await ScalarAsync<long>(connectionString, $"SELECT count(*) FROM pos.fiscal_report_fiscal_number_ranges WHERE x_z_report_id='{created.ZReading.FiscalReportId}'") > 0);
         Assert.Equal("closed", await ScalarAsync<string>(connectionString, "SELECT code.code_key FROM pos.fiscal_reporting_periods p JOIN pos.controlled_codes code ON code.controlled_code_id=p.period_status_code_id WHERE p.fiscal_reporting_period_id='73000000-0000-4000-8000-000000000010'"));
+        Assert.Equal(1L, await ScalarAsync<long>(connectionString, $"""
+            SELECT count(*) FROM pos.x_z_reports
+            WHERE x_z_report_id='{created.ZReading.FiscalReportId:D}'
+              AND snapshot_detail_version='{FiscalXReadingContract.SnapshotDetailVersion}'
+              AND issued_sales_invoice_count=2
+              AND void_transaction_count=0
+              AND cancellation_transaction_count IS NULL
+              AND return_transaction_count IS NULL
+              AND refund_transaction_count IS NULL
+              AND last_z_counter_value IS NULL
+              AND last_z_closed_at IS NULL
+            """));
 
         await AssertImmutableAsync(connectionString, created.ZReading.FiscalReportId);
         await ProveCompetingCloseAsync(connectionString, client);
         await ProvePersistenceFailureRollsBackAsync(connectionString, client);
+        await ProvePriorZCapturedByNextXAsync(connectionString, client);
     }
 
     [Fact]
@@ -715,6 +735,39 @@ public sealed class FiscalZReadingPostgresIntegrationTests
         Assert.Equal("23514", (await Assert.ThrowsAsync<PostgresException>(() => command.ExecuteNonQueryAsync())).SqlState);
     }
 
+    private static async Task ProvePriorZCapturedByNextXAsync(string connectionString, HttpClient client)
+    {
+        var periodId = Guid.Parse("73000000-0000-4000-8000-000000000013");
+        var observedAt = DateTimeOffset.UtcNow;
+        await ExecuteAsync(connectionString, $"""
+            INSERT INTO pos.fiscal_reporting_periods(
+                fiscal_reporting_period_id,fiscal_reporting_contract_version_id,site_pos_server_id,fiscal_identity_id,
+                period_status_code_id,business_day_date,period_start_at,period_end_at,reporting_timezone_name,
+                business_day_cutoff_local_time,currency_code,period_sequence,expected_prior_period_id,opened_at,
+                created_by_ref,updated_by_ref)
+            VALUES('{periodId:D}','f6766f48-62f0-513f-b9eb-e61c2f3e8c66','{SiteId:D}','{IdentityId:D}',
+                '1a6f7021-bc84-5c01-afaa-c5d6685633c8',(clock_timestamp() AT TIME ZONE 'Asia/Manila')::date,
+                clock_timestamp()-interval '5 minutes',clock_timestamp()+interval '23 hours 55 minutes',
+                'Asia/Manila','00:00:00','PHP',4,'73000000-0000-4000-8000-000000000012',
+                clock_timestamp()-interval '5 minutes','prior-z-x-proof','prior-z-x-proof');
+            """);
+
+        using var response = await client.PostAsJsonAsync(
+            "/v1/fiscal-reports/x-readings/",
+            new GenerateFiscalXReadingRequest("x-after-prior-z", SiteId, IdentityId, observedAt));
+        var body = await response.Content.ReadFromJsonAsync<FiscalXReadingApiResponse>();
+        Assert.Equal(HttpStatusCode.Created, response.StatusCode);
+        Assert.NotNull(body?.XReading?.PriorZ);
+        Assert.Equal(2, body.XReading.PriorZ.ZCounterValue);
+        Assert.True(body.XReading.PriorZ.ClosedAt <= observedAt);
+        Assert.Equal(1L, await ScalarAsync<long>(connectionString, $"""
+            SELECT count(*) FROM pos.x_z_reports
+            WHERE x_z_report_id='{body.XReading.FiscalReportId:D}'
+              AND last_z_counter_value=2
+              AND last_z_closed_at IS NOT NULL
+            """));
+    }
+
     private static async Task<ZManifest> ManifestAsync(string connectionString) => new(
         await ScalarAsync<long>(connectionString,"SELECT count(*) FROM pos.fiscal_documents"),
         await ScalarAsync<long>(connectionString,"SELECT count(*) FROM pos.fiscal_document_lines"),
@@ -742,12 +795,12 @@ public sealed class FiscalZReadingPostgresIntegrationTests
         foreach(var file in Directory.GetFiles(Path.Combine(root,"db","reference-data","controlled-codes","generated","sql"),"*.sql").OrderBy(x=>x,StringComparer.Ordinal)) await ExecuteFileAsync(connectionString,file);
     }
 
-    private static async Task<WebApplication> StartApiAsync(string connectionString)
+    private async Task<WebApplication> StartApiAsync(string connectionString)
     {
         var builder=WebApplication.CreateBuilder();builder.WebHost.UseKestrel().UseUrls("http://127.0.0.1:0");
         builder.Configuration.AddInMemoryCollection(new Dictionary<string,string?>
         {
-            ["ConnectionStrings:PosServer"]=connectionString,["PosServer:Admin:ApiKeys:0:Principal"]="z-proof-service",["PosServer:Admin:ApiKeys:0:Key"]="synthetic-z-proof-key",
+            ["ConnectionStrings:PosServer"]=connectionString,["PosServer:FiscalReports:ArtifactRoot"]=artifactRoot,["PosServer:Admin:ApiKeys:0:Principal"]="z-proof-service",["PosServer:Admin:ApiKeys:0:Key"]="synthetic-z-proof-key",
             ["PosServer:Admin:ApiKeys:0:Permissions:0"]=FiscalZCloseStateInitializationAuthorization.Permission,["PosServer:Admin:ApiKeys:0:Permissions:1"]=FiscalZReadingAuthorization.ClosePermission,["PosServer:Admin:ApiKeys:0:Permissions:2"]=FiscalZReadingAuthorization.ReadPermission,
             ["PosServer:Admin:ApiKeys:0:Permissions:3"]=FiscalXReadingAuthorization.GeneratePermission,["PosServer:Admin:ApiKeys:0:Permissions:4"]=FiscalXReadingAuthorization.ReadPermission,
             ["PosServer:Admin:ApiKeys:0:Permissions:5"]=FiscalZCounterResetAuthorization.ReadPermission,["PosServer:Admin:ApiKeys:0:Permissions:6"]=FiscalZCounterResetAuthorization.ResetPermission,
@@ -763,4 +816,9 @@ public sealed class FiscalZReadingPostgresIntegrationTests
     private static async Task<T> ScalarAsync<T>(string cs,string sql){await using var c=new NpgsqlConnection(cs);await c.OpenAsync();await using var cmd=new NpgsqlCommand(sql,c);return (T)(await cmd.ExecuteScalarAsync())!;}
     private static string FindRepositoryRoot(){var d=new DirectoryInfo(AppContext.BaseDirectory);while(d is not null){if(File.Exists(Path.Combine(d.FullName,"ExitPass.PosServer.sln")))return d.FullName;d=d.Parent;}throw new DirectoryNotFoundException();}
     private sealed record ZManifest(long Documents,long Lines,long Tenders,long Taxes,long Discounts,long Totals,long StatusHistory,long SequenceStates,long LegacyCounterStates,long FiscalStateSnapshots,long XReports,long ZReports,long ZCounterSnapshots,long ZTransitions,long ZStateVersion,long ZCounter,long Gta,long Reprints);
+
+    public void Dispose()
+    {
+        if (Directory.Exists(artifactRoot)) Directory.Delete(artifactRoot, true);
+    }
 }

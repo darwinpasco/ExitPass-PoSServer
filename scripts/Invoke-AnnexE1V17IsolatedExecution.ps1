@@ -126,7 +126,7 @@ function Invoke-IsolatedRun {
         $env:ANNEX_E1_V17_REPORT_PATH = $reportPath
         Invoke-CheckedNative 'execute Annex E-1 v1.7 integration harness' 'dotnet' @(
             'test',$testProject,'--configuration','Release','--no-build',
-            '--filter','FullyQualifiedName~AnnexE1V17IsolatedExecutionTests.LoadsAndExecutesAllIncludedV17Cases',
+            '--filter','FullyQualifiedName~AnnexE1V17IsolatedExecutionTests',
             '--logger','console;verbosity=minimal'
         ) | Out-Host
         if (-not (Test-Path -LiteralPath $reportPath -PathType Leaf)) { throw 'The integration harness did not produce its normalized report.' }

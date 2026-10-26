@@ -14,6 +14,7 @@ public sealed class AnnexE1V17IsolatedExecutionTests
     private const string ConnectionVariable = "ANNEX_E1_V17_HARNESS_DB_URL";
     private const string DatasetVariable = "ANNEX_E1_V17_DATASET_PATH";
     private const string ReportVariable = "ANNEX_E1_V17_REPORT_PATH";
+    private const string HarnessTerminalPrefix = "ANNEX-E1-V17-TERMINAL-";
 
     private static readonly IReadOnlyDictionary<string, FamilyMapping> FamilyMappings =
         new Dictionary<string, FamilyMapping>(StringComparer.Ordinal)
@@ -89,6 +90,8 @@ public sealed class AnnexE1V17IsolatedExecutionTests
             where cs.code_set_key = 'annex_e1_correction_reason'
               and cc.code_key = 'SYNTHETIC_CORRECTION'
             """));
+        Assert.Equal(19, await ScalarLongAsync(connectionString,
+            "select count(*) from pos.channel_terminals where channel_terminal_code like 'ANNEX-E1-V17-TERMINAL-%'"));
 
         var correction = Single(dataset.Semantic, "F16|013|0008");
         Assert.Equal("source_correction", Text(correction, "correction_reason"));
@@ -153,6 +156,7 @@ public sealed class AnnexE1V17IsolatedExecutionTests
             "EJ_RECORDS=148",
             "EJ_STREAMS=19",
             "FISCAL_DOCUMENTS_EXECUTED=67",
+            "SYNTHETIC_CHANNEL_TERMINALS=19",
             "LOADABLE_FAMILIES=29",
             "SEMANTIC_INSTANCES=1690",
             "STATUTORY_FINALITY_CASES=30",
@@ -161,6 +165,33 @@ public sealed class AnnexE1V17IsolatedExecutionTests
         lines.AddRange(caseIds.Select(caseId => $"{caseId}=PASS"));
         Directory.CreateDirectory(Path.GetDirectoryName(reportPath)!);
         await File.WriteAllTextAsync(reportPath, string.Join('\n', lines) + "\n", new UTF8Encoding(false));
+    }
+
+    [Fact]
+    public async Task AcceptsOwnedAndRejectsForeignSyntheticChannelTerminal()
+    {
+        var dataset = ReadDataset(RequireFile(DatasetVariable));
+        var documents = dataset.Semantic.Where(row => RowFamily(row) == "F06")
+            .OrderBy(RowKey, StringComparer.Ordinal).ToArray();
+        var source = documents.First(row =>
+            !TryNested(row.GetProperty("members"), "applied_statutory_fiscal_facts", out var value) ||
+            value.ValueKind == JsonValueKind.Null);
+        var command = BuildFiscalCommand(source);
+        var foreignSite = documents.Select(row => GuidValue(row, "site_pos_server_id"))
+            .First(siteId => siteId != command.SitePosServerId);
+        var service = new FiscalDocumentCreationService(new HarnessFiscalDocumentRepository());
+
+        var accepted = await service.CreateAsync(command);
+        var foreign = command with
+        {
+            ChannelTerminalId = HarnessTerminalId(foreignSite),
+            RuntimeTerminalRef = HarnessTerminalRef(foreignSite)
+        };
+        var result = await service.CreateAsync(foreign);
+
+        Assert.True(accepted.Succeeded);
+        Assert.False(result.Succeeded);
+        Assert.Equal(FiscalDocumentCreationErrorCode.ChannelTerminalMismatch, result.ErrorCode);
     }
 
     private static async Task CreateHarnessSchemaAndLoadAsync(string connectionString, Dataset dataset)
@@ -302,6 +333,26 @@ public sealed class AnnexE1V17IsolatedExecutionTests
                 ("created_by", Text(row, "created_by")), ("updated_by", Text(row, "updated_by")));
         }
 
+        var terminalPairs = dataset.Semantic.Where(row => RowFamily(row) == "F04")
+            .Select(row => (SiteId: GuidValue(row, "site_pos_server_id"), FiscalIdentityId: GuidValue(row, "fiscal_identity_id")))
+            .Distinct().OrderBy(pair => pair.SiteId).ToArray();
+        Assert.Equal(19, terminalPairs.Length);
+        foreach (var pair in terminalPairs)
+        {
+            var terminalRef = HarnessTerminalRef(pair.SiteId);
+            await ExecuteSqlAsync(connection, """
+                insert into pos.channel_terminals (
+                    channel_terminal_id, site_pos_server_id, channel_terminal_code, terminal_serial_number,
+                    display_name, is_logical_channel, is_physical_terminal, fiscal_identity_id,
+                    is_active, created_at, updated_at)
+                values (@id,@site,@code,@serial,@display,false,true,@identity,true,
+                    '2026-01-01T00:00:00Z','2026-01-01T00:00:00Z')
+                """, transaction,
+                ("id", HarnessTerminalId(pair.SiteId)), ("site", pair.SiteId), ("code", terminalRef),
+                ("serial", terminalRef + "-SERIAL"), ("display", "Annex E-1 v1.7 isolated harness terminal"),
+                ("identity", pair.FiscalIdentityId));
+        }
+
         var contractId = await ScalarGuidAsync(connection, transaction,
             "select fiscal_reporting_contract_version_id from pos.fiscal_reporting_contract_versions where is_active order by effective_from desc limit 1");
         var closedStatusId = await ResolveCodeAsync(connection, transaction, "fiscal_reporting_period_status", "closed");
@@ -367,7 +418,7 @@ public sealed class AnnexE1V17IsolatedExecutionTests
 
     private static async Task<(int DocumentCount, int StatutoryCount)> ExecuteFiscalDocumentsAsync(Dataset dataset)
     {
-        var service = new FiscalDocumentCreationService(new AcceptingFiscalDocumentRepository());
+        var service = new FiscalDocumentCreationService(new HarnessFiscalDocumentRepository());
         var statutoryCount = 0;
         foreach (var row in dataset.Semantic.Where(row => RowFamily(row) == "F06").OrderBy(RowKey, StringComparer.Ordinal))
         {
@@ -388,6 +439,7 @@ public sealed class AnnexE1V17IsolatedExecutionTests
 
     private static FiscalDocumentCreationCommand BuildFiscalCommand(JsonElement row)
     {
+        var sitePosServerId = GuidValue(row, "site_pos_server_id");
         var payable = Member(row, "payable_basis");
         var discountReferences = ArrayObjects(Nested(payable, "discount_references")).Select(value =>
             new FiscalDiscountReferenceInput(
@@ -452,7 +504,9 @@ public sealed class AnnexE1V17IsolatedExecutionTests
 
         return new FiscalDocumentCreationCommand(
             Text(row, "site_pos_server_ref"), Text(row, "fiscal_document_type_code_key"), basis,
-            GuidValue(row, "site_pos_server_id"), FiscalDocumentTypeCodeId: GuidValue(row, "fiscal_document_type_code_id"),
+            sitePosServerId, ChannelTerminalId: HarnessTerminalId(sitePosServerId),
+            RuntimeTerminalRef: HarnessTerminalRef(sitePosServerId),
+            FiscalDocumentTypeCodeId: GuidValue(row, "fiscal_document_type_code_id"),
             FiscalDocumentStatusCodeId: GuidValue(row, "fiscal_document_status_code_id"),
             BusinessDayDate: DateOnly.ParseExact(Text(row, "business_day_date"), "yyyy-MM-dd", CultureInfo.InvariantCulture),
             CentralPmsParkingSessionRef: NullableText(row, "central_pms_parking_session_ref"),
@@ -462,6 +516,18 @@ public sealed class AnnexE1V17IsolatedExecutionTests
             DocumentLines: lines, Tenders: tenders, TaxDetails: tax, DiscountPrivilegeDetails: discounts, Totals: totals,
             AppliedStatutoryFiscalFacts: applied);
     }
+
+    private static Guid HarnessTerminalId(Guid sitePosServerId)
+    {
+        var bytes = SHA256.HashData(Encoding.UTF8.GetBytes($"annex-e1-v1.7-harness|channel-terminal|{sitePosServerId:D}"));
+        bytes[6] = (byte)((bytes[6] & 0x0f) | 0x80);
+        bytes[8] = (byte)((bytes[8] & 0x3f) | 0x80);
+        var hex = Convert.ToHexString(bytes.AsSpan(0, 16)).ToLowerInvariant();
+        return Guid.ParseExact($"{hex[..8]}-{hex[8..12]}-{hex[12..16]}-{hex[16..20]}-{hex[20..32]}", "D");
+    }
+
+    private static string HarnessTerminalRef(Guid sitePosServerId) =>
+        HarnessTerminalPrefix + sitePosServerId.ToString("N").ToUpperInvariant();
 
     private static (int RowCount, HashSet<string> Cases) ExecuteAnnexRows(Dataset dataset)
     {
@@ -713,10 +779,20 @@ public sealed class AnnexE1V17IsolatedExecutionTests
     private sealed record FamilyMapping(string Target, string Mode);
     private sealed record Dataset(IReadOnlyList<JsonElement> All, IReadOnlyList<JsonElement> Identities, IReadOnlyList<JsonElement> Semantic, IReadOnlyList<JsonElement> Cases);
 
-    private sealed class AcceptingFiscalDocumentRepository : IFiscalDocumentRepository
+    private sealed class HarnessFiscalDocumentRepository : IFiscalDocumentRepository
     {
-        public Task<FiscalDocumentPersistenceResult> CreateAsync(FiscalDocumentDraft draft, FiscalIssuanceIdempotency idempotency, CancellationToken cancellationToken) =>
-            Task.FromResult(FiscalDocumentPersistenceResult.Created(draft));
+        public Task<FiscalDocumentPersistenceResult> CreateAsync(FiscalDocumentDraft draft, FiscalIssuanceIdempotency idempotency, CancellationToken cancellationToken)
+        {
+            if (draft.ChannelTerminalId != HarnessTerminalId(draft.SitePosServerId) ||
+                !string.Equals(draft.RuntimeTerminalRef, HarnessTerminalRef(draft.SitePosServerId), StringComparison.Ordinal))
+            {
+                throw new FiscalDocumentFiscalContextException(
+                    FiscalDocumentCreationErrorCode.ChannelTerminalMismatch,
+                    "The synthetic channel terminal does not belong to the fiscal document Site POS Server.");
+            }
+
+            return Task.FromResult(FiscalDocumentPersistenceResult.Created(draft));
+        }
 
         public Task<FiscalDocumentVoidPersistenceResult> VoidAsync(FiscalDocumentVoidCommand command, FiscalDocumentVoidIdempotency idempotency, CancellationToken cancellationToken) =>
             throw new NotSupportedException("The isolated creation-finality harness does not issue runtime void commands.");

@@ -307,6 +307,7 @@ public static class FiscalReportOutputEndpoint
         return new FiscalReportReceiptProfile(
             identity.RegisteredBusinessName,
             identity.RegisteredBusinessName,
+            identity.RegisteredBusinessAddress,
             identity.Tin,
             VatType(identity.TaxpayerClassification),
             profile.ParkingLocationDisplay,

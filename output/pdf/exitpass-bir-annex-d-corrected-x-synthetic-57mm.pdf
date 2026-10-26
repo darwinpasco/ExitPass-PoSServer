@@ -1,0 +1,192 @@
+%PDF-1.4
+1 0 obj
+<< /Type /Catalog /Pages 2 0 R >>
+endobj
+2 0 obj
+<< /Type /Pages /Kids [3 0 R] /Count 1 >>
+endobj
+3 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 161.5748 654.8386] /Resources << /Font << /F1 4 0 R >> >> /Contents 5 0 R >>
+endobj
+4 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Courier /Encoding /WinAnsiEncoding >>
+endobj
+5 0 obj
+<< /Length 2971 >>
+stream
+BT
+/F1 6.5 Tf
+8.25 TL
+1 0 0 1 5.6693 642.6693 Tm
+(        X READING REPORT) Tj
+T*
+(     \(INTERIM SALES REPORT\)) Tj
+T*
+(================================) Tj
+T*
+(--------------------------------) Tj
+T*
+(      TAXPAYER INFORMATION) Tj
+T*
+(Registered Name: Professional) Tj
+T*
+(Parking Management Corporation) Tj
+T*
+(Trade Name: Professional) Tj
+T*
+(Parking Management Corporation) Tj
+T*
+(Business Address:) Tj
+T*
+(            PITX, Paranaque City) Tj
+T*
+(TIN:             999-999-999-000) Tj
+T*
+(VAT Type:               Vat-able) Tj
+T*
+(Branch Code:        PITX Level 3) Tj
+T*
+(--------------------------------) Tj
+T*
+(        PTU INFORMATION) Tj
+T*
+(PTU Number:) Tj
+T*
+(           PTU-TEST-PITX-L3-0001) Tj
+T*
+(PTU Issue Date:       2026-01-01) Tj
+T*
+(Valid Until:          2031-01-01) Tj
+T*
+(--------------------------------) Tj
+T*
+(      MACHINE INFORMATION) Tj
+T*
+(MIN:        MIN-TEST-PITX-L3-001) Tj
+T*
+(Serial Number:) Tj
+T*
+(             SN-TEST-PITX-L3-001) Tj
+T*
+(Location:           PITX Level 3) Tj
+T*
+(--------------------------------) Tj
+T*
+(       REPORT INFORMATION) Tj
+T*
+(X Reading ID:    X-20260806-0001) Tj
+T*
+(Report Date:          2026-08-06) Tj
+T*
+(Report Time:        16:00:00 PHT) Tj
+T*
+(Fiscal Business Date: 2026-08-06) Tj
+T*
+(Period Start:) Tj
+T*
+(         2026-08-06 07:00:00 PHT) Tj
+T*
+(Observation Cutoff:) Tj
+T*
+(         2026-08-06 16:00:00 PHT) Tj
+T*
+(Scheduled Period End:) Tj
+T*
+(         2026-08-07 07:00:00 PHT) Tj
+T*
+(--------------------------------) Tj
+T*
+(       SINCE LAST Z READ) Tj
+T*
+(Last Z Counter:               10) Tj
+T*
+(Last Z Closed:) Tj
+T*
+(         2026-08-06 07:00:00 PHT) Tj
+T*
+(Beginning Invoice:       SI-0001) Tj
+T*
+(Ending Invoice:          SI-0002) Tj
+T*
+(Transactions:                  2) Tj
+T*
+(Voids:                         0) Tj
+T*
+(--------------------------------) Tj
+T*
+(         SALES SUMMARY) Tj
+T*
+(Currency:                    PHP) Tj
+T*
+(Gross Sales:          PHP 120.00) Tj
+T*
+(Discounts:             PHP 15.00) Tj
+T*
+(Void Amount:            PHP 0.00) Tj
+T*
+(--------------------------------) Tj
+T*
+(         VATABLE SALES) Tj
+T*
+(VATable Sales:         PHP 80.00) Tj
+T*
+(VAT Amount:             PHP 9.60) Tj
+T*
+(VAT Exempt Sales:      PHP 20.00) Tj
+T*
+(Zero Rated Sales:       PHP 0.00) Tj
+T*
+(--------------------------------) Tj
+T*
+(           NET SALES) Tj
+T*
+(Net Sales:            PHP 100.00) Tj
+T*
+(Total Collected:      PHP 100.00) Tj
+T*
+(--------------------------------) Tj
+T*
+(        PAYMENT METHODS) Tj
+T*
+(TYPE  COUNT               AMOUNT) Tj
+T*
+(CASH      2           PHP 100.00) Tj
+T*
+(CARD      0             PHP 0.00) Tj
+T*
+(QRPH      0             PHP 0.00) Tj
+T*
+(GCASH     0             PHP 0.00) Tj
+T*
+(MAYA      0             PHP 0.00) Tj
+T*
+(TOTAL PAYMENTS:       PHP 100.00) Tj
+T*
+() Tj
+T*
+(Printed Date:) Tj
+T*
+(         2026-08-06 16:00:00 PHT) Tj
+T*
+(Request Actor:        operator-x) Tj
+T*
+(================================) Tj
+T*
+(        NOTHING FOLLOWS) Tj
+T*
+ET
+endstream
+endobj
+xref
+0 6
+0000000000 65535 f 
+0000000009 00000 n 
+0000000058 00000 n 
+0000000115 00000 n 
+0000000251 00000 n 
+0000000346 00000 n 
+trailer
+<< /Size 6 /Root 1 0 R >>
+startxref
+3368
+%%EOF

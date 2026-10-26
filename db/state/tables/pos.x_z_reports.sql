@@ -16,6 +16,14 @@ CREATE TABLE IF NOT EXISTS pos.x_z_reports (
     reporting_timezone_name text NOT NULL,
     business_day_cutoff_local_time time without time zone NOT NULL,
     transaction_count bigint NOT NULL,
+    snapshot_detail_version text NULL,
+    issued_sales_invoice_count bigint NULL,
+    void_transaction_count bigint NULL,
+    cancellation_transaction_count bigint NULL,
+    return_transaction_count bigint NULL,
+    refund_transaction_count bigint NULL,
+    last_z_counter_value bigint NULL,
+    last_z_closed_at timestamptz NULL,
     begin_fiscal_document_id uuid NULL,
     end_fiscal_document_id uuid NULL,
     beginning_si_ref text NULL,
@@ -106,6 +114,29 @@ CREATE TABLE IF NOT EXISTS pos.x_z_reports (
     CONSTRAINT ck_x_z_reports__timezone CHECK (char_length(btrim(reporting_timezone_name)) > 0),
     CONSTRAINT ck_x_z_reports__counts CHECK (
         transaction_count >= 0 AND fiscal_sequence_gap_count >= 0
+        AND (issued_sales_invoice_count IS NULL OR issued_sales_invoice_count >= 0)
+        AND (void_transaction_count IS NULL OR void_transaction_count >= 0)
+        AND (cancellation_transaction_count IS NULL OR cancellation_transaction_count >= 0)
+        AND (return_transaction_count IS NULL OR return_transaction_count >= 0)
+        AND (refund_transaction_count IS NULL OR refund_transaction_count >= 0)
+        AND (last_z_counter_value IS NULL OR last_z_counter_value >= 0)
+        AND ((last_z_counter_value IS NULL) = (last_z_closed_at IS NULL))
+        AND (snapshot_detail_version IS NULL OR snapshot_detail_version = 'pos-server-fiscal-reporting-annex-d-source-facts:v2')
+        AND (
+            snapshot_detail_version IS NULL
+            OR (
+                issued_sales_invoice_count IS NOT NULL
+                AND void_transaction_count IS NOT NULL
+                AND issued_sales_invoice_count + void_transaction_count = transaction_count
+            )
+        )
+        AND (
+            last_z_closed_at IS NULL
+            OR (
+                report_kind_code_id = '5dc3cc94-b3ab-5582-a598-e779871fc3e2'
+                AND last_z_closed_at <= generated_at
+            )
+        )
     ),
     CONSTRAINT ck_x_z_reports__document_range CHECK (
         (begin_fiscal_document_id IS NULL AND end_fiscal_document_id IS NULL)
@@ -200,6 +231,14 @@ ALTER TABLE pos.x_z_reports
     ADD COLUMN IF NOT EXISTS reporting_timezone_name text NULL,
     ADD COLUMN IF NOT EXISTS business_day_cutoff_local_time time without time zone NULL,
     ADD COLUMN IF NOT EXISTS transaction_count bigint NULL,
+    ADD COLUMN IF NOT EXISTS snapshot_detail_version text NULL,
+    ADD COLUMN IF NOT EXISTS issued_sales_invoice_count bigint NULL,
+    ADD COLUMN IF NOT EXISTS void_transaction_count bigint NULL,
+    ADD COLUMN IF NOT EXISTS cancellation_transaction_count bigint NULL,
+    ADD COLUMN IF NOT EXISTS return_transaction_count bigint NULL,
+    ADD COLUMN IF NOT EXISTS refund_transaction_count bigint NULL,
+    ADD COLUMN IF NOT EXISTS last_z_counter_value bigint NULL,
+    ADD COLUMN IF NOT EXISTS last_z_closed_at timestamptz NULL,
     ADD COLUMN IF NOT EXISTS first_fiscal_sequence_value bigint NULL,
     ADD COLUMN IF NOT EXISTS last_fiscal_sequence_value bigint NULL,
     ADD COLUMN IF NOT EXISTS fiscal_sequence_gap_count bigint NULL,
@@ -302,7 +341,7 @@ ALTER TABLE pos.x_z_reports
     ADD CONSTRAINT ck_x_z_reports__report_number CHECK (char_length(btrim(report_number)) > 0),
     ADD CONSTRAINT ck_x_z_reports__period_range CHECK (period_end_at > period_start_at),
     ADD CONSTRAINT ck_x_z_reports__timezone CHECK (char_length(btrim(reporting_timezone_name)) > 0),
-    ADD CONSTRAINT ck_x_z_reports__counts CHECK (transaction_count >= 0 AND fiscal_sequence_gap_count >= 0),
+    ADD CONSTRAINT ck_x_z_reports__counts CHECK (transaction_count >= 0 AND fiscal_sequence_gap_count >= 0 AND (issued_sales_invoice_count IS NULL OR issued_sales_invoice_count >= 0) AND (void_transaction_count IS NULL OR void_transaction_count >= 0) AND (cancellation_transaction_count IS NULL OR cancellation_transaction_count >= 0) AND (return_transaction_count IS NULL OR return_transaction_count >= 0) AND (refund_transaction_count IS NULL OR refund_transaction_count >= 0) AND (last_z_counter_value IS NULL OR last_z_counter_value >= 0) AND ((last_z_counter_value IS NULL) = (last_z_closed_at IS NULL)) AND (snapshot_detail_version IS NULL OR snapshot_detail_version = 'pos-server-fiscal-reporting-annex-d-source-facts:v2') AND (snapshot_detail_version IS NULL OR (issued_sales_invoice_count IS NOT NULL AND void_transaction_count IS NOT NULL AND issued_sales_invoice_count + void_transaction_count = transaction_count)) AND (last_z_closed_at IS NULL OR (report_kind_code_id = '5dc3cc94-b3ab-5582-a598-e779871fc3e2' AND last_z_closed_at <= generated_at))),
     ADD CONSTRAINT ck_x_z_reports__document_range CHECK ((begin_fiscal_document_id IS NULL AND end_fiscal_document_id IS NULL) OR (begin_fiscal_document_id IS NOT NULL AND end_fiscal_document_id IS NOT NULL)),
     ADD CONSTRAINT ck_x_z_reports__sequence_range CHECK ((first_fiscal_sequence_value IS NULL AND last_fiscal_sequence_value IS NULL) OR (first_fiscal_sequence_value > 0 AND last_fiscal_sequence_value >= first_fiscal_sequence_value)),
     ADD CONSTRAINT ck_x_z_reports__si_refs CHECK ((beginning_si_ref IS NULL AND ending_si_ref IS NULL) OR (char_length(btrim(beginning_si_ref)) > 0 AND char_length(btrim(ending_si_ref)) > 0)),
@@ -356,3 +395,11 @@ COMMENT ON COLUMN pos.x_z_reports.current_grand_total_amount_minor_units IS 'Cur
 COMMENT ON COLUMN pos.x_z_reports.present_grand_total_amount_minor_units IS 'Resulting GTA, constrained as previous plus current. Preserved column name for additive compatibility.';
 COMMENT ON COLUMN pos.x_z_reports.refund_amount_minor_units IS 'Reserved first-class non-negative category total. Future runtime fails closed until refund period/sign rules are governed.';
 COMMENT ON COLUMN pos.x_z_reports.service_charge_amount_minor_units IS 'Reserved first-class category total. Future runtime fails closed until a governed source classification exists.';
+COMMENT ON COLUMN pos.x_z_reports.issued_sales_invoice_count IS 'Additive immutable count of issued or recorded Sales Invoices included in a v2-or-later snapshot. NULL means the historical snapshot predates this fact.';
+COMMENT ON COLUMN pos.x_z_reports.snapshot_detail_version IS 'Version marker for additive immutable snapshot facts. NULL identifies a historical snapshot created before the Annex D source-fact extension.';
+COMMENT ON COLUMN pos.x_z_reports.void_transaction_count IS 'Additive immutable count of voided Sales Invoices included in a v2-or-later snapshot. NULL means the historical snapshot predates this fact.';
+COMMENT ON COLUMN pos.x_z_reports.cancellation_transaction_count IS 'Reserved additive immutable cancellation count. NULL means no governed cancellation source fact was captured; NULL must not be presented as zero.';
+COMMENT ON COLUMN pos.x_z_reports.return_transaction_count IS 'Reserved additive immutable return count. NULL means no governed return source fact was captured; NULL must not be presented as zero.';
+COMMENT ON COLUMN pos.x_z_reports.refund_transaction_count IS 'Reserved additive immutable refund count. NULL means no governed refund source fact was captured; NULL must not be presented as zero.';
+COMMENT ON COLUMN pos.x_z_reports.last_z_counter_value IS 'For X Reading only, the prior committed Z counter observed when the immutable X snapshot was created. NULL means no prior-Z evidence was captured.';
+COMMENT ON COLUMN pos.x_z_reports.last_z_closed_at IS 'For X Reading only, the prior committed Z close timestamp captured with last_z_counter_value.';

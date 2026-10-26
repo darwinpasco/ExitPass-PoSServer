@@ -38,6 +38,13 @@ public sealed class FiscalReportPresentationService
         {
             return Malformed();
         }
+        if (!ValidSnapshotDetails(record.SnapshotDetailVersion, record.DocumentCounts) ||
+            !ValidDocumentCounts(record.DocumentCounts, record.QualifyingDocumentCount) ||
+            record.PriorZ is { ZCounterValue: < 0 } ||
+            record.PriorZ is { ClosedAt: var closedAt } && closedAt > record.GeneratedAt)
+        {
+            return Malformed();
+        }
 
         return Build(
             FiscalReportPresentationContract.XPresentationVersion,
@@ -75,16 +82,22 @@ public sealed class FiscalReportPresentationService
             [
                 new("siteIdentity", "not_recorded"),
                 new("closeTimestamp", "not_applicable"),
-                new("zCounter", "not_recorded"),
+                new("zCounter", record.PriorZ is null ? "not_available" : "recorded_at_observation"),
                 new("resetCounter", "not_recorded"),
-                new("grandTotalObservation", "not_recorded")
+                new("grandTotalObservation", "not_recorded"),
+                new("cashierAccountability", "authoritative_source_required"),
+                new("returnAndRefundCounts", "authoritative_source_required")
             ],
             [
                 "INTERIM READ-ONLY OBSERVATION",
                 "THIS X READING DOES NOT CLOSE THE FISCAL PERIOD",
                 "FISCAL COUNTERS AND GRAND TOTAL STATE ARE UNCHANGED"
             ],
-            record.Immutable);
+            record.Immutable,
+            record.DocumentCounts,
+            record.PriorZ,
+            record.RequestedByRef,
+            record.SnapshotDetailVersion);
     }
 
     public FiscalReportPresentationResult Present(FiscalZReadingRecord record)
@@ -127,6 +140,11 @@ public sealed class FiscalReportPresentationService
             counter.CurrentPeriodGrandTotalAmountMinorUnits != record.Amounts.NetSalesAmountMinorUnits ||
             !TryAdd(counter.PreviousGrandTotalAmountMinorUnits, counter.CurrentPeriodGrandTotalAmountMinorUnits, out var gta) ||
             gta != counter.ResultingGrandTotalAmountMinorUnits)
+        {
+            return Malformed();
+        }
+        if (!ValidSnapshotDetails(record.SnapshotDetailVersion, record.DocumentCounts) ||
+            !ValidDocumentCounts(record.DocumentCounts, record.QualifyingDocumentCount))
         {
             return Malformed();
         }
@@ -173,13 +191,22 @@ public sealed class FiscalReportPresentationService
                 counter.ResultingStateVersion),
             record.CorrelationId,
             record.SupportReference,
-            [new("siteIdentity", "not_recorded")],
+            [
+                new("siteIdentity", "not_recorded"),
+                new("cashierAccountability", "authoritative_source_required"),
+                new("categorySpecificVatAdjustments", "authoritative_source_required"),
+                new("returnAndRefundCounts", "authoritative_source_required")
+            ],
             [
                 "IMMUTABLE CLOSED-PERIOD SNAPSHOT",
                 "ONE-TIME Z CLOSE COMMITTED",
                 "READBACK AND EXPORT DO NOT RECOMPUTE FISCAL FACTS"
             ],
-            record.Immutable);
+            record.Immutable,
+            record.DocumentCounts,
+            null,
+            record.RequestedByRef,
+            record.SnapshotDetailVersion);
     }
 
     private static FiscalReportPresentationResult? ValidateCommon(
@@ -322,7 +349,11 @@ public sealed class FiscalReportPresentationService
         string support,
         IReadOnlyList<FiscalReportFieldPosture> postures,
         IReadOnlyList<string> statements,
-        bool immutable)
+        bool immutable,
+        FiscalReportDocumentCounts? documentCounts,
+        FiscalXReadingPriorZSnapshot? priorZ,
+        string requestedByRef,
+        string? snapshotDetailVersion)
     {
         var tenderRows = tenders
             .OrderBy(item => item.Classification, StringComparer.Ordinal)
@@ -405,7 +436,11 @@ public sealed class FiscalReportPresentationService
             support,
             postures.OrderBy(item => item.Field, StringComparer.Ordinal).ToArray(),
             statements,
-            immutable);
+            immutable,
+            documentCounts,
+            priorZ,
+            requestedByRef,
+            snapshotDetailVersion);
         var snapshotIdentity = FiscalReportOutputRenderer.ComputeSnapshotIdentity(model);
         return FiscalReportPresentationResult.Success(model with { SnapshotIdentity = snapshotIdentity });
     }
@@ -428,6 +463,28 @@ public sealed class FiscalReportPresentationService
             return false;
         }
     }
+
+    private static bool ValidDocumentCounts(FiscalReportDocumentCounts? counts, long qualifyingDocumentCount)
+    {
+        if (counts is null) return true;
+        if (counts.IssuedSalesInvoiceCount < 0 || counts.VoidTransactionCount < 0 ||
+            counts.CancellationTransactionCount is < 0 || counts.ReturnTransactionCount is < 0 ||
+            counts.RefundTransactionCount is < 0)
+            return false;
+        try
+        {
+            return checked(counts.IssuedSalesInvoiceCount + counts.VoidTransactionCount) == qualifyingDocumentCount;
+        }
+        catch (OverflowException)
+        {
+            return false;
+        }
+    }
+
+    private static bool ValidSnapshotDetails(string? version, FiscalReportDocumentCounts? counts) =>
+        counts is null
+            ? version is null
+            : string.Equals(version, FiscalXReadingContract.SnapshotDetailVersion, StringComparison.Ordinal);
 
     private static FiscalReportPresentationResult Malformed() =>
         FiscalReportPresentationResult.Failure(

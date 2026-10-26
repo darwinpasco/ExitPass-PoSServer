@@ -43,6 +43,8 @@ public sealed class FiscalXReadingRuntimeTests
             [Document("recorded", sequence: 1)], [], "PHP");
 
         Assert.Equal(1, aggregate.QualifyingDocumentCount);
+        Assert.Equal(1, aggregate.DocumentCounts.IssuedSalesInvoiceCount);
+        Assert.Equal(0, aggregate.DocumentCounts.VoidTransactionCount);
         Assert.Equal(10_000, aggregate.Amounts.GrossSalesAmountMinorUnits);
         Assert.Equal(8_000, aggregate.Amounts.NetSalesAmountMinorUnits);
         Assert.Equal(2_000, aggregate.Amounts.DiscountAmountMinorUnits);
@@ -255,6 +257,51 @@ public sealed class FiscalXReadingRuntimeTests
         Assert.Equal(1, aggregate.QualifyingDocumentCount);
         Assert.Equal(0, aggregate.Amounts.NetSalesAmountMinorUnits);
         Assert.Equal(8_000, aggregate.Amounts.VoidAmountMinorUnits);
+        Assert.Equal(0, aggregate.DocumentCounts.IssuedSalesInvoiceCount);
+        Assert.Equal(1, aggregate.DocumentCounts.VoidTransactionCount);
+        Assert.Null(aggregate.DocumentCounts.ReturnTransactionCount);
+    }
+
+    [Fact]
+    public void VatUsesSumOfAuthoritativeInvoiceAmountsNotRateAppliedToAggregateBase()
+    {
+        FiscalXReadingSourceDocument SmallInvoice(long sequence) => Document("issued", sequence) with
+        {
+            Lines = [new("parking_fee", 4, 0, 0, 4, "PHP")],
+            Tenders = [new("cash", 4, "PHP")],
+            Taxes = [new("vatable", false, 4, 0, "PHP")],
+            Discounts = []
+        };
+
+        var aggregate = new FiscalXReadingAggregationService().Aggregate(
+            [SmallInvoice(1), SmallInvoice(2)], [], "PHP");
+
+        Assert.Equal(8, aggregate.Amounts.VatableSalesAmountMinorUnits);
+        Assert.Equal(0, aggregate.Amounts.VatAmountMinorUnits);
+        Assert.Equal(8, aggregate.Amounts.NetSalesAmountMinorUnits);
+        Assert.Equal(1m, decimal.Round(8m * 0.12m, 0, MidpointRounding.AwayFromZero));
+    }
+
+    [Fact]
+    public void InvalidInvoiceLineOrTaxEvidenceFailsClosedBeforeAggregation()
+    {
+        var invalidLine = Document("issued", 1) with
+        {
+            Lines = [new("parking_fee", 10_000, 2_000, 1, 8_000, "PHP")],
+            Taxes = [new("vatable", false, 8_000, 1, "PHP")]
+        };
+        var invalidTax = Document("issued", 2) with
+        {
+            Lines = [new("parking_fee", 10_000, 2_000, 0, 8_000, "PHP")],
+            Taxes = [new("vatable", false, 8_000, 1, "PHP")]
+        };
+
+        Assert.Equal(FiscalXReadingOutcome.ReconciliationFailure,
+            Assert.Throws<FiscalXReadingSafeException>(() =>
+                new FiscalXReadingAggregationService().Aggregate([invalidLine], [], "PHP")).Outcome);
+        Assert.Equal(FiscalXReadingOutcome.ReconciliationFailure,
+            Assert.Throws<FiscalXReadingSafeException>(() =>
+                new FiscalXReadingAggregationService().Aggregate([invalidTax], [], "PHP")).Outcome);
     }
 
     [Theory]
