@@ -2,12 +2,12 @@ namespace ExitPass.PosServer.Runtime.FiscalReports;
 
 public static class FiscalReportPresentationContract
 {
-    public const string XPresentationVersion = "fiscal-x-reading-presentation-json-v1";
-    public const string ZPresentationVersion = "fiscal-z-reading-presentation-json-v1";
-    public const string JsonExportVersion = "fiscal-x-z-reading-export-json-v1";
-    public const string CsvExportVersion = "fiscal-x-z-reading-export-csv-v1";
-    public const string PdfExportVersion = "fiscal-x-z-reading-receipt-pdf-v1";
-    public const string OutputIdentityVersion = "fiscal-report-output:sha256:v1";
+    public const string XPresentationVersion = "fiscal-x-reading-presentation-json-v2";
+    public const string ZPresentationVersion = "fiscal-z-reading-presentation-json-v2";
+    public const string JsonExportVersion = "fiscal-x-z-reading-export-json-v2";
+    public const string CsvExportVersion = "fiscal-x-z-reading-export-csv-v2";
+    public const string PdfExportVersion = "fiscal-x-z-reading-receipt-pdf-v2";
+    public const string OutputIdentityVersion = "fiscal-report-output:sha256:v2";
 }
 
 public sealed record FiscalReportPresentationModel(
@@ -48,7 +48,11 @@ public sealed record FiscalReportPresentationModel(
     string SupportReference,
     IReadOnlyList<FiscalReportFieldPosture> FieldPostures,
     IReadOnlyList<string> Statements,
-    bool Immutable);
+    bool Immutable,
+    FiscalReportDocumentCounts? DocumentCounts,
+    FiscalXReadingPriorZSnapshot? PriorZ,
+    string RequestedByRef,
+    string? SourceDetailContractVersion);
 
 public sealed record FiscalReportTenderPresentation(
     string Classification,
@@ -153,6 +157,7 @@ public sealed record FiscalReportOutputArtifact(
 public sealed record FiscalReportReceiptProfile(
     string? RegisteredName,
     string? TradeName,
+    string? RegisteredAddress,
     string? Tin,
     string? VatType,
     string? BranchCode,

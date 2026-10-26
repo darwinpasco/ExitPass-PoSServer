@@ -78,7 +78,10 @@ public sealed record FiscalZReadingRecord(
     string SupportReference,
     bool Immutable,
     long PeriodSequence = 0,
-    string ReportStatus = "COMMITTED");
+    string ReportStatus = "COMMITTED",
+    FiscalReportDocumentCounts? DocumentCounts = null,
+    string RequestedByRef = "unavailable",
+    string? SnapshotDetailVersion = null);
 
 public enum FiscalZReadingOutcome
 {

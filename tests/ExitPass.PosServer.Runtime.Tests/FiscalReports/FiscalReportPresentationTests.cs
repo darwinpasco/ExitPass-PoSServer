@@ -82,7 +82,7 @@ public sealed class FiscalReportPresentationTests
         Assert.NotEqual(json1.OutputIdentity, csv1.OutputIdentity);
         Assert.NotEqual(csv1.OutputIdentity, pdf1.OutputIdentity);
         Assert.NotEqual(presentationJson.OutputIdentity, json1.OutputIdentity);
-        Assert.StartsWith("fiscal-report-output:sha256:v1:", json1.OutputIdentity, StringComparison.Ordinal);
+        Assert.StartsWith("fiscal-report-output:sha256:v2:", json1.OutputIdentity, StringComparison.Ordinal);
         Assert.Equal("application/json; charset=utf-8", presentationJson.ContentType);
         Assert.Equal("application/json; charset=utf-8", json1.ContentType);
         Assert.Equal("x-reading-x-20260806-0001.json", xJson.FileName);
@@ -112,11 +112,11 @@ public sealed class FiscalReportPresentationTests
         AssertInOrder(x,
             "TAXPAYER INFORMATION", "PTU INFORMATION", "MACHINE INFORMATION", "REPORT INFORMATION",
             "SINCE LAST Z READ", "SALES SUMMARY", "VATABLE SALES",
-            "NET SALES", "PAYMENT METHODS", "Printed Date", "Operator", "NOTHING FOLLOWS");
+            "NET SALES", "PAYMENT METHODS", "Printed Date", "Request Actor", "NOTHING FOLLOWS");
         AssertInOrder(z,
             "TAXPAYER INFORMATION", "PTU INFORMATION", "MACHINE INFORMATION", "REPORT INFORMATION",
             "COUNTERS", "SALES SUMMARY", "VATABLE SALES", "NET SALES",
-            "PAYMENT METHODS", "Printed Date", "Operator", "NOTHING FOLLOWS");
+            "PAYMENT METHODS", "Printed Date", "Request Actor", "NOTHING FOLLOWS");
 
         foreach (var report in new[] { x, z })
         foreach (var method in new[] { "CASH", "CARD", "QRPH", "GCASH", "MAYA" })
@@ -149,14 +149,24 @@ public sealed class FiscalReportPresentationTests
         Assert.Contains("Vat-able", x, StringComparison.Ordinal);
         Assert.Contains("Branch Code", x, StringComparison.Ordinal);
         Assert.Contains("PITX Level 3", x, StringComparison.Ordinal);
+        Assert.Contains("Business Address", x, StringComparison.Ordinal);
+        Assert.Contains("PITX, Paranaque City", x, StringComparison.Ordinal);
         Assert.Contains("PTU-TEST-PITX-L3-0001", compactX, StringComparison.Ordinal);
         Assert.Contains("PTU Issue Date:       2026-01-01", x, StringComparison.Ordinal);
         Assert.Contains("Valid Until:          2031-01-01", x, StringComparison.Ordinal);
-        Assert.Contains("Last Z Counter:             0000", x, StringComparison.Ordinal);
-        Assert.Contains("Last Z Closed:              0000", x, StringComparison.Ordinal);
-        Assert.Contains("Voids:                         0", x, StringComparison.Ordinal);
-        Assert.Contains("Cancelled:                     0", x, StringComparison.Ordinal);
-        Assert.Contains("Returns:                       0", x, StringComparison.Ordinal);
+        Assert.Contains("Last Z Counter", x, StringComparison.Ordinal);
+        Assert.Contains("2026-08-06 07:00:00 PHT", x, StringComparison.Ordinal);
+        Assert.Contains("Transactions", x, StringComparison.Ordinal);
+        Assert.Contains("Voids", x, StringComparison.Ordinal);
+        Assert.DoesNotContain("Cancelled", x, StringComparison.Ordinal);
+        Assert.DoesNotContain("Returns:", x, StringComparison.Ordinal);
+        Assert.Contains("Observation Cutoff", x, StringComparison.Ordinal);
+        Assert.Contains("Scheduled Period End", x, StringComparison.Ordinal);
+        Assert.Contains("GRAND TOTAL AMOUNT (GTA)", z, StringComparison.Ordinal);
+        Assert.Contains("Previous GTA", z, StringComparison.Ordinal);
+        Assert.Contains("Period Net GTA", z, StringComparison.Ordinal);
+        Assert.Contains("Present GTA", z, StringComparison.Ordinal);
+        Assert.DoesNotContain("ACCUMULATED SALES", z, StringComparison.Ordinal);
         foreach (var report in new[] { x, z })
         {
             Assert.DoesNotContain("NOT RECORDED", report, StringComparison.Ordinal);
@@ -165,7 +175,8 @@ public sealed class FiscalReportPresentationTests
             Assert.DoesNotContain("Print Contract", report, StringComparison.Ordinal);
             Assert.DoesNotContain(XRecord().FiscalIdentityId.ToString("D"), report, StringComparison.OrdinalIgnoreCase);
             Assert.DoesNotContain(XRecord().SitePosServerId.ToString("D"), report, StringComparison.OrdinalIgnoreCase);
-            Assert.Contains("Operator:                 SYSTEM", report, StringComparison.Ordinal);
+            Assert.Contains("Request Actor", report, StringComparison.Ordinal);
+            Assert.Contains(report == x ? "operator-x" : "operator-z", report, StringComparison.Ordinal);
         }
         Assert.Equal(Amounts(), service.Present(XRecord()).Presentation?.Amounts);
         Assert.Equal(ZRecord().CounterSnapshot.ResultingZCounterValue, service.Present(ZRecord()).Presentation?.Counters?.ResultingZCounterValue);
@@ -262,6 +273,46 @@ public sealed class FiscalReportPresentationTests
     }
 
     [Fact]
+    public void LegacySnapshotDoesNotInventPriorZOrUnsupportedCounts()
+    {
+        var legacy = XRecord() with
+        {
+            DocumentCounts = null,
+            PriorZ = null,
+            RequestedByRef = "unavailable",
+            SnapshotDetailVersion = null
+        };
+        var receipt = Text(new FiscalReportOutputRenderer(),
+            new FiscalReportPresentationService().Present(legacy).Presentation!);
+
+        Assert.Contains("Prior Z", receipt, StringComparison.Ordinal);
+        Assert.Contains("UNAVAILABLE", receipt, StringComparison.Ordinal);
+        Assert.Contains("Qualifying Documents", receipt, StringComparison.Ordinal);
+        Assert.DoesNotContain("Voids:", receipt, StringComparison.Ordinal);
+        Assert.DoesNotContain("Cancelled", receipt, StringComparison.Ordinal);
+        Assert.DoesNotContain("Returns:", receipt, StringComparison.Ordinal);
+        Assert.DoesNotContain("Request Actor", receipt, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void SnapshotDetailVersionMustMatchAdditiveFacts()
+    {
+        var service = new FiscalReportPresentationService();
+
+        Assert.Equal(FiscalReportPresentationErrorCode.MalformedSnapshot,
+            service.Present(XRecord() with { SnapshotDetailVersion = null }).ErrorCode);
+        Assert.Equal(FiscalReportPresentationErrorCode.MalformedSnapshot,
+            service.Present(XRecord() with { SnapshotDetailVersion = "unsupported:v3" }).ErrorCode);
+        Assert.Equal(FiscalReportPresentationErrorCode.MalformedSnapshot,
+            service.Present(XRecord() with
+            {
+                DocumentCounts = null,
+                PriorZ = null,
+                SnapshotDetailVersion = FiscalXReadingContract.SnapshotDetailVersion
+            }).ErrorCode);
+    }
+
+    [Fact]
     public void FormattingIsInvariantAndSupportsExplicitNegativeAndZeroValues()
     {
         Assert.Equal("PHP 0.00", FiscalReportOutputRenderer.FormatAmount(0, "PHP"));
@@ -308,6 +359,7 @@ public sealed class FiscalReportPresentationTests
     private static FiscalReportReceiptProfile ReceiptProfile() => new(
         "Professional Parking Management Corporation",
         "Professional Parking Management Corporation",
+        "PITX, Paranaque City",
         "999-999-999-000",
         "Vat-able",
         "PITX Level 3",
@@ -349,7 +401,11 @@ public sealed class FiscalReportPresentationTests
         "X-20260806-0001",
         true,
         7,
-        "COMMITTED");
+        "COMMITTED",
+        new(2, 0, null, null, null),
+        new(10, DateTimeOffset.Parse("2026-08-05T23:00:00Z")),
+        "operator-x",
+        FiscalXReadingContract.SnapshotDetailVersion);
 
     private static FiscalZReadingRecord ZRecord()
     {
@@ -386,7 +442,10 @@ public sealed class FiscalReportPresentationTests
             "Z-20260806-00000012",
             true,
             7,
-            "COMMITTED");
+            "COMMITTED",
+            new(2, 0, null, null, null),
+            "operator-z",
+            FiscalXReadingContract.SnapshotDetailVersion);
     }
 
     private static FiscalXReadingAmounts Amounts() => new(

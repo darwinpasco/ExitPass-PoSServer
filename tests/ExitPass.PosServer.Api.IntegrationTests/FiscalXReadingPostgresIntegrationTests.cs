@@ -2,6 +2,7 @@ using System.Net;
 using System.Net.Http.Json;
 using ExitPass.PosServer.Api.FiscalDocuments;
 using ExitPass.PosServer.Api.FiscalReports;
+using ExitPass.PosServer.Runtime.FiscalReports;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Hosting.Server;
@@ -13,13 +14,14 @@ using Xunit;
 
 namespace ExitPass.PosServer.Api.IntegrationTests;
 
-public sealed class FiscalXReadingPostgresIntegrationTests
+public sealed class FiscalXReadingPostgresIntegrationTests : IDisposable
 {
     private const string ConnectionVariable = "POSSERVER_X_READING_TEST_DB_URL";
     private static readonly Guid SiteId = Guid.Parse("73000000-0000-4000-8000-000000000001");
     private static readonly Guid IdentityId = Guid.Parse("73000000-0000-4000-8000-000000000002");
     private static readonly Guid CurrentPeriodId = Guid.Parse("73000000-0000-4000-8000-000000000019");
     private static readonly DateTimeOffset ObservedAt = DateTimeOffset.Parse("2026-08-03T12:00:00Z");
+    private readonly string artifactRoot = Path.Combine(Path.GetTempPath(), "exitpass-x-reading-artifacts-" + Guid.NewGuid().ToString("N"));
 
     [Fact]
     public async Task XReadingApiPersistsReplaysConflictsReadsAndPreservesFiscalState()
@@ -46,6 +48,10 @@ public sealed class FiscalXReadingPostgresIntegrationTests
         Assert.Equal(HttpStatusCode.Created, createdResponse.StatusCode);
         Assert.NotNull(created?.XReading);
         Assert.Equal(2, created.XReading.QualifyingDocumentCount);
+        Assert.Equal(FiscalXReadingContract.SnapshotDetailVersion, created.XReading.SnapshotDetailVersion);
+        Assert.Equal(new FiscalReportDocumentCounts(2, 0, null, null, null), created.XReading.DocumentCounts);
+        Assert.Null(created.XReading.PriorZ);
+        Assert.Equal("x-proof-service", created.XReading.RequestedByRef);
         Assert.Equal(20_714, created.XReading.Amounts.GrossSalesAmountMinorUnits);
         Assert.Equal(16_571, created.XReading.Amounts.NetSalesAmountMinorUnits);
         Assert.Equal(2_143, created.XReading.Amounts.PwdDiscountAmountMinorUnits);
@@ -85,6 +91,20 @@ public sealed class FiscalXReadingPostgresIntegrationTests
         Assert.Equal(created.XReading.Amounts, read?.XReading?.Amounts);
         Assert.Equal(created.XReading.Tenders, read?.XReading?.Tenders);
         Assert.Equal(created.XReading.Discounts, read?.XReading?.Discounts);
+        Assert.Equal(created.XReading.DocumentCounts, read?.XReading?.DocumentCounts);
+        Assert.Equal(created.XReading.SnapshotDetailVersion, read?.XReading?.SnapshotDetailVersion);
+        Assert.Equal(1L, await ScalarAsync<long>(connectionString, $"""
+            SELECT count(*) FROM pos.x_z_reports
+            WHERE x_z_report_id='{created.XReading.FiscalReportId:D}'
+              AND snapshot_detail_version='{FiscalXReadingContract.SnapshotDetailVersion}'
+              AND issued_sales_invoice_count=2
+              AND void_transaction_count=0
+              AND cancellation_transaction_count IS NULL
+              AND return_transaction_count IS NULL
+              AND refund_transaction_count IS NULL
+              AND last_z_counter_value IS NULL
+              AND last_z_closed_at IS NULL
+            """));
 
         var after = await ManifestAsync(connectionString);
         Assert.Equal(before, after with { XRequests = 0, XReports = 0, TenderBreakdowns = 0, DiscountBreakdowns = 0, FiscalRanges = 0, AuditRows = 0 });
@@ -108,6 +128,7 @@ public sealed class FiscalXReadingPostgresIntegrationTests
         Assert.Equal(0, await ScalarAsync<long>(connectionString, "SELECT count(*) FROM pos.fiscal_report_requests WHERE operation_idempotency_key='x-proof-rejected'"));
 
         await AssertImmutableAsync(connectionString, created.XReading.FiscalReportId);
+        await ProveSnapshotDetailConstraintAndLegacyCompatibilityAsync(connectionString, created.XReading.FiscalReportId);
     }
 
     [Fact]
@@ -234,6 +255,87 @@ public sealed class FiscalXReadingPostgresIntegrationTests
         Assert.Equal("23514", exception.SqlState);
     }
 
+    private static async Task ProveSnapshotDetailConstraintAndLegacyCompatibilityAsync(string connectionString, Guid sourceReportId)
+    {
+        var legacyRequestId = Guid.Parse("73000000-0000-4000-8000-000000000091");
+        var legacyReportId = Guid.Parse("73000000-0000-4000-8000-000000000092");
+        await ExecuteAsync(connectionString, $"""
+            INSERT INTO pos.fiscal_report_requests(
+                fiscal_report_request_id,fiscal_reporting_contract_version_id,fiscal_reporting_period_id,
+                site_pos_server_id,requested_by_channel_terminal_id,report_type_code_id,report_status_code_id,
+                operation_idempotency_key,semantic_request_hash,semantic_hash_version,business_day_date,
+                requested_at,requested_by_ref,service_identity_ref,created_at,updated_at)
+            SELECT '{legacyRequestId:D}',fiscal_reporting_contract_version_id,fiscal_reporting_period_id,
+                site_pos_server_id,requested_by_channel_terminal_id,report_type_code_id,report_status_code_id,
+                'legacy-snapshot-compatibility',repeat('a',64),semantic_hash_version,business_day_date,
+                requested_at,requested_by_ref,service_identity_ref,created_at,updated_at
+            FROM pos.fiscal_report_requests
+            WHERE fiscal_report_request_id=(SELECT fiscal_report_request_id FROM pos.x_z_reports WHERE x_z_report_id='{sourceReportId:D}');
+
+            INSERT INTO pos.x_z_reports
+            SELECT (jsonb_populate_record(NULL::pos.x_z_reports,
+                to_jsonb(source_row) || jsonb_build_object(
+                    'x_z_report_id','{legacyReportId:D}',
+                    'fiscal_report_request_id','{legacyRequestId:D}',
+                    'report_number','X-LEGACY-SNAPSHOT-COMPATIBILITY',
+                    'snapshot_detail_version',NULL,
+                    'issued_sales_invoice_count',NULL,
+                    'void_transaction_count',NULL,
+                    'cancellation_transaction_count',NULL,
+                    'return_transaction_count',NULL,
+                    'refund_transaction_count',NULL,
+                    'last_z_counter_value',NULL,
+                    'last_z_closed_at',NULL))).*
+            FROM pos.x_z_reports source_row
+            WHERE x_z_report_id='{sourceReportId:D}';
+            """);
+
+        Assert.Equal(1L, await ScalarAsync<long>(connectionString, $"""
+            SELECT count(*) FROM pos.x_z_reports
+            WHERE x_z_report_id='{legacyReportId:D}'
+              AND snapshot_detail_version IS NULL
+              AND issued_sales_invoice_count IS NULL
+              AND void_transaction_count IS NULL
+              AND cancellation_transaction_count IS NULL
+              AND return_transaction_count IS NULL
+              AND refund_transaction_count IS NULL
+              AND last_z_counter_value IS NULL
+              AND last_z_closed_at IS NULL
+            """));
+        await AssertImmutableAsync(connectionString, legacyReportId);
+
+        var invalidRequestId = Guid.Parse("73000000-0000-4000-8000-000000000093");
+        var invalidReportId = Guid.Parse("73000000-0000-4000-8000-000000000094");
+        var invalid = await Assert.ThrowsAsync<PostgresException>(() => ExecuteAsync(connectionString, $"""
+            INSERT INTO pos.fiscal_report_requests(
+                fiscal_report_request_id,fiscal_reporting_contract_version_id,fiscal_reporting_period_id,
+                site_pos_server_id,requested_by_channel_terminal_id,report_type_code_id,report_status_code_id,
+                operation_idempotency_key,semantic_request_hash,semantic_hash_version,business_day_date,
+                requested_at,requested_by_ref,service_identity_ref,created_at,updated_at)
+            SELECT '{invalidRequestId:D}',fiscal_reporting_contract_version_id,fiscal_reporting_period_id,
+                site_pos_server_id,requested_by_channel_terminal_id,report_type_code_id,report_status_code_id,
+                'invalid-snapshot-detail',repeat('b',64),semantic_hash_version,business_day_date,
+                requested_at,requested_by_ref,service_identity_ref,created_at,updated_at
+            FROM pos.fiscal_report_requests
+            WHERE fiscal_report_request_id=(SELECT fiscal_report_request_id FROM pos.x_z_reports WHERE x_z_report_id='{sourceReportId:D}');
+
+            INSERT INTO pos.x_z_reports
+            SELECT (jsonb_populate_record(NULL::pos.x_z_reports,
+                to_jsonb(source_row) || jsonb_build_object(
+                    'x_z_report_id','{invalidReportId:D}',
+                    'fiscal_report_request_id','{invalidRequestId:D}',
+                    'report_number','X-INVALID-SNAPSHOT-DETAIL',
+                    'snapshot_detail_version','{FiscalXReadingContract.SnapshotDetailVersion}',
+                    'issued_sales_invoice_count',NULL))).*
+            FROM pos.x_z_reports source_row
+            WHERE x_z_report_id='{sourceReportId:D}';
+            """));
+        Assert.Equal("23514", invalid.SqlState);
+        Assert.Equal("ck_x_z_reports__counts", invalid.ConstraintName);
+        Assert.Equal(0L, await ScalarAsync<long>(connectionString,
+            $"SELECT count(*) FROM pos.fiscal_report_requests WHERE fiscal_report_request_id='{invalidRequestId:D}'"));
+    }
+
     private static async Task<XManifest> ManifestAsync(string connectionString) => new(
         await ScalarAsync<long>(connectionString, "SELECT count(*) FROM pos.fiscal_documents"),
         await ScalarAsync<long>(connectionString, "SELECT count(*) FROM pos.fiscal_document_status_history"),
@@ -258,9 +360,9 @@ public sealed class FiscalXReadingPostgresIntegrationTests
         foreach (var file in Directory.GetFiles(Path.Combine(root, "db", "reference-data", "controlled-codes", "generated", "sql"), "*.sql").OrderBy(x => x, StringComparer.Ordinal)) await ExecuteFileAsync(connectionString, file);
     }
 
-    private static async Task<WebApplication> StartApiAsync(string connectionString)
+    private async Task<WebApplication> StartApiAsync(string connectionString)
     {
-        var builder = WebApplication.CreateBuilder(); builder.WebHost.UseKestrel().UseUrls("http://127.0.0.1:0"); builder.Configuration.AddInMemoryCollection(new Dictionary<string, string?> { { "ConnectionStrings:PosServer", connectionString }, { "PosServer:Admin:ApiKeys:0:Principal", "x-proof-service" }, { "PosServer:Admin:ApiKeys:0:Key", "synthetic-x-proof-key" }, { "PosServer:Admin:ApiKeys:0:Permissions:0", FiscalXReadingAuthorization.GeneratePermission }, { "PosServer:Admin:ApiKeys:0:Permissions:1", FiscalXReadingAuthorization.ReadPermission }, { "PosServer:Admin:ApiKeys:0:SitePosServerIds:0", SiteId.ToString("D") }, { "PosServer:Admin:ApiKeys:0:FiscalIdentityIds:0", IdentityId.ToString("D") } }); builder.Services.AddPosServerFiscalDocumentApi(builder.Configuration); var app = builder.Build(); app.UseAuthentication(); app.UseAuthorization(); app.MapFiscalXReadingEndpoints(); await app.StartAsync(); return app;
+        var builder = WebApplication.CreateBuilder(); builder.WebHost.UseKestrel().UseUrls("http://127.0.0.1:0"); builder.Configuration.AddInMemoryCollection(new Dictionary<string, string?> { { "ConnectionStrings:PosServer", connectionString }, { "PosServer:FiscalReports:ArtifactRoot", artifactRoot }, { "PosServer:Admin:ApiKeys:0:Principal", "x-proof-service" }, { "PosServer:Admin:ApiKeys:0:Key", "synthetic-x-proof-key" }, { "PosServer:Admin:ApiKeys:0:Permissions:0", FiscalXReadingAuthorization.GeneratePermission }, { "PosServer:Admin:ApiKeys:0:Permissions:1", FiscalXReadingAuthorization.ReadPermission }, { "PosServer:Admin:ApiKeys:0:SitePosServerIds:0", SiteId.ToString("D") }, { "PosServer:Admin:ApiKeys:0:FiscalIdentityIds:0", IdentityId.ToString("D") } }); builder.Services.AddPosServerFiscalDocumentApi(builder.Configuration); var app = builder.Build(); app.UseAuthentication(); app.UseAuthorization(); app.MapFiscalXReadingEndpoints(); await app.StartAsync(); return app;
     }
     private static HttpClient CreateClient(WebApplication app) { var address = app.Services.GetRequiredService<IServer>().Features.Get<IServerAddressesFeature>()!.Addresses.Single(); return new() { BaseAddress = new(address) }; }
     private static void Authorize(HttpClient client) { client.DefaultRequestHeaders.Add(SalesInvoiceHeaderProfileAdminAuthorization.ApiKeyHeaderName, "synthetic-x-proof-key"); client.DefaultRequestHeaders.Add(SalesInvoiceHeaderProfileAdminAuthorization.CorrelationHeaderName, "x-proof-correlation"); }
@@ -269,4 +371,9 @@ public sealed class FiscalXReadingPostgresIntegrationTests
     private static async Task<T> ScalarAsync<T>(string cs, string sql) { await using var c = new NpgsqlConnection(cs); await c.OpenAsync(); await using var cmd = new NpgsqlCommand(sql, c); return (T)(await cmd.ExecuteScalarAsync())!; }
     private static string FindRepositoryRoot() { var d = new DirectoryInfo(AppContext.BaseDirectory); while (d is not null) { if (File.Exists(Path.Combine(d.FullName, "ExitPass.PosServer.sln"))) return d.FullName; d = d.Parent; } throw new DirectoryNotFoundException(); }
     private sealed record XManifest(long Documents, long StatusHistory, long SequenceStates, long CounterStates, long StateSnapshots, long OpenPeriods, long ZReports, long ZCounters, long Reprints, long XRequests, long XReports, long TenderBreakdowns, long DiscountBreakdowns, long FiscalRanges, long AuditRows);
+
+    public void Dispose()
+    {
+        if (Directory.Exists(artifactRoot)) Directory.Delete(artifactRoot, true);
+    }
 }

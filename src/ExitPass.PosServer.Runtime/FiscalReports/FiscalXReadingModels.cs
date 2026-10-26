@@ -5,6 +5,7 @@ public static class FiscalXReadingContract
     public const string ContractVersion = "pos-server-fiscal-reporting:v1";
     public const string SemanticHashVersion = "pos-server-fiscal-report-request:sha256:v1";
     public const string ReportKind = "X_READING";
+    public const string SnapshotDetailVersion = "pos-server-fiscal-reporting-annex-d-source-facts:v2";
 }
 
 public sealed record FiscalXReadingCommand(
@@ -54,6 +55,17 @@ public sealed record FiscalXReadingAmounts(
     long AdjustmentAmountMinorUnits,
     long ServiceChargeAmountMinorUnits);
 
+public sealed record FiscalReportDocumentCounts(
+    long IssuedSalesInvoiceCount,
+    long VoidTransactionCount,
+    long? CancellationTransactionCount,
+    long? ReturnTransactionCount,
+    long? RefundTransactionCount);
+
+public sealed record FiscalXReadingPriorZSnapshot(
+    long ZCounterValue,
+    DateTimeOffset ClosedAt);
+
 public sealed record FiscalXReadingRecord(
     Guid FiscalReportId,
     string FiscalReportReference,
@@ -82,7 +94,11 @@ public sealed record FiscalXReadingRecord(
     string SupportReference,
     bool Immutable,
     long PeriodSequence = 0,
-    string ReportStatus = "COMMITTED");
+    string ReportStatus = "COMMITTED",
+    FiscalReportDocumentCounts? DocumentCounts = null,
+    FiscalXReadingPriorZSnapshot? PriorZ = null,
+    string RequestedByRef = "unavailable",
+    string? SnapshotDetailVersion = null);
 
 public enum FiscalXReadingOutcome
 {

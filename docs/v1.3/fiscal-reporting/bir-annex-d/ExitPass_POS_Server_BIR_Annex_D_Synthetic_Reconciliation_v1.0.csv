@@ -1,0 +1,8 @@
+source_fiscal_reference,business_day_date,status,tender_type,gross_minor_units,discount_minor_units,taxable_minor_units,vat_minor_units,vat_exempt_minor_units,zero_rated_minor_units,net_minor_units,tender_minor_units,void_minor_units,x_net_contribution_minor_units,z_net_contribution_minor_units,difference_minor_units,result
+SI-00000001,2026-10-21,issued,cash,8929,0,8929,1071,0,0,10000,10000,0,10000,10000,0,PASS
+SI-00000002,2026-10-21,issued,qrph,8929,0,8929,1071,0,0,10000,10000,0,10000,10000,0,PASS
+SI-00000003,2026-10-21,issued,gcash,8929,893,8036,964,0,0,9000,9000,0,9000,9000,0,PASS
+SI-00000004,2026-10-21,issued,card,8929,1786,0,0,8929,0,7143,7143,0,7143,7143,0,PASS
+SI-00000005,2026-10-21,issued,none_zero_payable,2679,2679,0,0,2679,0,0,0,0,0,0,0,PASS
+SI-00000006,2026-10-21,voided,cash,8929,0,8929,1071,0,0,10000,0,10000,0,0,0,PASS
+TOTAL,2026-10-21,mixed,mixed,38395,5358,25894,3106,11608,0,36143,36143,10000,36143,36143,0,PASS

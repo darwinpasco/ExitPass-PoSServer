@@ -36,7 +36,8 @@ public sealed record FiscalXReadingAggregate(
     FiscalXReadingAmounts Amounts,
     IReadOnlyList<FiscalXReadingTenderBreakdown> Tenders,
     IReadOnlyList<FiscalXReadingDiscountBreakdown> Discounts,
-    IReadOnlyList<FiscalXReadingFiscalNumberRange> FiscalNumberRanges);
+    IReadOnlyList<FiscalXReadingFiscalNumberRange> FiscalNumberRanges,
+    FiscalReportDocumentCounts DocumentCounts);
 
 public sealed class FiscalXReadingAggregationService
 {
@@ -99,6 +100,7 @@ public sealed class FiscalXReadingAggregationService
                 ValidateDocumentCurrency(document, currency);
                 if (document.Lines.Count == 0)
                     throw Reconciliation("A recorded Sales Invoice is missing required line facts.");
+                ValidateLineAndTaxArithmetic(document);
 
                 var zeroPayableStatutoryCompletion = string.Equals(
                     document.CompletionBasis,
@@ -201,6 +203,9 @@ public sealed class FiscalXReadingAggregationService
             foreach (var document in voided)
             {
                 ValidateDocumentCurrency(document, currency);
+                if (document.Lines.Count == 0)
+                    throw Reconciliation("A voided Sales Invoice is missing required line facts.");
+                ValidateLineAndTaxArithmetic(document);
                 voidAmount += document.Lines.SumChecked(line => line.Net);
             }
 
@@ -216,7 +221,8 @@ public sealed class FiscalXReadingAggregationService
                 amounts,
                 tenderTotals.OrderBy(pair => pair.Key).Select(pair => new FiscalXReadingTenderBreakdown(pair.Key, pair.Value.Count, pair.Value.Amount, currency)).ToArray(),
                 discountTotals.OrderBy(pair => pair.Key).Select(pair => new FiscalXReadingDiscountBreakdown(pair.Key, pair.Value.Count, pair.Value.Discount, pair.Value.Vat, currency)).ToArray(),
-                ranges);
+                ranges,
+                new FiscalReportDocumentCounts(sales.Count, voided.Count, null, null, null));
         }
     }
 
@@ -257,6 +263,20 @@ public sealed class FiscalXReadingAggregationService
             document.Taxes.Any(tax => tax.Currency != currency) || document.Discounts.Any(detail => detail.Currency != currency) ||
             (document.Statutory is not null && document.Statutory.Currency != currency))
             throw new FiscalXReadingSafeException(FiscalXReadingOutcome.MixedCurrency, "Mixed-currency fiscal facts cannot be aggregated into one X Reading.");
+    }
+
+    private static void ValidateLineAndTaxArithmetic(FiscalXReadingSourceDocument document)
+    {
+        foreach (var line in document.Lines)
+        {
+            if (line.Gross < 0 || line.Discount < 0 || line.Tax < 0 || line.Net < 0 ||
+                line.Net != checked(line.Gross - line.Discount + line.Tax))
+                throw Reconciliation("A fiscal document line does not satisfy gross minus discount plus tax equals net.");
+        }
+
+        if (document.Taxes.Any(tax => tax.TaxableAmount < 0 || tax.TaxAmount < 0) ||
+            document.Lines.SumChecked(line => line.Tax) != document.Taxes.SumChecked(tax => tax.TaxAmount))
+            throw Reconciliation("Fiscal line tax does not reconcile to authoritative tax-detail amounts.");
     }
 
     private static void AddDiscount(Dictionary<string, (long Count, long Discount, long Vat)> totals, string key, long discount, long vat)
