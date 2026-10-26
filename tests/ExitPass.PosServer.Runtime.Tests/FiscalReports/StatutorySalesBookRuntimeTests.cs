@@ -40,7 +40,7 @@ public sealed class StatutorySalesBookRuntimeTests
         Assert.Contains("Software Name and Version No. plus Release No./Release Date: ExitPass POS Server 1.3 / v1.3 / 2026-10-17", worksheetXml);
         Assert.Contains("Serial No.: SN-TEST", worksheetXml);
         Assert.Contains("Machine Identification Number: MIN-TEST", worksheetXml);
-        Assert.Contains("POS Terminal No.: PITX-L3-WEBPAY-01", worksheetXml);
+        Assert.Contains("POS Server: PITX-L3-POS-01", worksheetXml);
         Assert.Contains("Date and Time Generated: 2026-10-17 16:00:00", worksheetXml);
         Assert.Contains("UserID: operator-1", worksheetXml);
         Assert.Contains(">TOTAL<", worksheetXml);
@@ -201,11 +201,22 @@ public sealed class StatutorySalesBookRuntimeTests
         Assert.NotEqual(StatutorySalesBookContract.SourceFingerprint(report), StatutorySalesBookContract.SourceFingerprint(changed));
     }
 
+    [Fact]
+    public void DuplicateSalesInvoiceNumberAcrossDifferentDocumentsFailsReconciliation()
+    {
+        var first = Row(StatutorySalesBookType.AnnexE2, 2000);
+        var duplicate = first with { FiscalDocumentId = Guid.NewGuid() };
+
+        Assert.False(StatutorySalesBookReconciliation.HasUniqueFiscalEvidence([first, duplicate]));
+        Assert.True(StatutorySalesBookReconciliation.HasUniqueFiscalEvidence(
+            [first, duplicate with { SalesInvoiceNumber = duplicate.SalesInvoiceNumber + "-2" }]));
+    }
+
     private static StatutorySalesBookReport Report(StatutorySalesBookType type, IReadOnlyList<StatutorySalesBookRow> rows)
     {
-        var summary = new StatutorySalesBookSummary(type, Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), "PHP", 2026, 10, "PITX-L3-WEBPAY-01", rows.Count,
+        var summary = new StatutorySalesBookSummary(type, Guid.NewGuid(), Guid.NewGuid(), "PHP", 2026, 10, "PITX-L3-POS-01", rows.Count,
             rows.Sum(x => x.SalesInclusiveVatMinorUnits), rows.Sum(x => x.VatAmountMinorUnits), rows.Sum(x => x.VatExemptSalesMinorUnits), rows.Sum(x => x.Discount5MinorUnits), rows.Sum(x => x.Discount20MinorUnits), rows.Sum(x => x.NetSalesMinorUnits), DateTimeOffset.Parse("2026-10-17T08:00:00Z"), [], StatutorySalesBookStatuses.Final, rows.Count == 0, 31, 31, 31);
-        return new(new("Professional Parking Management Corporation", "PITX, Paranaque City", "999-999-999-000", "ExitPass POS Server", "1.3", "v1.3", "2026-10-17", "SN-TEST", "MIN-TEST", "PITX-L3-WEBPAY-01", summary.ReportAsOf, "operator-1"), summary, rows);
+        return new(new("Professional Parking Management Corporation", "PITX, Paranaque City", "999-999-999-000", "ExitPass POS Server", "1.3", "v1.3", "2026-10-17", "SN-TEST", "MIN-TEST", "PITX-L3-POS-01", summary.ReportAsOf, "operator-1"), summary, rows);
     }
 
     private static StatutorySalesBookRow Row(StatutorySalesBookType type, int rate) => new(Guid.NewGuid(), new(2026, 10, 17), DateTimeOffset.Parse("2026-10-17T08:00:00Z"), rate, "Synthetic Beneficiary", type == StatutorySalesBookType.AnnexE2 ? "OSCA_ID" : "PWD_ID", "SYN-001", null, $"SI-{rate}", 10_000, 1_071, 0, rate == 500 ? 1_000 : 0, rate == 2000 ? 1_000 : 0, 9_000, "SYNTHETIC-LGU-PERCENTAGE", rate);

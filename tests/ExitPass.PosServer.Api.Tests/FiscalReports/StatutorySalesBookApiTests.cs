@@ -36,7 +36,7 @@ public sealed class StatutorySalesBookApiTests
     [Theory]
     [InlineData("e2", StatutorySalesBookType.AnnexE2)]
     [InlineData("e3", StatutorySalesBookType.AnnexE3)]
-    public async Task ReadUsesExactSiteIdentityTerminalAndMonthScope(string annex, StatutorySalesBookType type)
+    public async Task ReadUsesExactPosServerIdentityAndMonthScope(string annex, StatutorySalesBookType type)
     {
         var repository = new StubRepository(type);
         var response = await Execute(context => StatutorySalesBookEndpoint.ReadAsync(
@@ -46,7 +46,6 @@ public sealed class StatutorySalesBookApiTests
         Assert.Equal(type, repository.Query!.Type);
         Assert.Equal(Site, repository.Query.SitePosServerId);
         Assert.Equal(Identity, repository.Query.FiscalIdentityId);
-        Assert.Equal(Terminal, repository.Query.ChannelTerminalId);
         Assert.Equal(2026, repository.Query.CalendarYear);
         Assert.Equal(10, repository.Query.CalendarMonth);
         Assert.Equal(1, repository.AccessCalls);
@@ -66,8 +65,9 @@ public sealed class StatutorySalesBookApiTests
     public async Task ExportReturnsCanonicalArtifactAndRecordsOnlySafeScope(string format, string contentType, string extension, string signature)
     {
         var repository = new StubRepository(StatutorySalesBookType.AnnexE2);
+        var artifacts = TestFiscalReportArtifacts.CaptureService(out var artifactRepository);
         var response = await Execute(context => StatutorySalesBookEndpoint.DownloadAsync(
-            "e2", Request(), format, new(repository), new(), TestFiscalReportArtifacts.Service(), repository, context, new Host(Environments.Production), default));
+            "e2", Request(), format, new(repository), new(), artifacts, repository, context, new Host(Environments.Production), default));
 
         Assert.Equal(StatusCodes.Status200OK, response.StatusCode);
         Assert.Equal(contentType, response.ContentType);
@@ -76,7 +76,11 @@ public sealed class StatutorySalesBookApiTests
         Assert.Equal(1, repository.ReadCalls);
         Assert.Equal(1, repository.ExportCalls);
         Assert.Equal("ANNEX_E2", repository.LastReportKind);
-        Assert.Equal($"2026-10/{Terminal:D}", repository.LastSubjectReference);
+        Assert.Equal($"pos-server-v2/{Site:D}/{Identity:D}/PHP/2026-10", repository.LastSubjectReference);
+        Assert.NotNull(artifactRepository.Command);
+        Assert.Equal(StatutorySalesBookContract.ArtifactContractProfile, artifactRepository.Command.ArtifactVersion);
+        Assert.Equal(repository.LastSubjectReference, artifactRepository.Command.ScopeReference);
+        Assert.DoesNotContain("terminal", artifactRepository.Command.ScopeReference, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("Synthetic Senior", repository.LastSubjectReference, StringComparison.Ordinal);
         Assert.Equal("private, no-store", response.Headers.CacheControl.ToString());
         Assert.Equal("nosniff", response.Headers.XContentTypeOptions.ToString());
@@ -110,7 +114,7 @@ public sealed class StatutorySalesBookApiTests
         Assert.Equal(0, repository.ExportCalls);
     }
 
-    private static StatutorySalesBookRequest Request() => new(Site, Identity, Terminal, "PHP", 2026, 10);
+    private static StatutorySalesBookRequest Request() => new(Site, Identity, "PHP", 2026, 10);
 
     private static StatutorySalesBookReport Report(StatutorySalesBookType type)
     {
@@ -120,8 +124,8 @@ public sealed class StatutorySalesBookApiTests
             10000, 1071, 0, 0, 2000, 8000, "PARANAQUE-SYNTHETIC-20", 2000);
         return new(
             new("PITX TEST", "Paranaque City", "999-999-999-000", "ExitPass POS Server", "1.3", "v1.3", "2026-10-17",
-                "SN-TEST", "MIN-TEST", "PITX-L3-WEBPAY-01", generatedAt, "operator"),
-            new(type, Site, Identity, Terminal, "PHP", 2026, 10, "PITX-L3-WEBPAY-01", 1, 10000, 1071, 0, 0, 2000, 8000, generatedAt, []),
+                "SN-TEST", "MIN-TEST", "PITX-L3-POS-01", generatedAt, "operator"),
+            new(type, Site, Identity, "PHP", 2026, 10, "PITX-L3-POS-01", 1, 10000, 1071, 0, 0, 2000, 8000, generatedAt, []),
             [row]);
     }
 
@@ -150,7 +154,6 @@ public sealed class StatutorySalesBookApiTests
 
     private static readonly Guid Site = Guid.Parse("91000000-0000-4000-8000-000000000001");
     private static readonly Guid Identity = Guid.Parse("91000000-0000-4000-8000-000000000002");
-    private static readonly Guid Terminal = Guid.Parse("91000000-0000-4000-8000-000000000003");
     private sealed record Capture(int StatusCode, string? ContentType, IHeaderDictionary Headers, byte[] Body);
     private sealed class Host(string name) : IHostEnvironment { public string EnvironmentName { get; set; } = name; public string ApplicationName { get; set; } = "tests"; public string ContentRootPath { get; set; } = "."; public IFileProvider ContentRootFileProvider { get; set; } = new NullFileProvider(); }
 

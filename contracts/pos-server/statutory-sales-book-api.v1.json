@@ -1,5 +1,5 @@
 {
-  "profile": "pos-server-statutory-sales-book-api:v1",
+  "profile": "pos-server-statutory-sales-book-api:pos-server-scope-v2",
   "routes": [
     {
       "method": "GET",
@@ -12,7 +12,7 @@
       "permission": "fiscal_statutory_sales_book.export"
     }
   ],
-  "scope": ["sitePosServerId", "fiscalIdentityId", "channelTerminalId", "currencyCode", "calendarYear", "calendarMonth"],
+  "scope": ["sitePosServerId", "fiscalIdentityId", "currencyCode", "calendarYear", "calendarMonth"],
   "response": {
     "reportStatus": ["PRELIMINARY", "FINAL"],
     "emptyReportSupported": true,

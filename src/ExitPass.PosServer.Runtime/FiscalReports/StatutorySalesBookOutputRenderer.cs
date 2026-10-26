@@ -13,7 +13,7 @@ public sealed class StatutorySalesBookOutputRenderer
     public StatutorySalesBookArtifact Render(StatutorySalesBookReport report, StatutorySalesBookFormat format)
     {
         var prefix = report.Summary.Type == StatutorySalesBookType.AnnexE2 ? "ANNEX-E2" : "ANNEX-E3";
-        var scope = $"{Safe(report.Header.MachineIdentificationNumber)}_{Safe(report.Header.PosTerminalNumber)}_{report.Summary.CalendarYear:0000}{report.Summary.CalendarMonth:00}";
+        var scope = $"{Safe(report.Header.MachineIdentificationNumber)}_{Safe(report.Header.PosServerCode)}_{report.Summary.CalendarYear:0000}{report.Summary.CalendarMonth:00}";
         return format switch
         {
             StatutorySalesBookFormat.Xlsx => new(RenderXlsx(report), StatutorySalesBookContract.XlsxContentType, $"{prefix}_{scope}.xlsx"),
@@ -82,7 +82,7 @@ public sealed class StatutorySalesBookOutputRenderer
         pdf.Text(page, 20, 506, $"Software Name and Version No. plus Release No./Release Date: {h.SoftwareName} {h.SoftwareVersion} / {h.ReleaseNumber} / {h.ReleaseDate}", 6.5);
         pdf.Text(page, 20, 495, $"Serial No.: {h.SerialNumber}", 6.5);
         pdf.Text(page, 20, 484, $"Machine Identification Number: {h.MachineIdentificationNumber}", 6.5);
-        pdf.Text(page, 20, 473, $"POS Terminal No.: {h.PosTerminalNumber}", 6.5);
+        pdf.Text(page, 20, 473, $"POS Server: {h.PosServerCode}", 6.5);
         pdf.Text(page, 20, 462, $"Date and Time Generated: {Pht(h.GeneratedAt):yyyy-MM-dd HH:mm:ss}", 6.5);
         pdf.Text(page, 20, 451, $"UserID: {h.UserId}", 6.5);
         pdf.CenterText(page, width / 2, 430, StatutorySalesBookContract.Title(report.Summary.Type) + (continued ? " (continued)" : string.Empty), 10, true);
@@ -198,7 +198,7 @@ public sealed class StatutorySalesBookOutputRenderer
         HeaderWithAnnex(b, 5, $"Software Name and Version No. plus Release No./Release Date: {h.SoftwareName} {h.SoftwareVersion} / {h.ReleaseNumber} / {h.ReleaseDate}", StatutorySalesBookContract.AnnexLabel(type));
         Header(b, 6, $"Serial No.: {h.SerialNumber}");
         Header(b, 7, $"Machine Identification Number: {h.MachineIdentificationNumber}");
-        Header(b, 8, $"POS Terminal No.: {h.PosTerminalNumber}");
+        Header(b, 8, $"POS Server: {h.PosServerCode}");
         Header(b, 9, $"Date and Time Generated: {Pht(h.GeneratedAt):yyyy-MM-dd HH:mm:ss}");
         Header(b, 10, $"UserID: {h.UserId}");
         b.Append("<row r=\"11\" ht=\"15.75\"/>");
