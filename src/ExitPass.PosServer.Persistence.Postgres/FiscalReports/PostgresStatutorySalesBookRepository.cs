@@ -27,14 +27,14 @@ public sealed class PostgresStatutorySalesBookRepository(
                 return new(StatutorySalesBookOutcome.MissingBeneficiarySnapshot, SafeMessage: $"E2_E3_REQUIRED_BENEFICIARY_SNAPSHOT_MISSING:{rows.MissingSnapshotReference}");
 
             var ordered = rows.Rows.OrderBy(x => x.TransactionTimestamp).ThenBy(x => x.FiscalSequence).ThenBy(x => x.FiscalDocumentId).ToArray();
-            if (ordered.Select(x => x.FiscalDocumentId).Distinct().Count() != ordered.Length ||
+            if (!StatutorySalesBookReconciliation.HasUniqueFiscalEvidence(ordered) ||
                 ordered.Any(row => !StatutorySalesBookReconciliation.IsValid(row)))
                 return new(StatutorySalesBookOutcome.ReconciliationFailure, SafeMessage: "The statutory sales-book rows did not reconcile with committed fiscal evidence.");
             var period = await ReadPeriodStatusAsync(connection, transaction, query, cancellationToken).ConfigureAwait(false);
             var asOf = ordered.Select(x => x.TransactionTimestamp).DefaultIfEmpty(header.GeneratedAt).Max();
             var summary = new StatutorySalesBookSummary(
-                query.Type, query.SitePosServerId, query.FiscalIdentityId, query.ChannelTerminalId, query.CurrencyCode,
-                query.CalendarYear, query.CalendarMonth, header.PosTerminalNumber, ordered.Length,
+                query.Type, query.SitePosServerId, query.FiscalIdentityId, query.CurrencyCode,
+                query.CalendarYear, query.CalendarMonth, header.PosServerCode, ordered.Length,
                 Sum(ordered, x => x.SalesInclusiveVatMinorUnits), Sum(ordered, x => x.VatAmountMinorUnits),
                 Sum(ordered, x => x.VatExemptSalesMinorUnits), Sum(ordered, x => x.Discount5MinorUnits),
                 Sum(ordered, x => x.Discount20MinorUnits), Sum(ordered, x => x.NetSalesMinorUnits), asOf,
@@ -94,12 +94,10 @@ public sealed class PostgresStatutorySalesBookRepository(
         const string sql = """
         SELECT fi.registered_business_name, fi.registered_business_address, fi.tin,
                COALESCE(fi.software_name, @software), COALESCE(fi.software_version, @version),
-               hp.pos_serial_number, hp.machine_identification_number, terminal.channel_terminal_code,
+               hp.pos_serial_number, hp.machine_identification_number, site.site_pos_server_code,
                hp.effective_from, transaction_timestamp()
         FROM pos.site_pos_servers site
         JOIN pos.fiscal_identities fi ON fi.fiscal_identity_id=@identity AND fi.is_active
-        JOIN pos.channel_terminals terminal ON terminal.channel_terminal_id=@terminal
-             AND terminal.site_pos_server_id=site.site_pos_server_id AND terminal.is_active
         JOIN LATERAL (
             SELECT p.* FROM pos.sales_invoice_header_profiles p
             WHERE p.site_pos_server_id=site.site_pos_server_id AND p.fiscal_identity_id=fi.fiscal_identity_id
@@ -138,6 +136,9 @@ public sealed class PostgresStatutorySalesBookRepository(
                s.protected_identity_envelope, s.protection_key_reference, s.protection_key_version,
                s.envelope_format_version
         FROM pos.fiscal_documents d
+        JOIN pos.channel_terminals terminal
+          ON terminal.channel_terminal_id=d.channel_terminal_id
+         AND terminal.site_pos_server_id=d.site_pos_server_id
         JOIN pos.controlled_codes dt ON dt.controlled_code_id=d.fiscal_document_type_code_id AND dt.code_key='sales_invoice'
         JOIN pos.controlled_codes document_status
           ON document_status.controlled_code_id=d.fiscal_document_status_code_id
@@ -146,7 +147,7 @@ public sealed class PostgresStatutorySalesBookRepository(
         JOIN pos.controlled_codes ent ON ent.controlled_code_id=f.entitlement_type_code_id
         JOIN pos.controlled_codes basis ON basis.controlled_code_id=f.policy_resolution_basis_code_id
         LEFT JOIN pos.fiscal_document_statutory_beneficiary_snapshots s ON s.fiscal_document_id=d.fiscal_document_id
-        WHERE d.site_pos_server_id=@site AND d.fiscal_identity_id=@identity AND d.channel_terminal_id=@terminal
+        WHERE d.site_pos_server_id=@site AND d.fiscal_identity_id=@identity
           AND d.currency_code=@currency AND d.business_day_date>=@month_start AND d.business_day_date<@month_end
           AND d.fiscal_document_number IS NOT NULL AND d.fiscal_sequence_value IS NOT NULL AND d.is_active
           AND d.voided_at IS NULL AND upper(ent.code_key)=@entitlement
@@ -187,7 +188,6 @@ public sealed class PostgresStatutorySalesBookRepository(
         var start = new DateOnly(query.CalendarYear, query.CalendarMonth, 1);
         command.Parameters.AddWithValue("site", query.SitePosServerId);
         command.Parameters.AddWithValue("identity", query.FiscalIdentityId);
-        command.Parameters.AddWithValue("terminal", query.ChannelTerminalId);
         command.Parameters.AddWithValue("currency", query.CurrencyCode);
         command.Parameters.AddWithValue("month_start", start);
         command.Parameters.AddWithValue("month_end", start.AddMonths(1));

@@ -1,6 +1,7 @@
 using System.Net;
 using System.Net.Http.Json;
 using ExitPass.PosServer.Api.FiscalDocuments;
+using ExitPass.PosServer.Api.FiscalReports;
 using ExitPass.PosServer.Persistence.Postgres.FiscalReports;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
@@ -21,8 +22,12 @@ public sealed class FiscalDocumentApiPostgresSmokeTests
     private static readonly Guid SitePosServerId = Guid.Parse("10000000-0000-0000-0000-000000000001");
     private static readonly Guid SiteId = Guid.Parse("21000000-0000-4000-8000-000000000006");
     private static readonly Guid ChannelTerminalId = Guid.Parse("10000000-0000-0000-0000-000000000002");
+    private static readonly Guid WebPayTerminalId = Guid.Parse("10000000-0000-0000-0000-000000000003");
+    private static readonly Guid ApmTerminalId = Guid.Parse("10000000-0000-0000-0000-000000000004");
     private static readonly Guid FiscalDocumentTypeCodeId = Guid.Parse("10000000-0000-0000-0000-000000000101");
     private static readonly Guid FiscalDocumentStatusCodeId = Guid.Parse("10000000-0000-0000-0000-000000000102");
+    private static readonly Guid IssuedSalesInvoiceTypeCodeId = Guid.Parse("b9fc7458-57a7-5bbe-809d-8c8b3d780b1d");
+    private static readonly Guid IssuedFiscalDocumentStatusCodeId = Guid.Parse("9f868073-a648-5b1d-99c0-f96d598c4eb0");
     private static readonly Guid FiscalDocumentVoidedStatusCodeId = Guid.Parse("10000000-0000-0000-0000-000000000103");
     private static readonly Guid FiscalLineTypeCodeId = Guid.Parse("10000000-0000-0000-0000-000000000201");
     private static readonly Guid FiscalTenderTypeCodeId = Guid.Parse("10000000-0000-0000-0000-000000000301");
@@ -46,6 +51,75 @@ public sealed class FiscalDocumentApiPostgresSmokeTests
     public FiscalDocumentApiPostgresSmokeTests(ITestOutputHelper output)
     {
         this.output = output;
+    }
+
+    [Theory]
+    [InlineData("e2", "SENIOR_CITIZEN", "OSCA_ID")]
+    [InlineData("e3", "PWD", "PWD_ID")]
+    public async Task StatutorySalesBookAggregatesQualifyingInvoicesAcrossRegisteredPosServerTerminals(
+        string annex,
+        string entitlement,
+        string statutoryIdType)
+    {
+        if (!TryGetSmokeConnectionString(out var connectionString)) return;
+
+        await RebuildDisposableDatabaseAsync(connectionString);
+        await InsertDisposableSmokeFixtureAsync(connectionString);
+        await ConfigureStatutorySalesInvoiceHeaderAsync(connectionString);
+        await InsertAdditionalReportTerminalsAsync(connectionString);
+
+        await using var app = await StartApiAsync(connectionString);
+        using var client = CreateClient(app);
+        var requests = new[]
+        {
+            CreateQualifyingStatutoryRequest("apt-annex", ChannelTerminalId, "APT-TERMINAL-SMOKE-001", 1, entitlement, statutoryIdType),
+            CreateQualifyingStatutoryRequest("webpay-annex", WebPayTerminalId, "WEBPAY-TERMINAL-SMOKE-001", 2, entitlement, statutoryIdType),
+            CreateQualifyingStatutoryRequest("apm-annex", ApmTerminalId, "APM-TERMINAL-SMOKE-001", 3, entitlement, statutoryIdType)
+        };
+
+        foreach (var request in requests)
+        {
+            using var issued = await client.PostAsJsonAsync("/v1/fiscal-documents/", request);
+            var body = await issued.Content.ReadFromJsonAsync<CreateFiscalDocumentResponse>();
+            Assert.Equal(HttpStatusCode.Accepted, issued.StatusCode);
+            Assert.True(body?.Succeeded);
+        }
+
+        await using (var connection = new NpgsqlConnection(connectionString))
+        {
+            await connection.OpenAsync();
+            await ExecuteSqlAsync(
+                connection,
+                "update pos.channel_terminals set is_active=false where channel_terminal_id=@terminal",
+                command => command.Parameters.AddWithValue("terminal", WebPayTerminalId));
+        }
+
+        client.DefaultRequestHeaders.Add(
+            SalesInvoiceHeaderProfileAdminAuthorization.PermissionHeaderName,
+            StatutorySalesBookAuthorization.ReadPermission);
+        client.DefaultRequestHeaders.Add(
+            SalesInvoiceHeaderProfileAdminAuthorization.CorrelationHeaderName,
+            "annex-e2-multi-terminal-postgres-proof");
+        using var response = await client.GetAsync(
+            $"/v1/fiscal-reports/annex-e/{annex}/?SitePosServerId={SitePosServerId:D}&FiscalIdentityId={FiscalIdentityId:D}&CurrencyCode=PHP&CalendarYear={DateTime.UtcNow.Year}&CalendarMonth={DateTime.UtcNow.Month}");
+        var reportResponse = await response.Content.ReadFromJsonAsync<StatutorySalesBookApiResponse>();
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.True(reportResponse?.Succeeded);
+        var report = Assert.IsType<ExitPass.PosServer.Runtime.FiscalReports.StatutorySalesBookReport>(reportResponse!.Report);
+        Assert.Equal(3, report.Rows.Count);
+        Assert.Equal(3, report.Rows.Select(row => row.FiscalDocumentId).Distinct().Count());
+        Assert.Equal(3, report.Rows.Select(row => row.SalesInvoiceNumber).Distinct(StringComparer.OrdinalIgnoreCase).Count());
+        Assert.Equal(30_000, report.Summary.SalesInclusiveVatMinorUnits);
+        Assert.Equal(5_358, report.Summary.Discount20MinorUnits);
+        Assert.Equal(24_000, report.Summary.NetSalesMinorUnits);
+        Assert.Equal("site-pos-server-smoke", report.Header.PosServerCode);
+
+        await using var verify = new NpgsqlConnection(connectionString);
+        await verify.OpenAsync();
+        Assert.Equal(3, await ScalarLongAsync(verify,
+            "select count(distinct channel_terminal_id) from pos.fiscal_documents where site_pos_server_id=@id",
+            SitePosServerId));
     }
 
     [Fact]
@@ -1777,6 +1851,36 @@ public sealed class FiscalDocumentApiPostgresSmokeTests
             });
     }
 
+    private static async Task InsertAdditionalReportTerminalsAsync(string connectionString)
+    {
+        await using var connection = new NpgsqlConnection(connectionString);
+        await connection.OpenAsync();
+        const string sql = """
+            insert into pos.channel_terminals (
+                channel_terminal_id, site_pos_server_id, channel_terminal_code, terminal_serial_number,
+                display_name, channel_terminal_type_code_id, is_logical_channel, is_physical_terminal,
+                fiscal_identity_id, is_active)
+            values
+                (@webpay, @site, 'WEBPAY-TERMINAL-SMOKE-001', 'WEBPAY-SERIAL-SMOKE-001',
+                 'WebPay Smoke Fixture', 'ba4b7e0c-a973-56a7-b877-15d1f8d1ce9b', true, false, @identity, true),
+                (@apm, @site, 'APM-TERMINAL-SMOKE-001', 'APM-SERIAL-SMOKE-001',
+                 'APM Smoke Fixture', 'ba4b7e0c-a973-56a7-b877-15d1f8d1ce9b', false, true, @identity, true);
+
+            update pos.fiscal_sequence_policies
+            set document_type_code_id=@document_type
+            where fiscal_sequence_policy_id=@policy;
+            """;
+        await ExecuteSqlAsync(connection, sql, command =>
+        {
+            command.Parameters.AddWithValue("webpay", WebPayTerminalId);
+            command.Parameters.AddWithValue("apm", ApmTerminalId);
+            command.Parameters.AddWithValue("site", SitePosServerId);
+            command.Parameters.AddWithValue("identity", FiscalIdentityId);
+            command.Parameters.AddWithValue("document_type", IssuedSalesInvoiceTypeCodeId);
+            command.Parameters.AddWithValue("policy", FiscalSequencePolicyId);
+        });
+    }
+
     private static async Task ConfigureHistoricalAndCurrentPeriodsAsync(string connectionString)
     {
         await using var connection = new NpgsqlConnection(connectionString);
@@ -1814,11 +1918,21 @@ public sealed class FiscalDocumentApiPostgresSmokeTests
             ["PosServer:FiscalReports:ArtifactRoot"] = Path.Combine(
                 Path.GetTempPath(),
                 "exitpass-terminal-identity-api-smoke-artifacts"),
+            ["PosServer:StatutoryBeneficiary:ProtectionKeyBase64"] = Convert.ToBase64String(
+                Enumerable.Range(1, 32).Select(value => (byte)value).ToArray()),
+            ["PosServer:StatutoryBeneficiary:ProtectionKeyReference"] = "synthetic-api-smoke-beneficiary-key",
+            ["PosServer:StatutoryBeneficiary:ProtectionKeyVersion"] = "1",
             ["PosServer:Admin:ApiKeys:smoke:Principal"] = "fiscal-document-smoke",
             ["PosServer:Admin:ApiKeys:smoke:Key"] = SmokeApiKey,
             ["PosServer:Admin:ApiKeys:smoke:Permissions:0"] = FiscalDocumentAuthorization.CreatePermission,
             ["PosServer:Admin:ApiKeys:smoke:Permissions:1"] = FiscalDocumentAuthorization.ReadPermission,
-            ["PosServer:Admin:ApiKeys:smoke:Permissions:2"] = FiscalDocumentAuthorization.VoidPermission
+            ["PosServer:Admin:ApiKeys:smoke:Permissions:2"] = FiscalDocumentAuthorization.VoidPermission,
+            ["PosServer:Admin:ApiKeys:smoke:Permissions:3"] = StatutorySalesBookAuthorization.ReadPermission,
+            ["PosServer:Admin:ApiKeys:smoke:Permissions:4"] = StatutorySalesBookAuthorization.ExportPermission,
+            ["PosServer:Admin:ApiKeys:smoke:SitePosServerIds:0"] = SitePosServerId.ToString("D"),
+            ["PosServer:Admin:ApiKeys:smoke:FiscalIdentityIds:0"] = FiscalIdentityId.ToString("D"),
+            ["PosServer:Admin:ApiKeys:smoke:CurrencyCodes:0"] = "PHP",
+            ["PosServer:Admin:ApiKeys:smoke:AuthorityClass"] = BirSalesSummaryAuthorization.ProductionAuthorityClass
         });
         builder.Services.AddPosServerFiscalDocumentApi(builder.Configuration);
 
@@ -1826,6 +1940,7 @@ public sealed class FiscalDocumentApiPostgresSmokeTests
         app.UseAuthentication();
         app.UseAuthorization();
         app.MapFiscalDocumentEndpoints();
+        app.MapStatutorySalesBookEndpoints();
         await app.StartAsync();
         return app;
     }
@@ -2058,6 +2173,64 @@ public sealed class FiscalDocumentApiPostgresSmokeTests
                 "Sample Trading",
                 "OSCA-12345"));
     }
+
+    private static CreateFiscalDocumentRequest CreateQualifyingStatutoryRequest(
+        string suffix,
+        Guid terminalId,
+        string terminalRef,
+        int ordinal,
+        string entitlement,
+        string statutoryIdType)
+    {
+        var request = CreateValidStatutoryRequest(suffix);
+        var decisionId = SyntheticId(ordinal, 1);
+        var facts = request.AppliedStatutoryFiscalFacts! with
+        {
+            StatutoryDiscountDecisionCommandId = decisionId,
+            StatutoryRequestReference = SyntheticId(ordinal, 2),
+            StatutoryPayableBasisApplicationCommandId = SyntheticId(ordinal, 3),
+            StatutoryValidationId = SyntheticId(ordinal, 4),
+            ParkingSessionId = SyntheticId(ordinal, 5),
+            OriginalTariffSnapshotId = SyntheticId(ordinal, 6),
+            AppliedTariffSnapshotId = SyntheticId(ordinal, 7),
+            EntitlementType = entitlement,
+            StatutoryDiscountRateBasisPoints = 2000,
+            PercentageDiscountAmountMinorUnits = 1786,
+            NonPercentageBenefitAmountMinorUnits = 0,
+            PercentageComponentSeparatelyProven = true,
+            BeneficiaryIdentity = new StatutoryBeneficiaryIdentityRequest(
+                $"Synthetic Beneficiary {ordinal}", statutoryIdType, $"STAT-SYN-{ordinal:000}", null,
+                "synthetic-reviewer", "OPERATOR_CONSOLE", DateTimeOffset.Parse("2026-10-20T08:00:00+08:00"),
+                "synthetic-reviewer", "OPERATOR_CONSOLE", DateTimeOffset.Parse("2026-10-20T08:01:00+08:00"),
+                "synthetic-approver", DateTimeOffset.Parse("2026-10-20T08:02:00+08:00"),
+                decisionId.ToString("D"), $"annex-multi-terminal-{ordinal}")
+        };
+
+        return WithGovernedStatutoryPrivilegeCode(request with
+        {
+            FiscalDocumentTypeCodeKey = "sales_invoice",
+            FiscalDocumentTypeCodeId = IssuedSalesInvoiceTypeCodeId,
+            FiscalDocumentStatusCodeId = IssuedFiscalDocumentStatusCodeId,
+            ChannelTerminalId = terminalId,
+            RuntimeTerminalRef = terminalRef,
+            CentralPmsParkingSessionRef = facts.ParkingSessionId!.Value.ToString("D"),
+            PayableBasis = request.PayableBasis! with
+            {
+                DiscountReferences = [new(facts.StatutoryValidationId!.Value.ToString("D"), "approved", true)]
+            },
+            DiscountPrivilegeDetails =
+            [
+                request.DiscountPrivilegeDetails![0] with
+                {
+                    ApprovalRef = facts.StatutoryValidationId.Value.ToString("D")
+                }
+            ],
+            AppliedStatutoryFiscalFacts = facts
+        });
+    }
+
+    private static Guid SyntheticId(int ordinal, int slot) =>
+        Guid.Parse($"21{ordinal:00}{slot:0000}-0000-4000-8000-000000000001");
 
     private static CreateFiscalDocumentRequest CreateValidZeroPayableStatutoryRequest(string suffix)
     {

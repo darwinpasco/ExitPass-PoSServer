@@ -4,7 +4,7 @@ using ExitPass.PosServer.Runtime.FiscalReports;
 
 namespace ExitPass.PosServer.Api.FiscalReports;
 
-public sealed record StatutorySalesBookRequest(Guid? SitePosServerId, Guid? FiscalIdentityId, Guid? ChannelTerminalId, string? CurrencyCode, int? CalendarYear, int? CalendarMonth);
+public sealed record StatutorySalesBookRequest(Guid? SitePosServerId, Guid? FiscalIdentityId, string? CurrencyCode, int? CalendarYear, int? CalendarMonth);
 public sealed record StatutorySalesBookApiResponse(bool Succeeded, string Code, string CorrelationId, int HttpStatusCode, StatutorySalesBookReport? Report = null, string? Message = null);
 
 public static class StatutorySalesBookEndpoint
@@ -22,7 +22,7 @@ public static class StatutorySalesBookEndpoint
         {
             var summary = result.Report.Summary;
             await audit.RecordAccessAsync(summary.SitePosServerId, type == StatutorySalesBookType.AnnexE2 ? "ANNEX_E2" : "ANNEX_E3",
-                $"{summary.CalendarYear:0000}-{summary.CalendarMonth:00}/{summary.ChannelTerminalId:D}",
+                ScopeReference(summary),
                 context.User.FindFirstValue(ClaimTypes.NameIdentifier) ?? "unavailable", correlation,
                 summary.QualifyingTransactionCount, ct).ConfigureAwait(false);
         }
@@ -39,10 +39,10 @@ public static class StatutorySalesBookEndpoint
         if (result.Report is null) return Json(Map(result, correlation));
         var report = result.Report;
         var reportKind = type == StatutorySalesBookType.AnnexE2 ? "ANNEX_E2" : "ANNEX_E3";
-        var scopeReference = $"{report.Summary.CalendarYear:0000}-{report.Summary.CalendarMonth:00}/{report.Summary.ChannelTerminalId:D}";
+        var scopeReference = ScopeReference(report.Summary);
         var persisted = await artifactService.GetOrCreateAsync(new(
             report.Summary.SitePosServerId, report.Summary.FiscalIdentityId, report.Summary.CurrencyCode,
-            reportKind, scopeReference, format.Trim().ToLowerInvariant(), "pos-server-statutory-sales-book-rmo24-2023:v1",
+            reportKind, scopeReference, format.Trim().ToLowerInvariant(), StatutorySalesBookContract.ArtifactContractProfile,
             StatutorySalesBookContract.SourceFingerprint(report), CalendarYear: report.Summary.CalendarYear,
             CalendarMonth: report.Summary.CalendarMonth), _ =>
         {
@@ -64,14 +64,17 @@ public static class StatutorySalesBookEndpoint
     }
 
     private static StatutorySalesBookQuery Query(StatutorySalesBookRequest request, StatutorySalesBookType type, HttpContext context) => new(
-        request.SitePosServerId ?? Guid.Empty, request.FiscalIdentityId ?? Guid.Empty, request.ChannelTerminalId ?? Guid.Empty,
+        request.SitePosServerId ?? Guid.Empty, request.FiscalIdentityId ?? Guid.Empty,
         request.CurrencyCode ?? string.Empty, request.CalendarYear ?? 0, request.CalendarMonth ?? 0, type,
         context.User.FindFirstValue(ClaimTypes.NameIdentifier) ?? "unavailable");
 
     private static bool Authorized(StatutorySalesBookRequest request, HttpContext context, IHostEnvironment environment) =>
         StatutorySalesBookAuthorization.IsHostingAuthorityAllowed(context.User, environment) && request.SitePosServerId is { } site &&
-        request.FiscalIdentityId is { } identity && request.ChannelTerminalId is { } terminal && terminal != Guid.Empty && request.CurrencyCode is { } currency &&
+        request.FiscalIdentityId is { } identity && request.CurrencyCode is { } currency &&
         StatutorySalesBookAuthorization.IsInScope(context.User, site, identity, currency);
+
+    private static string ScopeReference(StatutorySalesBookSummary summary) =>
+        $"{StatutorySalesBookContract.ArtifactScopeVersion}/{summary.SitePosServerId:D}/{summary.FiscalIdentityId:D}/{summary.CurrencyCode}/{summary.CalendarYear:0000}-{summary.CalendarMonth:00}";
 
     private static StatutorySalesBookApiResponse Map(StatutorySalesBookResult result, string correlation) => result.Outcome switch
     {

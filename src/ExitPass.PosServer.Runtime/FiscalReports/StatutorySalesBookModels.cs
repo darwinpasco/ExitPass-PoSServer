@@ -7,7 +7,6 @@ public enum StatutorySalesBookOutcome { Succeeded, InvalidRequest, ScopeNotFound
 public sealed record StatutorySalesBookQuery(
     Guid SitePosServerId,
     Guid FiscalIdentityId,
-    Guid ChannelTerminalId,
     string CurrencyCode,
     int CalendarYear,
     int CalendarMonth,
@@ -24,7 +23,7 @@ public sealed record StatutorySalesBookHeader(
     string ReleaseDate,
     string SerialNumber,
     string MachineIdentificationNumber,
-    string PosTerminalNumber,
+    string PosServerCode,
     DateTimeOffset GeneratedAt,
     string UserId);
 
@@ -51,11 +50,10 @@ public sealed record StatutorySalesBookSummary(
     StatutorySalesBookType Type,
     Guid SitePosServerId,
     Guid FiscalIdentityId,
-    Guid ChannelTerminalId,
     string CurrencyCode,
     int CalendarYear,
     int CalendarMonth,
-    string PosTerminalNumber,
+    string PosServerCode,
     int QualifyingTransactionCount,
     long SalesInclusiveVatMinorUnits,
     long VatAmountMinorUnits,
@@ -99,6 +97,8 @@ public static class StatutorySalesBookContract
     public const string SoftwareVersion = "1.3";
     public const string ReleaseNumber = "v1.3";
     public const string ReleaseDate = "2026-10-17";
+    public const string ArtifactScopeVersion = "pos-server-v2";
+    public const string ArtifactContractProfile = "pos-server-statutory-sales-book-rmo24-2023:pos-server-scope-v2";
 
     public static string Entitlement(StatutorySalesBookType type) => type == StatutorySalesBookType.AnnexE2 ? "SENIOR_CITIZEN" : "PWD";
     public static string AnnexLabel(StatutorySalesBookType type) => type == StatutorySalesBookType.AnnexE2 ? "ANNEX \"E-2\"" : "ANNEX \"E-3\"";
@@ -120,18 +120,17 @@ public static class StatutorySalesBookContract
                 report.Header.ReleaseDate,
                 report.Header.SerialNumber,
                 report.Header.MachineIdentificationNumber,
-                report.Header.PosTerminalNumber
+                report.Header.PosServerCode
             },
             Summary = new
             {
                 report.Summary.Type,
                 report.Summary.SitePosServerId,
                 report.Summary.FiscalIdentityId,
-                report.Summary.ChannelTerminalId,
                 report.Summary.CurrencyCode,
                 report.Summary.CalendarYear,
                 report.Summary.CalendarMonth,
-                report.Summary.PosTerminalNumber,
+                report.Summary.PosServerCode,
                 report.Summary.QualifyingTransactionCount,
                 report.Summary.SalesInclusiveVatMinorUnits,
                 report.Summary.VatAmountMinorUnits,
@@ -194,6 +193,10 @@ public static class StatutorySalesBookQualification
 
 public static class StatutorySalesBookReconciliation
 {
+    public static bool HasUniqueFiscalEvidence(IReadOnlyList<StatutorySalesBookRow> rows) =>
+        rows.Select(row => row.FiscalDocumentId).Distinct().Count() == rows.Count &&
+        rows.Select(row => row.SalesInvoiceNumber).Distinct(StringComparer.OrdinalIgnoreCase).Count() == rows.Count;
+
     public static bool IsValid(StatutorySalesBookRow row)
     {
         if (row.SalesInclusiveVatMinorUnits < 0 || row.VatAmountMinorUnits < 0 ||
@@ -216,7 +219,7 @@ public sealed class StatutorySalesBookService(IStatutorySalesBookRepository repo
 {
     public Task<StatutorySalesBookResult> ReadAsync(StatutorySalesBookQuery query, CancellationToken cancellationToken = default)
     {
-        if (query.SitePosServerId == Guid.Empty || query.FiscalIdentityId == Guid.Empty || query.ChannelTerminalId == Guid.Empty ||
+        if (query.SitePosServerId == Guid.Empty || query.FiscalIdentityId == Guid.Empty ||
             query.CalendarYear is < 2000 or > 9999 || query.CalendarMonth is < 1 or > 12 ||
             !string.Equals(query.CurrencyCode?.Trim(), "PHP", StringComparison.Ordinal) || string.IsNullOrWhiteSpace(query.RequestedByRef))
             return Task.FromResult(new StatutorySalesBookResult(StatutorySalesBookOutcome.InvalidRequest, SafeMessage: "The statutory sales-book scope is invalid."));
