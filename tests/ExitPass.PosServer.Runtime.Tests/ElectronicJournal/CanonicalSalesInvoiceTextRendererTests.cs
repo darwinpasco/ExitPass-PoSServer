@@ -24,6 +24,30 @@ public sealed class CanonicalSalesInvoiceTextRendererTests
         Assert.Equal(printed.Text, Encoding.UTF8.GetString(journal.Bytes));
     }
 
+    [Theory]
+    [InlineData("01:02:03", "01:02:03")]
+    [InlineData("1:02:03", "01:02:03")]
+    [InlineData("53:16:24", "53:16:24")]
+    [InlineData("2.05:16:24", "53:16:24")]
+    public void RendererPreservesTotalHoursAndLegacyDurationFormats(string source, string expected)
+    {
+        var invoice = Invoice() with
+        {
+            FiscalContent = Invoice().FiscalContent! with { ParkingDurationText = source }
+        };
+
+        var printed = new SalesInvoicePrinterPayloadRenderer(new CanonicalSalesInvoiceTextRenderer())
+            .RenderVisibleText(invoice);
+        var journal = new ElectronicJournalInvoiceTextRenderer(new CanonicalSalesInvoiceTextRenderer())
+            .RenderPersisted([
+                new(invoice.FiscalDocumentId, invoice.FiscalDocumentNumber!, invoice.BusinessDayDate!.Value,
+                    invoice.FiscalNumberAssignedAt!.Value, printed.Text)
+            ]);
+
+        Assert.Contains($"DURATION                   {expected}", printed.Text, StringComparison.Ordinal);
+        Assert.Equal(printed.Text, Encoding.UTF8.GetString(journal.Bytes));
+    }
+
     [Fact]
     public void RendererMatchesApprovedSalesInvoiceReceiptStructureAndLabels()
     {
