@@ -611,6 +611,14 @@ public sealed class FiscalDocumentCreationService
         StatutoryBeneficiaryIdentitySnapshot? beneficiaryIdentity = null;
         var isStatutorySalesBookCandidate = facts.StatutoryDiscountRateBasisPoints is 500 or 2000 &&
             percentageDiscountAmount > 0 && facts.PercentageComponentSeparatelyProven;
+        var isFullFeeExemptionSalesBookCandidate =
+            string.Equals(policyResolutionBasis, "LOCAL_ORDINANCE", StringComparison.Ordinal) &&
+            string.Equals(benefitClassification, "FREE_PARKING", StringComparison.Ordinal) &&
+            facts.StatutoryDiscountRateBasisPoints is null &&
+            percentageDiscountAmount == 0 &&
+            statutoryDiscountAmount > 0 &&
+            (nonPercentageBenefitAmount == 0 || nonPercentageBenefitAmount == statutoryDiscountAmount) &&
+            finalPayableAmount == 0;
         if (isStatutorySalesBookCandidate)
         {
             if (!string.Equals(policyResolutionBasis, "LOCAL_ORDINANCE", StringComparison.Ordinal) ||
@@ -629,11 +637,21 @@ public sealed class FiscalDocumentCreationService
                     "The authoritative statutory beneficiary identity snapshot is incomplete."), null);
             }
         }
+        else if (isFullFeeExemptionSalesBookCandidate && facts.BeneficiaryIdentity is not null)
+        {
+            beneficiaryIdentity = NormalizeBeneficiaryIdentity(facts.BeneficiaryIdentity);
+            if (beneficiaryIdentity is null)
+            {
+                return (FiscalDocumentCreationResult.Failure(
+                    FiscalDocumentCreationErrorCode.AppliedStatutoryFactsIncomplete,
+                    "The authoritative statutory beneficiary identity snapshot is incomplete."), null);
+            }
+        }
         else if (facts.BeneficiaryIdentity is not null)
         {
             return (FiscalDocumentCreationResult.Failure(
                 FiscalDocumentCreationErrorCode.AppliedStatutoryFactsNotFinal,
-                "Beneficiary identity is accepted only for a proven local 5% or 20% statutory sales-book row."), null);
+                "Beneficiary identity is accepted only for a proven local statutory sales-book row."), null);
         }
 
         if (!string.Equals(

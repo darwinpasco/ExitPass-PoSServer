@@ -44,7 +44,14 @@ public sealed record StatutorySalesBookRow(
     long Discount20MinorUnits,
     long NetSalesMinorUnits,
     string OrdinanceReference,
-    int PercentageRateBasisPoints);
+    int PercentageRateBasisPoints,
+    string BenefitClassification = "PERCENTAGE_DISCOUNT",
+    string? PolicyCode = null,
+    long OriginalVatExclusiveSalesMinorUnits = 0,
+    long NonPercentageBenefitAmountMinorUnits = 0,
+    long FinalVatableSalesMinorUnits = 0,
+    long FinalVatAmountMinorUnits = 0,
+    long FinalPayableAmountMinorUnits = 0);
 
 public sealed record StatutorySalesBookSummary(
     StatutorySalesBookType Type,
@@ -189,6 +196,24 @@ public static class StatutorySalesBookQualification
         !percentageComponentSeparatelyProven
             ? PercentageComponentNotSeparatelyProven
             : null;
+
+    public static bool IsQualifyingFullFeeExemptionRow(
+        string? entitlementType,
+        StatutorySalesBookType reportType,
+        string? policyResolutionBasis,
+        string? benefitClassification,
+        int? percentageRateBasisPoints,
+        long statutoryDiscountAmountMinorUnits,
+        long nonPercentageBenefitAmountMinorUnits,
+        long finalPayableAmountMinorUnits) =>
+        string.Equals(entitlementType?.Trim(), StatutorySalesBookContract.Entitlement(reportType), StringComparison.OrdinalIgnoreCase) &&
+        string.Equals(policyResolutionBasis?.Trim(), "LOCAL_ORDINANCE", StringComparison.OrdinalIgnoreCase) &&
+        string.Equals(benefitClassification?.Trim(), "FREE_PARKING", StringComparison.OrdinalIgnoreCase) &&
+        percentageRateBasisPoints is null &&
+        statutoryDiscountAmountMinorUnits > 0 &&
+        (nonPercentageBenefitAmountMinorUnits == 0 ||
+         nonPercentageBenefitAmountMinorUnits == statutoryDiscountAmountMinorUnits) &&
+        finalPayableAmountMinorUnits == 0;
 }
 
 public static class StatutorySalesBookReconciliation
@@ -205,10 +230,26 @@ public static class StatutorySalesBookReconciliation
             return false;
 
         var percentageDiscount = checked(row.Discount5MinorUnits + row.Discount20MinorUnits);
-        return row.VatAmountMinorUnits <= row.SalesInclusiveVatMinorUnits &&
+        var commonFactsReconcile = row.VatAmountMinorUnits <= row.SalesInclusiveVatMinorUnits &&
                row.VatExemptSalesMinorUnits <= row.SalesInclusiveVatMinorUnits &&
-               percentageDiscount > 0 && percentageDiscount <= row.SalesInclusiveVatMinorUnits &&
                row.NetSalesMinorUnits <= row.SalesInclusiveVatMinorUnits &&
+               row.FinalVatableSalesMinorUnits >= 0 &&
+               row.FinalVatAmountMinorUnits >= 0 &&
+               row.FinalPayableAmountMinorUnits >= 0;
+        if (!commonFactsReconcile)
+            return false;
+
+        if (string.Equals(row.BenefitClassification, "FREE_PARKING", StringComparison.OrdinalIgnoreCase))
+            return row.PercentageRateBasisPoints == 0 &&
+                   percentageDiscount == 0 &&
+                   row.NonPercentageBenefitAmountMinorUnits > 0 &&
+                   row.NonPercentageBenefitAmountMinorUnits <= row.OriginalVatExclusiveSalesMinorUnits &&
+                   row.FinalVatableSalesMinorUnits == 0 &&
+                   row.FinalVatAmountMinorUnits == 0 &&
+                   row.FinalPayableAmountMinorUnits == 0 &&
+                   row.NetSalesMinorUnits == 0;
+
+        return percentageDiscount > 0 && percentageDiscount <= row.SalesInclusiveVatMinorUnits &&
                (row.PercentageRateBasisPoints == 500
                    ? row.Discount5MinorUnits > 0 && row.Discount20MinorUnits == 0
                    : row.PercentageRateBasisPoints == 2000 && row.Discount20MinorUnits > 0 && row.Discount5MinorUnits == 0);

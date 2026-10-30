@@ -96,6 +96,23 @@ public sealed class StatutorySalesBookRuntimeTests
     }
 
     [Theory]
+    [InlineData(StatutorySalesBookType.AnnexE2, "SENIOR_CITIZEN")]
+    [InlineData(StatutorySalesBookType.AnnexE3, "PWD")]
+    public void ProvenLocalFullFeeExemptionsQualifyWithoutBecomingPercentageRows(
+        StatutorySalesBookType type,
+        string entitlement)
+    {
+        Assert.True(StatutorySalesBookQualification.IsQualifyingFullFeeExemptionRow(
+            entitlement, type, "LOCAL_ORDINANCE", "FREE_PARKING", null, 4_464, 4_464, 0));
+        Assert.False(StatutorySalesBookQualification.IsQualifyingPercentageRow(
+            entitlement, type, "LOCAL_ORDINANCE", null, 0, false));
+        Assert.False(StatutorySalesBookQualification.IsQualifyingFullFeeExemptionRow(
+            entitlement, type, "NATIONAL_LAW", "FREE_PARKING", null, 4_464, 4_464, 0));
+        Assert.False(StatutorySalesBookQualification.IsQualifyingFullFeeExemptionRow(
+            entitlement, type, "LOCAL_ORDINANCE", "FREE_PARKING", null, 4_464, 4_464, 1));
+    }
+
+    [Theory]
     [InlineData(null, 5_000, true)]
     [InlineData(500, 0, true)]
     [InlineData(500, 5_000, false)]
@@ -155,6 +172,52 @@ public sealed class StatutorySalesBookRuntimeTests
         Assert.Contains("20%", text);
         Assert.Contains("0 0.69 0.94 rg", text);
         Assert.Contains("1 0.85 0.4 rg", text);
+    }
+
+    [Theory]
+    [InlineData(StatutorySalesBookType.AnnexE2)]
+    [InlineData(StatutorySalesBookType.AnnexE3)]
+    public void FullFeeExemptionPreservesPrescribedSheetAndAddsSeparateLguSupplement(
+        StatutorySalesBookType type)
+    {
+        var row = FullFeeRow(type);
+        Assert.True(StatutorySalesBookReconciliation.IsValid(row));
+
+        var output = new StatutorySalesBookOutputRenderer().Render(Report(type, [row]), StatutorySalesBookFormat.Xlsx);
+        using var stream = new MemoryStream(output.Bytes);
+        using var document = SpreadsheetDocument.Open(stream, false);
+        var workbookPart = Assert.IsType<WorkbookPart>(document.WorkbookPart);
+        var sheets = Assert.IsType<Sheets>(Assert.IsType<Workbook>(workbookPart.Workbook).Sheets).Elements<Sheet>().ToArray();
+        Assert.Equal(2, sheets.Length);
+        Assert.Equal(type == StatutorySalesBookType.AnnexE2 ? "E-2" : "E-3", sheets[0].Name!.Value);
+        Assert.Equal("LGU Supplement", sheets[1].Name!.Value);
+
+        using var archive = new System.IO.Compression.ZipArchive(new MemoryStream(output.Bytes));
+        using var primaryReader = new StreamReader(archive.GetEntry("xl/worksheets/sheet1.xml")!.Open());
+        var primary = primaryReader.ReadToEnd();
+        Assert.Contains("<c r=\"I17\" s=\"4\"><v>0.00</v></c>", primary);
+        Assert.Contains("<c r=\"J17\" s=\"4\"><v>0.00</v></c>", primary);
+
+        using var supplementReader = new StreamReader(archive.GetEntry("xl/worksheets/sheet2.xml")!.Open());
+        var supplement = supplementReader.ReadToEnd();
+        Assert.Contains("PH_PARANAQUE_", supplement);
+        Assert.Contains("Full Fee Exemption", supplement);
+        Assert.Contains("44.64", supplement);
+        Assert.Contains("5.36", supplement);
+    }
+
+    [Fact]
+    public void FullFeeExemptionPdfAddsSupplementWithoutChangingPrescribedReport()
+    {
+        var output = new StatutorySalesBookOutputRenderer().Render(
+            Report(StatutorySalesBookType.AnnexE2, [FullFeeRow(StatutorySalesBookType.AnnexE2)]),
+            StatutorySalesBookFormat.Pdf);
+        var text = System.Text.Encoding.Latin1.GetString(output.Bytes);
+
+        Assert.Contains("Senior Citizen Sales Book/Report", text);
+        Assert.Contains("SUPPLEMENTARY LGU PARKING BENEFIT DETAILS", text);
+        Assert.Contains("prescribed Annex E-2/E-3 columns remain unchanged", text);
+        Assert.Contains("Final payable: PHP 0.00", text);
     }
 
     [Theory]
@@ -220,4 +283,15 @@ public sealed class StatutorySalesBookRuntimeTests
     }
 
     private static StatutorySalesBookRow Row(StatutorySalesBookType type, int rate) => new(Guid.NewGuid(), new(2026, 10, 17), DateTimeOffset.Parse("2026-10-17T08:00:00Z"), rate, "Synthetic Beneficiary", type == StatutorySalesBookType.AnnexE2 ? "OSCA_ID" : "PWD_ID", "SYN-001", null, $"SI-{rate}", 10_000, 1_071, 0, rate == 500 ? 1_000 : 0, rate == 2000 ? 1_000 : 0, 9_000, "SYNTHETIC-LGU-PERCENTAGE", rate);
+
+    private static StatutorySalesBookRow FullFeeRow(StatutorySalesBookType type) => new(
+        Guid.NewGuid(), new(2026, 10, 17), DateTimeOffset.Parse("2026-10-17T08:00:00Z"), 0,
+        "Synthetic Beneficiary", type == StatutorySalesBookType.AnnexE2 ? "SENIOR_CITIZEN_ID" : "PWD_ID",
+        "SYN-001", null, type == StatutorySalesBookType.AnnexE2 ? "SI-SC-FULL" : "SI-PWD-FULL",
+        5_000, 536, 0, 0, 0, 0, "City Ordinance No. 48", 0,
+        "FREE_PARKING",
+        type == StatutorySalesBookType.AnnexE2
+            ? "PH_PARANAQUE_SENIOR_FREE_PARKING"
+            : "PH_PARANAQUE_PWD_FREE_PARKING",
+        4_464, 4_464, 0, 0, 0);
 }
