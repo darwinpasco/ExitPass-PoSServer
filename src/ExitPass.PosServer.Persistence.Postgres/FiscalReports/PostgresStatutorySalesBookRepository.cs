@@ -134,7 +134,15 @@ public sealed class PostgresStatutorySalesBookRepository(
                          JOIN pos.controlled_codes tc ON tc.controlled_code_id=td.tax_classification_code_id
                          WHERE td.fiscal_document_id=d.fiscal_document_id AND upper(tc.code_key) LIKE '%EXEMPT%'),0),
                s.protected_identity_envelope, s.protection_key_reference, s.protection_key_version,
-               s.envelope_format_version
+               s.envelope_format_version,
+               benefit.code_key, f.policy_code, f.vat_exclusive_basis_amount_minor_units,
+               f.statutory_discount_amount_minor_units, f.non_percentage_benefit_amount_minor_units,
+               COALESCE((SELECT SUM(td.taxable_amount_minor_units)
+                         FROM pos.fiscal_tax_details td
+                         WHERE td.fiscal_document_id=d.fiscal_document_id),0),
+               COALESCE((SELECT SUM(td.tax_amount_minor_units)
+                         FROM pos.fiscal_tax_details td
+                         WHERE td.fiscal_document_id=d.fiscal_document_id),0)
         FROM pos.fiscal_documents d
         JOIN pos.channel_terminals terminal
           ON terminal.channel_terminal_id=d.channel_terminal_id
@@ -146,6 +154,7 @@ public sealed class PostgresStatutorySalesBookRepository(
         JOIN pos.fiscal_document_applied_statutory_facts f ON f.fiscal_document_id=d.fiscal_document_id
         JOIN pos.controlled_codes ent ON ent.controlled_code_id=f.entitlement_type_code_id
         JOIN pos.controlled_codes basis ON basis.controlled_code_id=f.policy_resolution_basis_code_id
+        JOIN pos.controlled_codes benefit ON benefit.controlled_code_id=f.benefit_classification_code_id
         LEFT JOIN pos.fiscal_document_statutory_beneficiary_snapshots s ON s.fiscal_document_id=d.fiscal_document_id
         WHERE d.site_pos_server_id=@site AND d.fiscal_identity_id=@identity
           AND d.currency_code=@currency AND d.business_day_date>=@month_start AND d.business_day_date<@month_end
@@ -165,20 +174,36 @@ public sealed class PostgresStatutorySalesBookRepository(
             var documentNumber = r.GetString(4);
             var rate = r.IsDBNull(9) ? (int?)null : r.GetInt32(9);
             var discount = r.GetInt64(10);
+            var benefitClassification = r.GetString(20);
+            var statutoryDiscount = r.GetInt64(23);
+            var nonPercentageBenefit = r.GetInt64(24);
             var warning = StatutorySalesBookQualification.SafeExclusionClassification(
                 r.GetString(6), q.Type, r.GetString(7), rate, r.GetBoolean(11));
             if (warning is not null) warnings.Add(warning);
-            if (!StatutorySalesBookQualification.IsQualifyingPercentageRow(
-                    r.GetString(6), q.Type, r.GetString(7), rate, discount, r.GetBoolean(11)))
+            var isPercentage = StatutorySalesBookQualification.IsQualifyingPercentageRow(
+                r.GetString(6), q.Type, r.GetString(7), rate, discount, r.GetBoolean(11));
+            var isFullFeeExemption = StatutorySalesBookQualification.IsQualifyingFullFeeExemptionRow(
+                r.GetString(6), q.Type, r.GetString(7), benefitClassification, rate,
+                statutoryDiscount, nonPercentageBenefit, r.GetInt64(14));
+            if (!isPercentage && !isFullFeeExemption)
                 continue;
             if (r.IsDBNull(16)) return new([], documentNumber, warnings.ToArray());
             var decisionId = r.GetGuid(5);
             var identity = protector.Unprotect(documentId, decisionId, new(
                 (byte[])r.GetValue(16), r.GetString(17), r.GetString(18), r.GetInt16(19)));
+            var effectiveNonPercentageBenefit = isFullFeeExemption
+                ? nonPercentageBenefit > 0 ? nonPercentageBenefit : statutoryDiscount
+                : 0;
+            var originalAmount = r.GetInt64(12);
+            var originalVatAmount = isFullFeeExemption
+                ? checked(originalAmount - r.GetInt64(22))
+                : r.GetInt64(13);
             result.Add(new(documentId, r.GetFieldValue<DateOnly>(1), r.GetFieldValue<DateTimeOffset>(2), r.GetInt64(3),
                 identity.BeneficiaryFullName, identity.StatutoryIdType, identity.StatutoryIdNumber, identity.BeneficiaryTin,
-                documentNumber, r.GetInt64(12), r.GetInt64(13), r.GetInt64(15), rate == 500 ? discount : 0,
-                rate == 2000 ? discount : 0, r.GetInt64(14), r.IsDBNull(8) ? string.Empty : r.GetString(8), rate!.Value));
+                documentNumber, originalAmount, originalVatAmount, r.GetInt64(15), rate == 500 ? discount : 0,
+                rate == 2000 ? discount : 0, r.GetInt64(14), r.IsDBNull(8) ? string.Empty : r.GetString(8), rate ?? 0,
+                benefitClassification, r.IsDBNull(21) ? null : r.GetString(21), r.GetInt64(22),
+                effectiveNonPercentageBenefit, r.GetInt64(25), r.GetInt64(26), r.GetInt64(14)));
         }
         return new(result, null, warnings.ToArray());
     }

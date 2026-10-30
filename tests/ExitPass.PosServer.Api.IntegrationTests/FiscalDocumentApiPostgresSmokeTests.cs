@@ -561,6 +561,12 @@ public sealed class FiscalDocumentApiPostgresSmokeTests
             "fiscal_document_id = @id and is_canonical",
             "id",
             fiscalDocumentId));
+        Assert.Equal(1, await CountAsync(
+            connection,
+            "pos.fiscal_document_statutory_beneficiary_snapshots",
+            "fiscal_document_id = @id",
+            "id",
+            fiscalDocumentId));
         Assert.Equal("ZERO_PAYABLE_STATUTORY_FINALITY", await ScalarStringAsync(
             connection,
             "select event_facts ->> 'completion_basis' from pos.electronic_journal_records where fiscal_document_id = @id and is_canonical;",
@@ -2243,7 +2249,18 @@ public sealed class FiscalDocumentApiPostgresSmokeTests
             VatAmountMinorUnits = 0,
             VatTreatment = "VAT_INCLUSIVE_NO_EXEMPTION",
             StatutoryDiscountAmountMinorUnits = 2679,
-            FinalPayableAmountMinorUnits = 0
+            FinalPayableAmountMinorUnits = 0,
+            StatutoryDiscountRateBasisPoints = null,
+            PercentageDiscountAmountMinorUnits = 0,
+            NonPercentageBenefitAmountMinorUnits = 2679,
+            PercentageComponentSeparatelyProven = false,
+            BeneficiaryIdentity = new StatutoryBeneficiaryIdentityRequest(
+                "Synthetic Senior Beneficiary", "SENIOR_CITIZEN_ID", "SC-TEST-0001", null,
+                "synthetic-operator", "OPERATOR_CONSOLE", DateTimeOffset.Parse("2026-10-20T08:00:00+08:00"),
+                "synthetic-operator", "OPERATOR_CONSOLE", DateTimeOffset.Parse("2026-10-20T08:01:00+08:00"),
+                "synthetic-reviewer", DateTimeOffset.Parse("2026-10-20T08:02:00+08:00"),
+                paid.AppliedStatutoryFiscalFacts.StatutoryDiscountDecisionCommandId!.Value.ToString("D"),
+                $"zero-payable-{suffix}")
         };
         var authorityRef = facts.StatutoryPayableBasisApplicationCommandId!.Value.ToString("D");
         var upstreamRef = $"ZERO_PAYABLE_STATUTORY_FINALITY:{authorityRef}";

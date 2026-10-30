@@ -263,6 +263,56 @@ public sealed class FiscalDocumentCreationServiceTests
             FiscalDocumentSemanticRequestHasher.GetVersion(ValidZeroPayableStatutoryCommand()));
     }
 
+    [Theory]
+    [InlineData("SENIOR_CITIZEN", "SENIOR_CITIZEN_ID")]
+    [InlineData("PWD", "PWD_ID")]
+    public async Task ZeroPayableFullFeeExemptionAcceptsFinalizedBeneficiaryIdentity(
+        string entitlementType,
+        string statutoryIdType)
+    {
+        var repository = new RecordingFiscalDocumentRepository();
+        var service = new FiscalDocumentCreationService(repository);
+        var command = ValidZeroPayableStatutoryCommand();
+        var facts = command.AppliedStatutoryFiscalFacts! with
+        {
+            EntitlementType = entitlementType,
+            BeneficiaryIdentity = ValidBeneficiaryIdentity(statutoryIdType)
+        };
+
+        var result = await service.CreateAsync(command with { AppliedStatutoryFiscalFacts = facts });
+
+        Assert.True(result.Succeeded, $"{result.ErrorCode}: {result.Message}");
+        var identity = Assert.IsType<StatutoryBeneficiaryIdentitySnapshot>(
+            result.Draft?.AppliedStatutoryFiscalFacts?.BeneficiaryIdentity);
+        Assert.Equal("Synthetic Beneficiary", identity.BeneficiaryFullName);
+        Assert.Equal(statutoryIdType, identity.StatutoryIdType);
+        Assert.Equal("TEST-0001", identity.StatutoryIdNumber);
+        Assert.Equal("000-000-000-000", identity.BeneficiaryTin);
+        Assert.Empty(result.Draft!.Tenders);
+        Assert.Equal(0, result.Draft.PayableAmountMinorUnits);
+    }
+
+    [Fact]
+    public async Task ZeroPayableFullFeeExemptionRejectsIncompleteSuppliedBeneficiaryIdentity()
+    {
+        var repository = new RecordingFiscalDocumentRepository();
+        var service = new FiscalDocumentCreationService(repository);
+        var command = ValidZeroPayableStatutoryCommand();
+        var facts = command.AppliedStatutoryFiscalFacts! with
+        {
+            BeneficiaryIdentity = ValidBeneficiaryIdentity("SENIOR_CITIZEN_ID") with
+            {
+                BeneficiaryFullName = " "
+            }
+        };
+
+        var result = await service.CreateAsync(command with { AppliedStatutoryFiscalFacts = facts });
+
+        Assert.False(result.Succeeded);
+        Assert.Equal(FiscalDocumentCreationErrorCode.AppliedStatutoryFactsIncomplete, result.ErrorCode);
+        Assert.Equal(0, repository.CreateCount);
+    }
+
     [Fact]
     public async Task ZeroPayableStatutoryCompletionReplaysWithoutDuplicateDocument()
     {
@@ -1131,6 +1181,7 @@ public sealed class FiscalDocumentCreationServiceTests
             VatAmountMinorUnits = 0,
             VatTreatment = "VAT_INCLUSIVE_NO_EXEMPTION",
             StatutoryDiscountAmountMinorUnits = 2679,
+            NonPercentageBenefitAmountMinorUnits = 2679,
             FinalPayableAmountMinorUnits = 0
         };
         var appliedTariffRef = facts.AppliedTariffSnapshotId!.Value.ToString("D");
@@ -1183,6 +1234,22 @@ public sealed class FiscalDocumentCreationServiceTests
             AppliedStatutoryFiscalFacts = facts
         };
     }
+
+    private static StatutoryBeneficiaryIdentityInput ValidBeneficiaryIdentity(string statutoryIdType) => new(
+        "Synthetic Beneficiary",
+        statutoryIdType,
+        "TEST-0001",
+        "000-000-000-000",
+        "operator-001",
+        StatutoryBeneficiaryCaptureChannels.AuthorizedSiteOperator,
+        DateTimeOffset.Parse("2026-10-20T08:00:00+08:00"),
+        "operator-001",
+        StatutoryBeneficiaryCaptureChannels.AuthorizedSiteOperator,
+        DateTimeOffset.Parse("2026-10-20T08:01:00+08:00"),
+        "reviewer-001",
+        DateTimeOffset.Parse("2026-10-20T08:02:00+08:00"),
+        "APPROVED",
+        "correlation-001");
 
     private static FiscalizationPayableBasisInput ValidPayableBasis() =>
         new(

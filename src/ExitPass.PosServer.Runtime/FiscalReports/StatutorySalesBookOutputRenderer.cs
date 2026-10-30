@@ -24,17 +24,20 @@ public sealed class StatutorySalesBookOutputRenderer
 
     private static byte[] RenderXlsx(StatutorySalesBookReport report)
     {
+        var hasLguSupplement = report.Rows.Any(IsLguFullFeeExemption);
         using var stream = new MemoryStream();
         using (var archive = new ZipArchive(stream, ZipArchiveMode.Create, true, Encoding.UTF8))
         {
-            Add(archive, "[Content_Types].xml", ContentTypes());
+            Add(archive, "[Content_Types].xml", ContentTypes(hasLguSupplement));
             Add(archive, "_rels/.rels", RootRelationships());
-            Add(archive, "docProps/app.xml", AppProperties(report));
+            Add(archive, "docProps/app.xml", AppProperties(report, hasLguSupplement));
             Add(archive, "docProps/core.xml", CoreProperties());
-            Add(archive, "xl/workbook.xml", Workbook(report));
-            Add(archive, "xl/_rels/workbook.xml.rels", WorkbookRelationships());
+            Add(archive, "xl/workbook.xml", Workbook(report, hasLguSupplement));
+            Add(archive, "xl/_rels/workbook.xml.rels", WorkbookRelationships(hasLguSupplement));
             Add(archive, "xl/styles.xml", Styles());
             Add(archive, "xl/worksheets/sheet1.xml", Worksheet(report));
+            if (hasLguSupplement)
+                Add(archive, "xl/worksheets/sheet2.xml", LguSupplementWorksheet(report));
         }
         return stream.ToArray();
     }
@@ -69,6 +72,7 @@ public sealed class StatutorySalesBookOutputRenderer
             pdf.Text(page, left, 14, $"Status: {report.Summary.ReportStatus} | Period: {report.Summary.CalendarYear:0000}-{report.Summary.CalendarMonth:00} | {(report.Summary.IsEmpty ? "No qualifying transactions" : $"{report.Summary.QualifyingTransactionCount} qualifying transaction(s)")}", 6.5);
             pdf.RightText(page, right, 14, $"Page {pageNo + 1} of {pageCount}", 6.5);
         }
+        DrawLguSupplementPdf(pdf, report, width, height, left, right);
         return pdf.Build();
     }
 
@@ -181,6 +185,84 @@ public sealed class StatutorySalesBookOutputRenderer
         }
     }
 
+    private static void DrawLguSupplementPdf(
+        A4FiscalReportPdf pdf,
+        StatutorySalesBookReport report,
+        double width,
+        double height,
+        double left,
+        double right)
+    {
+        var rows = report.Rows.Where(IsLguFullFeeExemption).ToArray();
+        const int rowsPerPage = 5;
+        for (var pageIndex = 0; pageIndex * rowsPerPage < rows.Length; pageIndex++)
+        {
+            var page = pdf.AddPage(width, height);
+            pdf.CenterText(page, width / 2, height - 32, "SUPPLEMENTARY LGU PARKING BENEFIT DETAILS", 10, true);
+            pdf.CenterText(page, width / 2, height - 45, "For evaluator review; prescribed Annex E-2/E-3 columns remain unchanged.", 7);
+            var y = height - 72;
+            foreach (var row in rows.Skip(pageIndex * rowsPerPage).Take(rowsPerPage))
+            {
+                pdf.Text(page, left, y, $"SI: {row.SalesInvoiceNumber} | Date: {row.TransactionDate:yyyy-MM-dd} | Classification: Full Fee Exemption", 7, true);
+                pdf.Text(page, left, y - 12, $"Policy: {row.PolicyCode ?? ""} | Ordinance: {row.OrdinanceReference}", 6.5);
+                pdf.Text(page, left, y - 24, $"Original fee: PHP {Money(row.SalesInclusiveVatMinorUnits)} | VAT-exclusive: PHP {Money(row.OriginalVatExclusiveSalesMinorUnits)} | Original VAT: PHP {Money(row.VatAmountMinorUnits)}", 6.5);
+                pdf.Text(page, left, y - 36, $"LGU benefit: PHP {Money(row.NonPercentageBenefitAmountMinorUnits)} | Final VATable sales: PHP {Money(row.FinalVatableSalesMinorUnits)} | Final VAT: PHP {Money(row.FinalVatAmountMinorUnits)} | Final payable: PHP {Money(row.FinalPayableAmountMinorUnits)}", 6.5);
+                pdf.StrokeRect(page, left, y - 44, right - left, 50, 0.25);
+                y -= 66;
+            }
+            pdf.RightText(page, right, 14, $"LGU Supplement {pageIndex + 1}", 6.5);
+        }
+    }
+
+    private static string LguSupplementWorksheet(StatutorySalesBookReport report)
+    {
+        var rows = report.Rows.Where(IsLguFullFeeExemption).ToArray();
+        var last = Math.Max(12, rows.Length + 3);
+        var b = new StringBuilder(16000);
+        b.Append("<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?><worksheet xmlns=\"http://schemas.openxmlformats.org/spreadsheetml/2006/main\"><dimension ref=\"A1:M").Append(last).Append("\"/><sheetViews><sheetView workbookViewId=\"0\"/></sheetViews><sheetFormatPr defaultRowHeight=\"18\"/><cols>");
+        var widths = new[] { 12d, 18d, 18d, 22d, 22d, 18d, 16d, 14d, 16d, 18d, 14d, 14d, 14d };
+        for (var i = 0; i < widths.Length; i++) b.Append("<col min=\"").Append(i + 1).Append("\" max=\"").Append(i + 1).Append("\" width=\"").Append(widths[i].ToString(CultureInfo.InvariantCulture)).Append("\" customWidth=\"1\"/>");
+        b.Append("</cols><sheetData>");
+        b.Append("<row r=\"1\"><c r=\"A1\" s=\"2\" t=\"inlineStr\"><is><t>SUPPLEMENTARY LGU PARKING BENEFIT DETAILS - FOR EVALUATOR REVIEW</t></is></c></row>");
+        var headings = new[] { "Date", "SI Number", "Entitlement", "Policy Code", "Ordinance Reference", "Benefit Classification", "Original Fee", "VAT-exclusive Basis", "Original VAT", "LGU Benefit", "Final VATable Sales", "Final VAT", "Final Payable" };
+        b.Append("<row r=\"2\">");
+        for (var i = 0; i < headings.Length; i++) TextCell(b, ((char)('A' + i)).ToString(), 2, headings[i], 7);
+        b.Append("</row>");
+        var rowNumber = 3;
+        foreach (var row in rows)
+        {
+            b.Append("<row r=\"").Append(rowNumber).Append("\">");
+            TextCell(b, "A", rowNumber, row.TransactionDate.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture), 5);
+            TextCell(b, "B", rowNumber, row.SalesInvoiceNumber, 5);
+            TextCell(b, "C", rowNumber, report.Summary.Type == StatutorySalesBookType.AnnexE2 ? "Senior Citizen" : "PWD", 5);
+            TextCell(b, "D", rowNumber, row.PolicyCode ?? string.Empty, 5);
+            TextCell(b, "E", rowNumber, row.OrdinanceReference, 5);
+            TextCell(b, "F", rowNumber, "Full Fee Exemption", 5);
+            MoneyCell(b, "G", rowNumber, row.SalesInclusiveVatMinorUnits);
+            MoneyCell(b, "H", rowNumber, row.OriginalVatExclusiveSalesMinorUnits);
+            MoneyCell(b, "I", rowNumber, row.VatAmountMinorUnits);
+            MoneyCell(b, "J", rowNumber, row.NonPercentageBenefitAmountMinorUnits);
+            MoneyCell(b, "K", rowNumber, row.FinalVatableSalesMinorUnits);
+            MoneyCell(b, "L", rowNumber, row.FinalVatAmountMinorUnits);
+            MoneyCell(b, "M", rowNumber, row.FinalPayableAmountMinorUnits);
+            b.Append("</row>");
+            rowNumber++;
+        }
+        while (rowNumber <= last) BlankSupplementRow(b, rowNumber++);
+        b.Append("</sheetData><mergeCells count=\"1\"><mergeCell ref=\"A1:M1\"/></mergeCells><printOptions horizontalCentered=\"1\"/><pageMargins left=\"0.2362\" right=\"0.2362\" top=\"0.5\" bottom=\"0.5\" header=\"0.2\" footer=\"0.2\"/><pageSetup paperSize=\"9\" orientation=\"landscape\" fitToWidth=\"1\" fitToHeight=\"0\"/></worksheet>");
+        return b.ToString();
+    }
+
+    private static void BlankSupplementRow(StringBuilder b, int row)
+    {
+        b.Append("<row r=\"").Append(row).Append("\">");
+        for (var i = 0; i < 13; i++) b.Append("<c r=\"").Append((char)('A' + i)).Append(row).Append("\" s=\"5\"/>");
+        b.Append("</row>");
+    }
+
+    private static bool IsLguFullFeeExemption(StatutorySalesBookRow row) =>
+        string.Equals(row.BenefitClassification, "FREE_PARKING", StringComparison.OrdinalIgnoreCase);
+
     private static string Worksheet(StatutorySalesBookReport report)
     {
         var h = report.Header;
@@ -251,11 +333,35 @@ public sealed class StatutorySalesBookOutputRenderer
     private static void TextCell(StringBuilder b,string c,int r,string value,int style)=>b.Append("<c r=\"").Append(c).Append(r).Append("\" s=\"").Append(style).Append("\" t=\"inlineStr\"><is><t xml:space=\"preserve\">").Append(Xml(value)).Append("</t></is></c>");
     private static void MoneyCell(StringBuilder b,string c,int r,long value,int style=4)=>b.Append("<c r=\"").Append(c).Append(r).Append("\" s=\"").Append(style).Append("\"><v>").Append(Money(value)).Append("</v></c>");
     private static string Styles() => "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?><styleSheet xmlns=\"http://schemas.openxmlformats.org/spreadsheetml/2006/main\"><fonts count=\"3\"><font><sz val=\"9\"/><name val=\"Arial\"/></font><font><b/><sz val=\"10\"/><name val=\"Arial\"/></font><font><b/><sz val=\"9\"/><name val=\"Arial\"/></font></fonts><fills count=\"11\"><fill><patternFill patternType=\"none\"/></fill><fill><patternFill patternType=\"gray125\"/></fill><fill><patternFill patternType=\"solid\"><fgColor rgb=\"FFA6A6A6\"/></patternFill></fill><fill><patternFill patternType=\"solid\"><fgColor rgb=\"FF00B0F0\"/></patternFill></fill><fill><patternFill patternType=\"solid\"><fgColor rgb=\"FFFFFF00\"/></patternFill></fill><fill><patternFill patternType=\"solid\"><fgColor rgb=\"FF9999FF\"/></patternFill></fill><fill><patternFill patternType=\"solid\"><fgColor rgb=\"FFFFC000\"/></patternFill></fill><fill><patternFill patternType=\"solid\"><fgColor rgb=\"FF92D050\"/></patternFill></fill><fill><patternFill patternType=\"solid\"><fgColor rgb=\"FFED7D31\"/></patternFill></fill><fill><patternFill patternType=\"solid\"><fgColor rgb=\"FFE7E6E6\"/></patternFill></fill><fill><patternFill patternType=\"solid\"><fgColor rgb=\"FFFFD966\"/></patternFill></fill></fills><borders count=\"2\"><border/><border><left style=\"thin\"><color auto=\"1\"/></left><right style=\"thin\"><color auto=\"1\"/></right><top style=\"thin\"><color auto=\"1\"/></top><bottom style=\"thin\"><color auto=\"1\"/></bottom></border></borders><cellStyleXfs count=\"1\"><xf numFmtId=\"0\" fontId=\"0\" fillId=\"0\" borderId=\"0\"/></cellStyleXfs><cellXfs count=\"16\"><xf numFmtId=\"0\" fontId=\"0\" fillId=\"0\" borderId=\"0\"/><xf numFmtId=\"0\" fontId=\"0\" fillId=\"0\" borderId=\"0\" applyAlignment=\"1\"><alignment horizontal=\"center\"/></xf><xf numFmtId=\"0\" fontId=\"1\" fillId=\"0\" borderId=\"0\" applyAlignment=\"1\"><alignment horizontal=\"center\"/></xf><xf numFmtId=\"0\" fontId=\"2\" fillId=\"0\" borderId=\"0\" applyAlignment=\"1\"><alignment horizontal=\"right\"/></xf><xf numFmtId=\"4\" fontId=\"0\" fillId=\"0\" borderId=\"1\" applyAlignment=\"1\"><alignment horizontal=\"right\"/></xf><xf numFmtId=\"0\" fontId=\"0\" fillId=\"0\" borderId=\"1\" applyAlignment=\"1\"><alignment horizontal=\"center\" vertical=\"center\" wrapText=\"1\"/></xf><xf numFmtId=\"4\" fontId=\"2\" fillId=\"2\" borderId=\"1\"/><xf numFmtId=\"0\" fontId=\"2\" fillId=\"2\" borderId=\"1\" applyAlignment=\"1\"><alignment horizontal=\"center\" vertical=\"center\" wrapText=\"1\"/></xf><xf numFmtId=\"0\" fontId=\"2\" fillId=\"3\" borderId=\"1\" applyAlignment=\"1\"><alignment horizontal=\"center\" vertical=\"center\" wrapText=\"1\"/></xf><xf numFmtId=\"0\" fontId=\"2\" fillId=\"4\" borderId=\"1\" applyAlignment=\"1\"><alignment horizontal=\"center\" vertical=\"center\" wrapText=\"1\"/></xf><xf numFmtId=\"0\" fontId=\"2\" fillId=\"5\" borderId=\"1\" applyAlignment=\"1\"><alignment horizontal=\"center\" vertical=\"center\" wrapText=\"1\"/></xf><xf numFmtId=\"0\" fontId=\"2\" fillId=\"6\" borderId=\"1\" applyAlignment=\"1\"><alignment horizontal=\"center\" vertical=\"center\" wrapText=\"1\"/></xf><xf numFmtId=\"0\" fontId=\"2\" fillId=\"7\" borderId=\"1\" applyAlignment=\"1\"><alignment horizontal=\"center\" vertical=\"center\" wrapText=\"1\"/></xf><xf numFmtId=\"0\" fontId=\"2\" fillId=\"8\" borderId=\"1\" applyAlignment=\"1\"><alignment horizontal=\"center\" vertical=\"center\" wrapText=\"1\"/></xf><xf numFmtId=\"0\" fontId=\"2\" fillId=\"9\" borderId=\"1\" applyAlignment=\"1\"><alignment horizontal=\"center\" vertical=\"center\" wrapText=\"1\"/></xf><xf numFmtId=\"0\" fontId=\"2\" fillId=\"10\" borderId=\"1\" applyAlignment=\"1\"><alignment horizontal=\"center\" vertical=\"center\" wrapText=\"1\"/></xf></cellXfs><cellStyles count=\"1\"><cellStyle name=\"Normal\" xfId=\"0\" builtinId=\"0\"/></cellStyles></styleSheet>";
-    private static string Workbook(StatutorySalesBookReport report) => $"<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?><workbook xmlns=\"http://schemas.openxmlformats.org/spreadsheetml/2006/main\" xmlns:r=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships\"><bookViews><workbookView/></bookViews><sheets><sheet name=\"{(report.Summary.Type == StatutorySalesBookType.AnnexE2 ? "E-2" : "E-3")}\" sheetId=\"1\" r:id=\"rId1\"/></sheets><definedNames><definedName name=\"_xlnm.Print_Area\" localSheetId=\"0\">'{(report.Summary.Type == StatutorySalesBookType.AnnexE2 ? "E-2" : "E-3")}'!$A$1:$K${Math.Max(25, 17 + report.Rows.Count)}</definedName></definedNames><calcPr calcId=\"0\" calcMode=\"manual\"/></workbook>";
-    private static string WorkbookRelationships() => "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?><Relationships xmlns=\"http://schemas.openxmlformats.org/package/2006/relationships\"><Relationship Id=\"rId1\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet\" Target=\"worksheets/sheet1.xml\"/><Relationship Id=\"rId2\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles\" Target=\"styles.xml\"/></Relationships>";
-    private static string ContentTypes() => "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?><Types xmlns=\"http://schemas.openxmlformats.org/package/2006/content-types\"><Default Extension=\"rels\" ContentType=\"application/vnd.openxmlformats-package.relationships+xml\"/><Default Extension=\"xml\" ContentType=\"application/xml\"/><Override PartName=\"/xl/workbook.xml\" ContentType=\"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml\"/><Override PartName=\"/xl/worksheets/sheet1.xml\" ContentType=\"application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml\"/><Override PartName=\"/xl/styles.xml\" ContentType=\"application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml\"/><Override PartName=\"/docProps/core.xml\" ContentType=\"application/vnd.openxmlformats-package.core-properties+xml\"/><Override PartName=\"/docProps/app.xml\" ContentType=\"application/vnd.openxmlformats-officedocument.extended-properties+xml\"/></Types>";
+    private static string Workbook(StatutorySalesBookReport report, bool hasLguSupplement)
+    {
+        var primary = report.Summary.Type == StatutorySalesBookType.AnnexE2 ? "E-2" : "E-3";
+        var supplement = hasLguSupplement ? "<sheet name=\"LGU Supplement\" sheetId=\"2\" r:id=\"rId2\"/>" : string.Empty;
+        return $"<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?><workbook xmlns=\"http://schemas.openxmlformats.org/spreadsheetml/2006/main\" xmlns:r=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships\"><bookViews><workbookView/></bookViews><sheets><sheet name=\"{primary}\" sheetId=\"1\" r:id=\"rId1\"/>{supplement}</sheets><definedNames><definedName name=\"_xlnm.Print_Area\" localSheetId=\"0\">'{primary}'!$A$1:$K${Math.Max(25, 17 + report.Rows.Count)}</definedName></definedNames><calcPr calcId=\"0\" calcMode=\"manual\"/></workbook>";
+    }
+    private static string WorkbookRelationships(bool hasLguSupplement)
+    {
+        var supplement = hasLguSupplement
+            ? "<Relationship Id=\"rId2\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet\" Target=\"worksheets/sheet2.xml\"/>"
+            : string.Empty;
+        var stylesId = hasLguSupplement ? "rId3" : "rId2";
+        return $"<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?><Relationships xmlns=\"http://schemas.openxmlformats.org/package/2006/relationships\"><Relationship Id=\"rId1\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet\" Target=\"worksheets/sheet1.xml\"/>{supplement}<Relationship Id=\"{stylesId}\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles\" Target=\"styles.xml\"/></Relationships>";
+    }
+    private static string ContentTypes(bool hasLguSupplement)
+    {
+        var supplement = hasLguSupplement
+            ? "<Override PartName=\"/xl/worksheets/sheet2.xml\" ContentType=\"application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml\"/>"
+            : string.Empty;
+        return $"<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?><Types xmlns=\"http://schemas.openxmlformats.org/package/2006/content-types\"><Default Extension=\"rels\" ContentType=\"application/vnd.openxmlformats-package.relationships+xml\"/><Default Extension=\"xml\" ContentType=\"application/xml\"/><Override PartName=\"/xl/workbook.xml\" ContentType=\"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml\"/><Override PartName=\"/xl/worksheets/sheet1.xml\" ContentType=\"application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml\"/>{supplement}<Override PartName=\"/xl/styles.xml\" ContentType=\"application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml\"/><Override PartName=\"/docProps/core.xml\" ContentType=\"application/vnd.openxmlformats-package.core-properties+xml\"/><Override PartName=\"/docProps/app.xml\" ContentType=\"application/vnd.openxmlformats-officedocument.extended-properties+xml\"/></Types>";
+    }
     private static string RootRelationships() => "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?><Relationships xmlns=\"http://schemas.openxmlformats.org/package/2006/relationships\"><Relationship Id=\"rId1\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument\" Target=\"xl/workbook.xml\"/><Relationship Id=\"rId2\" Type=\"http://schemas.openxmlformats.org/package/2006/relationships/metadata/core-properties\" Target=\"docProps/core.xml\"/><Relationship Id=\"rId3\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/extended-properties\" Target=\"docProps/app.xml\"/></Relationships>";
-    private static string AppProperties(StatutorySalesBookReport report) => $"<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?><Properties xmlns=\"http://schemas.openxmlformats.org/officeDocument/2006/extended-properties\" xmlns:vt=\"http://schemas.openxmlformats.org/officeDocument/2006/docPropsVTypes\"><Application>ExitPass POS Server</Application><TitlesOfParts><vt:vector size=\"1\" baseType=\"lpstr\"><vt:lpstr>{(report.Summary.Type == StatutorySalesBookType.AnnexE2 ? "E-2" : "E-3")}</vt:lpstr></vt:vector></TitlesOfParts></Properties>";
+    private static string AppProperties(StatutorySalesBookReport report, bool hasLguSupplement)
+    {
+        var primary = report.Summary.Type == StatutorySalesBookType.AnnexE2 ? "E-2" : "E-3";
+        var supplement = hasLguSupplement ? "<vt:lpstr>LGU Supplement</vt:lpstr>" : string.Empty;
+        var count = hasLguSupplement ? 2 : 1;
+        return $"<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?><Properties xmlns=\"http://schemas.openxmlformats.org/officeDocument/2006/extended-properties\" xmlns:vt=\"http://schemas.openxmlformats.org/officeDocument/2006/docPropsVTypes\"><Application>ExitPass POS Server</Application><TitlesOfParts><vt:vector size=\"{count}\" baseType=\"lpstr\"><vt:lpstr>{primary}</vt:lpstr>{supplement}</vt:vector></TitlesOfParts></Properties>";
+    }
     private static string CoreProperties() => "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?><cp:coreProperties xmlns:cp=\"http://schemas.openxmlformats.org/package/2006/metadata/core-properties\" xmlns:dc=\"http://purl.org/dc/elements/1.1/\" xmlns:dcterms=\"http://purl.org/dc/terms/\" xmlns:xsi=\"http://www.w3.org/2001/XMLSchema-instance\"><dc:creator>ExitPass POS Server</dc:creator><cp:lastModifiedBy>ExitPass POS Server</cp:lastModifiedBy><dcterms:created xsi:type=\"dcterms:W3CDTF\">2000-01-01T00:00:00Z</dcterms:created><dcterms:modified xsi:type=\"dcterms:W3CDTF\">2000-01-01T00:00:00Z</dcterms:modified></cp:coreProperties>";
     private static void Add(ZipArchive archive,string name,string content){var entry=archive.CreateEntry(name,CompressionLevel.NoCompression);entry.LastWriteTime=FixedZipTime;using var writer=new StreamWriter(entry.Open(),new UTF8Encoding(false)){NewLine="\n"};writer.Write(content);}
     private static DateTimeOffset Pht(DateTimeOffset value) => TimeZoneInfo.ConvertTime(value, ResolvePht());

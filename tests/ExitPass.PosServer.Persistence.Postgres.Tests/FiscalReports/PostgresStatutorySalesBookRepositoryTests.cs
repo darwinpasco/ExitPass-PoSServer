@@ -15,6 +15,9 @@ public sealed class PostgresStatutorySalesBookRepositoryTests
         Assert.Contains("document_status.code_key='issued'", source, StringComparison.Ordinal);
         Assert.Contains("pos.fiscal_document_applied_statutory_facts", source, StringComparison.Ordinal);
         Assert.Contains("pos.fiscal_document_statutory_beneficiary_snapshots", source, StringComparison.Ordinal);
+        Assert.Contains("JOIN pos.controlled_codes benefit", source, StringComparison.Ordinal);
+        Assert.Contains("IsQualifyingFullFeeExemptionRow", source, StringComparison.Ordinal);
+        Assert.Contains("f.non_percentage_benefit_amount_minor_units", source, StringComparison.Ordinal);
         Assert.Contains("JOIN pos.channel_terminals terminal", source, StringComparison.Ordinal);
         Assert.Contains("terminal.site_pos_server_id=d.site_pos_server_id", source, StringComparison.Ordinal);
         Assert.Contains("d.site_pos_server_id=@site", source, StringComparison.Ordinal);
