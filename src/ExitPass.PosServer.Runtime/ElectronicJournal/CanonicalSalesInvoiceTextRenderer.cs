@@ -66,8 +66,9 @@ public sealed class CanonicalSalesInvoiceTextRenderer
         lines.Add(string.Empty);
         lines.Add(Separator);
         lines.Add("PARKING FEE");
+        var usesOriginalFullFeeAmounts = DigitalSalesInvoiceRenderModelFactory.UsesOriginalFullFeePresentation(invoice);
         foreach (var item in invoice.Lines.OrderBy(item => item.LineSequence))
-            AddCompactItem(lines, item, currency);
+            AddCompactItem(lines, item, currency, usesOriginalFullFeeAmounts);
         lines.Add(Separator);
         AddValue(lines, "SUBTOTAL", Amount(fiscal.SubtotalAmountMinorUnits));
         AddValue(lines, "DISCOUNT", Amount(fiscal.DiscountAmountMinorUnits));
@@ -143,10 +144,14 @@ public sealed class CanonicalSalesInvoiceTextRenderer
     private static string Amount(long minorUnits) =>
         (minorUnits / 100m).ToString("N2", CultureInfo.InvariantCulture);
 
-    private static void AddCompactItem(List<string> lines, DigitalSalesInvoiceLineRenderModel item, string currency)
+    private static void AddCompactItem(
+        List<string> lines,
+        DigitalSalesInvoiceLineRenderModel item,
+        string currency,
+        bool useGrossAmount)
     {
         var left = $"{item.Quantity:0.##} x {Money(item.UnitAmountMinorUnits, currency)}";
-        var right = Amount(item.NetAmountMinorUnits);
+        var right = Amount(useGrossAmount ? item.GrossAmountMinorUnits : item.NetAmountMinorUnits);
         if (left.Length + right.Length + 1 <= ReceiptWidth)
             lines.Add(left + new string(' ', ReceiptWidth - left.Length - right.Length) + right);
         else

@@ -144,13 +144,34 @@ public static class DigitalSalesInvoiceRenderModelFactory
         IReadOnlyDictionary<string, string?> context)
     {
         var currency = ResolveCurrency(model);
+        var usesOriginalFullFeeAmounts = UsesOriginalFullFeePresentation(model);
+        var statutoryFacts = model.AppliedStatutoryFiscalFacts;
+        var lines = usesOriginalFullFeeAmounts
+            ? model.Lines.Select(line => line with
+            {
+                UnitAmountMinorUnits = statutoryFacts!.OriginalAmountMinorUnits,
+                GrossAmountMinorUnits = statutoryFacts.OriginalAmountMinorUnits
+            }).ToArray()
+            : model.Lines;
         var payableTotal = model.Totals
             .Where(value => string.Equals(value.TotalTypeCodeKey, "payable_total", StringComparison.OrdinalIgnoreCase))
             .Select(value => (long?)value.AmountMinorUnits)
             .SingleOrDefault();
         var totalAmount = payableTotal
-            ?? model.AppliedStatutoryFiscalFacts?.FinalPayableAmountMinorUnits
+            ?? statutoryFacts?.FinalPayableAmountMinorUnits
             ?? (model.Totals.Count == 1 ? model.Totals[0].AmountMinorUnits : model.Lines.Sum(line => line.NetAmountMinorUnits));
+        var subtotalAmount = usesOriginalFullFeeAmounts
+            ? statutoryFacts!.OriginalAmountMinorUnits
+            : model.Lines.Sum(line => line.GrossAmountMinorUnits);
+        var discountAmount = usesOriginalFullFeeAmounts
+            ? statutoryFacts!.StatutoryDiscountAmountMinorUnits
+            : model.Discounts.Sum(discount => discount.DiscountAmountMinorUnits);
+        var vatableSales = usesOriginalFullFeeAmounts
+            ? statutoryFacts!.VatExclusiveBasisAmountMinorUnits
+            : SumTaxableAmount(model.TaxDetails, "vatable");
+        var vatAmount = usesOriginalFullFeeAmounts
+            ? checked(statutoryFacts!.OriginalAmountMinorUnits - statutoryFacts.VatExclusiveBasisAmountMinorUnits)
+            : model.TaxDetails.Sum(tax => tax.TaxAmountMinorUnits);
 
         var fiscalContent = new DigitalSalesInvoiceFiscalContentRenderModel(
             Value(context, "branch_site", "branchSite", "site_name", "siteName"),
@@ -160,10 +181,10 @@ public static class DigitalSalesInvoiceRenderModelFactory
             Value(context, "payment_time", "paymentTime", "paid_at", "paidAt"),
             Value(context, "duration", "durationText", "parking_duration"),
             ResolvePaymentMethod(model, context),
-            model.Lines.Sum(line => line.GrossAmountMinorUnits),
-            model.Discounts.Sum(discount => discount.DiscountAmountMinorUnits),
-            SumTaxableAmount(model.TaxDetails, "vatable"),
-            model.TaxDetails.Sum(tax => tax.TaxAmountMinorUnits),
+            subtotalAmount,
+            discountAmount,
+            vatableSales,
+            vatAmount,
             SumTaxableAmount(model.TaxDetails, "vat_exempt"),
             SumTaxableAmount(model.TaxDetails, "zero_rated"),
             totalAmount,
@@ -174,7 +195,27 @@ public static class DigitalSalesInvoiceRenderModelFactory
             true,
             Value(context, "cashier_display_name", "cashierDisplayName"));
 
-        return model with { FiscalContent = fiscalContent };
+        return model with { Lines = lines, FiscalContent = fiscalContent };
+    }
+
+    internal static bool UsesOriginalFullFeePresentation(DigitalSalesInvoiceRenderModel model)
+    {
+        var facts = model.AppliedStatutoryFiscalFacts;
+        if (facts is null ||
+            !string.Equals(model.CompletionBasis, FiscalCompletionBasisCodes.ZeroPayableStatutoryFinality, StringComparison.OrdinalIgnoreCase) ||
+            !string.Equals(facts.PolicyReference.ResolutionBasis, "LOCAL_ORDINANCE", StringComparison.OrdinalIgnoreCase) ||
+            !string.Equals(facts.BenefitClassification, "FREE_PARKING", StringComparison.OrdinalIgnoreCase) ||
+            facts.FinalPayableAmountMinorUnits != 0 ||
+            facts.OriginalAmountMinorUnits <= 0 ||
+            facts.VatExclusiveBasisAmountMinorUnits < 0 ||
+            facts.VatExclusiveBasisAmountMinorUnits > facts.OriginalAmountMinorUnits ||
+            facts.StatutoryDiscountAmountMinorUnits != facts.VatExclusiveBasisAmountMinorUnits ||
+            model.Lines.Count != 1 ||
+            model.Lines[0].Quantity != 1m ||
+            !string.Equals(model.Lines[0].CurrencyCode, facts.Currency, StringComparison.OrdinalIgnoreCase))
+            return false;
+
+        return facts.EntitlementType.Trim().ToUpperInvariant() is "SENIOR_CITIZEN" or "PWD";
     }
 
     private static long SumTaxableAmount(
