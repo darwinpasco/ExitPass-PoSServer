@@ -256,10 +256,21 @@ public sealed class CanonicalSalesInvoiceTextRenderer
     {
         if (string.IsNullOrWhiteSpace(value)) return value;
         var normalized = value.Trim();
+        var totalHoursParts = normalized.Split(':', StringSplitOptions.None);
+        if (totalHoursParts.Length == 3 &&
+            long.TryParse(totalHoursParts[0], NumberStyles.None, CultureInfo.InvariantCulture, out var totalHours) &&
+            int.TryParse(totalHoursParts[1], NumberStyles.None, CultureInfo.InvariantCulture, out var minutes) &&
+            int.TryParse(totalHoursParts[2], NumberStyles.None, CultureInfo.InvariantCulture, out var seconds) &&
+            minutes is >= 0 and <= 59 &&
+            seconds is >= 0 and <= 59)
+        {
+            return $"{totalHours:00}:{minutes:00}:{seconds:00}";
+        }
+
         if (TimeSpan.TryParse(normalized, CultureInfo.InvariantCulture, out var duration) && duration >= TimeSpan.Zero)
         {
-            var totalHours = (long)Math.Floor(duration.TotalHours);
-            return $"{totalHours:00}:{duration.Minutes:00}:{duration.Seconds:00}";
+            var parsedTotalHours = (long)Math.Floor(duration.TotalHours);
+            return $"{parsedTotalHours:00}:{duration.Minutes:00}:{duration.Seconds:00}";
         }
         return normalized;
     }
