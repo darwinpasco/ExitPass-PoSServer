@@ -39,7 +39,10 @@ public sealed class PostgresStatutorySalesBookRepository(
                 Sum(ordered, x => x.VatExemptSalesMinorUnits), Sum(ordered, x => x.Discount5MinorUnits),
                 Sum(ordered, x => x.Discount20MinorUnits), Sum(ordered, x => x.NetSalesMinorUnits), asOf,
                 rows.Warnings.Order(StringComparer.Ordinal).ToArray(), period.Status, ordered.Length == 0,
-                period.TotalCount, period.ClosedCount, period.CommittedZCount);
+                period.TotalCount, period.ClosedCount, period.CommittedZCount,
+                Sum(ordered, x => x.OriginalParkingFeeVatInclusiveMinorUnits),
+                Sum(ordered, x => x.LguWaiverVatInclusiveMinorUnits),
+                Sum(ordered, x => x.LguFinalPayableVatInclusiveMinorUnits));
             await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
             return new(StatutorySalesBookOutcome.Succeeded, new(header, summary, ordered));
         }
@@ -142,7 +145,8 @@ public sealed class PostgresStatutorySalesBookRepository(
                          WHERE td.fiscal_document_id=d.fiscal_document_id),0),
                COALESCE((SELECT SUM(td.tax_amount_minor_units)
                          FROM pos.fiscal_tax_details td
-                         WHERE td.fiscal_document_id=d.fiscal_document_id),0)
+                          WHERE td.fiscal_document_id=d.fiscal_document_id),0),
+                f.applied_policy_reference_id
         FROM pos.fiscal_documents d
         JOIN pos.channel_terminals terminal
           ON terminal.channel_terminal_id=d.channel_terminal_id
@@ -198,12 +202,25 @@ public sealed class PostgresStatutorySalesBookRepository(
             var originalVatAmount = isFullFeeExemption
                 ? checked(originalAmount - r.GetInt64(22))
                 : r.GetInt64(13);
+            var finalPayableAmount = r.GetInt64(14);
+            var policyReference = isFullFeeExemption
+                ? !r.IsDBNull(21) && !string.IsNullOrWhiteSpace(r.GetString(21))
+                    ? r.GetString(21)
+                    : r.IsDBNull(27) ? null : r.GetGuid(27).ToString("D")
+                : null;
+            var originalParkingFee = isFullFeeExemption ? originalAmount : 0;
+            var lguFinalPayable = isFullFeeExemption ? finalPayableAmount : 0;
+            var lguWaiver = isFullFeeExemption
+                ? checked(originalParkingFee - lguFinalPayable)
+                : 0;
             result.Add(new(documentId, r.GetFieldValue<DateOnly>(1), r.GetFieldValue<DateTimeOffset>(2), r.GetInt64(3),
                 identity.BeneficiaryFullName, identity.StatutoryIdType, identity.StatutoryIdNumber, identity.BeneficiaryTin,
                 documentNumber, originalAmount, originalVatAmount, r.GetInt64(15), rate == 500 ? discount : 0,
-                rate == 2000 ? discount : 0, r.GetInt64(14), r.IsDBNull(8) ? string.Empty : r.GetString(8), rate ?? 0,
+                rate == 2000 ? discount : 0, finalPayableAmount, r.IsDBNull(8) ? string.Empty : r.GetString(8), rate ?? 0,
                 benefitClassification, r.IsDBNull(21) ? null : r.GetString(21), r.GetInt64(22),
-                effectiveNonPercentageBenefit, r.GetInt64(25), r.GetInt64(26), r.GetInt64(14)));
+                effectiveNonPercentageBenefit, r.GetInt64(25), r.GetInt64(26), finalPayableAmount,
+                isFullFeeExemption ? "FULL_FEE_EXEMPTION" : null, null,
+                originalParkingFee, lguWaiver, lguFinalPayable, policyReference));
         }
         return new(result, null, warnings.ToArray());
     }

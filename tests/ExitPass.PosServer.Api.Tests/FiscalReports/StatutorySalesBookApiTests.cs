@@ -103,10 +103,12 @@ public sealed class StatutorySalesBookApiTests
     {
         var repository = new StubRepository(type, fullFeeExemption: true);
         var legacyBytes = Encoding.UTF8.GetBytes($"legacy-11-column-{annex}-{format}");
+        var previousBytes = Encoding.UTF8.GetBytes($"previous-12-column-{annex}-{format}");
         var artifacts = new ImmutableRevisionRepository(
             Guid.Parse(legacyArtifactId),
             Guid.Parse(currentArtifactId),
             legacyBytes,
+            previousBytes,
             type,
             format);
         var service = new FiscalReportArtifactService(artifacts);
@@ -121,14 +123,16 @@ public sealed class StatutorySalesBookApiTests
         Assert.Equal(StatusCodes.Status200OK, created.StatusCode);
         Assert.Equal(created.Body, replayed.Body);
         Assert.Equal(1, artifacts.RenderCount);
-        Assert.Equal(2, artifacts.Current.Revision);
-        Assert.Equal(artifacts.Legacy.ArtifactId, artifacts.Current.SupersedesArtifactId);
+        Assert.Equal(3, artifacts.Current.Revision);
+        Assert.Equal(artifacts.Previous.ArtifactId, artifacts.Current.SupersedesArtifactId);
         Assert.Equal(StatutorySalesBookContract.ArtifactContractProfile, artifacts.Current.ArtifactVersion);
-        Assert.NotEqual(artifacts.Legacy.SourceFingerprint, artifacts.Current.SourceFingerprint);
+        Assert.NotEqual(artifacts.Previous.SourceFingerprint, artifacts.Current.SourceFingerprint);
         Assert.Equal(legacyBytes, artifacts.Read(artifacts.Legacy.ArtifactId));
+        Assert.Equal(previousBytes, artifacts.Read(artifacts.Previous.ArtifactId));
         Assert.Equal(artifacts.Legacy.Sha256, Hash(legacyBytes));
+        Assert.Equal(artifacts.Previous.Sha256, Hash(previousBytes));
         Assert.Equal(artifacts.Current.Sha256, Hash(created.Body));
-        AssertCurrentTwelveColumnOutput(created.Body, format);
+        AssertCurrentSeventeenColumnOutput(created.Body, format);
     }
 
     [Fact]
@@ -170,7 +174,11 @@ public sealed class StatutorySalesBookApiTests
                 "SYN-TEST-001", null, "SI-00000000000171", 5_000, 536, 0, 0, 0, 0, "City Ordinance No. 48", 0,
                 "FREE_PARKING", type == StatutorySalesBookType.AnnexE2
                     ? "PH_PARANAQUE_SENIOR_FREE_PARKING"
-                    : "PH_PARANAQUE_PWD_FREE_PARKING", 4_464, 4_464, 0, 0, 0)
+                    : "PH_PARANAQUE_PWD_FREE_PARKING", 4_464, 4_464, 0, 0, 0,
+                "FULL_FEE_EXEMPTION", null, 5_000, 5_000, 0,
+                type == StatutorySalesBookType.AnnexE2
+                    ? "PH_PARANAQUE_SENIOR_FREE_PARKING"
+                    : "PH_PARANAQUE_PWD_FREE_PARKING")
             : new StatutorySalesBookRow(Guid.Parse("91000000-0000-4000-8000-000000000010"), new DateOnly(2026, 10, 17), generatedAt,
                 117, "Synthetic Senior", "SENIOR_CITIZEN_ID", "SC-TEST-001", null, "SI-00000117",
                 10000, 1071, 0, 0, 2000, 8000, "PARANAQUE-SYNTHETIC-20", 2000);
@@ -179,28 +187,33 @@ public sealed class StatutorySalesBookApiTests
                 "SN-TEST", "MIN-TEST", "PITX-L3-POS-01", generatedAt, "operator"),
             new(type, Site, Identity, "PHP", 2026, 10, "PITX-L3-POS-01", 1,
                 row.SalesInclusiveVatMinorUnits, row.VatAmountMinorUnits, row.VatExemptSalesMinorUnits,
-                row.Discount5MinorUnits, row.Discount20MinorUnits, row.NetSalesMinorUnits, generatedAt, []),
+                row.Discount5MinorUnits, row.Discount20MinorUnits, row.NetSalesMinorUnits, generatedAt, [],
+                LguOriginalParkingFeeVatInclusiveMinorUnits: row.OriginalParkingFeeVatInclusiveMinorUnits,
+                LguWaiverVatInclusiveMinorUnits: row.LguWaiverVatInclusiveMinorUnits,
+                LguFinalPayableVatInclusiveMinorUnits: row.LguFinalPayableVatInclusiveMinorUnits),
             [row]);
     }
 
-    private static void AssertCurrentTwelveColumnOutput(byte[] bytes, string format)
+    private static void AssertCurrentSeventeenColumnOutput(byte[] bytes, string format)
     {
         if (format == "pdf")
         {
             var text = Encoding.Latin1.GetString(bytes);
-            Assert.Contains("LGU Benefit", text);
+            Assert.Contains("ADDITIONAL LGU PARKING-PRIVILEGE DETAIL", text);
             Assert.Contains("(SI-00000000000171) Tj", text);
-            Assert.Contains("44.64", text);
+            Assert.Contains("FULL_FEE_EXEMPTION", text);
+            Assert.Contains("50.00", text);
             return;
         }
 
         using var archive = new ZipArchive(new MemoryStream(bytes), ZipArchiveMode.Read);
         using var reader = new StreamReader(archive.GetEntry("xl/worksheets/sheet1.xml")!.Open());
         var worksheet = reader.ReadToEnd();
-        Assert.Contains("LGU Benefit / Exemption", worksheet);
+        Assert.Contains("ADDITIONAL LGU PARKING-PRIVILEGE DETAIL", worksheet);
+        Assert.Contains("LGU Policy Reference", worksheet);
         Assert.Contains("SI-00000000000171", worksheet);
-        Assert.Contains("<c r=\"L17\" s=\"4\"><v>44.64</v></c>", worksheet);
-        Assert.Contains("ref=\"A1:L25\"", worksheet);
+        Assert.Contains("<c r=\"O17\" s=\"4\"><v>50.00</v></c>", worksheet);
+        Assert.Contains("ref=\"A1:Q25\"", worksheet);
     }
 
     private static string Hash(byte[] bytes) =>
@@ -259,6 +272,7 @@ public sealed class StatutorySalesBookApiTests
             Guid legacyArtifactId,
             Guid currentArtifactId,
             byte[] legacyBytes,
+            byte[] previousBytes,
             StatutorySalesBookType type,
             string format)
         {
@@ -274,11 +288,24 @@ public sealed class StatutorySalesBookApiTests
                 null,
                 legacyHash,
                 legacyBytes.LongLength);
-            Current = Legacy;
+            var previousHash = Hash(previousBytes);
+            Previous = Record(
+                Guid.Parse("93000000-0000-4000-8000-000000000012"),
+                type,
+                format,
+                "pos-server-statutory-sales-book-rmo24-2023:pos-server-scope-v3:annex-e2-e3-12-column-v1",
+                FiscalReportArtifactContract.SourceFingerprint(new { LayoutVersion = "annex-e2-e3-12-column-v1", Scope = "2026-10" }),
+                2,
+                Legacy.ArtifactId,
+                previousHash,
+                previousBytes.LongLength);
+            Current = Previous;
             bytesByArtifactId.Add(Legacy.ArtifactId, legacyBytes.ToArray());
+            bytesByArtifactId.Add(Previous.ArtifactId, previousBytes.ToArray());
         }
 
         public FiscalReportArtifactRecord Legacy { get; }
+        public FiscalReportArtifactRecord Previous { get; }
         public FiscalReportArtifactRecord Current { get; private set; }
         public int RenderCount { get; private set; }
 
@@ -297,7 +324,7 @@ public sealed class StatutorySalesBookApiTests
                 currentArtifactId, command.SitePosServerId, command.FiscalIdentityId, command.CurrencyCode,
                 command.ReportType, command.ScopeReference, command.Format, command.ArtifactVersion,
                 command.SourceFingerprint, command.FiscalReportingPeriodId, command.CalendarYear,
-                command.CalendarMonth, command.BusinessDayDate, Legacy.Revision + 1, Legacy.ArtifactId,
+                command.CalendarMonth, command.BusinessDayDate, Previous.Revision + 1, Previous.ArtifactId,
                 $"test/{hash}.{command.Format}", hash, payload.Bytes.LongLength, payload.ContentType,
                 payload.FileName, DateTimeOffset.Parse("2026-11-03T10:00:00+08:00"));
             bytesByArtifactId.Add(Current.ArtifactId, payload.Bytes.ToArray());
