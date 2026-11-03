@@ -146,7 +146,11 @@ public sealed class PostgresStatutorySalesBookRepository(
                COALESCE((SELECT SUM(td.tax_amount_minor_units)
                          FROM pos.fiscal_tax_details td
                           WHERE td.fiscal_document_id=d.fiscal_document_id),0),
-                f.applied_policy_reference_id
+                COALESCE(
+                    NULLIF(BTRIM(f.policy_code), ''),
+                    NULLIF(BTRIM(f.ordinance_reference), ''),
+                    f.policy_version_id::text,
+                    f.applied_policy_reference_id::text)
         FROM pos.fiscal_documents d
         JOIN pos.channel_terminals terminal
           ON terminal.channel_terminal_id=d.channel_terminal_id
@@ -203,11 +207,7 @@ public sealed class PostgresStatutorySalesBookRepository(
                 ? checked(originalAmount - r.GetInt64(22))
                 : r.GetInt64(13);
             var finalPayableAmount = r.GetInt64(14);
-            var policyReference = isFullFeeExemption
-                ? !r.IsDBNull(21) && !string.IsNullOrWhiteSpace(r.GetString(21))
-                    ? r.GetString(21)
-                    : r.IsDBNull(27) ? null : r.GetGuid(27).ToString("D")
-                : null;
+            var policyReference = isFullFeeExemption && !r.IsDBNull(27) ? r.GetString(27) : null;
             var originalParkingFee = isFullFeeExemption ? originalAmount : 0;
             var lguFinalPayable = isFullFeeExemption ? finalPayableAmount : 0;
             var lguWaiver = isFullFeeExemption

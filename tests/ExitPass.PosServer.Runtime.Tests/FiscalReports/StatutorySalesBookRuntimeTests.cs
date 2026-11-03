@@ -51,8 +51,16 @@ public sealed class StatutorySalesBookRuntimeTests
         Assert.Contains("ADDITIONAL LGU PARKING-PRIVILEGE DETAIL", worksheetXml);
         Assert.Contains("LGU Privilege Type", worksheetXml);
         Assert.Contains("LGU Policy Reference", worksheetXml);
+        Assert.Contains("<c r=\"K13\" s=\"7\"", worksheetXml);
+        Assert.Contains("<c r=\"L13\" s=\"16\"", worksheetXml);
+        Assert.Contains("<c r=\"Q13\" s=\"16\"", worksheetXml);
         Assert.Contains("<c r=\"N17\" s=\"4\"><v>0.00</v></c>", worksheetXml);
         Assert.Contains("<c r=\"P18\" s=\"6\"><v>0.00</v></c>", worksheetXml);
+        using var stylesReader = new StreamReader(archive.GetEntry("xl/styles.xml")!.Open());
+        var stylesXml = stylesReader.ReadToEnd();
+        Assert.Contains("<color rgb=\"FFFFFFFF\"/>", stylesXml);
+        Assert.Contains("<fgColor rgb=\"FF375623\"/>", stylesXml);
+        Assert.Contains("fontId=\"3\" fillId=\"11\"", stylesXml);
     }
 
     [Fact]
@@ -180,14 +188,18 @@ public sealed class StatutorySalesBookRuntimeTests
         Assert.Contains("<c r=\"P17\" s=\"6\"><v>0.00</v></c>", xml);
     }
 
-    [Fact]
-    public void PdfIsLandscapeAndIncludesAllPrescribedHeadings()
+    [Theory]
+    [InlineData(StatutorySalesBookType.AnnexE2)]
+    [InlineData(StatutorySalesBookType.AnnexE3)]
+    public void PdfIsLandscapeAndIncludesAllPrescribedHeadings(StatutorySalesBookType type)
     {
-        var output = new StatutorySalesBookOutputRenderer().Render(Report(StatutorySalesBookType.AnnexE2, [Row(StatutorySalesBookType.AnnexE2, 2000)]), StatutorySalesBookFormat.Pdf);
+        var output = new StatutorySalesBookOutputRenderer().Render(Report(type, [Row(type, 2000)]), StatutorySalesBookFormat.Pdf);
         var text = System.Text.Encoding.Latin1.GetString(output.Bytes);
         Assert.StartsWith("%PDF-1.4", text);
         Assert.Contains("/MediaBox [0 0 841.89 595.28]", text);
-        Assert.Contains("Senior Citizen Sales Book/Report", text);
+        Assert.Contains(type == StatutorySalesBookType.AnnexE2
+            ? "Senior Citizen Sales Book/Report"
+            : "Persons with Disability Sales Book/Report", text);
         Assert.Contains("Software Name and Version No. plus Release No./Release Date", text);
         Assert.Contains("Discount", text);
         Assert.Contains("5%", text);
@@ -196,6 +208,8 @@ public sealed class StatutorySalesBookRuntimeTests
         Assert.Contains("LGU Privilege", text);
         Assert.Contains("LGU Policy", text);
         Assert.Contains("Reference", text);
+        Assert.Contains("0.22 0.34 0.14 rg", text);
+        Assert.Contains("1 1 1 rg BT /F2", text);
         Assert.Contains("0 0.69 0.94 rg", text);
         Assert.Contains("1 0.85 0.4 rg", text);
     }

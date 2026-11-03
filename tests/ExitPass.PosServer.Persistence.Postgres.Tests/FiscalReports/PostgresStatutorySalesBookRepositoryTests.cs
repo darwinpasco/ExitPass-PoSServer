@@ -19,6 +19,10 @@ public sealed class PostgresStatutorySalesBookRepositoryTests
         Assert.Contains("IsQualifyingFullFeeExemptionRow", source, StringComparison.Ordinal);
         Assert.Contains("f.non_percentage_benefit_amount_minor_units", source, StringComparison.Ordinal);
         Assert.Contains("f.applied_policy_reference_id", source, StringComparison.Ordinal);
+        Assert.Contains("NULLIF(BTRIM(f.policy_code), '')", source, StringComparison.Ordinal);
+        Assert.Contains("NULLIF(BTRIM(f.ordinance_reference), '')", source, StringComparison.Ordinal);
+        Assert.Contains("f.policy_version_id::text", source, StringComparison.Ordinal);
+        Assert.Contains("f.applied_policy_reference_id::text", source, StringComparison.Ordinal);
         Assert.Contains("FULL_FEE_EXEMPTION", source, StringComparison.Ordinal);
         Assert.Contains("checked(originalParkingFee - lguFinalPayable)", source, StringComparison.Ordinal);
         Assert.Contains("JOIN pos.channel_terminals terminal", source, StringComparison.Ordinal);
