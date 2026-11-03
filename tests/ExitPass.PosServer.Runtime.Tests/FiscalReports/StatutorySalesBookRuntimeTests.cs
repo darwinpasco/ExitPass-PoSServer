@@ -10,7 +10,7 @@ public sealed class StatutorySalesBookRuntimeTests
     [Theory]
     [InlineData(StatutorySalesBookType.AnnexE2, "E-2", "Senior Citizen Sales Book/Report", "ANNEX \"E-2\"")]
     [InlineData(StatutorySalesBookType.AnnexE3, "E-3", "Persons with Disability Sales Book/Report", "ANNEX \"E-3\"")]
-    public void XlsxPreservesOfficialElevenColumnGeometryAndTitles(StatutorySalesBookType type, string sheetName, string title, string annex)
+    public void XlsxPreservesPrescribedColumnsAndAppendsLguBenefitExtension(StatutorySalesBookType type, string sheetName, string title, string annex)
     {
         var output = new StatutorySalesBookOutputRenderer().Render(Report(type, [Row(type, 2000)]), StatutorySalesBookFormat.Xlsx);
         using var stream = new MemoryStream(output.Bytes);
@@ -20,13 +20,15 @@ public sealed class StatutorySalesBookRuntimeTests
         var sheets = Assert.IsType<Sheets>(workbook.Sheets);
         Assert.Equal(sheetName, sheets.Elements<Sheet>().Single().Name!.Value);
         var sheet = Assert.IsType<Worksheet>(workbookPart.WorksheetParts.Single().Worksheet);
-        Assert.Equal(11, sheet.Elements<Columns>().Single().Elements<Column>().Count());
+        Assert.Equal(12, sheet.Elements<Columns>().Single().Elements<Column>().Count());
         var merges = sheet.Elements<MergeCells>().Single().Elements<MergeCell>().Select(x => x.Reference!.Value).ToArray();
         Assert.Contains("I13:J13", merges);
         Assert.Contains("I14:I16", merges);
         Assert.Contains("J14:J16", merges);
+        Assert.Contains("K13:K16", merges);
+        Assert.Contains("L13:L16", merges);
         var names = Assert.IsType<DefinedNames>(workbook.DefinedNames);
-        Assert.Equal("$A$1:$K$25", names.Elements<DefinedName>().Single().Text!.Split('!')[1]);
+        Assert.Equal("$A$1:$L$25", names.Elements<DefinedName>().Single().Text!.Split('!')[1]);
         Assert.True(output.Bytes[0] == (byte)'P' && output.Bytes[1] == (byte)'K');
         using var archive = new System.IO.Compression.ZipArchive(new MemoryStream(output.Bytes));
         using var reader = new StreamReader(archive.GetEntry("xl/worksheets/sheet1.xml")!.Open());
@@ -44,6 +46,9 @@ public sealed class StatutorySalesBookRuntimeTests
         Assert.Contains("Date and Time Generated: 2026-10-17 16:00:00", worksheetXml);
         Assert.Contains("UserID: operator-1", worksheetXml);
         Assert.Contains(">TOTAL<", worksheetXml);
+        Assert.Contains("LGU Benefit / Exemption", worksheetXml);
+        Assert.Contains("<c r=\"L17\" s=\"4\"><v>0.00</v></c>", worksheetXml);
+        Assert.Contains("<c r=\"L18\" s=\"6\"><v>0.00</v></c>", worksheetXml);
     }
 
     [Fact]
@@ -156,6 +161,7 @@ public sealed class StatutorySalesBookRuntimeTests
         Assert.DoesNotContain("Synthetic Beneficiary", xml);
         Assert.Contains("TOTAL - NO QUALIFYING TRANSACTIONS", xml);
         Assert.Contains("r=\"17\"", xml);
+        Assert.Contains("<c r=\"L17\" s=\"6\"><v>0.00</v></c>", xml);
     }
 
     [Fact]
@@ -170,6 +176,8 @@ public sealed class StatutorySalesBookRuntimeTests
         Assert.Contains("Discount", text);
         Assert.Contains("5%", text);
         Assert.Contains("20%", text);
+        Assert.Contains("LGU Benefit", text);
+        Assert.Contains("Exemption", text);
         Assert.Contains("0 0.69 0.94 rg", text);
         Assert.Contains("1 0.85 0.4 rg", text);
     }
@@ -197,6 +205,9 @@ public sealed class StatutorySalesBookRuntimeTests
         var primary = primaryReader.ReadToEnd();
         Assert.Contains("<c r=\"I17\" s=\"4\"><v>0.00</v></c>", primary);
         Assert.Contains("<c r=\"J17\" s=\"4\"><v>0.00</v></c>", primary);
+        Assert.Contains("<c r=\"K17\" s=\"4\"><v>0.00</v></c>", primary);
+        Assert.Contains("<c r=\"L17\" s=\"4\"><v>44.64</v></c>", primary);
+        Assert.Contains("<c r=\"L18\" s=\"6\"><v>44.64</v></c>", primary);
 
         using var supplementReader = new StreamReader(archive.GetEntry("xl/worksheets/sheet2.xml")!.Open());
         var supplement = supplementReader.ReadToEnd();
@@ -206,15 +217,22 @@ public sealed class StatutorySalesBookRuntimeTests
         Assert.Contains("5.36", supplement);
     }
 
-    [Fact]
-    public void FullFeeExemptionPdfAddsSupplementWithoutChangingPrescribedReport()
+    [Theory]
+    [InlineData(StatutorySalesBookType.AnnexE2)]
+    [InlineData(StatutorySalesBookType.AnnexE3)]
+    public void FullFeeExemptionPdfAddsLguBenefitColumnAndPreservesSupplement(StatutorySalesBookType type)
     {
         var output = new StatutorySalesBookOutputRenderer().Render(
-            Report(StatutorySalesBookType.AnnexE2, [FullFeeRow(StatutorySalesBookType.AnnexE2)]),
+            Report(type, [FullFeeRow(type)]),
             StatutorySalesBookFormat.Pdf);
         var text = System.Text.Encoding.Latin1.GetString(output.Bytes);
 
-        Assert.Contains("Senior Citizen Sales Book/Report", text);
+        Assert.Contains(type == StatutorySalesBookType.AnnexE2
+            ? "Senior Citizen Sales Book/Report"
+            : "Persons with Disability Sales Book/Report", text);
+        Assert.Contains("LGU Benefit", text);
+        Assert.Contains("Exemption", text);
+        Assert.Contains("44.64", text);
         Assert.Contains("SUPPLEMENTARY LGU PARKING BENEFIT DETAILS", text);
         Assert.Contains("prescribed Annex E-2/E-3 columns remain unchanged", text);
         Assert.Contains("Final payable: PHP 0.00", text);
@@ -259,9 +277,14 @@ public sealed class StatutorySalesBookRuntimeTests
         {
             Rows = [report.Rows[0] with { NetSalesMinorUnits = report.Rows[0].NetSalesMinorUnits + 1 }]
         };
+        var changedLguBenefit = report with
+        {
+            Rows = [report.Rows[0] with { NonPercentageBenefitAmountMinorUnits = 1 }]
+        };
 
         Assert.Equal(StatutorySalesBookContract.SourceFingerprint(report), StatutorySalesBookContract.SourceFingerprint(regenerated));
         Assert.NotEqual(StatutorySalesBookContract.SourceFingerprint(report), StatutorySalesBookContract.SourceFingerprint(changed));
+        Assert.NotEqual(StatutorySalesBookContract.SourceFingerprint(report), StatutorySalesBookContract.SourceFingerprint(changedLguBenefit));
     }
 
     [Fact]

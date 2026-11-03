@@ -49,7 +49,7 @@ public sealed class StatutorySalesBookOutputRenderer
         const double left = 20;
         const double right = width - 20;
         const double headerHeight = 38;
-        var columns = new[] { 48d, 128d, 80d, 72d, 72d, 80d, 62d, 72d, 48d, 48d, 72d };
+        var columns = new[] { 48d, 128d, 80d, 72d, 72d, 80d, 62d, 72d, 48d, 48d, 72d, 82d };
         var scale = (right - left) / columns.Sum();
         columns = columns.Select(value => value * scale).ToArray();
         var pdf = new A4FiscalReportPdf();
@@ -68,7 +68,7 @@ public sealed class StatutorySalesBookOutputRenderer
                 y -= 22;
             }
             if (pageNo == pageCount - 1)
-                DrawPdfTotals(pdf, page, left, y, columns, 22, report.Summary);
+                DrawPdfTotals(pdf, page, left, y, columns, 22, report.Summary, SumNonPercentageBenefits(report.Rows));
             pdf.Text(page, left, 14, $"Status: {report.Summary.ReportStatus} | Period: {report.Summary.CalendarYear:0000}-{report.Summary.CalendarMonth:00} | {(report.Summary.IsEmpty ? "No qualifying transactions" : $"{report.Summary.QualifyingTransactionCount} qualifying transaction(s)")}", 6.5);
             pdf.RightText(page, right, 14, $"Page {pageNo + 1} of {pageCount}", 6.5);
         }
@@ -95,8 +95,8 @@ public sealed class StatutorySalesBookOutputRenderer
     private static void DrawPdfColumns(A4FiscalReportPdf pdf, int page, double x, double y, double[] widths, double height, StatutorySalesBookType type)
     {
         var labels = type == StatutorySalesBookType.AnnexE2
-            ? new[] { "Date", "Name of Senior Citizen (SC)", "OSCA ID No./SC ID No.", "SC TIN", "SI/OR Number", "Sales (inclusive of VAT)", "VAT Amount", "VAT Exempt Sales", "Net Sales" }
-            : new[] { "Date", "Name of Person with Disability (PWD)", "PWD ID No.", "PWD TIN", "SI / OR Number", "Sales (inclusive of VAT)", "VAT Amount", "VAT Exempt Sales", "Net Sales" };
+            ? new[] { "Date", "Name of Senior Citizen (SC)", "OSCA ID No./SC ID No.", "SC TIN", "SI/OR Number", "Sales (inclusive of VAT)", "VAT Amount", "VAT Exempt Sales", "Net Sales", "LGU Benefit / Exemption" }
+            : new[] { "Date", "Name of Person with Disability (PWD)", "PWD ID No.", "PWD TIN", "SI / OR Number", "Sales (inclusive of VAT)", "VAT Amount", "VAT Exempt Sales", "Net Sales", "LGU Benefit / Exemption" };
         var colors = new[]
         {
             (0.65, 0.65, 0.65), (0.00, 0.69, 0.94), (1.00, 1.00, 0.00), (0.60, 0.60, 1.00),
@@ -115,6 +115,8 @@ public sealed class StatutorySalesBookOutputRenderer
         DrawPdfHeaderCell(pdf, page, x + widths[8], y - half, widths[9], half, "20%", (1.00, 0.85, 0.40));
         x += discountWidth;
         DrawPdfHeaderCell(pdf, page, x, y, widths[10], height, labels[8], (0.65, 0.65, 0.65));
+        x += widths[10];
+        DrawPdfHeaderCell(pdf, page, x, y, widths[11], height, labels[9], (0.65, 0.65, 0.65));
     }
 
     private static void DrawPdfHeaderCell(A4FiscalReportPdf pdf, int page, double x, double y, double width, double height, string label, (double Red, double Green, double Blue) color)
@@ -128,7 +130,7 @@ public sealed class StatutorySalesBookOutputRenderer
 
     private static void DrawPdfRow(A4FiscalReportPdf pdf, int page, double x, double y, double[] widths, double height, StatutorySalesBookRow row)
     {
-        var values = new[] { row.TransactionDate.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture), row.BeneficiaryFullName, row.StatutoryIdNumber, row.BeneficiaryTin ?? string.Empty, row.SalesInvoiceNumber, Money(row.SalesInclusiveVatMinorUnits), Money(row.VatAmountMinorUnits), Money(row.VatExemptSalesMinorUnits), Money(row.Discount5MinorUnits), Money(row.Discount20MinorUnits), Money(row.NetSalesMinorUnits) };
+        var values = new[] { row.TransactionDate.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture), row.BeneficiaryFullName, row.StatutoryIdNumber, row.BeneficiaryTin ?? string.Empty, row.SalesInvoiceNumber, Money(row.SalesInclusiveVatMinorUnits), Money(row.VatAmountMinorUnits), Money(row.VatExemptSalesMinorUnits), Money(row.Discount5MinorUnits), Money(row.Discount20MinorUnits), Money(row.NetSalesMinorUnits), Money(row.NonPercentageBenefitAmountMinorUnits) };
         for (var i = 0; i < widths.Length; i++)
         {
             pdf.StrokeRect(page, x, y - height, widths[i], height, 0.3);
@@ -139,7 +141,7 @@ public sealed class StatutorySalesBookOutputRenderer
         }
     }
 
-    private static void DrawPdfTotals(A4FiscalReportPdf pdf, int page, double x, double y, double[] widths, double height, StatutorySalesBookSummary summary)
+    private static void DrawPdfTotals(A4FiscalReportPdf pdf, int page, double x, double y, double[] widths, double height, StatutorySalesBookSummary summary, long nonPercentageBenefitTotal)
     {
         if (summary.IsEmpty)
         {
@@ -156,7 +158,8 @@ public sealed class StatutorySalesBookOutputRenderer
                 summary.VatExemptSalesMinorUnits,
                 summary.Discount5MinorUnits,
                 summary.Discount20MinorUnits,
-                summary.NetSalesMinorUnits
+                summary.NetSalesMinorUnits,
+                nonPercentageBenefitTotal
             };
             for (var i = 5; i < widths.Length; i++)
             {
@@ -173,7 +176,8 @@ public sealed class StatutorySalesBookOutputRenderer
         {
             "TOTAL", "", "", "", "",
             Money(summary.SalesInclusiveVatMinorUnits), Money(summary.VatAmountMinorUnits), Money(summary.VatExemptSalesMinorUnits),
-            Money(summary.Discount5MinorUnits), Money(summary.Discount20MinorUnits), Money(summary.NetSalesMinorUnits)
+            Money(summary.Discount5MinorUnits), Money(summary.Discount20MinorUnits), Money(summary.NetSalesMinorUnits),
+            Money(nonPercentageBenefitTotal)
         };
         for (var i = 0; i < widths.Length; i++)
         {
@@ -270,10 +274,10 @@ public sealed class StatutorySalesBookOutputRenderer
         var totalsRow = 17 + report.Rows.Count;
         var last = Math.Max(25, totalsRow);
         var b = new StringBuilder(24000);
-        b.Append("<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?><worksheet xmlns=\"http://schemas.openxmlformats.org/spreadsheetml/2006/main\"><sheetPr><pageSetUpPr fitToPage=\"1\"/></sheetPr><dimension ref=\"A1:K").Append(last).Append("\"/><sheetViews><sheetView workbookViewId=\"0\"/></sheetViews><sheetFormatPr defaultRowHeight=\"15\"/><cols>");
+        b.Append("<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?><worksheet xmlns=\"http://schemas.openxmlformats.org/spreadsheetml/2006/main\"><sheetPr><pageSetUpPr fitToPage=\"1\"/></sheetPr><dimension ref=\"A1:L").Append(last).Append("\"/><sheetViews><sheetView workbookViewId=\"0\"/></sheetViews><sheetFormatPr defaultRowHeight=\"15\"/><cols>");
         var widths = type == StatutorySalesBookType.AnnexE2
-            ? new[] { 8.43, 22.140625, 14, 14, 11.7109375, 17.28515625, 11.42578125, 11.42578125, 7.140625, 6.7109375, 11.42578125 }
-            : new[] { 8.43, 22.140625, 14, 14, 11.7109375, 17.28515625, 11.42578125, 11.42578125, 6.7109375, 6.85546875, 11.42578125 };
+            ? new[] { 8.43, 22.140625, 14, 14, 11.7109375, 17.28515625, 11.42578125, 11.42578125, 7.140625, 6.7109375, 11.42578125, 14d }
+            : new[] { 8.43, 22.140625, 14, 14, 11.7109375, 17.28515625, 11.42578125, 11.42578125, 6.7109375, 6.85546875, 11.42578125, 14d };
         for (var i = 0; i < widths.Length; i++) b.Append("<col min=\"").Append(i + 1).Append("\" max=\"").Append(i + 1).Append("\" width=\"").Append(widths[i].ToString(CultureInfo.InvariantCulture)).Append("\" customWidth=\"1\"/>");
         b.Append("</cols><sheetData>");
         Header(b, 1, h.TaxpayerName); Header(b, 2, h.TaxpayerAddress); Header(b, 3, h.Tin); b.Append("<row r=\"4\"/>");
@@ -288,9 +292,9 @@ public sealed class StatutorySalesBookOutputRenderer
         Headings(b, type);
         var rowNo = 17;
         foreach (var row in report.Rows) DataRow(b, rowNo++, row);
-        TotalRow(b, rowNo++, report.Summary);
+        TotalRow(b, rowNo++, report.Summary, SumNonPercentageBenefits(report.Rows));
         while (rowNo <= last) BlankRow(b, rowNo++);
-        b.Append("</sheetData><mergeCells count=\"").Append(report.Summary.IsEmpty ? 17 : 16).Append("\"><mergeCell ref=\"A1:K1\"/><mergeCell ref=\"A2:K2\"/><mergeCell ref=\"A3:K3\"/><mergeCell ref=\"A12:K12\"/><mergeCell ref=\"A13:A16\"/><mergeCell ref=\"B13:B16\"/><mergeCell ref=\"C13:C16\"/><mergeCell ref=\"D13:D16\"/><mergeCell ref=\"E13:E16\"/><mergeCell ref=\"F13:F16\"/><mergeCell ref=\"G13:G16\"/><mergeCell ref=\"H13:H16\"/><mergeCell ref=\"I13:J13\"/><mergeCell ref=\"I14:I16\"/><mergeCell ref=\"J14:J16\"/><mergeCell ref=\"K13:K16\"/>");
+        b.Append("</sheetData><mergeCells count=\"").Append(report.Summary.IsEmpty ? 18 : 17).Append("\"><mergeCell ref=\"A1:L1\"/><mergeCell ref=\"A2:L2\"/><mergeCell ref=\"A3:L3\"/><mergeCell ref=\"A12:L12\"/><mergeCell ref=\"A13:A16\"/><mergeCell ref=\"B13:B16\"/><mergeCell ref=\"C13:C16\"/><mergeCell ref=\"D13:D16\"/><mergeCell ref=\"E13:E16\"/><mergeCell ref=\"F13:F16\"/><mergeCell ref=\"G13:G16\"/><mergeCell ref=\"H13:H16\"/><mergeCell ref=\"I13:J13\"/><mergeCell ref=\"I14:I16\"/><mergeCell ref=\"J14:J16\"/><mergeCell ref=\"K13:K16\"/><mergeCell ref=\"L13:L16\"/>");
         if (report.Summary.IsEmpty) b.Append("<mergeCell ref=\"A").Append(totalsRow).Append(":E").Append(totalsRow).Append("\"/>");
         b.Append("</mergeCells><printOptions horizontalCentered=\"1\"/><pageMargins left=\"0.2362\" right=\"0.2362\" top=\"0.748\" bottom=\"0.748\" header=\"0.315\" footer=\"0.315\"/><pageSetup paperSize=\"9\" orientation=\"landscape\" fitToWidth=\"1\" fitToHeight=\"1\"/><headerFooter><oddFooter>&amp;LStatus: ").Append(Xml(report.Summary.ReportStatus)).Append(" | Period: ").Append(report.Summary.CalendarYear.ToString("0000", CultureInfo.InvariantCulture)).Append('-').Append(report.Summary.CalendarMonth.ToString("00", CultureInfo.InvariantCulture)).Append("&amp;RPage &amp;P of &amp;N</oddFooter></headerFooter></worksheet>");
         return b.ToString();
@@ -301,32 +305,32 @@ public sealed class StatutorySalesBookOutputRenderer
         var name = type == StatutorySalesBookType.AnnexE2 ? "Name of Senior Citizen (SC)" : "Name of Person with Disability (PWD)";
         var id = type == StatutorySalesBookType.AnnexE2 ? "OSCA ID No./SC ID No." : "PWD ID No.";
         var tin = type == StatutorySalesBookType.AnnexE2 ? "SC TIN" : "PWD TIN";
-        var labels = new[] { "Date", name, id, tin, type == StatutorySalesBookType.AnnexE2 ? "SI/OR Number" : "SI / OR Number", "Sales (inclusive of VAT)", "VAT Amount", "VAT Exempt Sales", "Discount", "", "Net Sales" };
+        var labels = new[] { "Date", name, id, tin, type == StatutorySalesBookType.AnnexE2 ? "SI/OR Number" : "SI / OR Number", "Sales (inclusive of VAT)", "VAT Amount", "VAT Exempt Sales", "Discount", "", "Net Sales", "LGU Benefit / Exemption" };
         var row13Height = type == StatutorySalesBookType.AnnexE2 ? "21" : "24.75";
         var row14Height = type == StatutorySalesBookType.AnnexE2 ? "15" : "15.75";
         var row15Height = type == StatutorySalesBookType.AnnexE2 ? "5.25" : "3.75";
         var row16Height = type == StatutorySalesBookType.AnnexE2 ? "2.25" : "9";
-        b.Append("<row r=\"13\" ht=\"").Append(row13Height).Append("\" customHeight=\"1\">"); Cells(b, 13, labels, new[] { 7, 8, 9, 10, 11, 12, 13, 14, 15, 15, 7 }); b.Append("</row><row r=\"14\" ht=\"").Append(row14Height).Append("\" customHeight=\"1\">");
-        Cells(b, 14, new[] { "", "", "", "", "", "", "", "", "5%", "20%", "" }, new[] { 7, 8, 9, 10, 11, 12, 13, 14, 15, 15, 7 }); b.Append("</row><row r=\"15\" ht=\"").Append(row15Height).Append("\" customHeight=\"1\"/><row r=\"16\" ht=\"").Append(row16Height).Append("\" customHeight=\"1\"/>");
+        b.Append("<row r=\"13\" ht=\"").Append(row13Height).Append("\" customHeight=\"1\">"); Cells(b, 13, labels, new[] { 7, 8, 9, 10, 11, 12, 13, 14, 15, 15, 7, 7 }); b.Append("</row><row r=\"14\" ht=\"").Append(row14Height).Append("\" customHeight=\"1\">");
+        Cells(b, 14, new[] { "", "", "", "", "", "", "", "", "5%", "20%", "", "" }, new[] { 7, 8, 9, 10, 11, 12, 13, 14, 15, 15, 7, 7 }); b.Append("</row><row r=\"15\" ht=\"").Append(row15Height).Append("\" customHeight=\"1\"/><row r=\"16\" ht=\"").Append(row16Height).Append("\" customHeight=\"1\"/>");
     }
 
     private static void DataRow(StringBuilder b, int r, StatutorySalesBookRow row)
     {
         b.Append("<row r=\"").Append(r).Append("\" ht=\"18\">");
         TextCell(b, "A", r, row.TransactionDate.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture), 5); TextCell(b, "B", r, row.BeneficiaryFullName, 5); TextCell(b, "C", r, row.StatutoryIdNumber, 5); TextCell(b, "D", r, row.BeneficiaryTin ?? string.Empty, 5); TextCell(b, "E", r, row.SalesInvoiceNumber, 5);
-        MoneyCell(b, "F", r, row.SalesInclusiveVatMinorUnits); MoneyCell(b, "G", r, row.VatAmountMinorUnits); MoneyCell(b, "H", r, row.VatExemptSalesMinorUnits); MoneyCell(b, "I", r, row.Discount5MinorUnits); MoneyCell(b, "J", r, row.Discount20MinorUnits); MoneyCell(b, "K", r, row.NetSalesMinorUnits); b.Append("</row>");
+        MoneyCell(b, "F", r, row.SalesInclusiveVatMinorUnits); MoneyCell(b, "G", r, row.VatAmountMinorUnits); MoneyCell(b, "H", r, row.VatExemptSalesMinorUnits); MoneyCell(b, "I", r, row.Discount5MinorUnits); MoneyCell(b, "J", r, row.Discount20MinorUnits); MoneyCell(b, "K", r, row.NetSalesMinorUnits); MoneyCell(b, "L", r, row.NonPercentageBenefitAmountMinorUnits); b.Append("</row>");
     }
-    private static void TotalRow(StringBuilder b, int r, StatutorySalesBookSummary summary)
+    private static void TotalRow(StringBuilder b, int r, StatutorySalesBookSummary summary, long nonPercentageBenefitTotal)
     {
         b.Append("<row r=\"").Append(r).Append("\" ht=\"18\">");
         TextCell(b, "A", r, summary.IsEmpty ? "TOTAL - NO QUALIFYING TRANSACTIONS" : "TOTAL", 7);
         for (var column = 'B'; column <= 'E'; column++) TextCell(b, column.ToString(), r, string.Empty, 7);
         MoneyCell(b, "F", r, summary.SalesInclusiveVatMinorUnits, 6); MoneyCell(b, "G", r, summary.VatAmountMinorUnits, 6);
         MoneyCell(b, "H", r, summary.VatExemptSalesMinorUnits, 6); MoneyCell(b, "I", r, summary.Discount5MinorUnits, 6);
-        MoneyCell(b, "J", r, summary.Discount20MinorUnits, 6); MoneyCell(b, "K", r, summary.NetSalesMinorUnits, 6);
+        MoneyCell(b, "J", r, summary.Discount20MinorUnits, 6); MoneyCell(b, "K", r, summary.NetSalesMinorUnits, 6); MoneyCell(b, "L", r, nonPercentageBenefitTotal, 6);
         b.Append("</row>");
     }
-    private static void BlankRow(StringBuilder b, int r) { b.Append("<row r=\"").Append(r).Append("\" ht=\"18\">"); for (var i = 0; i < 11; i++) b.Append("<c r=\"").Append((char)('A' + i)).Append(r).Append("\" s=\"5\"/>"); b.Append("</row>"); }
+    private static void BlankRow(StringBuilder b, int r) { b.Append("<row r=\"").Append(r).Append("\" ht=\"18\">"); for (var i = 0; i < 12; i++) b.Append("<c r=\"").Append((char)('A' + i)).Append(r).Append("\" s=\"5\"/>"); b.Append("</row>"); }
     private static void Header(StringBuilder b, int r, string value) => b.Append("<row r=\"").Append(r).Append("\"><c r=\"A").Append(r).Append("\" s=\"1\" t=\"inlineStr\"><is><t xml:space=\"preserve\">").Append(Xml(value)).Append("</t></is></c></row>");
     private static void HeaderWithAnnex(StringBuilder b, int r, string value, string annex) => b.Append("<row r=\"").Append(r).Append("\"><c r=\"A").Append(r).Append("\" s=\"1\" t=\"inlineStr\"><is><t xml:space=\"preserve\">").Append(Xml(value)).Append("</t></is></c><c r=\"K").Append(r).Append("\" s=\"3\" t=\"inlineStr\"><is><t>").Append(Xml(annex)).Append("</t></is></c></row>");
     private static void Cells(StringBuilder b,int r,IReadOnlyList<string> values,IReadOnlyList<int> styles){for(var i=0;i<values.Count;i++)TextCell(b,((char)('A'+i)).ToString(),r,values[i],styles[i]);}
@@ -337,7 +341,15 @@ public sealed class StatutorySalesBookOutputRenderer
     {
         var primary = report.Summary.Type == StatutorySalesBookType.AnnexE2 ? "E-2" : "E-3";
         var supplement = hasLguSupplement ? "<sheet name=\"LGU Supplement\" sheetId=\"2\" r:id=\"rId2\"/>" : string.Empty;
-        return $"<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?><workbook xmlns=\"http://schemas.openxmlformats.org/spreadsheetml/2006/main\" xmlns:r=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships\"><bookViews><workbookView/></bookViews><sheets><sheet name=\"{primary}\" sheetId=\"1\" r:id=\"rId1\"/>{supplement}</sheets><definedNames><definedName name=\"_xlnm.Print_Area\" localSheetId=\"0\">'{primary}'!$A$1:$K${Math.Max(25, 17 + report.Rows.Count)}</definedName></definedNames><calcPr calcId=\"0\" calcMode=\"manual\"/></workbook>";
+        return $"<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?><workbook xmlns=\"http://schemas.openxmlformats.org/spreadsheetml/2006/main\" xmlns:r=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships\"><bookViews><workbookView/></bookViews><sheets><sheet name=\"{primary}\" sheetId=\"1\" r:id=\"rId1\"/>{supplement}</sheets><definedNames><definedName name=\"_xlnm.Print_Area\" localSheetId=\"0\">'{primary}'!$A$1:$L${Math.Max(25, 17 + report.Rows.Count)}</definedName></definedNames><calcPr calcId=\"0\" calcMode=\"manual\"/></workbook>";
+    }
+
+    private static long SumNonPercentageBenefits(IEnumerable<StatutorySalesBookRow> rows)
+    {
+        long total = 0;
+        foreach (var row in rows)
+            total = checked(total + row.NonPercentageBenefitAmountMinorUnits);
+        return total;
     }
     private static string WorkbookRelationships(bool hasLguSupplement)
     {
