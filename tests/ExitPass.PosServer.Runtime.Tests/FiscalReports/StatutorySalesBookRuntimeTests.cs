@@ -10,7 +10,7 @@ public sealed class StatutorySalesBookRuntimeTests
     [Theory]
     [InlineData(StatutorySalesBookType.AnnexE2, "E-2", "Senior Citizen Sales Book/Report", "ANNEX \"E-2\"")]
     [InlineData(StatutorySalesBookType.AnnexE3, "E-3", "Persons with Disability Sales Book/Report", "ANNEX \"E-3\"")]
-    public void XlsxPreservesPrescribedColumnsAndAppendsLguBenefitExtension(StatutorySalesBookType type, string sheetName, string title, string annex)
+    public void XlsxPreservesPrescribedColumnsAndAppendsAgreedLguPrivilegeDetail(StatutorySalesBookType type, string sheetName, string title, string annex)
     {
         var output = new StatutorySalesBookOutputRenderer().Render(Report(type, [Row(type, 2000)]), StatutorySalesBookFormat.Xlsx);
         using var stream = new MemoryStream(output.Bytes);
@@ -20,15 +20,17 @@ public sealed class StatutorySalesBookRuntimeTests
         var sheets = Assert.IsType<Sheets>(workbook.Sheets);
         Assert.Equal(sheetName, sheets.Elements<Sheet>().Single().Name!.Value);
         var sheet = Assert.IsType<Worksheet>(workbookPart.WorksheetParts.Single().Worksheet);
-        Assert.Equal(12, sheet.Elements<Columns>().Single().Elements<Column>().Count());
+        Assert.Equal(17, sheet.Elements<Columns>().Single().Elements<Column>().Count());
         var merges = sheet.Elements<MergeCells>().Single().Elements<MergeCell>().Select(x => x.Reference!.Value).ToArray();
         Assert.Contains("I13:J13", merges);
         Assert.Contains("I14:I16", merges);
         Assert.Contains("J14:J16", merges);
         Assert.Contains("K13:K16", merges);
-        Assert.Contains("L13:L16", merges);
+        Assert.Contains("L13:Q13", merges);
+        Assert.Contains("L14:L16", merges);
+        Assert.Contains("Q14:Q16", merges);
         var names = Assert.IsType<DefinedNames>(workbook.DefinedNames);
-        Assert.Equal("$A$1:$L$25", names.Elements<DefinedName>().Single().Text!.Split('!')[1]);
+        Assert.Equal("$A$1:$Q$25", names.Elements<DefinedName>().Single().Text!.Split('!')[1]);
         Assert.True(output.Bytes[0] == (byte)'P' && output.Bytes[1] == (byte)'K');
         using var archive = new System.IO.Compression.ZipArchive(new MemoryStream(output.Bytes));
         using var reader = new StreamReader(archive.GetEntry("xl/worksheets/sheet1.xml")!.Open());
@@ -46,9 +48,19 @@ public sealed class StatutorySalesBookRuntimeTests
         Assert.Contains("Date and Time Generated: 2026-10-17 16:00:00", worksheetXml);
         Assert.Contains("UserID: operator-1", worksheetXml);
         Assert.Contains(">TOTAL<", worksheetXml);
-        Assert.Contains("LGU Benefit / Exemption", worksheetXml);
-        Assert.Contains("<c r=\"L17\" s=\"4\"><v>0.00</v></c>", worksheetXml);
-        Assert.Contains("<c r=\"L18\" s=\"6\"><v>0.00</v></c>", worksheetXml);
+        Assert.Contains("ADDITIONAL LGU PARKING-PRIVILEGE DETAIL", worksheetXml);
+        Assert.Contains("LGU Privilege Type", worksheetXml);
+        Assert.Contains("LGU Policy Reference", worksheetXml);
+        Assert.Contains("<c r=\"K13\" s=\"7\"", worksheetXml);
+        Assert.Contains("<c r=\"L13\" s=\"16\"", worksheetXml);
+        Assert.Contains("<c r=\"Q13\" s=\"16\"", worksheetXml);
+        Assert.Contains("<c r=\"N17\" s=\"4\"><v>0.00</v></c>", worksheetXml);
+        Assert.Contains("<c r=\"P18\" s=\"6\"><v>0.00</v></c>", worksheetXml);
+        using var stylesReader = new StreamReader(archive.GetEntry("xl/styles.xml")!.Open());
+        var stylesXml = stylesReader.ReadToEnd();
+        Assert.Contains("<color rgb=\"FFFFFFFF\"/>", stylesXml);
+        Assert.Contains("<fgColor rgb=\"FF375623\"/>", stylesXml);
+        Assert.Contains("fontId=\"3\" fillId=\"11\"", stylesXml);
     }
 
     [Fact]
@@ -117,6 +129,18 @@ public sealed class StatutorySalesBookRuntimeTests
             entitlement, type, "LOCAL_ORDINANCE", "FREE_PARKING", null, 4_464, 4_464, 1));
     }
 
+    [Fact]
+    public void FullFeeLguDetailFailsClosedWhenFinalPayableExceedsOriginalFee()
+    {
+        var row = FullFeeRow(StatutorySalesBookType.AnnexE2) with
+        {
+            LguFinalPayableVatInclusiveMinorUnits = 5_001,
+            LguWaiverVatInclusiveMinorUnits = 0
+        };
+
+        Assert.False(StatutorySalesBookReconciliation.IsValid(row));
+    }
+
     [Theory]
     [InlineData(null, 5_000, true)]
     [InlineData(500, 0, true)]
@@ -161,23 +185,31 @@ public sealed class StatutorySalesBookRuntimeTests
         Assert.DoesNotContain("Synthetic Beneficiary", xml);
         Assert.Contains("TOTAL - NO QUALIFYING TRANSACTIONS", xml);
         Assert.Contains("r=\"17\"", xml);
-        Assert.Contains("<c r=\"L17\" s=\"6\"><v>0.00</v></c>", xml);
+        Assert.Contains("<c r=\"P17\" s=\"6\"><v>0.00</v></c>", xml);
     }
 
-    [Fact]
-    public void PdfIsLandscapeAndIncludesAllPrescribedHeadings()
+    [Theory]
+    [InlineData(StatutorySalesBookType.AnnexE2)]
+    [InlineData(StatutorySalesBookType.AnnexE3)]
+    public void PdfIsLandscapeAndIncludesAllPrescribedHeadings(StatutorySalesBookType type)
     {
-        var output = new StatutorySalesBookOutputRenderer().Render(Report(StatutorySalesBookType.AnnexE2, [Row(StatutorySalesBookType.AnnexE2, 2000)]), StatutorySalesBookFormat.Pdf);
+        var output = new StatutorySalesBookOutputRenderer().Render(Report(type, [Row(type, 2000)]), StatutorySalesBookFormat.Pdf);
         var text = System.Text.Encoding.Latin1.GetString(output.Bytes);
         Assert.StartsWith("%PDF-1.4", text);
         Assert.Contains("/MediaBox [0 0 841.89 595.28]", text);
-        Assert.Contains("Senior Citizen Sales Book/Report", text);
+        Assert.Contains(type == StatutorySalesBookType.AnnexE2
+            ? "Senior Citizen Sales Book/Report"
+            : "Persons with Disability Sales Book/Report", text);
         Assert.Contains("Software Name and Version No. plus Release No./Release Date", text);
         Assert.Contains("Discount", text);
         Assert.Contains("5%", text);
         Assert.Contains("20%", text);
-        Assert.Contains("LGU Benefit", text);
-        Assert.Contains("Exemption", text);
+        Assert.Contains("ADDITIONAL LGU PARKING-PRIVILEGE DETAIL", text);
+        Assert.Contains("LGU Privilege", text);
+        Assert.Contains("LGU Policy", text);
+        Assert.Contains("Reference", text);
+        Assert.Contains("0.22 0.34 0.14 rg", text);
+        Assert.Contains("1 1 1 rg BT /F2", text);
         Assert.Contains("0 0.69 0.94 rg", text);
         Assert.Contains("1 0.85 0.4 rg", text);
     }
@@ -197,16 +229,16 @@ public sealed class StatutorySalesBookRuntimeTests
         Assert.Contains($"({salesInvoiceNumber}) Tj", text);
         Assert.DoesNotContain("(SI-000000000001) Tj", text);
 
-        var configuredWidths = new[] { 48d, 128d, 80d, 72d, 72d, 80d, 62d, 72d, 48d, 48d, 72d, 82d };
+        var configuredWidths = new[] { 42d, 96d, 62d, 54d, 62d, 52d, 44d, 50d, 34d, 34d, 48d, 66d, 48d, 52d, 52d, 48d, 72d };
         var scale = (841.89d - 40d) / configuredWidths.Sum();
         var invoiceCellWidth = configuredWidths[4] * scale;
-        var renderedInvoiceWidth = salesInvoiceNumber.Length * 5.5d * 0.52d;
+        var renderedInvoiceWidth = salesInvoiceNumber.Length * 4.2d * 0.52d;
         Assert.True(renderedInvoiceWidth <= invoiceCellWidth - 4d);
 
         var invoicePosition = text.IndexOf($"({salesInvoiceNumber}) Tj", StringComparison.Ordinal);
         var followingAmountPosition = text.IndexOf("(50.00) Tj", invoicePosition, StringComparison.Ordinal);
         Assert.True(followingAmountPosition > invoicePosition);
-        Assert.Contains("(44.64) Tj", text);
+        Assert.Contains("(50.00) Tj", text);
         Assert.Contains("SUPPLEMENTARY LGU PARKING BENEFIT DETAILS", text);
     }
 
@@ -234,8 +266,15 @@ public sealed class StatutorySalesBookRuntimeTests
         Assert.Contains("<c r=\"I17\" s=\"4\"><v>0.00</v></c>", primary);
         Assert.Contains("<c r=\"J17\" s=\"4\"><v>0.00</v></c>", primary);
         Assert.Contains("<c r=\"K17\" s=\"4\"><v>0.00</v></c>", primary);
-        Assert.Contains("<c r=\"L17\" s=\"4\"><v>44.64</v></c>", primary);
-        Assert.Contains("<c r=\"L18\" s=\"6\"><v>44.64</v></c>", primary);
+        Assert.Contains("<c r=\"L17\" s=\"5\" t=\"inlineStr\"><is><t xml:space=\"preserve\">FULL_FEE_EXEMPTION</t></is></c>", primary);
+        Assert.Contains("<c r=\"M17\" s=\"5\" t=\"inlineStr\"><is><t xml:space=\"preserve\"></t></is></c>", primary);
+        Assert.Contains("<c r=\"N17\" s=\"4\"><v>50.00</v></c>", primary);
+        Assert.Contains("<c r=\"O17\" s=\"4\"><v>50.00</v></c>", primary);
+        Assert.Contains("<c r=\"P17\" s=\"4\"><v>0.00</v></c>", primary);
+        Assert.Contains("<c r=\"Q17\" s=\"5\" t=\"inlineStr\"><is><t xml:space=\"preserve\">PH_PARANAQUE_", primary);
+        Assert.Contains("<c r=\"N18\" s=\"6\"><v>50.00</v></c>", primary);
+        Assert.Contains("<c r=\"O18\" s=\"6\"><v>50.00</v></c>", primary);
+        Assert.Contains("<c r=\"P18\" s=\"6\"><v>0.00</v></c>", primary);
 
         using var supplementReader = new StreamReader(archive.GetEntry("xl/worksheets/sheet2.xml")!.Open());
         var supplement = supplementReader.ReadToEnd();
@@ -248,7 +287,7 @@ public sealed class StatutorySalesBookRuntimeTests
     [Theory]
     [InlineData(StatutorySalesBookType.AnnexE2)]
     [InlineData(StatutorySalesBookType.AnnexE3)]
-    public void FullFeeExemptionPdfAddsLguBenefitColumnAndPreservesSupplement(StatutorySalesBookType type)
+    public void FullFeeExemptionPdfAddsAgreedLguDetailAndPreservesSupplement(StatutorySalesBookType type)
     {
         var output = new StatutorySalesBookOutputRenderer().Render(
             Report(type, [FullFeeRow(type)]),
@@ -258,9 +297,9 @@ public sealed class StatutorySalesBookRuntimeTests
         Assert.Contains(type == StatutorySalesBookType.AnnexE2
             ? "Senior Citizen Sales Book/Report"
             : "Persons with Disability Sales Book/Report", text);
-        Assert.Contains("LGU Benefit", text);
-        Assert.Contains("Exemption", text);
-        Assert.Contains("44.64", text);
+        Assert.Contains("ADDITIONAL LGU PARKING-PRIVILEGE DETAIL", text);
+        Assert.Contains("FULL_FEE_EXEMPTION", text);
+        Assert.Contains("50.00", text);
         Assert.Contains("SUPPLEMENTARY LGU PARKING BENEFIT DETAILS", text);
         Assert.Contains("prescribed Annex E-2/E-3 columns remain unchanged", text);
         Assert.Contains("Final payable: PHP 0.00", text);
@@ -307,7 +346,7 @@ public sealed class StatutorySalesBookRuntimeTests
         };
         var changedLguBenefit = report with
         {
-            Rows = [report.Rows[0] with { NonPercentageBenefitAmountMinorUnits = 1 }]
+            Rows = [report.Rows[0] with { LguWaiverVatInclusiveMinorUnits = 1 }]
         };
 
         Assert.Equal(StatutorySalesBookContract.SourceFingerprint(report), StatutorySalesBookContract.SourceFingerprint(regenerated));
@@ -329,7 +368,8 @@ public sealed class StatutorySalesBookRuntimeTests
     private static StatutorySalesBookReport Report(StatutorySalesBookType type, IReadOnlyList<StatutorySalesBookRow> rows)
     {
         var summary = new StatutorySalesBookSummary(type, Guid.NewGuid(), Guid.NewGuid(), "PHP", 2026, 10, "PITX-L3-POS-01", rows.Count,
-            rows.Sum(x => x.SalesInclusiveVatMinorUnits), rows.Sum(x => x.VatAmountMinorUnits), rows.Sum(x => x.VatExemptSalesMinorUnits), rows.Sum(x => x.Discount5MinorUnits), rows.Sum(x => x.Discount20MinorUnits), rows.Sum(x => x.NetSalesMinorUnits), DateTimeOffset.Parse("2026-10-17T08:00:00Z"), [], StatutorySalesBookStatuses.Final, rows.Count == 0, 31, 31, 31);
+            rows.Sum(x => x.SalesInclusiveVatMinorUnits), rows.Sum(x => x.VatAmountMinorUnits), rows.Sum(x => x.VatExemptSalesMinorUnits), rows.Sum(x => x.Discount5MinorUnits), rows.Sum(x => x.Discount20MinorUnits), rows.Sum(x => x.NetSalesMinorUnits), DateTimeOffset.Parse("2026-10-17T08:00:00Z"), [], StatutorySalesBookStatuses.Final, rows.Count == 0, 31, 31, 31,
+            rows.Sum(x => x.OriginalParkingFeeVatInclusiveMinorUnits), rows.Sum(x => x.LguWaiverVatInclusiveMinorUnits), rows.Sum(x => x.LguFinalPayableVatInclusiveMinorUnits));
         return new(new("Professional Parking Management Corporation", "PITX, Paranaque City", "999-999-999-000", "ExitPass POS Server", "1.3", "v1.3", "2026-10-17", "SN-TEST", "MIN-TEST", "PITX-L3-POS-01", summary.ReportAsOf, "operator-1"), summary, rows);
     }
 
@@ -344,5 +384,9 @@ public sealed class StatutorySalesBookRuntimeTests
         type == StatutorySalesBookType.AnnexE2
             ? "PH_PARANAQUE_SENIOR_FREE_PARKING"
             : "PH_PARANAQUE_PWD_FREE_PARKING",
-        4_464, 4_464, 0, 0, 0);
+        4_464, 4_464, 0, 0, 0,
+        "FULL_FEE_EXEMPTION", null, 5_000, 5_000, 0,
+        type == StatutorySalesBookType.AnnexE2
+            ? "PH_PARANAQUE_SENIOR_FREE_PARKING"
+            : "PH_PARANAQUE_PWD_FREE_PARKING");
 }

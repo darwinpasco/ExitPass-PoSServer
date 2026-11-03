@@ -22,19 +22,39 @@ internal sealed class A4FiscalReportPdf
         return pages.Count - 1;
     }
 
-    public void Text(int page, double x, double y, string? value, double size = 8, bool bold = false)
+    public void Text(
+        int page,
+        double x,
+        double y,
+        string? value,
+        double size = 8,
+        bool bold = false,
+        (double Red, double Green, double Blue)? color = null)
     {
         if (string.IsNullOrEmpty(value)) return;
+        if (color is { } textColor)
+            pages[page].Content.Append(Number(textColor.Red)).Append(' ')
+                .Append(Number(textColor.Green)).Append(' ')
+                .Append(Number(textColor.Blue)).Append(" rg ");
         pages[page].Content.Append("BT /").Append(bold ? "F2" : "F1").Append(' ')
             .Append(Number(size)).Append(" Tf 1 0 0 1 ").Append(Number(x)).Append(' ')
-            .Append(Number(y)).Append(" Tm (").Append(Escape(value)).Append(") Tj ET\n");
+            .Append(Number(y)).Append(" Tm (").Append(Escape(value)).Append(") Tj ET");
+        if (color is not null) pages[page].Content.Append(" 0 g");
+        pages[page].Content.Append('\n');
     }
 
     public void RightText(int page, double right, double y, string? value, double size = 8, bool bold = false) =>
         Text(page, right - TextWidth(value, size, bold), y, value, size, bold);
 
-    public void CenterText(int page, double center, double y, string? value, double size = 8, bool bold = false) =>
-        Text(page, center - (TextWidth(value, size, bold) / 2), y, value, size, bold);
+    public void CenterText(
+        int page,
+        double center,
+        double y,
+        string? value,
+        double size = 8,
+        bool bold = false,
+        (double Red, double Green, double Blue)? color = null) =>
+        Text(page, center - (TextWidth(value, size, bold) / 2), y, value, size, bold, color);
 
     public void Line(int page, double x1, double y1, double x2, double y2, double width = 0.5)
     {

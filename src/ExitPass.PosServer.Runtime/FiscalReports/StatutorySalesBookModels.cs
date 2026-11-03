@@ -51,7 +51,13 @@ public sealed record StatutorySalesBookRow(
     long NonPercentageBenefitAmountMinorUnits = 0,
     long FinalVatableSalesMinorUnits = 0,
     long FinalVatAmountMinorUnits = 0,
-    long FinalPayableAmountMinorUnits = 0);
+    long FinalPayableAmountMinorUnits = 0,
+    string? LguPrivilegeType = null,
+    decimal? FreeHoursGranted = null,
+    long OriginalParkingFeeVatInclusiveMinorUnits = 0,
+    long LguWaiverVatInclusiveMinorUnits = 0,
+    long LguFinalPayableVatInclusiveMinorUnits = 0,
+    string? LguPolicyReference = null);
 
 public sealed record StatutorySalesBookSummary(
     StatutorySalesBookType Type,
@@ -74,7 +80,10 @@ public sealed record StatutorySalesBookSummary(
     bool IsEmpty = false,
     int ScopedFiscalPeriodCount = 0,
     int ClosedFiscalPeriodCount = 0,
-    int CommittedZPeriodCount = 0);
+    int CommittedZPeriodCount = 0,
+    long LguOriginalParkingFeeVatInclusiveMinorUnits = 0,
+    long LguWaiverVatInclusiveMinorUnits = 0,
+    long LguFinalPayableVatInclusiveMinorUnits = 0);
 
 public sealed record StatutorySalesBookReport(
     StatutorySalesBookHeader Header,
@@ -105,7 +114,7 @@ public static class StatutorySalesBookContract
     public const string ReleaseNumber = "v1.3";
     public const string ReleaseDate = "2026-10-17";
     public const string ArtifactScopeVersion = "pos-server-v2";
-    public const string ArtifactLayoutVersion = "annex-e2-e3-12-column-v1";
+    public const string ArtifactLayoutVersion = "annex-e2-e3-17-column-v1";
     public const string ArtifactContractProfile = "pos-server-statutory-sales-book-rmo24-2023:pos-server-scope-v2:" + ArtifactLayoutVersion;
 
     public static string Entitlement(StatutorySalesBookType type) => type == StatutorySalesBookType.AnnexE2 ? "SENIOR_CITIZEN" : "PWD";
@@ -152,7 +161,10 @@ public static class StatutorySalesBookContract
                 report.Summary.IsEmpty,
                 report.Summary.ScopedFiscalPeriodCount,
                 report.Summary.ClosedFiscalPeriodCount,
-                report.Summary.CommittedZPeriodCount
+                report.Summary.CommittedZPeriodCount,
+                report.Summary.LguOriginalParkingFeeVatInclusiveMinorUnits,
+                report.Summary.LguWaiverVatInclusiveMinorUnits,
+                report.Summary.LguFinalPayableVatInclusiveMinorUnits
             },
             report.Rows
         });
@@ -228,7 +240,10 @@ public static class StatutorySalesBookReconciliation
     {
         if (row.SalesInclusiveVatMinorUnits < 0 || row.VatAmountMinorUnits < 0 ||
             row.VatExemptSalesMinorUnits < 0 || row.Discount5MinorUnits < 0 ||
-            row.Discount20MinorUnits < 0 || row.NetSalesMinorUnits < 0)
+            row.Discount20MinorUnits < 0 || row.NetSalesMinorUnits < 0 ||
+            row.OriginalParkingFeeVatInclusiveMinorUnits < 0 ||
+            row.LguWaiverVatInclusiveMinorUnits < 0 ||
+            row.LguFinalPayableVatInclusiveMinorUnits < 0)
             return false;
 
         var percentageDiscount = checked(row.Discount5MinorUnits + row.Discount20MinorUnits);
@@ -249,9 +264,22 @@ public static class StatutorySalesBookReconciliation
                    row.FinalVatableSalesMinorUnits == 0 &&
                    row.FinalVatAmountMinorUnits == 0 &&
                    row.FinalPayableAmountMinorUnits == 0 &&
-                   row.NetSalesMinorUnits == 0;
+                   row.NetSalesMinorUnits == 0 &&
+                   string.Equals(row.LguPrivilegeType, "FULL_FEE_EXEMPTION", StringComparison.Ordinal) &&
+                   row.FreeHoursGranted is null &&
+                   row.OriginalParkingFeeVatInclusiveMinorUnits == row.SalesInclusiveVatMinorUnits &&
+                   row.OriginalParkingFeeVatInclusiveMinorUnits >= row.LguFinalPayableVatInclusiveMinorUnits &&
+                   row.LguWaiverVatInclusiveMinorUnits ==
+                       row.OriginalParkingFeeVatInclusiveMinorUnits - row.LguFinalPayableVatInclusiveMinorUnits &&
+                   row.LguFinalPayableVatInclusiveMinorUnits == row.FinalPayableAmountMinorUnits &&
+                   !string.IsNullOrWhiteSpace(row.LguPolicyReference);
 
-        return percentageDiscount > 0 && percentageDiscount <= row.SalesInclusiveVatMinorUnits &&
+        return row.LguPrivilegeType is null && row.FreeHoursGranted is null &&
+               row.OriginalParkingFeeVatInclusiveMinorUnits == 0 &&
+               row.LguWaiverVatInclusiveMinorUnits == 0 &&
+               row.LguFinalPayableVatInclusiveMinorUnits == 0 &&
+               row.LguPolicyReference is null &&
+               percentageDiscount > 0 && percentageDiscount <= row.SalesInclusiveVatMinorUnits &&
                (row.PercentageRateBasisPoints == 500
                    ? row.Discount5MinorUnits > 0 && row.Discount20MinorUnits == 0
                    : row.PercentageRateBasisPoints == 2000 && row.Discount20MinorUnits > 0 && row.Discount5MinorUnits == 0);
