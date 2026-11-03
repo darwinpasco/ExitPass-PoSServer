@@ -134,7 +134,10 @@ public sealed class StatutorySalesBookOutputRenderer
         for (var i = 0; i < widths.Length; i++)
         {
             pdf.StrokeRect(page, x, y - height, widths[i], height, 0.3);
-            var shown = values[i].Length > Math.Max(6, (int)(widths[i] / 4.2)) ? values[i][..Math.Max(6, (int)(widths[i] / 4.2))] : values[i];
+            var maximumCharacters = Math.Max(6, (int)(widths[i] / 4.2));
+            var shown = i == 4 || values[i].Length <= maximumCharacters
+                ? values[i]
+                : values[i][..maximumCharacters];
             if (i >= 5) pdf.RightText(page, x + widths[i] - 2, y - 13, shown, 5.5);
             else pdf.Text(page, x + 2, y - 13, shown, 5.5);
             x += widths[i];
