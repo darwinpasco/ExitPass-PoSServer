@@ -185,6 +185,34 @@ public sealed class StatutorySalesBookRuntimeTests
     [Theory]
     [InlineData(StatutorySalesBookType.AnnexE2)]
     [InlineData(StatutorySalesBookType.AnnexE3)]
+    public void PdfRendersCompleteCanonicalSalesInvoiceNumberInsideExistingCell(StatutorySalesBookType type)
+    {
+        const string salesInvoiceNumber = "SI-00000000000171";
+        var row = FullFeeRow(type) with { SalesInvoiceNumber = salesInvoiceNumber };
+        var output = new StatutorySalesBookOutputRenderer().Render(
+            Report(type, [row]),
+            StatutorySalesBookFormat.Pdf);
+        var text = System.Text.Encoding.Latin1.GetString(output.Bytes);
+
+        Assert.Contains($"({salesInvoiceNumber}) Tj", text);
+        Assert.DoesNotContain("(SI-000000000001) Tj", text);
+
+        var configuredWidths = new[] { 48d, 128d, 80d, 72d, 72d, 80d, 62d, 72d, 48d, 48d, 72d, 82d };
+        var scale = (841.89d - 40d) / configuredWidths.Sum();
+        var invoiceCellWidth = configuredWidths[4] * scale;
+        var renderedInvoiceWidth = salesInvoiceNumber.Length * 5.5d * 0.52d;
+        Assert.True(renderedInvoiceWidth <= invoiceCellWidth - 4d);
+
+        var invoicePosition = text.IndexOf($"({salesInvoiceNumber}) Tj", StringComparison.Ordinal);
+        var followingAmountPosition = text.IndexOf("(50.00) Tj", invoicePosition, StringComparison.Ordinal);
+        Assert.True(followingAmountPosition > invoicePosition);
+        Assert.Contains("(44.64) Tj", text);
+        Assert.Contains("SUPPLEMENTARY LGU PARKING BENEFIT DETAILS", text);
+    }
+
+    [Theory]
+    [InlineData(StatutorySalesBookType.AnnexE2)]
+    [InlineData(StatutorySalesBookType.AnnexE3)]
     public void FullFeeExemptionPreservesPrescribedSheetAndAddsSeparateLguSupplement(
         StatutorySalesBookType type)
     {
