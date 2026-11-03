@@ -105,7 +105,8 @@ public static class StatutorySalesBookContract
     public const string ReleaseNumber = "v1.3";
     public const string ReleaseDate = "2026-10-17";
     public const string ArtifactScopeVersion = "pos-server-v2";
-    public const string ArtifactContractProfile = "pos-server-statutory-sales-book-rmo24-2023:pos-server-scope-v2";
+    public const string ArtifactLayoutVersion = "annex-e2-e3-12-column-v1";
+    public const string ArtifactContractProfile = "pos-server-statutory-sales-book-rmo24-2023:pos-server-scope-v2:" + ArtifactLayoutVersion;
 
     public static string Entitlement(StatutorySalesBookType type) => type == StatutorySalesBookType.AnnexE2 ? "SENIOR_CITIZEN" : "PWD";
     public static string AnnexLabel(StatutorySalesBookType type) => type == StatutorySalesBookType.AnnexE2 ? "ANNEX \"E-2\"" : "ANNEX \"E-3\"";
@@ -116,6 +117,7 @@ public static class StatutorySalesBookContract
     public static string SourceFingerprint(StatutorySalesBookReport report) =>
         FiscalReportArtifactContract.SourceFingerprint(new
         {
+            LayoutVersion = ArtifactLayoutVersion,
             Header = new
             {
                 report.Header.TaxpayerName,
