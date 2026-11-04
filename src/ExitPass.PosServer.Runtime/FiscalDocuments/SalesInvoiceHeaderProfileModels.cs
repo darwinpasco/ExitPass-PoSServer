@@ -23,7 +23,10 @@ public sealed record FiscalIdentityProfile(
     DateTimeOffset CreatedAt,
     DateTimeOffset UpdatedAt,
     string? CreatedByRef,
-    string? UpdatedByRef);
+    string? UpdatedByRef,
+    string? SoftwareName = null,
+    string? SoftwareVersion = null,
+    string? SerialReference = null);
 
 public sealed record SalesInvoiceHeaderProfile(
     Guid SalesInvoiceHeaderProfileId,
@@ -57,7 +60,8 @@ public sealed record SalesInvoiceHeaderProfile(
     bool HasBeenSnapshotted = false,
     string? SupplierDeveloperRegisteredName = null,
     string? SupplierDeveloperAddress = null,
-    string? SupplierDeveloperTin = null);
+    string? SupplierDeveloperTin = null,
+    string? SitePosServerCode = null);
 
 public sealed record SalesInvoiceHeaderSnapshot(
     Guid FiscalIdentityId,

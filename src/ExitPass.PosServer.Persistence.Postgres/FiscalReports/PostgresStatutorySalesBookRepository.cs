@@ -96,7 +96,7 @@ public sealed class PostgresStatutorySalesBookRepository(
     {
         const string sql = """
         SELECT fi.registered_business_name, fi.registered_business_address, fi.tin,
-               COALESCE(fi.software_name, @software), COALESCE(fi.software_version, @version),
+               COALESCE(NULLIF(BTRIM(fi.software_name),''), @software), COALESCE(NULLIF(BTRIM(fi.software_version),''), @version),
                hp.pos_serial_number, hp.machine_identification_number, site.site_pos_server_code,
                hp.effective_from, transaction_timestamp()
         FROM pos.site_pos_servers site
@@ -120,7 +120,7 @@ public sealed class PostgresStatutorySalesBookRepository(
             r.IsDBNull(0) ? string.Empty : r.GetString(0), r.IsDBNull(1) ? string.Empty : r.GetString(1), r.IsDBNull(2) ? string.Empty : r.GetString(2),
             r.GetString(3), r.GetString(4), StatutorySalesBookContract.ReleaseNumber, StatutorySalesBookContract.ReleaseDate,
             r.IsDBNull(5) ? string.Empty : r.GetString(5), r.IsDBNull(6) ? string.Empty : r.GetString(6), r.GetString(7),
-            r.GetFieldValue<DateTimeOffset>(9), q.RequestedByRef);
+            r.GetFieldValue<DateTimeOffset>(9), q.RequestedByRef, q.RequestedByDisplayName);
     }
 
     private async Task<RowReadResult> ReadRowsAsync(NpgsqlConnection c, NpgsqlTransaction t, StatutorySalesBookQuery q, CancellationToken ct)

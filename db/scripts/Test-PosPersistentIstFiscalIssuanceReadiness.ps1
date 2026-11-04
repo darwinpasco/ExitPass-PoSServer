@@ -21,25 +21,29 @@ Assert-PosPersistentIstTarget $ContainerName $DatabaseName $DatabaseUser
 $siteId = '2d1dcdf8-f563-537c-8542-0bde7cc9da97'
 $sitePosServerId = '3a138565-1b88-55f8-c83d-5380db6edccc'
 $fiscalIdentityId = 'ad02beb5-b8cd-4545-9ff2-5586782c686a'
-$headerProfileId = 'cb90e882-89f3-4bf3-975c-a6fb10dd765c'
 $atUtc = $At.ToUniversalTime().ToString('O')
 
 $sql = @"
 WITH counts AS (
   SELECT
     (SELECT count(*) FROM pos.site_pos_servers
-     WHERE site_pos_server_id='$sitePosServerId' AND central_pms_site_ref='$siteId' AND is_active) AS site_pos_server,
+     WHERE site_pos_server_id='$sitePosServerId' AND site_pos_server_code='PITX-L3-POS-01'
+       AND central_pms_site_ref='$siteId' AND is_active) AS site_pos_server,
     (SELECT count(*) FROM pos.site_pos_server_fiscal_identity_history history
      JOIN pos.fiscal_identities identity ON identity.fiscal_identity_id=history.fiscal_identity_id
      WHERE history.site_pos_server_id='$sitePosServerId' AND history.fiscal_identity_id='$fiscalIdentityId'
        AND identity.fiscal_identity_status='APPROVED' AND identity.is_active
+       AND identity.software_name='ExitPass POS Server'
+       AND identity.software_version='V1.0.0'
+       AND identity.serial_ref='0026_B728_3B2F_8505'
        AND history.effective_start_at<='$atUtc'::timestamptz
        AND (history.effective_end_at IS NULL OR history.effective_end_at>'$atUtc'::timestamptz)) AS fiscal_identity,
     (SELECT count(*) FROM pos.sales_invoice_header_profiles
-     WHERE sales_invoice_header_profile_id='$headerProfileId' AND site_id='$siteId'
+     WHERE site_id='$siteId'
        AND site_pos_server_id='$sitePosServerId' AND fiscal_identity_id='$fiscalIdentityId'
+       AND pos_serial_number='0026_B728_3B2F_8505'
        AND lifecycle_status='APPROVED' AND effective_from<='$atUtc'::timestamptz
-       AND effective_to IS NULL) AS approved_profile,
+       AND (effective_to IS NULL OR effective_to>'$atUtc'::timestamptz)) AS approved_profile,
     (SELECT count(*) FROM pos.channel_terminals terminal
      JOIN pos.controlled_codes type_code ON type_code.controlled_code_id=terminal.channel_terminal_type_code_id
      JOIN pos.controlled_code_sets type_set ON type_set.controlled_code_set_id=type_code.controlled_code_set_id
@@ -47,7 +51,8 @@ WITH counts AS (
      JOIN pos.controlled_code_sets status_set ON status_set.controlled_code_set_id=status_code.controlled_code_set_id
      WHERE terminal.site_pos_server_id='$sitePosServerId'
        AND terminal.fiscal_identity_id='$fiscalIdentityId'
-       AND terminal.channel_terminal_code='PITX-L3-WEBPAY-01'
+       AND terminal.channel_terminal_code='PITX-WEBPAY-01'
+       AND terminal.terminal_serial_number='0026-B738-43B5-E605'
        AND terminal.is_logical_channel AND NOT terminal.is_physical_terminal AND terminal.is_active
        AND type_set.code_set_key='channel_terminal_type' AND type_code.code_key='webpay'
        AND status_set.code_set_key='pos_terminal_operational_status' AND status_code.code_key='active'
@@ -67,7 +72,8 @@ WITH counts AS (
      JOIN pos.controlled_code_sets status_set ON status_set.controlled_code_set_id=status_code.controlled_code_set_id
      WHERE terminal.site_pos_server_id='$sitePosServerId'
        AND terminal.fiscal_identity_id='$fiscalIdentityId'
-       AND terminal.channel_terminal_code='apt-pitx-level-3-01'
+       AND terminal.channel_terminal_code='PITX-APT-01'
+       AND terminal.terminal_serial_number='ACE4_2E00_653A_D952'
        AND NOT terminal.is_logical_channel AND terminal.is_physical_terminal AND terminal.is_active
        AND type_set.code_set_key='channel_terminal_type' AND type_code.code_key='assisted_payment_terminal'
        AND status_set.code_set_key='pos_terminal_operational_status' AND status_code.code_key='active'

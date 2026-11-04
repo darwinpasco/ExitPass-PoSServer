@@ -52,7 +52,8 @@ public sealed record FiscalReportPresentationModel(
     FiscalReportDocumentCounts? DocumentCounts,
     FiscalXReadingPriorZSnapshot? PriorZ,
     string RequestedByRef,
-    string? SourceDetailContractVersion);
+    string? SourceDetailContractVersion,
+    string? RequestedByDisplayName = null);
 
 public sealed record FiscalReportTenderPresentation(
     string Classification,

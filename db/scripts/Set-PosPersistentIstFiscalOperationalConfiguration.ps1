@@ -16,9 +16,11 @@ param(
     [string] $DatabaseName = 'exitpass_pos_ist',
     [string] $DatabaseUser = 'exitpass_ist',
     [ValidatePattern('^[A-Za-z0-9][A-Za-z0-9._-]{2,127}$')]
-    [string] $WebPayTerminalSerialNumber,
+    [string] $WebPayTerminalSerialNumber = '0026-B738-43B5-E605',
     [ValidatePattern('^[A-Za-z0-9][A-Za-z0-9._-]{2,127}$')]
-    [string] $AptTerminalSerialNumber,
+    [string] $AptTerminalSerialNumber = 'ACE4_2E00_653A_D952',
+    [string] $EffectiveFrom,
+    [string] $ApprovedByRef,
     [string] $EvidenceDir
 )
 
@@ -30,7 +32,8 @@ Assert-PosPersistentIstTarget $ContainerName $DatabaseName $DatabaseUser
 $siteId = '2d1dcdf8-f563-537c-8542-0bde7cc9da97'
 $sitePosServerId = '3a138565-1b88-55f8-c83d-5380db6edccc'
 $fiscalIdentityId = 'ad02beb5-b8cd-4545-9ff2-5586782c686a'
-$headerProfileId = 'cb90e882-89f3-4bf3-975c-a6fb10dd765c'
+$currentHeaderProfileId = 'cb90e882-89f3-4bf3-975c-a6fb10dd765c'
+$successorHeaderProfileId = 'fe2171a1-15cf-4ab7-aed5-a9ab083b66d9'
 $webPayTerminalId = 'b71f74f7-8e56-5fda-b257-5d9823ab8520'
 $aptTerminalId = '37bf9170-d797-475b-93b4-75ccca447784'
 $policyId = '2e4252dd-38f0-5424-bee2-0c864b41f6b2'
@@ -39,12 +42,15 @@ $stateId = 'a46c9d75-5b50-5cb6-927e-d5c0b44a4edc'
 function Get-PitxFiscalOperationalFacts {
     $sql = @"
 SELECT json_build_object(
-  'site_pos_server_count', (SELECT count(*) FROM pos.site_pos_servers WHERE site_pos_server_id='$sitePosServerId' AND central_pms_site_ref='$siteId' AND is_active),
+  'site_pos_server_count', (SELECT count(*) FROM pos.site_pos_servers WHERE site_pos_server_id='$sitePosServerId' AND site_pos_server_code='PITX-L3-POS-01' AND central_pms_site_ref='$siteId' AND is_active),
   'fiscal_identity_relationship_count', (SELECT count(*) FROM pos.site_pos_server_fiscal_identity_history WHERE site_pos_server_id='$sitePosServerId' AND fiscal_identity_id='$fiscalIdentityId' AND effective_start_at<=CURRENT_TIMESTAMP AND (effective_end_at IS NULL OR effective_end_at>CURRENT_TIMESTAMP)),
-  'approved_profile_count', (SELECT count(*) FROM pos.sales_invoice_header_profiles WHERE sales_invoice_header_profile_id='$headerProfileId' AND site_id='$siteId' AND site_pos_server_id='$sitePosServerId' AND fiscal_identity_id='$fiscalIdentityId' AND lifecycle_status='APPROVED' AND effective_from<=CURRENT_TIMESTAMP AND effective_to IS NULL),
-  'webpay_terminal_count', (SELECT count(*) FROM pos.channel_terminals WHERE site_pos_server_id='$sitePosServerId' AND channel_terminal_code='PITX-L3-WEBPAY-01' AND is_active),
+  'approved_profile_count', (SELECT count(*) FROM pos.sales_invoice_header_profiles WHERE site_id='$siteId' AND site_pos_server_id='$sitePosServerId' AND fiscal_identity_id='$fiscalIdentityId' AND lifecycle_status='APPROVED' AND effective_from<=CURRENT_TIMESTAMP AND (effective_to IS NULL OR effective_to>CURRENT_TIMESTAMP)),
+  'webpay_terminal_count', (SELECT count(*) FROM pos.channel_terminals WHERE channel_terminal_id='$webPayTerminalId' AND site_pos_server_id='$sitePosServerId' AND channel_terminal_code='PITX-WEBPAY-01' AND is_active),
   'webpay_terminal_serial', (SELECT to_jsonb(terminal)->>'terminal_serial_number' FROM pos.channel_terminals terminal WHERE channel_terminal_id='$webPayTerminalId'),
-  'apt_terminal_count', (SELECT count(*) FROM pos.channel_terminals WHERE site_pos_server_id='$sitePosServerId' AND channel_terminal_code='apt-pitx-level-3-01' AND is_active),
+  'apt_terminal_count', (SELECT count(*) FROM pos.channel_terminals WHERE channel_terminal_id='$aptTerminalId' AND site_pos_server_id='$sitePosServerId' AND channel_terminal_code='PITX-APT-01' AND is_active),
+  'software_name', (SELECT software_name FROM pos.fiscal_identities WHERE fiscal_identity_id='$fiscalIdentityId'),
+  'software_version', (SELECT software_version FROM pos.fiscal_identities WHERE fiscal_identity_id='$fiscalIdentityId'),
+  'pos_server_serial', (SELECT serial_ref FROM pos.fiscal_identities WHERE fiscal_identity_id='$fiscalIdentityId'),
   'apt_terminal_serial', (SELECT to_jsonb(terminal)->>'terminal_serial_number' FROM pos.channel_terminals terminal WHERE channel_terminal_id='$aptTerminalId'),
   'sales_invoice_policy_count', (SELECT count(*) FROM pos.fiscal_sequence_policies WHERE site_pos_server_id='$sitePosServerId' AND policy_code='PITX-L3-SI' AND effective_start_at<=CURRENT_TIMESTAMP AND (effective_end_at IS NULL OR effective_end_at>CURRENT_TIMESTAMP)),
   'sales_invoice_padding_length', (SELECT padding_length FROM pos.fiscal_sequence_policies WHERE fiscal_sequence_policy_id='$policyId'),
@@ -68,7 +74,8 @@ $result = [ordered]@{
     site_id = $siteId
     site_pos_server_id = $sitePosServerId
     fiscal_identity_id = $fiscalIdentityId
-    header_profile_id = $headerProfileId
+    current_header_profile_id = $currentHeaderProfileId
+    successor_header_profile_id = $successorHeaderProfileId
     webpay_channel_terminal_id = $webPayTerminalId
     apt_channel_terminal_id = $aptTerminalId
     fiscal_sequence_policy_id = $policyId
@@ -86,9 +93,20 @@ if (-not $PSCmdlet.ShouldProcess("$ContainerName/$DatabaseName", 'Apply additive
     return
 }
 if ([string]::IsNullOrWhiteSpace($WebPayTerminalSerialNumber) -or
-    [string]::IsNullOrWhiteSpace($AptTerminalSerialNumber)) {
-    throw 'Apply requires the approved WebPay and physical APT terminal serial numbers.'
+    [string]::IsNullOrWhiteSpace($AptTerminalSerialNumber) -or
+    [string]::IsNullOrWhiteSpace($EffectiveFrom) -or
+    [string]::IsNullOrWhiteSpace($ApprovedByRef)) {
+    throw 'Apply requires approved terminal serials, an effective date, and an approval reference.'
 }
+$effectiveAt = [DateTimeOffset]::MinValue
+if (-not [DateTimeOffset]::TryParse($EffectiveFrom, [Globalization.CultureInfo]::InvariantCulture, [Globalization.DateTimeStyles]::RoundtripKind, [ref]$effectiveAt) -or
+    $effectiveAt.Offset -ne [TimeSpan]::FromHours(8) -or $effectiveAt.TimeOfDay -ne [TimeSpan]::FromHours(7) -or $effectiveAt.Day -ne 1) {
+    throw 'EffectiveFrom must be an approved first-of-month fiscal business-day boundary at 07:00:00+08:00.'
+}
+if ($effectiveAt -lt [DateTimeOffset]::Now) {
+    throw 'EffectiveFrom cannot be in the past. Schedule the approved activation before its effective boundary.'
+}
+$effectiveFromSql = $effectiveAt.ToString('yyyy-MM-ddTHH:mm:sszzz', [Globalization.CultureInfo]::InvariantCulture)
 
 $repoRoot = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path
 $codeSqlPath = Join-Path $repoRoot 'db\reference-data\controlled-codes\generated\sql\010_controlled_codes_fiscal_issuance.sql'
@@ -130,8 +148,22 @@ BEGIN
   IF (SELECT count(*) FROM pos.site_pos_server_fiscal_identity_history WHERE site_pos_server_id='$sitePosServerId' AND fiscal_identity_id='$fiscalIdentityId' AND effective_start_at<=CURRENT_TIMESTAMP AND (effective_end_at IS NULL OR effective_end_at>CURRENT_TIMESTAMP)) <> 1 THEN
     RAISE EXCEPTION 'PITX effective fiscal identity relationship must resolve exactly once';
   END IF;
-  IF (SELECT count(*) FROM pos.sales_invoice_header_profiles WHERE sales_invoice_header_profile_id='$headerProfileId' AND site_id='$siteId' AND site_pos_server_id='$sitePosServerId' AND fiscal_identity_id='$fiscalIdentityId' AND lifecycle_status='APPROVED' AND effective_from<=CURRENT_TIMESTAMP AND effective_to IS NULL) <> 1 THEN
-    RAISE EXCEPTION 'PITX current approved Sales Invoice header profile must resolve exactly once';
+  IF (SELECT count(*) FROM pos.sales_invoice_header_profiles
+      WHERE sales_invoice_header_profile_id='$currentHeaderProfileId' AND site_id='$siteId'
+        AND site_pos_server_id='$sitePosServerId' AND fiscal_identity_id='$fiscalIdentityId'
+        AND effective_from<'$effectiveFromSql'::timestamptz
+        AND lifecycle_status='APPROVED' AND retired_at IS NULL
+        AND (effective_to IS NULL OR effective_to='$effectiveFromSql'::timestamptz)) <> 1 THEN
+    RAISE EXCEPTION 'PITX predecessor Sales Invoice header profile is unavailable or has conflicting lifecycle evidence';
+  END IF;
+  IF EXISTS (SELECT 1 FROM pos.sales_invoice_header_profiles
+      WHERE sales_invoice_header_profile_id='$successorHeaderProfileId'
+        AND (site_id<>'$siteId' OR site_pos_server_id<>'$sitePosServerId'
+          OR fiscal_identity_id<>'$fiscalIdentityId' OR profile_version<>'pitx-l3-fiscal-identity-v1'
+          OR pos_serial_number<>'0026_B728_3B2F_8505'
+          OR effective_from<>'$effectiveFromSql'::timestamptz OR effective_to IS NOT NULL
+          OR lifecycle_status<>'APPROVED')) THEN
+    RAISE EXCEPTION 'PITX successor Sales Invoice header profile conflicts with the approved configuration';
   END IF;
   FOREACH pair IN ARRAY ARRAY[
     'channel_terminal_type:webpay',
@@ -155,10 +187,10 @@ BEGIN
       AND (c.effective_end_at IS NULL OR c.effective_end_at>CURRENT_TIMESTAMP);
     IF pair_count <> 1 THEN RAISE EXCEPTION 'Controlled code % must resolve exactly once', pair; END IF;
   END LOOP;
-  IF EXISTS (SELECT 1 FROM pos.channel_terminals WHERE site_pos_server_id='$sitePosServerId' AND channel_terminal_code='PITX-L3-WEBPAY-01' AND channel_terminal_id<>'$webPayTerminalId') THEN
+  IF EXISTS (SELECT 1 FROM pos.channel_terminals WHERE site_pos_server_id='$sitePosServerId' AND channel_terminal_code='PITX-WEBPAY-01' AND channel_terminal_id<>'$webPayTerminalId') THEN
     RAISE EXCEPTION 'PITX WebPay terminal natural key has a conflicting identity';
   END IF;
-  IF EXISTS (SELECT 1 FROM pos.channel_terminals WHERE site_pos_server_id='$sitePosServerId' AND channel_terminal_code='apt-pitx-level-3-01' AND channel_terminal_id<>'$aptTerminalId') THEN
+  IF EXISTS (SELECT 1 FROM pos.channel_terminals WHERE site_pos_server_id='$sitePosServerId' AND channel_terminal_code='PITX-APT-01' AND channel_terminal_id<>'$aptTerminalId') THEN
     RAISE EXCEPTION 'PITX APT terminal natural key has a conflicting identity';
   END IF;
   IF EXISTS (SELECT 1 FROM pos.fiscal_sequence_policies WHERE site_pos_server_id='$sitePosServerId' AND policy_code='PITX-L3-SI' AND fiscal_sequence_policy_id<>'$policyId') THEN
@@ -168,18 +200,69 @@ END
 `$`$;
 
 UPDATE pos.site_pos_servers
-SET reporting_timezone_name='Asia/Manila',
+SET site_pos_server_code='PITX-L3-POS-01',
+    display_name='PITX Level 3 POS Server',
+    reporting_timezone_name='Asia/Manila',
     business_day_cutoff_local_time='07:00:00',
     updated_at=CURRENT_TIMESTAMP
-WHERE site_pos_server_id='$sitePosServerId'
-  AND (reporting_timezone_name,business_day_cutoff_local_time)
-      IS DISTINCT FROM ('Asia/Manila','07:00:00'::time);
+WHERE site_pos_server_id='$sitePosServerId';
+
+UPDATE pos.fiscal_identities
+SET software_name='ExitPass POS Server',
+    software_version='V1.0.0',
+    serial_ref='0026_B728_3B2F_8505',
+    updated_at=CURRENT_TIMESTAMP,
+    updated_by_ref='$ApprovedByRef'
+WHERE fiscal_identity_id='$fiscalIdentityId';
+
+UPDATE pos.sales_invoice_header_profiles
+SET effective_to='$effectiveFromSql'::timestamptz,
+    updated_at=CURRENT_TIMESTAMP,
+    updated_by_ref='$ApprovedByRef'
+WHERE sales_invoice_header_profile_id='$currentHeaderProfileId'
+  AND lifecycle_status='APPROVED' AND retired_at IS NULL
+  AND (effective_to IS NULL OR effective_to='$effectiveFromSql'::timestamptz);
+
+INSERT INTO pos.sales_invoice_header_profiles(
+  sales_invoice_header_profile_id,fiscal_identity_id,site_id,site_pos_server_id,profile_version,
+  template_version,presentation_version,pos_serial_number,machine_identification_number,
+  parking_location_display,supplier_developer_registered_name,supplier_developer_address,
+  supplier_developer_tin,bir_accreditation_number,bir_accreditation_issued_date,
+  bir_accreditation_valid_until,ptu_number,ptu_issued_date,sales_invoice_legal_statement,
+  customer_service_footer,effective_from,lifecycle_status,approved_at,approved_by_ref,
+  created_by_ref,updated_by_ref)
+SELECT '$successorHeaderProfileId',fiscal_identity_id,site_id,site_pos_server_id,
+  'pitx-l3-fiscal-identity-v1',template_version,presentation_version,'0026_B728_3B2F_8505',
+  machine_identification_number,parking_location_display,supplier_developer_registered_name,
+  supplier_developer_address,supplier_developer_tin,bir_accreditation_number,
+  bir_accreditation_issued_date,bir_accreditation_valid_until,ptu_number,ptu_issued_date,
+  sales_invoice_legal_statement,customer_service_footer,'$effectiveFromSql'::timestamptz,
+  'APPROVED',CURRENT_TIMESTAMP,'$ApprovedByRef','$ApprovedByRef','$ApprovedByRef'
+FROM pos.sales_invoice_header_profiles
+WHERE sales_invoice_header_profile_id='$currentHeaderProfileId'
+ON CONFLICT(sales_invoice_header_profile_id) DO NOTHING;
+
+DO `$`$
+BEGIN
+  IF (SELECT count(*) FROM pos.sales_invoice_header_profiles
+      WHERE sales_invoice_header_profile_id='$currentHeaderProfileId' AND lifecycle_status='APPROVED'
+        AND effective_to='$effectiveFromSql'::timestamptz AND retired_at IS NULL) <> 1 OR
+     (SELECT count(*) FROM pos.sales_invoice_header_profiles
+      WHERE sales_invoice_header_profile_id='$successorHeaderProfileId' AND site_id='$siteId'
+        AND site_pos_server_id='$sitePosServerId' AND fiscal_identity_id='$fiscalIdentityId'
+        AND profile_version='pitx-l3-fiscal-identity-v1' AND pos_serial_number='0026_B728_3B2F_8505'
+        AND effective_from='$effectiveFromSql'::timestamptz AND effective_to IS NULL
+        AND lifecycle_status='APPROVED') <> 1 THEN
+    RAISE EXCEPTION 'PITX effective-dated Sales Invoice header-profile transition failed';
+  END IF;
+END
+`$`$;
 
 INSERT INTO pos.channel_terminals(
   channel_terminal_id,site_pos_server_id,channel_terminal_code,terminal_serial_number,display_name,
   channel_terminal_type_code_id,is_logical_channel,is_physical_terminal,
   fiscal_identity_id,health_status_code_id,operational_status_code_id,is_active)
-SELECT '$webPayTerminalId','$sitePosServerId','PITX-L3-WEBPAY-01','$WebPayTerminalSerialNumber','PITX Level 3 WebPay',
+SELECT '$webPayTerminalId','$sitePosServerId','PITX-WEBPAY-01','$WebPayTerminalSerialNumber','PITX Level 3 WebPay',
   type_code.controlled_code_id,true,false,'$fiscalIdentityId',
   health_code.controlled_code_id,status_code.controlled_code_id,true
 FROM pos.controlled_codes type_code
@@ -190,6 +273,7 @@ JOIN pos.controlled_codes status_code ON status_code.code_key='active'
 JOIN pos.controlled_code_sets status_set ON status_set.controlled_code_set_id=status_code.controlled_code_set_id AND status_set.code_set_key='pos_terminal_operational_status'
 WHERE type_code.code_key='webpay'
 ON CONFLICT(channel_terminal_id) DO UPDATE SET
+  channel_terminal_code=EXCLUDED.channel_terminal_code,
   terminal_serial_number=EXCLUDED.terminal_serial_number,
   display_name=EXCLUDED.display_name,
   channel_terminal_type_code_id=EXCLUDED.channel_terminal_type_code_id,
@@ -214,7 +298,7 @@ INSERT INTO pos.channel_terminals(
   channel_terminal_id,site_pos_server_id,channel_terminal_code,terminal_serial_number,display_name,
   channel_terminal_type_code_id,is_logical_channel,is_physical_terminal,
   fiscal_identity_id,health_status_code_id,operational_status_code_id,is_active)
-SELECT '$aptTerminalId','$sitePosServerId','apt-pitx-level-3-01','$AptTerminalSerialNumber','PITX Level 3 Assisted Payment Terminal 01',
+SELECT '$aptTerminalId','$sitePosServerId','PITX-APT-01','$AptTerminalSerialNumber','PITX Level 3 Assisted Payment Terminal 01',
   type_code.controlled_code_id,false,true,'$fiscalIdentityId',
   health_code.controlled_code_id,status_code.controlled_code_id,true
 FROM pos.controlled_codes type_code
@@ -225,6 +309,7 @@ JOIN pos.controlled_codes status_code ON status_code.code_key='active'
 JOIN pos.controlled_code_sets status_set ON status_set.controlled_code_set_id=status_code.controlled_code_set_id AND status_set.code_set_key='pos_terminal_operational_status'
 WHERE type_code.code_key='assisted_payment_terminal'
 ON CONFLICT(channel_terminal_id) DO UPDATE SET
+  channel_terminal_code=EXCLUDED.channel_terminal_code,
   terminal_serial_number=EXCLUDED.terminal_serial_number,
   display_name=EXCLUDED.display_name,
   channel_terminal_type_code_id=EXCLUDED.channel_terminal_type_code_id,

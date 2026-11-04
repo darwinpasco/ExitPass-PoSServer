@@ -132,6 +132,8 @@ public sealed class FiscalReportPresentationTests
         Assert.Contains("2026-08-06 16:00:00 PHT", x, StringComparison.Ordinal);
         Assert.Contains("2026-08-07 00:00:00 PHT", z, StringComparison.Ordinal);
         Assert.Contains("Printed Date", x, StringComparison.Ordinal);
+        Assert.Contains("Juan Dela Cruz", x, StringComparison.Ordinal);
+        Assert.DoesNotContain("operator-x", x, StringComparison.Ordinal);
         Assert.DoesNotContain("2026-08-06T08:00:00Z", x, StringComparison.Ordinal);
         Assert.Contains("Gross Sales", x, StringComparison.Ordinal);
         Assert.Contains("PHP 120.00", x, StringComparison.Ordinal);
@@ -176,7 +178,7 @@ public sealed class FiscalReportPresentationTests
             Assert.DoesNotContain(XRecord().FiscalIdentityId.ToString("D"), report, StringComparison.OrdinalIgnoreCase);
             Assert.DoesNotContain(XRecord().SitePosServerId.ToString("D"), report, StringComparison.OrdinalIgnoreCase);
             Assert.Contains("Request Actor", report, StringComparison.Ordinal);
-            Assert.Contains(report == x ? "operator-x" : "operator-z", report, StringComparison.Ordinal);
+            Assert.Contains(report == x ? "Juan Dela Cruz" : "Maria Santos", report, StringComparison.Ordinal);
         }
         Assert.Equal(Amounts(), service.Present(XRecord()).Presentation?.Amounts);
         Assert.Equal(ZRecord().CounterSnapshot.ResultingZCounterValue, service.Present(ZRecord()).Presentation?.Counters?.ResultingZCounterValue);
@@ -280,6 +282,7 @@ public sealed class FiscalReportPresentationTests
             DocumentCounts = null,
             PriorZ = null,
             RequestedByRef = "unavailable",
+            RequestedByDisplayName = null,
             SnapshotDetailVersion = null
         };
         var receipt = Text(new FiscalReportOutputRenderer(),
@@ -405,7 +408,8 @@ public sealed class FiscalReportPresentationTests
         new(2, 0, null, null, null),
         new(10, DateTimeOffset.Parse("2026-08-05T23:00:00Z")),
         "operator-x",
-        FiscalXReadingContract.SnapshotDetailVersion);
+        FiscalXReadingContract.SnapshotDetailVersion,
+        "Juan Dela Cruz");
 
     private static FiscalZReadingRecord ZRecord()
     {
@@ -445,7 +449,8 @@ public sealed class FiscalReportPresentationTests
             "COMMITTED",
             new(2, 0, null, null, null),
             "operator-z",
-            FiscalXReadingContract.SnapshotDetailVersion);
+            FiscalXReadingContract.SnapshotDetailVersion,
+            "Maria Santos");
     }
 
     private static FiscalXReadingAmounts Amounts() => new(

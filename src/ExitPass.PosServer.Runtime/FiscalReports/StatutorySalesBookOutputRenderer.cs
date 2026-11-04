@@ -84,7 +84,7 @@ public sealed class StatutorySalesBookOutputRenderer
         pdf.Text(page, 20, 484, $"Machine Identification Number: {h.MachineIdentificationNumber}", 6.5);
         pdf.Text(page, 20, 473, $"POS Server: {h.PosServerCode}", 6.5);
         pdf.Text(page, 20, 462, $"Date and Time Generated: {Pht(h.GeneratedAt):yyyy-MM-dd HH:mm:ss}", 6.5);
-        pdf.Text(page, 20, 451, $"UserID: {h.UserId}", 6.5);
+        pdf.Text(page, 20, 451, $"UserID: {h.UserDisplayName ?? h.UserId}", 6.5);
         pdf.CenterText(page, width / 2, 430, StatutorySalesBookContract.Title(report.Summary.Type) + (continued ? " (continued)" : string.Empty), 10, true);
     }
 
@@ -255,7 +255,7 @@ public sealed class StatutorySalesBookOutputRenderer
         Header(b, 7, $"Machine Identification Number: {h.MachineIdentificationNumber}");
         Header(b, 8, $"POS Server: {h.PosServerCode}");
         Header(b, 9, $"Date and Time Generated: {Pht(h.GeneratedAt):yyyy-MM-dd HH:mm:ss}");
-        Header(b, 10, $"UserID: {h.UserId}");
+        Header(b, 10, $"UserID: {h.UserDisplayName ?? h.UserId}");
         b.Append("<row r=\"11\" ht=\"15.75\"/>");
         b.Append("<row r=\"12\" ht=\"21.75\"><c r=\"A12\" s=\"2\" t=\"inlineStr\"><is><t>").Append(Xml(StatutorySalesBookContract.Title(type))).Append("</t></is></c></row>");
         Headings(b, type);

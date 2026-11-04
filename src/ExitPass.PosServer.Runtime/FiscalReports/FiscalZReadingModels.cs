@@ -17,7 +17,8 @@ public sealed record FiscalZReadingCommand(
     long ExpectedStateVersion,
     string RequestedByRef,
     string ServiceIdentityRef,
-    string CorrelationId);
+    string CorrelationId,
+    string? RequestedByDisplayName = null);
 
 public sealed record FiscalZReadingPeriod(
     Guid FiscalReportingPeriodId,
@@ -81,7 +82,8 @@ public sealed record FiscalZReadingRecord(
     string ReportStatus = "COMMITTED",
     FiscalReportDocumentCounts? DocumentCounts = null,
     string RequestedByRef = "unavailable",
-    string? SnapshotDetailVersion = null);
+    string? SnapshotDetailVersion = null,
+    string? RequestedByDisplayName = null);
 
 public enum FiscalZReadingOutcome
 {

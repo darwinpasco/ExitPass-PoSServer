@@ -12,7 +12,7 @@ public static class AnnexE1Contract
     public const string MimeType = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
     public const string ReportKind = "ANNEX_E";
     public const string SoftwareName = "ExitPass POS Server";
-    public const string SoftwareVersion = "1.3";
+    public const string SoftwareVersion = "V1.0.0";
     public const string ReleaseNumber = "Z-012B";
     public const string ReleaseDate = "2026-08-10";
 }
@@ -60,7 +60,8 @@ public sealed record AnnexE1PeriodFactCommand(
     string? CorrectionReason,
     string RequestedByRef,
     string ServiceIdentityRef,
-    string CorrelationId);
+    string CorrelationId,
+    string? RequestedByDisplayName = null);
 
 public sealed record AnnexE1PeriodFactRecord(
     Guid FactId,
@@ -101,7 +102,8 @@ public sealed record AnnexE1GenerationCommand(
     string? CorrectionApprovalReference,
     string RequestedByRef,
     string ServiceIdentityRef,
-    string CorrelationId);
+    string CorrelationId,
+    string? RequestedByDisplayName = null);
 
 public sealed record AnnexE1CurrentWorkbookQuery(
     Guid SitePosServerId,
@@ -123,7 +125,8 @@ public sealed record AnnexE1Header(
     string MachineIdentificationNumber,
     string PosTerminalNumber,
     DateTimeOffset GeneratedAt,
-    string GeneratedByRef);
+    string GeneratedByRef,
+    string? GeneratedByDisplayName = null);
 
 public sealed record AnnexE1RowInputs(
     Guid FiscalReportingPeriodId,

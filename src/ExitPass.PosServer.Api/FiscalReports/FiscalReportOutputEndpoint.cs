@@ -315,10 +315,10 @@ public static class FiscalReportOutputEndpoint
             profile.PtuIssuedDate,
             profile.BirAccreditationValidUntil,
             profile.MachineIdentificationNumber,
+            profile.SitePosServerCode,
+            identity.SerialReference ?? profile.PosSerialNumber,
             null,
-            profile.PosSerialNumber,
-            null,
-            null,
+            string.Join(' ', new[] { identity.SoftwareName, identity.SoftwareVersion }.Where(value => !string.IsNullOrWhiteSpace(value))),
             profile.ParkingLocationDisplay);
     }
 

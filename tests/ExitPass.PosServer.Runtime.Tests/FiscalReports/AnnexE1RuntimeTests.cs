@@ -68,6 +68,7 @@ public sealed class AnnexE1RuntimeTests
         var text=Encoding.Latin1.GetString(first.Bytes);
         Assert.Contains("/MediaBox [0 0 841.89 595.28]",text);Assert.Equal(1,Count(text,"/Type /Page "));
         Assert.Contains("BIR SALES SUMMARY REPORT",text);Assert.Contains("ANNEX E-1",text);
+        Assert.Contains("Juan Dela Cruz",text);
         Assert.DoesNotContain("ANNEX E-1 PDF PRESENTATION",text);Assert.DoesNotContain("TECHNICAL UAT",text);
         foreach(var heading in new[]{"Date","Beginning","Ending","SI/OR","Grand","Accum.","Gross","Deductions","Adjustment","VAT","Payable","Net","Sales","Overrun","/Overflow","Total","Income","Reset","Counter","Z","-Counter","Remarks"})
             Assert.Contains(heading,text);
@@ -183,7 +184,7 @@ public sealed class AnnexE1RuntimeTests
         ResetCounter:0,ZCounter:1,TransactionCount:1,RefundAmount:0,AdjustmentAmount:0,ServiceChargeAmount:0,
         FiscalRangeCount:1,FiscalGapCount:0,FactIds:Enumerable.Range(0,7).Select(_=>Guid.NewGuid()).ToArray(),
         FactSemanticHashes:Enumerable.Range(0,7).Select(_=>new string('b',64)).ToArray());
-    private static AnnexE1Header Header()=>new("Synthetic Taxpayer","Synthetic Address","000-000-000","ExitPass POS Server","1.3","Z-012B","2026-08-10","SERIAL","MIN","SITE-01",DateTimeOffset.Parse("2026-08-10T00:00:00Z"),"actor");
+    private static AnnexE1Header Header()=>new("Synthetic Taxpayer","Synthetic Address","000-000-000","ExitPass POS Server","V1.0.0","Z-012B","2026-08-10","SERIAL","MIN","PITX-L3-POS-01",DateTimeOffset.Parse("2026-08-10T00:00:00Z"),"actor","Juan Dela Cruz");
     private static AnnexE1WorkbookRecord Workbook(int rowCount=1)=>new(
         Guid.Parse("613af721-3b65-4bc4-9ce3-d2a032c26ab3"),"AE1-202608-TEST-R002","operation",AnnexE1Contract.Profile,
         AnnexE1Contract.CalculationProfile,AnnexE1Contract.RendererVersion,Guid.NewGuid(),Guid.NewGuid(),"PHP",2026,8,2,

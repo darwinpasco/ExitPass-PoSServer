@@ -828,7 +828,10 @@ public sealed class PostgresFiscalDocumentRepository : IFiscalDocumentRepository
                 ReadDateTimeOffset(reader, 32),
                 ReadDateTimeOffset(reader, 33),
                 reader.IsDBNull(34) ? null : reader.GetString(34),
-                reader.IsDBNull(35) ? null : reader.GetString(35));
+                reader.IsDBNull(35) ? null : reader.GetString(35),
+                reader.IsDBNull(39) ? null : reader.GetString(39),
+                reader.IsDBNull(40) ? null : reader.GetString(40),
+                reader.IsDBNull(41) ? null : reader.GetString(41));
 
             profiles.Add(new SalesInvoiceHeaderProfile(
                 reader.GetGuid(0),
@@ -862,7 +865,8 @@ public sealed class PostgresFiscalDocumentRepository : IFiscalDocumentRepository
                 false,
                 reader.IsDBNull(36) ? null : reader.GetString(36),
                 reader.IsDBNull(37) ? null : reader.GetString(37),
-                reader.IsDBNull(38) ? null : reader.GetString(38)));
+                reader.IsDBNull(38) ? null : reader.GetString(38),
+                reader.IsDBNull(42) ? null : reader.GetString(42)));
         }
 
         return profiles;

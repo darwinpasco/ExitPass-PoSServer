@@ -15,7 +15,8 @@ public sealed record FiscalXReadingCommand(
     DateTimeOffset ObservedAt,
     string RequestedByRef,
     string ServiceIdentityRef,
-    string CorrelationId);
+    string CorrelationId,
+    string? RequestedByDisplayName = null);
 
 public sealed record FiscalXReadingPeriod(
     Guid FiscalReportingPeriodId,
@@ -98,7 +99,8 @@ public sealed record FiscalXReadingRecord(
     FiscalReportDocumentCounts? DocumentCounts = null,
     FiscalXReadingPriorZSnapshot? PriorZ = null,
     string RequestedByRef = "unavailable",
-    string? SnapshotDetailVersion = null);
+    string? SnapshotDetailVersion = null,
+    string? RequestedByDisplayName = null);
 
 public enum FiscalXReadingOutcome
 {

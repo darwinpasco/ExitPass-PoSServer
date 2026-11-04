@@ -594,7 +594,10 @@ public sealed class PostgresSalesInvoiceHeaderProfileRepository : ISalesInvoiceH
             ReadDateTimeOffset(reader, 32),
             ReadDateTimeOffset(reader, 33),
             reader.IsDBNull(34) ? null : reader.GetString(34),
-            reader.IsDBNull(35) ? null : reader.GetString(35));
+            reader.IsDBNull(35) ? null : reader.GetString(35),
+            reader.IsDBNull(40) ? null : reader.GetString(40),
+            reader.IsDBNull(41) ? null : reader.GetString(41),
+            reader.IsDBNull(42) ? null : reader.GetString(42));
 
         return new SalesInvoiceHeaderProfile(
             reader.GetGuid(0),
@@ -628,7 +631,8 @@ public sealed class PostgresSalesInvoiceHeaderProfileRepository : ISalesInvoiceH
             reader.GetBoolean(36),
             reader.IsDBNull(37) ? null : reader.GetString(37),
             reader.IsDBNull(38) ? null : reader.GetString(38),
-            reader.IsDBNull(39) ? null : reader.GetString(39));
+            reader.IsDBNull(39) ? null : reader.GetString(39),
+            reader.IsDBNull(43) ? null : reader.GetString(43));
     }
 
     private static DateTimeOffset ReadDateTimeOffset(NpgsqlDataReader reader, int ordinal)
@@ -703,9 +707,15 @@ public sealed class PostgresSalesInvoiceHeaderProfileRepository : ISalesInvoiceH
             ),
             profile.supplier_developer_registered_name,
             profile.supplier_developer_address,
-            profile.supplier_developer_tin
+            profile.supplier_developer_tin,
+            identity.software_name,
+            identity.software_version,
+            identity.serial_ref,
+            site.site_pos_server_code
         from pos.sales_invoice_header_profiles profile
         inner join pos.fiscal_identities identity
             on identity.fiscal_identity_id = profile.fiscal_identity_id
+        inner join pos.site_pos_servers site
+            on site.site_pos_server_id = profile.site_pos_server_id
         """;
 }

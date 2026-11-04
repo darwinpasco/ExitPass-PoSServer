@@ -97,7 +97,8 @@ public sealed class FiscalReportPresentationService
             record.DocumentCounts,
             record.PriorZ,
             record.RequestedByRef,
-            record.SnapshotDetailVersion);
+            record.SnapshotDetailVersion,
+            record.RequestedByDisplayName);
     }
 
     public FiscalReportPresentationResult Present(FiscalZReadingRecord record)
@@ -206,7 +207,8 @@ public sealed class FiscalReportPresentationService
             record.DocumentCounts,
             null,
             record.RequestedByRef,
-            record.SnapshotDetailVersion);
+            record.SnapshotDetailVersion,
+            record.RequestedByDisplayName);
     }
 
     private static FiscalReportPresentationResult? ValidateCommon(
@@ -353,7 +355,8 @@ public sealed class FiscalReportPresentationService
         FiscalReportDocumentCounts? documentCounts,
         FiscalXReadingPriorZSnapshot? priorZ,
         string requestedByRef,
-        string? snapshotDetailVersion)
+        string? snapshotDetailVersion,
+        string? requestedByDisplayName)
     {
         var tenderRows = tenders
             .OrderBy(item => item.Classification, StringComparer.Ordinal)
@@ -440,7 +443,8 @@ public sealed class FiscalReportPresentationService
             documentCounts,
             priorZ,
             requestedByRef,
-            snapshotDetailVersion);
+            snapshotDetailVersion,
+            requestedByDisplayName);
         var snapshotIdentity = FiscalReportOutputRenderer.ComputeSnapshotIdentity(model);
         return FiscalReportPresentationResult.Success(model with { SnapshotIdentity = snapshotIdentity });
     }

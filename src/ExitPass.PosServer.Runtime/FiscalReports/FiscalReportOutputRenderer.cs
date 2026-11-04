@@ -202,6 +202,7 @@ public sealed class FiscalReportOutputRenderer
         Add("metadata", "generated_at", value: Timestamp(presentation.GeneratedAt));
         Add("metadata", "committed_at", value: Timestamp(presentation.CommittedAt));
         Add("metadata", "requested_by_ref", value: presentation.RequestedByRef);
+        Add("metadata", "requested_by_display_name", value: presentation.RequestedByDisplayName ?? presentation.RequestedByRef);
         Add("metadata", "source_detail_contract_version", value: presentation.SourceDetailContractVersion ?? "legacy_snapshot");
         Add("metadata", "closed_at", value: presentation.ClosedAt is null ? "not_applicable" : Timestamp(presentation.ClosedAt.Value));
         Add("count", "qualifying_documents", count: presentation.QualifyingDocumentCount);
@@ -409,7 +410,7 @@ public sealed class FiscalReportOutputRenderer
 
         lines.Add(string.Empty);
         AddValue(lines, "Printed Date", PhtTimestamp(presentation.GeneratedAt), width);
-        AddOptionalValue(lines, "Request Actor", AvailableReference(presentation.RequestedByRef), width);
+        AddOptionalValue(lines, "Request Actor", AvailableReference(presentation.RequestedByDisplayName ?? presentation.RequestedByRef), width);
         lines.Add(new string('=', width));
         AddCentered(lines, "NOTHING FOLLOWS", width);
         return string.Join('\n', lines) + "\n";
