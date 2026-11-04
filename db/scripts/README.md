@@ -201,8 +201,13 @@ Persistent PITX fiscal issuance configuration remains separate from schema recon
 The static configuration command additively loads the canonical fiscal-issuance controlled-code
 slice, preserves the registered Site POS Server and channel-terminal UUIDs, applies the approved
 PITX POS/WebPay/APT identities, and creates an effective-dated Sales Invoice header-profile successor.
-Run Apply only at or after the approved first-of-month 07:00 Asia/Manila boundary. Exact replay is
-idempotent, and the command never updates an existing sequence counter. The period command is intentionally separate:
+Run Apply during fiscal quiescence before the approved first-of-month 07:00 Asia/Manila boundary.
+Retroactive effective dates are rejected. The predecessor profile remains approved through that
+half-open boundary and the successor becomes effective at the boundary; historical snapshots are
+not rewritten. Monthly eSales requires the software version and each machine header to remain stable
+across the selected month, so the first-of-month restriction is retained. Exact pre-boundary replay
+is idempotent, and the command never updates an existing sequence counter. The period command is
+intentionally separate:
 it derives the current half-open Asia/Manila business day, reuses an existing current OPEN period,
 and rejects overlap or ambiguity. All three commands refuse production-like database names.
 

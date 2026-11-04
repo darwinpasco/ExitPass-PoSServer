@@ -1,6 +1,7 @@
 {
   "profile": "central-pms-to-site-pos-server",
   "version": 1,
+  "allowFiscalReportActorDelegation": true,
   "permissions": [
     "fiscal_document.create",
     "fiscal_document.read",

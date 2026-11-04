@@ -101,10 +101,10 @@ if ([string]::IsNullOrWhiteSpace($WebPayTerminalSerialNumber) -or
 $effectiveAt = [DateTimeOffset]::MinValue
 if (-not [DateTimeOffset]::TryParse($EffectiveFrom, [Globalization.CultureInfo]::InvariantCulture, [Globalization.DateTimeStyles]::RoundtripKind, [ref]$effectiveAt) -or
     $effectiveAt.Offset -ne [TimeSpan]::FromHours(8) -or $effectiveAt.TimeOfDay -ne [TimeSpan]::FromHours(7) -or $effectiveAt.Day -ne 1) {
-    throw 'EffectiveFrom must be the first calendar day of a month at 07:00:00+08:00.'
+    throw 'EffectiveFrom must be an approved first-of-month fiscal business-day boundary at 07:00:00+08:00.'
 }
-if ($effectiveAt -gt [DateTimeOffset]::Now) {
-    throw 'EffectiveFrom cannot be in the future; run the approved activation at or after its effective boundary.'
+if ($effectiveAt -lt [DateTimeOffset]::Now) {
+    throw 'EffectiveFrom cannot be in the past. Schedule the approved activation before its effective boundary.'
 }
 $effectiveFromSql = $effectiveAt.ToString('yyyy-MM-ddTHH:mm:sszzz', [Globalization.CultureInfo]::InvariantCulture)
 
@@ -152,9 +152,8 @@ BEGIN
       WHERE sales_invoice_header_profile_id='$currentHeaderProfileId' AND site_id='$siteId'
         AND site_pos_server_id='$sitePosServerId' AND fiscal_identity_id='$fiscalIdentityId'
         AND effective_from<'$effectiveFromSql'::timestamptz
-        AND ((lifecycle_status='APPROVED' AND effective_to IS NULL AND retired_at IS NULL)
-          OR (lifecycle_status='RETIRED' AND effective_to='$effectiveFromSql'::timestamptz
-              AND retired_at='$effectiveFromSql'::timestamptz))) <> 1 THEN
+        AND lifecycle_status='APPROVED' AND retired_at IS NULL
+        AND (effective_to IS NULL OR effective_to='$effectiveFromSql'::timestamptz)) <> 1 THEN
     RAISE EXCEPTION 'PITX predecessor Sales Invoice header profile is unavailable or has conflicting lifecycle evidence';
   END IF;
   IF EXISTS (SELECT 1 FROM pos.sales_invoice_header_profiles
@@ -218,12 +217,11 @@ WHERE fiscal_identity_id='$fiscalIdentityId';
 
 UPDATE pos.sales_invoice_header_profiles
 SET effective_to='$effectiveFromSql'::timestamptz,
-    lifecycle_status='RETIRED',
-    retired_at='$effectiveFromSql'::timestamptz,
     updated_at=CURRENT_TIMESTAMP,
     updated_by_ref='$ApprovedByRef'
 WHERE sales_invoice_header_profile_id='$currentHeaderProfileId'
-  AND lifecycle_status='APPROVED' AND effective_to IS NULL;
+  AND lifecycle_status='APPROVED' AND retired_at IS NULL
+  AND (effective_to IS NULL OR effective_to='$effectiveFromSql'::timestamptz);
 
 INSERT INTO pos.sales_invoice_header_profiles(
   sales_invoice_header_profile_id,fiscal_identity_id,site_id,site_pos_server_id,profile_version,
@@ -247,8 +245,8 @@ ON CONFLICT(sales_invoice_header_profile_id) DO NOTHING;
 DO `$`$
 BEGIN
   IF (SELECT count(*) FROM pos.sales_invoice_header_profiles
-      WHERE sales_invoice_header_profile_id='$currentHeaderProfileId' AND lifecycle_status='RETIRED'
-        AND effective_to='$effectiveFromSql'::timestamptz AND retired_at='$effectiveFromSql'::timestamptz) <> 1 OR
+      WHERE sales_invoice_header_profile_id='$currentHeaderProfileId' AND lifecycle_status='APPROVED'
+        AND effective_to='$effectiveFromSql'::timestamptz AND retired_at IS NULL) <> 1 OR
      (SELECT count(*) FROM pos.sales_invoice_header_profiles
       WHERE sales_invoice_header_profile_id='$successorHeaderProfileId' AND site_id='$siteId'
         AND site_pos_server_id='$sitePosServerId' AND fiscal_identity_id='$fiscalIdentityId'

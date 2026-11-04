@@ -35,6 +35,15 @@ public sealed class PosServerPitxLocalLauncherTests
         Assert.Contains(ContainerArtifactRoot, source, StringComparison.Ordinal);
     }
 
+    [Fact]
+    public void CentralPmsIntegrationAloneReceivesFiscalReportActorDelegationAuthority()
+    {
+        var source = LauncherSource();
+
+        Assert.Contains("$permissionProfile.allowFiscalReportActorDelegation -ne $true", source, StringComparison.Ordinal);
+        Assert.Contains("${apiKeyPrefix}AllowFiscalReportActorDelegation=true", source, StringComparison.Ordinal);
+    }
+
     private static string LauncherSource() => File.ReadAllText(Path.Combine(
         FindRepositoryRoot(),
         "scripts",

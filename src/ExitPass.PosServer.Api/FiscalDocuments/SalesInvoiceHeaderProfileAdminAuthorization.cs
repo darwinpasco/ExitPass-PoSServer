@@ -15,6 +15,7 @@ public static class SalesInvoiceHeaderProfileAdminAuthorization
     public const string AuthenticationScheme = "PosServerAdminApiKey";
     public const string PolicyName = "SalesInvoiceHeaderProfileAdministration";
     public const string PermissionClaimType = "pos_server_permission";
+    public const string FiscalReportActorDelegationClaimType = "pos_server_fiscal_report_actor_delegation";
     public const string RequiredPermission = "sales_invoice_header_profile.admin";
     public const string ApiKeyHeaderName = "X-PosServer-Admin-Key";
     public const string PermissionHeaderName = "X-PosServer-Admin-Permission";
@@ -47,6 +48,10 @@ public static class SalesInvoiceHeaderProfileAdminAuthorization
             var fiscalIdentityScopes = ReadScopes(child, "FiscalIdentityIds");
             var currencyScopes = ReadScopes(child, "CurrencyCodes");
             var authorityClass = (child["AuthorityClass"] ?? BirSalesSummaryAuthorization.DevelopmentAuthorityClass).Trim().ToUpperInvariant();
+            var allowsFiscalReportActorDelegation = string.Equals(
+                child["AllowFiscalReportActorDelegation"],
+                "true",
+                StringComparison.OrdinalIgnoreCase);
 
             if (string.IsNullOrWhiteSpace(principalName) ||
                 string.IsNullOrEmpty(secret) ||
@@ -105,7 +110,8 @@ public static class SalesInvoiceHeaderProfileAdminAuthorization
                 sitePosServerScopes,
                 fiscalIdentityScopes,
                 currencyScopes,
-                authorityClass));
+                authorityClass,
+                allowsFiscalReportActorDelegation));
         }
 
         if (registrations.Count == 0)
@@ -121,7 +127,8 @@ public static class SalesInvoiceHeaderProfileAdminAuthorization
                     [],
                     [],
                     [],
-                    BirSalesSummaryAuthorization.DevelopmentAuthorityClass));
+                    BirSalesSummaryAuthorization.DevelopmentAuthorityClass,
+                    AllowsFiscalReportActorDelegation: false));
             }
         }
 
@@ -164,7 +171,8 @@ public static class SalesInvoiceHeaderProfileAdminAuthorization
             matchedRegistration.SitePosServerScopes,
             matchedRegistration.FiscalIdentityScopes,
             matchedRegistration.CurrencyScopes,
-            matchedRegistration.AuthorityClass);
+            matchedRegistration.AuthorityClass,
+            matchedRegistration.AllowsFiscalReportActorDelegation);
     }
 
     private static string[] ReadScopes(IConfigurationSection registration, string sectionName) =>
@@ -226,7 +234,8 @@ public sealed record PosServerAdminApiKeyRegistration(
     IReadOnlyList<string> SitePosServerScopes,
     IReadOnlyList<string> FiscalIdentityScopes,
     IReadOnlyList<string> CurrencyScopes,
-    string AuthorityClass = BirSalesSummaryAuthorization.DevelopmentAuthorityClass);
+    string AuthorityClass = BirSalesSummaryAuthorization.DevelopmentAuthorityClass,
+    bool AllowsFiscalReportActorDelegation = false);
 
 public sealed record PosServerAdminApiKeyConfiguration(
     bool IsValid,
@@ -256,7 +265,8 @@ public sealed record PosServerAdminApiKeyAuthenticationResult(
     IReadOnlyList<string> SitePosServerScopes,
     IReadOnlyList<string> FiscalIdentityScopes,
     IReadOnlyList<string> CurrencyScopes,
-    string? AuthorityClass)
+    string? AuthorityClass,
+    bool AllowsFiscalReportActorDelegation)
 {
     public bool Succeeded => Status == PosServerAdminApiKeyAuthenticationStatus.Authenticated;
 
@@ -266,11 +276,12 @@ public sealed record PosServerAdminApiKeyAuthenticationResult(
         IReadOnlyList<string> sitePosServerScopes,
         IReadOnlyList<string> fiscalIdentityScopes,
         IReadOnlyList<string> currencyScopes,
-        string? authorityClass = null) =>
-        new(PosServerAdminApiKeyAuthenticationStatus.Authenticated, principalName, permissions, sitePosServerScopes, fiscalIdentityScopes, currencyScopes, authorityClass);
+        string? authorityClass = null,
+        bool allowsFiscalReportActorDelegation = false) =>
+        new(PosServerAdminApiKeyAuthenticationStatus.Authenticated, principalName, permissions, sitePosServerScopes, fiscalIdentityScopes, currencyScopes, authorityClass, allowsFiscalReportActorDelegation);
 
     public static PosServerAdminApiKeyAuthenticationResult Failed(PosServerAdminApiKeyAuthenticationStatus status) =>
-        new(status, null, [], [], [], [], null);
+        new(status, null, [], [], [], [], null, false);
 }
 
 public sealed class PosServerAdminApiKeyAuthenticationOptions : AuthenticationSchemeOptions
@@ -324,6 +335,8 @@ public sealed class PosServerAdminApiKeyAuthenticationHandler : AuthenticationHa
             new Claim(FiscalZReadingAuthorization.CurrencyScopeClaimType, scope)));
         if (!string.IsNullOrWhiteSpace(authentication.AuthorityClass))
             claims.Add(new Claim(BirSalesSummaryAuthorization.AuthorityClassClaimType, authentication.AuthorityClass));
+        if (authentication.AllowsFiscalReportActorDelegation)
+            claims.Add(new Claim(SalesInvoiceHeaderProfileAdminAuthorization.FiscalReportActorDelegationClaimType, "true"));
 
         var identity = new ClaimsIdentity(claims, Scheme.Name);
         return Task.FromResult(AuthenticateResult.Success(new AuthenticationTicket(new ClaimsPrincipal(identity), Scheme.Name)));

@@ -240,6 +240,7 @@ public sealed class StatutorySalesBookApiTests
 
     private static ClaimsPrincipal Principal(string permission) => new(new ClaimsIdentity([
         new Claim(ClaimTypes.NameIdentifier, "central-pms"),
+        new Claim(SalesInvoiceHeaderProfileAdminAuthorization.FiscalReportActorDelegationClaimType, "true"),
         new Claim(SalesInvoiceHeaderProfileAdminAuthorization.PermissionClaimType, permission),
         new Claim(BirSalesSummaryAuthorization.AuthorityClassClaimType, BirSalesSummaryAuthorization.ProductionAuthorityClass),
         new Claim(FiscalXReadingAuthorization.SitePosServerScopeClaimType, Site.ToString("D")),

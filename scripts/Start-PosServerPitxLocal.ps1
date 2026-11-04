@@ -180,6 +180,7 @@ catch {
 $profilePermissions = @($permissionProfile.permissions | ForEach-Object { ([string] $_).Trim() })
 if ($permissionProfile.profile -ne 'central-pms-to-site-pos-server' -or
     $permissionProfile.version -ne 1 -or
+    $permissionProfile.allowFiscalReportActorDelegation -ne $true -or
     $profilePermissions.Count -eq 0 -or
     @($profilePermissions | Where-Object { [string]::IsNullOrWhiteSpace($_) -or $_.Contains('*') }).Count -gt 0 -or
     ($profilePermissions | Select-Object -Unique).Count -ne $profilePermissions.Count) {
@@ -271,6 +272,7 @@ try {
         --network-alias 'pitx-pos-server' `
         --env-file $environmentFile `
         @permissionEnvironmentArguments `
+        --env "${apiKeyPrefix}AllowFiscalReportActorDelegation=true" `
         --env 'ASPNETCORE_URLS=http://+:8080;https://+:8443' `
         --env 'ASPNETCORE_Kestrel__Certificates__Default__Path=/https/exitpass-pos-local.pfx' `
         --env "ASPNETCORE_Kestrel__Certificates__Default__Password=$certificatePassword" `

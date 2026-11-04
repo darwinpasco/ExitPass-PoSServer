@@ -77,7 +77,7 @@ public sealed class FiscalXReadingApiTests
         var record = Record();
         var repository = new StubRepository(new(FiscalXReadingOutcome.Created, record));
         var service = new FiscalXReadingService(repository);
-        var context = Context();
+        var context = TrustedCentralContext();
         context.Request.Headers["X-Actor-Reference"] = "operator-001";
         context.Request.Headers["X-Actor-Display-Name"] = "Juan Dela Cruz";
 
@@ -90,9 +90,56 @@ public sealed class FiscalXReadingApiTests
         Assert.Same(record, generated.XReading);
         Assert.Equal("operator-001", repository.LastCommand!.RequestedByRef);
         Assert.Equal("Juan Dela Cruz", repository.LastCommand.RequestedByDisplayName);
-        Assert.Equal("x-reading-service", repository.LastCommand.ServiceIdentityRef);
+        Assert.Equal("central-pms-r41", repository.LastCommand.ServiceIdentityRef);
         Assert.True(read.Succeeded);
         Assert.Same(record, read.XReading);
+    }
+
+    [Fact]
+    public async Task ActorResolutionSupportsCoordinatedDeploymentAndRejectsUntrustedDelegation()
+    {
+        var legacyRepository = new StubRepository(new(FiscalXReadingOutcome.Created, Record()));
+        var legacyContext = TrustedCentralContext();
+        legacyContext.Request.Headers["X-Actor-Reference"] = "operator-legacy";
+        var legacy = await FiscalXReadingEndpoint.GenerateAsync(
+            new("operation-legacy", SiteId, IdentityId, ObservedAt),
+            new FiscalXReadingService(legacyRepository),
+            legacyContext);
+        Assert.True(legacy.Succeeded);
+        Assert.Equal("operator-legacy", legacyRepository.LastCommand!.RequestedByRef);
+        Assert.Null(legacyRepository.LastCommand.RequestedByDisplayName);
+        Assert.Equal("central-pms-r41", legacyRepository.LastCommand.ServiceIdentityRef);
+
+        var currentRepository = new StubRepository(new(FiscalXReadingOutcome.Created, Record()));
+        var currentContext = TrustedCentralContext();
+        currentContext.Request.Headers["X-Actor-Reference"] = "operator-current";
+        currentContext.Request.Headers["X-Actor-Display-Name"] = "Verified Operator";
+        var current = await FiscalXReadingEndpoint.GenerateAsync(
+            new("operation-current", SiteId, IdentityId, ObservedAt),
+            new FiscalXReadingService(currentRepository),
+            currentContext);
+        Assert.True(current.Succeeded);
+        Assert.Equal("Verified Operator", currentRepository.LastCommand!.RequestedByDisplayName);
+
+        var automatedRepository = new StubRepository(new(FiscalXReadingOutcome.Created, Record()));
+        var automated = await FiscalXReadingEndpoint.GenerateAsync(
+            new("operation-automated", SiteId, IdentityId, ObservedAt),
+            new FiscalXReadingService(automatedRepository),
+            Context());
+        Assert.True(automated.Succeeded);
+        Assert.Equal("x-reading-service", automatedRepository.LastCommand!.RequestedByRef);
+        Assert.Equal("x-reading-service", automatedRepository.LastCommand.RequestedByDisplayName);
+
+        var untrustedRepository = new StubRepository(new(FiscalXReadingOutcome.Created, Record()));
+        var untrustedContext = Context();
+        untrustedContext.Request.Headers["X-Actor-Reference"] = "forged-operator";
+        untrustedContext.Request.Headers["X-Actor-Display-Name"] = "Forged Name";
+        var untrusted = await FiscalXReadingEndpoint.GenerateAsync(
+            new("operation-untrusted", SiteId, IdentityId, ObservedAt),
+            new FiscalXReadingService(untrustedRepository),
+            untrustedContext);
+        Assert.Equal(StatusCodes.Status400BadRequest, untrusted.HttpStatusCode);
+        Assert.Equal(0, untrustedRepository.GenerateCalls);
     }
 
     [Fact]
@@ -124,12 +171,13 @@ public sealed class FiscalXReadingApiTests
 
     private static IConfiguration Configuration() => new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?>
     {
-        ["PosServer:Admin:ApiKeys:0:Principal"] = "x-reading-service",
+        ["PosServer:Admin:ApiKeys:0:Principal"] = "central-pms-r41",
         ["PosServer:Admin:ApiKeys:0:Key"] = "x-admin-key",
         ["PosServer:Admin:ApiKeys:0:Permissions:0"] = FiscalXReadingAuthorization.GeneratePermission,
         ["PosServer:Admin:ApiKeys:0:Permissions:1"] = FiscalXReadingAuthorization.ReadPermission,
         ["PosServer:Admin:ApiKeys:0:SitePosServerIds:0"] = SiteId.ToString("D"),
         ["PosServer:Admin:ApiKeys:0:FiscalIdentityIds:0"] = IdentityId.ToString("D"),
+        ["PosServer:Admin:ApiKeys:0:AllowFiscalReportActorDelegation"] = "true",
         ["PosServer:Admin:ApiKeys:1:Principal"] = "ordinary-fiscal-service",
         ["PosServer:Admin:ApiKeys:1:Key"] = "ordinary-fiscal-key",
         ["PosServer:Admin:ApiKeys:1:Permissions:0"] = "fiscal_document.create"
@@ -141,6 +189,8 @@ public sealed class FiscalXReadingApiTests
         claims.AddRange(authentication.Permissions.Select(value => new Claim(SalesInvoiceHeaderProfileAdminAuthorization.PermissionClaimType, value)));
         claims.AddRange(authentication.SitePosServerScopes.Select(value => new Claim(FiscalXReadingAuthorization.SitePosServerScopeClaimType, value)));
         claims.AddRange(authentication.FiscalIdentityScopes.Select(value => new Claim(FiscalXReadingAuthorization.FiscalIdentityScopeClaimType, value)));
+        if (authentication.AllowsFiscalReportActorDelegation)
+            claims.Add(new Claim(SalesInvoiceHeaderProfileAdminAuthorization.FiscalReportActorDelegationClaimType, "true"));
         return new(new ClaimsIdentity(claims, SalesInvoiceHeaderProfileAdminAuthorization.AuthenticationScheme));
     }
 
@@ -149,6 +199,19 @@ public sealed class FiscalXReadingApiTests
         var context = new DefaultHttpContext(); context.Request.Headers[SalesInvoiceHeaderProfileAdminAuthorization.CorrelationHeaderName] = "request-correlation";
         context.User = new ClaimsPrincipal(new ClaimsIdentity([
             new Claim(ClaimTypes.NameIdentifier, "x-reading-service"),
+            new Claim(FiscalXReadingAuthorization.SitePosServerScopeClaimType, (siteScope ?? SiteId).ToString("D")),
+            new Claim(FiscalXReadingAuthorization.FiscalIdentityScopeClaimType, IdentityId.ToString("D"))
+        ], SalesInvoiceHeaderProfileAdminAuthorization.AuthenticationScheme));
+        return context;
+    }
+
+    private static DefaultHttpContext TrustedCentralContext(Guid? siteScope = null)
+    {
+        var context = new DefaultHttpContext();
+        context.Request.Headers[SalesInvoiceHeaderProfileAdminAuthorization.CorrelationHeaderName] = "request-correlation";
+        context.User = new ClaimsPrincipal(new ClaimsIdentity([
+            new Claim(ClaimTypes.NameIdentifier, "central-pms-r41"),
+            new Claim(SalesInvoiceHeaderProfileAdminAuthorization.FiscalReportActorDelegationClaimType, "true"),
             new Claim(FiscalXReadingAuthorization.SitePosServerScopeClaimType, (siteScope ?? SiteId).ToString("D")),
             new Claim(FiscalXReadingAuthorization.FiscalIdentityScopeClaimType, IdentityId.ToString("D"))
         ], SalesInvoiceHeaderProfileAdminAuthorization.AuthenticationScheme));

@@ -88,6 +88,22 @@ public sealed class SalesInvoiceHeaderProfileAdminEndpointTests
     }
 
     [Fact]
+    public void FiscalReportActorDelegationIsDerivedOnlyFromTrustedConfiguration()
+    {
+        var trusted = SalesInvoiceHeaderProfileAdminAuthorization.Authenticate(
+            AdminApiKeyConfiguration(),
+            new StringValues("test-central-key"),
+            StringValues.Empty);
+        var ordinary = SalesInvoiceHeaderProfileAdminAuthorization.Authenticate(
+            AdminApiKeyConfiguration(),
+            new StringValues("test-readiness-key"),
+            StringValues.Empty);
+
+        Assert.True(trusted.AllowsFiscalReportActorDelegation);
+        Assert.False(ordinary.AllowsFiscalReportActorDelegation);
+    }
+
+    [Fact]
     public void NonAdminApiKeyCannotSelfAssertAdminPermissionHeader()
     {
         var authentication = SalesInvoiceHeaderProfileAdminAuthorization.Authenticate(
@@ -405,7 +421,14 @@ public sealed class SalesInvoiceHeaderProfileAdminEndpointTests
                 ["PosServer:Admin:ApiKeys:2:Principal"] = "disabled-admin",
                 ["PosServer:Admin:ApiKeys:2:Key"] = "test-disabled-key",
                 ["PosServer:Admin:ApiKeys:2:Permissions:0"] = SalesInvoiceHeaderProfileAdminAuthorization.RequiredPermission,
-                ["PosServer:Admin:ApiKeys:2:Enabled"] = "false"
+                ["PosServer:Admin:ApiKeys:2:Enabled"] = "false",
+                ["PosServer:Admin:ApiKeys:3:Principal"] = "central-pms-r41",
+                ["PosServer:Admin:ApiKeys:3:Key"] = "test-central-key",
+                ["PosServer:Admin:ApiKeys:3:Permissions:0"] = "fiscal_x_reading.generate",
+                ["PosServer:Admin:ApiKeys:3:SitePosServerIds:0"] = SitePosServerId.ToString("D"),
+                ["PosServer:Admin:ApiKeys:3:FiscalIdentityIds:0"] = Guid.Parse("cccccccc-2000-0000-0000-000000000001").ToString("D"),
+                ["PosServer:Admin:ApiKeys:3:AllowFiscalReportActorDelegation"] = "true",
+                ["PosServer:Admin:ApiKeys:3:Enabled"] = "true"
             })
             .Build();
 

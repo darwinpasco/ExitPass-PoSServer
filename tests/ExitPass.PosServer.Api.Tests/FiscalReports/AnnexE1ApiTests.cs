@@ -41,7 +41,7 @@ public sealed class AnnexE1ApiTests
     [Fact]
     public async Task GenerationUsesVerifiedDelegatedActorAndRetainsServiceIdentity()
     {
-        var repo=new Stub();var service=new AnnexE1Service(repo);var context=Context("PRODUCTION",AnnexE1Authorization.GeneratePermission);
+        var repo=new Stub();var service=new AnnexE1Service(repo);var context=Context("PRODUCTION",true,AnnexE1Authorization.GeneratePermission);
         context.Request.Headers["X-Actor-Reference"]="operator-004";
         context.Request.Headers["X-Actor-Display-Name"]="Ramon Garcia";
         var response=await AnnexE1Endpoint.GenerateAsync(Generation(),service,context,new Host(Environments.Production),default);
@@ -73,7 +73,8 @@ public sealed class AnnexE1ApiTests
 
     private static IConfiguration Configuration()=>new ConfigurationBuilder().AddInMemoryCollection().Build();
     private static AnnexE1GenerationRequest Generation()=>new("operation",Site,Identity,"PHP",2026,8,AnnexE1Contract.Profile,null,null,null);
-    private static DefaultHttpContext Context(string authority,params string[] permissions){var claims=new List<Claim>{new(ClaimTypes.NameIdentifier,"operator"),new(BirSalesSummaryAuthorization.AuthorityClassClaimType,authority),new(FiscalXReadingAuthorization.SitePosServerScopeClaimType,Site.ToString()),new(FiscalXReadingAuthorization.FiscalIdentityScopeClaimType,Identity.ToString()),new(FiscalZReadingAuthorization.CurrencyScopeClaimType,"PHP")};claims.AddRange(permissions.Select(p=>new Claim(SalesInvoiceHeaderProfileAdminAuthorization.PermissionClaimType,p)));return new(){User=new ClaimsPrincipal(new ClaimsIdentity(claims,"test")),TraceIdentifier="correlation"};}
+    private static DefaultHttpContext Context(string authority,params string[] permissions)=>Context(authority,false,permissions);
+    private static DefaultHttpContext Context(string authority,bool allowActorDelegation,params string[] permissions){var claims=new List<Claim>{new(ClaimTypes.NameIdentifier,"operator"),new(BirSalesSummaryAuthorization.AuthorityClassClaimType,authority),new(FiscalXReadingAuthorization.SitePosServerScopeClaimType,Site.ToString()),new(FiscalXReadingAuthorization.FiscalIdentityScopeClaimType,Identity.ToString()),new(FiscalZReadingAuthorization.CurrencyScopeClaimType,"PHP")};claims.AddRange(permissions.Select(p=>new Claim(SalesInvoiceHeaderProfileAdminAuthorization.PermissionClaimType,p)));if(allowActorDelegation)claims.Add(new Claim(SalesInvoiceHeaderProfileAdminAuthorization.FiscalReportActorDelegationClaimType,"true"));return new(){User=new ClaimsPrincipal(new ClaimsIdentity(claims,"test")),TraceIdentifier="correlation"};}
     private static ClaimsPrincipal Principal(string permission)=>Context("PRODUCTION",permission).User;
     private static string FindRoot(){var d=new DirectoryInfo(AppContext.BaseDirectory);while(d is not null&&!Directory.Exists(Path.Combine(d.FullName,"contracts")))d=d.Parent;return d?.FullName??throw new DirectoryNotFoundException();}
     private static readonly Guid Site=Guid.Parse("91000000-0000-4000-8000-000000000001");private static readonly Guid Identity=Guid.Parse("91000000-0000-4000-8000-000000000002");

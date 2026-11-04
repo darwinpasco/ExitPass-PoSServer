@@ -19,6 +19,18 @@ public sealed class PostgresMonthlyESalesRepositoryTests
         Assert.Contains("brs.code_key", source, StringComparison.Ordinal);
     }
 
+    [Fact]
+    public void PdfContractRequiresStableMonthlySoftwareAndMachineHeaders()
+    {
+        var source = File.ReadAllText(FindSource(
+            "src", "ExitPass.PosServer.Persistence.Postgres", "FiscalReports", "PostgresMonthlyESalesRepository.cs"));
+
+        Assert.Contains("var version = Stable(sources.Select(source => source.SoftwareVersion))", source, StringComparison.Ordinal);
+        Assert.Contains("var serial = Stable(ordered.Select(source => source.PosSerialNumber))", source, StringComparison.Ordinal);
+        Assert.Contains("var ptu = Stable(ordered.Select(source => source.PtuNumber))", source, StringComparison.Ordinal);
+        Assert.Contains("not stable across the selected month", source, StringComparison.Ordinal);
+    }
+
     private static string FindSource(params string[] parts)
     {
         var directory = new DirectoryInfo(AppContext.BaseDirectory);

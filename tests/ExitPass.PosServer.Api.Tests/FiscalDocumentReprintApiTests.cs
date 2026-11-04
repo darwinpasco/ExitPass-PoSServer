@@ -95,6 +95,7 @@ public sealed class FiscalDocumentReprintApiTests
 
         Assert.Equal("central-pms-to-site-pos-server", rootElement.GetProperty("profile").GetString());
         Assert.Equal(1, rootElement.GetProperty("version").GetInt32());
+        Assert.True(rootElement.GetProperty("allowFiscalReportActorDelegation").GetBoolean());
         Assert.Equal(
         [
             FiscalDocumentAuthorization.CreatePermission,

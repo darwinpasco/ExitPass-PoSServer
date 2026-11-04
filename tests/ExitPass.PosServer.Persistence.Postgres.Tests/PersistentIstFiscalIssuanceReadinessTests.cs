@@ -42,7 +42,11 @@ public sealed class PersistentIstFiscalIssuanceReadinessTests
         Assert.Contains("V1.0.0", source);
         Assert.Contains("effective_to='$effectiveFromSql'::timestamptz", source);
         Assert.Contains("FROM pos.sales_invoice_header_profiles", source);
-        Assert.Contains("EffectiveFrom cannot be in the future", source);
+        Assert.Contains("EffectiveFrom cannot be in the past", source);
+        Assert.Contains("approved first-of-month fiscal business-day boundary at 07:00:00+08:00", source);
+        Assert.Contains("$effectiveAt.Day -ne 1", source, StringComparison.Ordinal);
+        Assert.Contains("lifecycle_status='APPROVED' AND retired_at IS NULL", source, StringComparison.Ordinal);
+        Assert.DoesNotContain("lifecycle_status='RETIRED',", source, StringComparison.Ordinal);
         Assert.Contains("ON CONFLICT(sales_invoice_header_profile_id) DO NOTHING", source, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("effective-dated Sales Invoice header-profile transition failed", source);
         Assert.Contains("channel_terminal_type:webpay", source);

@@ -1,8 +1,9 @@
 using System.Security.Claims;
+using ExitPass.PosServer.Api.FiscalDocuments;
 
 namespace ExitPass.PosServer.Api.FiscalReports;
 
-internal sealed record FiscalReportActorContext(string ActorReference, string ActorDisplayName, string ServiceIdentityReference)
+internal sealed record FiscalReportActorContext(string ActorReference, string? ActorDisplayName, string ServiceIdentityReference)
 {
     private const string ActorReferenceHeader = "X-Actor-Reference";
     private const string ActorDisplayNameHeader = "X-Actor-Display-Name";
@@ -22,10 +23,26 @@ internal sealed record FiscalReportActorContext(string ActorReference, string Ac
             return true;
         }
 
-        if (actorReferences.Count != 1 || actorNames.Count != 1) return false;
+        if (!context.User.HasClaim(
+                SalesInvoiceHeaderProfileAdminAuthorization.FiscalReportActorDelegationClaimType,
+                "true") ||
+            actorReferences.Count != 1 ||
+            actorNames.Count > 1)
+        {
+            return false;
+        }
+
         var actorReference = actorReferences[0]?.Trim();
+        if (!Safe(actorReference)) return false;
+
+        if (actorNames.Count == 0)
+        {
+            actor = new(actorReference!, null, service!);
+            return true;
+        }
+
         var actorDisplayName = actorNames[0]?.Trim();
-        if (!Safe(actorReference) || !Safe(actorDisplayName)) return false;
+        if (!Safe(actorDisplayName)) return false;
         actor = new(actorReference!, actorDisplayName!, service!);
         return true;
     }
