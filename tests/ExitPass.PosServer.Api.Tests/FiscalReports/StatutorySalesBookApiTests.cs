@@ -102,8 +102,8 @@ public sealed class StatutorySalesBookApiTests
         string currentArtifactId)
     {
         var repository = new StubRepository(type, fullFeeExemption: true);
-        var legacyBytes = Encoding.UTF8.GetBytes($"legacy-11-column-{annex}-{format}");
-        var previousBytes = Encoding.UTF8.GetBytes($"previous-12-column-{annex}-{format}");
+        var legacyBytes = Encoding.UTF8.GetBytes($"legacy-12-column-{annex}-{format}");
+        var previousBytes = Encoding.UTF8.GetBytes($"previous-17-column-{annex}-{format}");
         var artifacts = new ImmutableRevisionRepository(
             Guid.Parse(legacyArtifactId),
             Guid.Parse(currentArtifactId),
@@ -132,7 +132,7 @@ public sealed class StatutorySalesBookApiTests
         Assert.Equal(artifacts.Legacy.Sha256, Hash(legacyBytes));
         Assert.Equal(artifacts.Previous.Sha256, Hash(previousBytes));
         Assert.Equal(artifacts.Current.Sha256, Hash(created.Body));
-        AssertCurrentSeventeenColumnOutput(created.Body, format);
+        AssertCurrentSixteenColumnOutput(created.Body, format);
     }
 
     [Fact]
@@ -194,7 +194,7 @@ public sealed class StatutorySalesBookApiTests
             [row]);
     }
 
-    private static void AssertCurrentSeventeenColumnOutput(byte[] bytes, string format)
+    private static void AssertCurrentSixteenColumnOutput(byte[] bytes, string format)
     {
         if (format == "pdf")
         {
@@ -210,10 +210,11 @@ public sealed class StatutorySalesBookApiTests
         using var reader = new StreamReader(archive.GetEntry("xl/worksheets/sheet1.xml")!.Open());
         var worksheet = reader.ReadToEnd();
         Assert.Contains("ADDITIONAL LGU PARKING-PRIVILEGE DETAIL", worksheet);
-        Assert.Contains("LGU Policy Reference", worksheet);
+        Assert.DoesNotContain("LGU Policy Reference", worksheet);
         Assert.Contains("SI-00000000000171", worksheet);
         Assert.Contains("<c r=\"O17\" s=\"4\"><v>50.00</v></c>", worksheet);
-        Assert.Contains("ref=\"A1:Q25\"", worksheet);
+        Assert.Contains("ref=\"A1:P25\"", worksheet);
+        Assert.Null(archive.GetEntry("xl/worksheets/sheet2.xml"));
     }
 
     private static string Hash(byte[] bytes) =>
@@ -282,8 +283,8 @@ public sealed class StatutorySalesBookApiTests
                 legacyArtifactId,
                 type,
                 format,
-                "pos-server-statutory-sales-book-rmo24-2023:pos-server-scope-v2",
-                FiscalReportArtifactContract.SourceFingerprint(new { LayoutVersion = "annex-e2-e3-11-column-v1", Scope = "2026-10" }),
+                "pos-server-statutory-sales-book-rmo24-2023:pos-server-scope-v3:annex-e2-e3-12-column-v1",
+                FiscalReportArtifactContract.SourceFingerprint(new { LayoutVersion = "annex-e2-e3-12-column-v1", Scope = "2026-10" }),
                 1,
                 null,
                 legacyHash,
@@ -293,8 +294,8 @@ public sealed class StatutorySalesBookApiTests
                 Guid.Parse("93000000-0000-4000-8000-000000000012"),
                 type,
                 format,
-                "pos-server-statutory-sales-book-rmo24-2023:pos-server-scope-v3:annex-e2-e3-12-column-v1",
-                FiscalReportArtifactContract.SourceFingerprint(new { LayoutVersion = "annex-e2-e3-12-column-v1", Scope = "2026-10" }),
+                "pos-server-statutory-sales-book-rmo24-2023:pos-server-scope-v2:annex-e2-e3-17-column-v1",
+                FiscalReportArtifactContract.SourceFingerprint(new { LayoutVersion = "annex-e2-e3-17-column-v1", Scope = "2026-10" }),
                 2,
                 Legacy.ArtifactId,
                 previousHash,

@@ -20,17 +20,17 @@ public sealed class StatutorySalesBookRuntimeTests
         var sheets = Assert.IsType<Sheets>(workbook.Sheets);
         Assert.Equal(sheetName, sheets.Elements<Sheet>().Single().Name!.Value);
         var sheet = Assert.IsType<Worksheet>(workbookPart.WorksheetParts.Single().Worksheet);
-        Assert.Equal(17, sheet.Elements<Columns>().Single().Elements<Column>().Count());
+        Assert.Equal(16, sheet.Elements<Columns>().Single().Elements<Column>().Count());
         var merges = sheet.Elements<MergeCells>().Single().Elements<MergeCell>().Select(x => x.Reference!.Value).ToArray();
         Assert.Contains("I13:J13", merges);
         Assert.Contains("I14:I16", merges);
         Assert.Contains("J14:J16", merges);
         Assert.Contains("K13:K16", merges);
-        Assert.Contains("L13:Q13", merges);
+        Assert.Contains("L13:P13", merges);
         Assert.Contains("L14:L16", merges);
-        Assert.Contains("Q14:Q16", merges);
+        Assert.Contains("P14:P16", merges);
         var names = Assert.IsType<DefinedNames>(workbook.DefinedNames);
-        Assert.Equal("$A$1:$Q$25", names.Elements<DefinedName>().Single().Text!.Split('!')[1]);
+        Assert.Equal("$A$1:$P$25", names.Elements<DefinedName>().Single().Text!.Split('!')[1]);
         Assert.True(output.Bytes[0] == (byte)'P' && output.Bytes[1] == (byte)'K');
         using var archive = new System.IO.Compression.ZipArchive(new MemoryStream(output.Bytes));
         using var reader = new StreamReader(archive.GetEntry("xl/worksheets/sheet1.xml")!.Open());
@@ -50,10 +50,11 @@ public sealed class StatutorySalesBookRuntimeTests
         Assert.Contains(">TOTAL<", worksheetXml);
         Assert.Contains("ADDITIONAL LGU PARKING-PRIVILEGE DETAIL", worksheetXml);
         Assert.Contains("LGU Privilege Type", worksheetXml);
-        Assert.Contains("LGU Policy Reference", worksheetXml);
+        Assert.DoesNotContain("LGU Policy Reference", worksheetXml);
         Assert.Contains("<c r=\"K13\" s=\"7\"", worksheetXml);
         Assert.Contains("<c r=\"L13\" s=\"16\"", worksheetXml);
-        Assert.Contains("<c r=\"Q13\" s=\"16\"", worksheetXml);
+        Assert.Contains("<c r=\"P13\" s=\"16\"", worksheetXml);
+        Assert.DoesNotContain("<c r=\"Q13\"", worksheetXml);
         Assert.Contains("<c r=\"N17\" s=\"4\"><v>0.00</v></c>", worksheetXml);
         Assert.Contains("<c r=\"P18\" s=\"6\"><v>0.00</v></c>", worksheetXml);
         using var stylesReader = new StreamReader(archive.GetEntry("xl/styles.xml")!.Open());
@@ -206,8 +207,7 @@ public sealed class StatutorySalesBookRuntimeTests
         Assert.Contains("20%", text);
         Assert.Contains("ADDITIONAL LGU PARKING-PRIVILEGE DETAIL", text);
         Assert.Contains("LGU Privilege", text);
-        Assert.Contains("LGU Policy", text);
-        Assert.Contains("Reference", text);
+        Assert.DoesNotContain("LGU Policy", text);
         Assert.Contains("0.22 0.34 0.14 rg", text);
         Assert.Contains("1 1 1 rg BT /F2", text);
         Assert.Contains("0 0.69 0.94 rg", text);
@@ -229,7 +229,7 @@ public sealed class StatutorySalesBookRuntimeTests
         Assert.Contains($"({salesInvoiceNumber}) Tj", text);
         Assert.DoesNotContain("(SI-000000000001) Tj", text);
 
-        var configuredWidths = new[] { 42d, 96d, 62d, 54d, 62d, 52d, 44d, 50d, 34d, 34d, 48d, 66d, 48d, 52d, 52d, 48d, 72d };
+        var configuredWidths = new[] { 42d, 96d, 62d, 54d, 62d, 52d, 44d, 50d, 34d, 34d, 48d, 66d, 48d, 52d, 52d, 48d };
         var scale = (841.89d - 40d) / configuredWidths.Sum();
         var invoiceCellWidth = configuredWidths[4] * scale;
         var renderedInvoiceWidth = salesInvoiceNumber.Length * 4.2d * 0.52d;
@@ -239,13 +239,13 @@ public sealed class StatutorySalesBookRuntimeTests
         var followingAmountPosition = text.IndexOf("(50.00) Tj", invoicePosition, StringComparison.Ordinal);
         Assert.True(followingAmountPosition > invoicePosition);
         Assert.Contains("(50.00) Tj", text);
-        Assert.Contains("SUPPLEMENTARY LGU PARKING BENEFIT DETAILS", text);
+        Assert.DoesNotContain("SUPPLEMENTARY LGU PARKING BENEFIT DETAILS", text);
     }
 
     [Theory]
     [InlineData(StatutorySalesBookType.AnnexE2)]
     [InlineData(StatutorySalesBookType.AnnexE3)]
-    public void FullFeeExemptionPreservesPrescribedSheetAndAddsSeparateLguSupplement(
+    public void FullFeeExemptionPreservesPrescribedSheetWithoutSeparateLguSupplement(
         StatutorySalesBookType type)
     {
         var row = FullFeeRow(type);
@@ -256,9 +256,8 @@ public sealed class StatutorySalesBookRuntimeTests
         using var document = SpreadsheetDocument.Open(stream, false);
         var workbookPart = Assert.IsType<WorkbookPart>(document.WorkbookPart);
         var sheets = Assert.IsType<Sheets>(Assert.IsType<Workbook>(workbookPart.Workbook).Sheets).Elements<Sheet>().ToArray();
-        Assert.Equal(2, sheets.Length);
+        Assert.Single(sheets);
         Assert.Equal(type == StatutorySalesBookType.AnnexE2 ? "E-2" : "E-3", sheets[0].Name!.Value);
-        Assert.Equal("LGU Supplement", sheets[1].Name!.Value);
 
         using var archive = new System.IO.Compression.ZipArchive(new MemoryStream(output.Bytes));
         using var primaryReader = new StreamReader(archive.GetEntry("xl/worksheets/sheet1.xml")!.Open());
@@ -271,23 +270,19 @@ public sealed class StatutorySalesBookRuntimeTests
         Assert.Contains("<c r=\"N17\" s=\"4\"><v>50.00</v></c>", primary);
         Assert.Contains("<c r=\"O17\" s=\"4\"><v>50.00</v></c>", primary);
         Assert.Contains("<c r=\"P17\" s=\"4\"><v>0.00</v></c>", primary);
-        Assert.Contains("<c r=\"Q17\" s=\"5\" t=\"inlineStr\"><is><t xml:space=\"preserve\">PH_PARANAQUE_", primary);
+        Assert.DoesNotContain("<c r=\"Q17\"", primary);
+        Assert.DoesNotContain("LGU Policy Reference", primary);
         Assert.Contains("<c r=\"N18\" s=\"6\"><v>50.00</v></c>", primary);
         Assert.Contains("<c r=\"O18\" s=\"6\"><v>50.00</v></c>", primary);
         Assert.Contains("<c r=\"P18\" s=\"6\"><v>0.00</v></c>", primary);
 
-        using var supplementReader = new StreamReader(archive.GetEntry("xl/worksheets/sheet2.xml")!.Open());
-        var supplement = supplementReader.ReadToEnd();
-        Assert.Contains("PH_PARANAQUE_", supplement);
-        Assert.Contains("Full Fee Exemption", supplement);
-        Assert.Contains("44.64", supplement);
-        Assert.Contains("5.36", supplement);
+        Assert.Null(archive.GetEntry("xl/worksheets/sheet2.xml"));
     }
 
     [Theory]
     [InlineData(StatutorySalesBookType.AnnexE2)]
     [InlineData(StatutorySalesBookType.AnnexE3)]
-    public void FullFeeExemptionPdfAddsAgreedLguDetailAndPreservesSupplement(StatutorySalesBookType type)
+    public void FullFeeExemptionPdfAddsAgreedLguDetailWithoutSupplement(StatutorySalesBookType type)
     {
         var output = new StatutorySalesBookOutputRenderer().Render(
             Report(type, [FullFeeRow(type)]),
@@ -300,9 +295,9 @@ public sealed class StatutorySalesBookRuntimeTests
         Assert.Contains("ADDITIONAL LGU PARKING-PRIVILEGE DETAIL", text);
         Assert.Contains("FULL_FEE_EXEMPTION", text);
         Assert.Contains("50.00", text);
-        Assert.Contains("SUPPLEMENTARY LGU PARKING BENEFIT DETAILS", text);
-        Assert.Contains("prescribed Annex E-2/E-3 columns remain unchanged", text);
-        Assert.Contains("Final payable: PHP 0.00", text);
+        Assert.DoesNotContain("SUPPLEMENTARY LGU PARKING BENEFIT DETAILS", text);
+        Assert.DoesNotContain("prescribed Annex E-2/E-3 columns remain unchanged", text);
+        Assert.DoesNotContain("LGU Policy Reference", text);
     }
 
     [Theory]
