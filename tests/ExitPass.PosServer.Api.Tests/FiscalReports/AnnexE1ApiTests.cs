@@ -39,6 +39,19 @@ public sealed class AnnexE1ApiTests
     }
 
     [Fact]
+    public async Task GenerationUsesVerifiedDelegatedActorAndRetainsServiceIdentity()
+    {
+        var repo=new Stub();var service=new AnnexE1Service(repo);var context=Context("PRODUCTION",AnnexE1Authorization.GeneratePermission);
+        context.Request.Headers["X-Actor-Reference"]="operator-004";
+        context.Request.Headers["X-Actor-Display-Name"]="Ramon Garcia";
+        var response=await AnnexE1Endpoint.GenerateAsync(Generation(),service,context,new Host(Environments.Production),default);
+        Assert.Equal(200,response.HttpStatusCode);
+        Assert.Equal("operator-004",repo.LastCommand!.RequestedByRef);
+        Assert.Equal("Ramon Garcia",repo.LastCommand.RequestedByDisplayName);
+        Assert.Equal("operator",repo.LastCommand.ServiceIdentityRef);
+    }
+
+    [Fact]
     public async Task CurrentWorkbookReadUsesReadAuthorityAndExactScopeWithoutGenerating()
     {
         var repo=new Stub();var service=new AnnexE1Service(repo);
@@ -65,5 +78,5 @@ public sealed class AnnexE1ApiTests
     private static string FindRoot(){var d=new DirectoryInfo(AppContext.BaseDirectory);while(d is not null&&!Directory.Exists(Path.Combine(d.FullName,"contracts")))d=d.Parent;return d?.FullName??throw new DirectoryNotFoundException();}
     private static readonly Guid Site=Guid.Parse("91000000-0000-4000-8000-000000000001");private static readonly Guid Identity=Guid.Parse("91000000-0000-4000-8000-000000000002");
     private sealed class Host(string name):IHostEnvironment{public string EnvironmentName{get;set;}=name;public string ApplicationName{get;set;}="tests";public string ContentRootPath{get;set;}=".";public IFileProvider ContentRootFileProvider{get;set;}=new NullFileProvider();}
-    private sealed class Stub:IAnnexE1Repository{public int GenerateCalls;public int CurrentCalls;public AnnexE1CurrentWorkbookQuery? CurrentQuery;public AnnexE1WorkbookResult WorkbookResult=new(AnnexE1Outcome.Replayed);public Task<AnnexE1FactResult> RecordFactAsync(AnnexE1PeriodFactCommand c,CancellationToken t=default)=>Task.FromResult(new AnnexE1FactResult(AnnexE1Outcome.Created));public Task<AnnexE1WorkbookResult> GenerateAsync(AnnexE1GenerationCommand c,CancellationToken t=default){GenerateCalls++;return Task.FromResult(WorkbookResult);}public Task<AnnexE1WorkbookResult> GetCurrentAsync(AnnexE1CurrentWorkbookQuery q,CancellationToken t=default){CurrentCalls++;CurrentQuery=q;return Task.FromResult(WorkbookResult);}public Task<AnnexE1WorkbookResult> GetAsync(Guid i,CancellationToken t=default)=>Task.FromResult(WorkbookResult);public Task<AnnexE1ArtifactResult> DownloadAsync(Guid i,CancellationToken t=default)=>Task.FromResult(new AnnexE1ArtifactResult(AnnexE1Outcome.NotFound));}
+    private sealed class Stub:IAnnexE1Repository{public int GenerateCalls;public int CurrentCalls;public AnnexE1CurrentWorkbookQuery? CurrentQuery;public AnnexE1GenerationCommand? LastCommand;public AnnexE1WorkbookResult WorkbookResult=new(AnnexE1Outcome.Replayed);public Task<AnnexE1FactResult> RecordFactAsync(AnnexE1PeriodFactCommand c,CancellationToken t=default)=>Task.FromResult(new AnnexE1FactResult(AnnexE1Outcome.Created));public Task<AnnexE1WorkbookResult> GenerateAsync(AnnexE1GenerationCommand c,CancellationToken t=default){GenerateCalls++;LastCommand=c;return Task.FromResult(WorkbookResult);}public Task<AnnexE1WorkbookResult> GetCurrentAsync(AnnexE1CurrentWorkbookQuery q,CancellationToken t=default){CurrentCalls++;CurrentQuery=q;return Task.FromResult(WorkbookResult);}public Task<AnnexE1WorkbookResult> GetAsync(Guid i,CancellationToken t=default)=>Task.FromResult(WorkbookResult);public Task<AnnexE1ArtifactResult> DownloadAsync(Guid i,CancellationToken t=default)=>Task.FromResult(new AnnexE1ArtifactResult(AnnexE1Outcome.NotFound));}
 }

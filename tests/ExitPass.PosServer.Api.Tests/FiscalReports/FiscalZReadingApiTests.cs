@@ -84,9 +84,15 @@ public sealed class FiscalZReadingApiTests
         var record = Record();
         var repository = new StubRepository(new(FiscalZReadingOutcome.Created, record));
         var service = new FiscalZReadingService(repository);
-        var created = await FiscalZReadingEndpoint.CloseAsync(new("z-operation", SiteId, IdentityId, "PHP", PeriodId, 1), service, Context());
+        var context = Context();
+        context.Request.Headers["X-Actor-Reference"] = "operator-002";
+        context.Request.Headers["X-Actor-Display-Name"] = "Maria Santos";
+        var created = await FiscalZReadingEndpoint.CloseAsync(new("z-operation", SiteId, IdentityId, "PHP", PeriodId, 1), service, context);
         Assert.Equal(StatusCodes.Status201Created, created.HttpStatusCode);
         Assert.Same(record, created.ZReading);
+        Assert.Equal("operator-002", repository.LastCommand!.RequestedByRef);
+        Assert.Equal("Maria Santos", repository.LastCommand.RequestedByDisplayName);
+        Assert.Equal("z-service", repository.LastCommand.ServiceIdentityRef);
 
         repository.Result = new(FiscalZReadingOutcome.Conflict, SafeMessage: "The operation is already bound.");
         var conflict = await FiscalZReadingEndpoint.CloseAsync(new("z-operation", SiteId, IdentityId, "PHP", PeriodId, 1), service, Context());
@@ -221,7 +227,8 @@ public sealed class FiscalZReadingApiTests
     {
         public FiscalZReadingResult Result { get; set; } = result;
         public int CloseCalls { get; private set; }
-        public Task<FiscalZReadingResult> CloseAsync(FiscalZReadingCommand command,CancellationToken cancellationToken=default){CloseCalls++;onClose?.Invoke();return Task.FromResult(Result);}
+        public FiscalZReadingCommand? LastCommand { get; private set; }
+        public Task<FiscalZReadingResult> CloseAsync(FiscalZReadingCommand command,CancellationToken cancellationToken=default){CloseCalls++;LastCommand=command;onClose?.Invoke();return Task.FromResult(Result);}
         public Task<FiscalZReadingResult> GetByReferenceAsync(string fiscalReportReference,CancellationToken cancellationToken=default)=>Task.FromResult(Result);
     }
 

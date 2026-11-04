@@ -15,6 +15,7 @@ CREATE TABLE IF NOT EXISTS pos.fiscal_report_requests (
     business_day_date date NOT NULL,
     requested_at timestamptz NOT NULL DEFAULT CURRENT_TIMESTAMP,
     requested_by_ref text NOT NULL,
+    requested_by_display_name text NULL,
     service_identity_ref text NOT NULL,
     created_at timestamptz NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at timestamptz NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -78,6 +79,9 @@ ALTER TABLE pos.fiscal_report_requests
     ADD COLUMN IF NOT EXISTS semantic_request_hash char(64) NULL,
     ADD COLUMN IF NOT EXISTS semantic_hash_version text NULL;
 
+ALTER TABLE pos.fiscal_report_requests
+    ADD COLUMN IF NOT EXISTS requested_by_display_name text NULL;
+
 ALTER TABLE pos.fiscal_report_requests DROP COLUMN IF EXISTS request_context;
 
 ALTER TABLE pos.fiscal_report_requests
@@ -113,6 +117,12 @@ ALTER TABLE pos.fiscal_report_requests
     ADD CONSTRAINT ck_fiscal_report_requests__semantic_hash CHECK (semantic_request_hash ~ '^[0-9a-f]{64}$'),
     ADD CONSTRAINT ck_fiscal_report_requests__semantic_version CHECK (semantic_hash_version = 'pos-server-fiscal-report-request:sha256:v1'),
     ADD CONSTRAINT ck_fiscal_report_requests__actor_refs CHECK (char_length(btrim(requested_by_ref)) > 0 AND char_length(btrim(service_identity_ref)) > 0);
+
+ALTER TABLE pos.fiscal_report_requests
+    DROP CONSTRAINT IF EXISTS ck_fiscal_report_requests__actor_display_name,
+    ADD CONSTRAINT ck_fiscal_report_requests__actor_display_name CHECK (
+        requested_by_display_name IS NULL OR char_length(btrim(requested_by_display_name)) > 0
+    );
 
 DO $$
 BEGIN

@@ -40,7 +40,8 @@ public static class FiscalZReadingEndpoint
             return Error("fiscal_z_reading_scope_forbidden", StatusCodes.Status403Forbidden,
                 "The authenticated service identity is not authorized for the requested fiscal scope.", correlation);
 
-        var principal = context.User.FindFirstValue(ClaimTypes.NameIdentifier) ?? "unavailable";
+        if (!FiscalReportActorContext.TryResolve(context, out var actor))
+            return Error("fiscal_report_actor_invalid", StatusCodes.Status400BadRequest, "The authenticated report actor context is invalid.", correlation);
         var result = await service.CloseAsync(new(
             request.OperationKey ?? string.Empty,
             request.SitePosServerId.Value,
@@ -48,9 +49,10 @@ public static class FiscalZReadingEndpoint
             request.CurrencyCode,
             request.FiscalReportingPeriodId ?? Guid.Empty,
             request.ExpectedStateVersion ?? 0,
-            principal,
-            principal,
-            correlation), cancellationToken).ConfigureAwait(false);
+            actor!.ActorReference,
+            actor.ServiceIdentityReference,
+            correlation,
+            actor.ActorDisplayName), cancellationToken).ConfigureAwait(false);
         return Map(result, correlation);
     }
 

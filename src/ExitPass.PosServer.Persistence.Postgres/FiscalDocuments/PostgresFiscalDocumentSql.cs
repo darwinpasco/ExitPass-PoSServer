@@ -45,10 +45,16 @@ public static class PostgresFiscalDocumentSql
             identity.updated_by_ref,
             profile.supplier_developer_registered_name,
             profile.supplier_developer_address,
-            profile.supplier_developer_tin
+            profile.supplier_developer_tin,
+            identity.software_name,
+            identity.software_version,
+            identity.serial_ref,
+            site.site_pos_server_code
         from pos.sales_invoice_header_profiles profile
         inner join pos.fiscal_identities identity
             on identity.fiscal_identity_id = profile.fiscal_identity_id
+        inner join pos.site_pos_servers site
+            on site.site_pos_server_id = profile.site_pos_server_id
         where profile.site_pos_server_id = @site_pos_server_id
           and (@site_id::uuid is null or profile.site_id = @site_id::uuid)
           and profile.lifecycle_status = 'APPROVED'

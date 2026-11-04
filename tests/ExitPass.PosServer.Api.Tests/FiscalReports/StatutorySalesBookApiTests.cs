@@ -51,6 +51,8 @@ public sealed class StatutorySalesBookApiTests
         Assert.Equal(Identity, repository.Query.FiscalIdentityId);
         Assert.Equal(2026, repository.Query.CalendarYear);
         Assert.Equal(10, repository.Query.CalendarMonth);
+        Assert.Equal("operator-003", repository.Query.RequestedByRef);
+        Assert.Equal("Ana Reyes", repository.Query.RequestedByDisplayName);
         Assert.Equal(1, repository.AccessCalls);
         Assert.Equal("private, no-store", response.Headers.CacheControl.ToString());
         Assert.Equal("nosniff", response.Headers.XContentTypeOptions.ToString());
@@ -227,6 +229,8 @@ public sealed class StatutorySalesBookApiTests
         context.RequestServices = provider;
         context.Response.Body = new MemoryStream();
         context.Request.Headers[SalesInvoiceHeaderProfileAdminAuthorization.CorrelationHeaderName] = "statutory-sales-book-test";
+        context.Request.Headers["X-Actor-Reference"] = "operator-003";
+        context.Request.Headers["X-Actor-Display-Name"] = "Ana Reyes";
         context.User = Principal(StatutorySalesBookAuthorization.ExportPermission);
         var result = await action(context);
         await result.ExecuteAsync(context);

@@ -458,12 +458,12 @@ public sealed class PostgresFiscalZReadingRepository(
     private static Task InsertRequestAsync(
         NpgsqlConnection c, NpgsqlTransaction t, FiscalZReadingCommand command, FiscalZReadingPeriod period,
         ReportingCodeIds ids, Guid requestId, string hash, DateTimeOffset committedAt, CancellationToken ct) =>
-        ExecuteAsync(c, t, "INSERT INTO pos.fiscal_report_requests(fiscal_report_request_id,fiscal_reporting_contract_version_id,fiscal_reporting_period_id,site_pos_server_id,report_type_code_id,report_status_code_id,operation_idempotency_key,semantic_request_hash,semantic_hash_version,business_day_date,requested_at,requested_by_ref,service_identity_ref,created_at,updated_at) VALUES(@id,@contract,@period,@site,@kind,@status,@operation,@hash,@version,@business,@at,@actor,@service,@at,@at)", ct, p =>
+        ExecuteAsync(c, t, "INSERT INTO pos.fiscal_report_requests(fiscal_report_request_id,fiscal_reporting_contract_version_id,fiscal_reporting_period_id,site_pos_server_id,report_type_code_id,report_status_code_id,operation_idempotency_key,semantic_request_hash,semantic_hash_version,business_day_date,requested_at,requested_by_ref,requested_by_display_name,service_identity_ref,created_at,updated_at) VALUES(@id,@contract,@period,@site,@kind,@status,@operation,@hash,@version,@business,@at,@actor,@actor_name,@service,@at,@at)", ct, p =>
         {
             p.AddWithValue("id", requestId); p.AddWithValue("contract", period.FiscalReportingContractVersionId); p.AddWithValue("period", period.FiscalReportingPeriodId);
             p.AddWithValue("site", period.SitePosServerId); p.AddWithValue("kind", ids.Get("fiscal_report_kind", "z_reading")); p.AddWithValue("status", ids.Get("fiscal_report_status", "committed"));
             p.AddWithValue("operation", command.OperationKey); p.AddWithValue("hash", hash); p.AddWithValue("version", FiscalZReadingContract.SemanticHashVersion);
-            p.AddWithValue("business", period.BusinessDayDate); p.AddWithValue("at", committedAt); p.AddWithValue("actor", command.RequestedByRef); p.AddWithValue("service", command.ServiceIdentityRef);
+            p.AddWithValue("business", period.BusinessDayDate); p.AddWithValue("at", committedAt); p.AddWithValue("actor", command.RequestedByRef); AddNullable(p, "actor_name", command.RequestedByDisplayName, NpgsqlDbType.Text); p.AddWithValue("service", command.ServiceIdentityRef);
         });
 
     private static Task InsertScopeAsync(NpgsqlConnection c, NpgsqlTransaction t, FiscalZReadingPeriod period, ReportingCodeIds ids, Guid requestId, CancellationToken ct) =>
@@ -598,7 +598,7 @@ public sealed class PostgresFiscalZReadingRepository(
                s.resulting_state_version,status.code_key,period.period_sequence,request_status.code_key,
                COALESCE(a.correlation_ref,'unavailable'),r.issued_sales_invoice_count,r.void_transaction_count,
                r.cancellation_transaction_count,r.return_transaction_count,r.refund_transaction_count,req.requested_by_ref,
-               r.snapshot_detail_version
+               r.snapshot_detail_version,req.requested_by_display_name
         FROM pos.x_z_reports r
         JOIN pos.fiscal_report_requests req ON req.fiscal_report_request_id=r.fiscal_report_request_id
         JOIN pos.controlled_codes kind ON kind.controlled_code_id=r.report_kind_code_id
@@ -621,9 +621,10 @@ public sealed class PostgresFiscalZReadingRepository(
             : new FiscalReportDocumentCounts(reader.GetInt64(52), reader.GetInt64(53), reader.IsDBNull(54) ? null : reader.GetInt64(54), reader.IsDBNull(55) ? null : reader.GetInt64(55), reader.IsDBNull(56) ? null : reader.GetInt64(56));
         var requestedBy = reader.GetString(57);
         var detailVersion = reader.IsDBNull(58) ? null : reader.GetString(58);
+        var requestedByDisplayName = reader.IsDBNull(59) ? null : reader.GetString(59);
         await reader.DisposeAsync().ConfigureAwait(false);
         var tenders=await ReadTenderChildrenAsync(c,t,id,ct).ConfigureAwait(false); var discounts=await ReadDiscountChildrenAsync(c,t,id,ct).ConfigureAwait(false); var ranges=await ReadRangeChildrenAsync(c,t,id,ct).ConfigureAwait(false);
-        return new(id,head.Reference,head.Request,head.Operation,head.Kind,head.Contract,head.HashVersion,head.Site,head.Identity,head.Period,head.Prior,head.Business,head.Start,head.End,head.Timezone,head.Cutoff,head.Currency,head.Generated,head.Committed,head.Closed,head.Count,amounts,tenders,discounts,ranges,counter,head.Status,head.Correlation,head.Reference,true,head.PeriodSequence,head.ReportStatus,documentCounts,requestedBy,detailVersion);
+        return new(id,head.Reference,head.Request,head.Operation,head.Kind,head.Contract,head.HashVersion,head.Site,head.Identity,head.Period,head.Prior,head.Business,head.Start,head.End,head.Timezone,head.Cutoff,head.Currency,head.Generated,head.Committed,head.Closed,head.Count,amounts,tenders,discounts,ranges,counter,head.Status,head.Correlation,head.Reference,true,head.PeriodSequence,head.ReportStatus,documentCounts,requestedBy,detailVersion,requestedByDisplayName);
     }
 
     private static async Task<IReadOnlyList<FiscalXReadingTenderBreakdown>> ReadTenderChildrenAsync(NpgsqlConnection c,NpgsqlTransaction? t,Guid id,CancellationToken ct) { const string sql="SELECT code.code_key,x.tender_transaction_count,x.amount_minor_units,x.currency_code FROM pos.fiscal_report_tender_breakdowns x JOIN pos.controlled_codes code ON code.controlled_code_id=x.tender_classification_code_id WHERE x.x_z_report_id=@id ORDER BY code.sort_order,code.code_key"; await using var cmd=CreateCommand(c,t,sql);cmd.Parameters.AddWithValue("id",id);await using var r=await cmd.ExecuteReaderAsync(ct).ConfigureAwait(false);var result=new List<FiscalXReadingTenderBreakdown>();while(await r.ReadAsync(ct).ConfigureAwait(false))result.Add(new(r.GetString(0),r.GetInt64(1),r.GetInt64(2),r.GetString(3)));return result; }

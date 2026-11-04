@@ -32,15 +32,17 @@ public static class FiscalXReadingEndpoint
             !FiscalXReadingAuthorization.IsInScope(context.User, request.SitePosServerId.Value, request.FiscalIdentityId.Value))
             return Error("fiscal_x_reading_scope_forbidden", StatusCodes.Status403Forbidden, "The authenticated service identity is not authorized for the requested fiscal scope.", correlation);
 
-        var principal = context.User.FindFirstValue(ClaimTypes.NameIdentifier) ?? "unavailable";
+        if (!FiscalReportActorContext.TryResolve(context, out var actor))
+            return Error("fiscal_report_actor_invalid", StatusCodes.Status400BadRequest, "The authenticated report actor context is invalid.", correlation);
         var result = await service.GenerateAsync(new(
             request.OperationKey ?? string.Empty,
             request.SitePosServerId.Value,
             request.FiscalIdentityId.Value,
             request.ObservedAt ?? default,
-            principal,
-            principal,
-            correlation), cancellationToken).ConfigureAwait(false);
+            actor!.ActorReference,
+            actor.ServiceIdentityReference,
+            correlation,
+            actor.ActorDisplayName), cancellationToken).ConfigureAwait(false);
         return Map(result, correlation);
     }
 

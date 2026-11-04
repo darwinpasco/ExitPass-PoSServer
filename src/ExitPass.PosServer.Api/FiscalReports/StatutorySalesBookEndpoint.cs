@@ -17,7 +17,8 @@ public static class StatutorySalesBookEndpoint
         if (correlation is null) return Json(Error("missing_correlation_id", 400, "A single safe X-Correlation-Id header is required.", "unavailable"));
         if (!TryType(annex, out var type)) return Json(Error("statutory_sales_book_type_unsupported", 400, "The requested statutory sales-book type is unsupported.", correlation));
         if (!Authorized(request, context, environment)) return Json(Error("statutory_sales_book_not_found", 404, "The requested statutory sales book is unavailable.", correlation));
-        var result = await service.ReadAsync(Query(request, type, context), ct).ConfigureAwait(false);
+        if (!FiscalReportActorContext.TryResolve(context, out var actor)) return Json(Error("fiscal_report_actor_invalid", 400, "The authenticated report actor context is invalid.", correlation));
+        var result = await service.ReadAsync(Query(request, type, actor!), ct).ConfigureAwait(false);
         if (result.Report is not null)
         {
             var summary = result.Report.Summary;
@@ -35,7 +36,8 @@ public static class StatutorySalesBookEndpoint
         if (correlation is null) return Json(Error("missing_correlation_id", 400, "A single safe X-Correlation-Id header is required.", "unavailable"));
         if (!TryType(annex, out var type) || !TryFormat(format, out var exportFormat)) return Json(Error("statutory_sales_book_export_format_unsupported", 400, "The requested statutory sales-book export is unsupported.", correlation));
         if (!Authorized(request, context, environment)) return Json(Error("statutory_sales_book_not_found", 404, "The requested statutory sales book is unavailable.", correlation));
-        var result = await service.ReadAsync(Query(request, type, context), ct).ConfigureAwait(false);
+        if (!FiscalReportActorContext.TryResolve(context, out var actorContext)) return Json(Error("fiscal_report_actor_invalid", 400, "The authenticated report actor context is invalid.", correlation));
+        var result = await service.ReadAsync(Query(request, type, actorContext!), ct).ConfigureAwait(false);
         if (result.Report is null) return Json(Map(result, correlation));
         var report = result.Report;
         var reportKind = type == StatutorySalesBookType.AnnexE2 ? "ANNEX_E2" : "ANNEX_E3";
@@ -63,10 +65,10 @@ public static class StatutorySalesBookEndpoint
         return Results.File(persisted.Bytes, artifact.ContentType, artifact.FileName, enableRangeProcessing: false);
     }
 
-    private static StatutorySalesBookQuery Query(StatutorySalesBookRequest request, StatutorySalesBookType type, HttpContext context) => new(
-        request.SitePosServerId ?? Guid.Empty, request.FiscalIdentityId ?? Guid.Empty,
-        request.CurrencyCode ?? string.Empty, request.CalendarYear ?? 0, request.CalendarMonth ?? 0, type,
-        context.User.FindFirstValue(ClaimTypes.NameIdentifier) ?? "unavailable");
+    private static StatutorySalesBookQuery Query(StatutorySalesBookRequest request, StatutorySalesBookType type, FiscalReportActorContext actor) =>
+        new(request.SitePosServerId ?? Guid.Empty, request.FiscalIdentityId ?? Guid.Empty,
+            request.CurrencyCode ?? string.Empty, request.CalendarYear ?? 0, request.CalendarMonth ?? 0, type,
+            actor.ActorReference, actor.ActorDisplayName);
 
     private static bool Authorized(StatutorySalesBookRequest request, HttpContext context, IHostEnvironment environment) =>
         StatutorySalesBookAuthorization.IsHostingAuthorityAllowed(context.User, environment) && request.SitePosServerId is { } site &&

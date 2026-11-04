@@ -39,6 +39,7 @@ CREATE TABLE IF NOT EXISTS pos.annex_e1_workbooks (
     generated_at timestamptz NOT NULL,
     committed_at timestamptz NOT NULL,
     generated_by_ref text NOT NULL,
+    generated_by_display_name text NULL,
     service_identity_ref text NOT NULL,
     correlation_id text NOT NULL,
     created_at timestamptz NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -68,6 +69,15 @@ CREATE TABLE IF NOT EXISTS pos.annex_e1_workbooks (
 );
 
 CREATE INDEX IF NOT EXISTS ix_annex_e1_workbooks__scope_month ON pos.annex_e1_workbooks (site_pos_server_id, fiscal_identity_id, currency_code, calendar_year, calendar_month, revision DESC);
+
+ALTER TABLE pos.annex_e1_workbooks
+    ADD COLUMN IF NOT EXISTS generated_by_display_name text NULL;
+
+ALTER TABLE pos.annex_e1_workbooks
+    DROP CONSTRAINT IF EXISTS ck_annex_e1_workbooks__generated_by_display_name,
+    ADD CONSTRAINT ck_annex_e1_workbooks__generated_by_display_name CHECK (
+        generated_by_display_name IS NULL OR char_length(btrim(generated_by_display_name)) > 0
+    );
 
 ALTER TABLE pos.annex_e1_workbooks
     DROP CONSTRAINT IF EXISTS ck_annex_e1_workbooks__correction,

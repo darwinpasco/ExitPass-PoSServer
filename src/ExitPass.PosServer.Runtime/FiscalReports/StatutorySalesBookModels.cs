@@ -11,7 +11,8 @@ public sealed record StatutorySalesBookQuery(
     int CalendarYear,
     int CalendarMonth,
     StatutorySalesBookType Type,
-    string RequestedByRef);
+    string RequestedByRef,
+    string? RequestedByDisplayName = null);
 
 public sealed record StatutorySalesBookHeader(
     string TaxpayerName,
@@ -25,7 +26,8 @@ public sealed record StatutorySalesBookHeader(
     string MachineIdentificationNumber,
     string PosServerCode,
     DateTimeOffset GeneratedAt,
-    string UserId);
+    string UserId,
+    string? UserDisplayName = null);
 
 public sealed record StatutorySalesBookRow(
     Guid FiscalDocumentId,
@@ -110,7 +112,7 @@ public static class StatutorySalesBookContract
     public const string XlsxContentType = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
     public const string PdfContentType = "application/pdf";
     public const string SoftwareName = "ExitPass POS Server";
-    public const string SoftwareVersion = "1.3";
+    public const string SoftwareVersion = "V1.0.0";
     public const string ReleaseNumber = "v1.3";
     public const string ReleaseDate = "2026-10-17";
     public const string ArtifactScopeVersion = "pos-server-v2";

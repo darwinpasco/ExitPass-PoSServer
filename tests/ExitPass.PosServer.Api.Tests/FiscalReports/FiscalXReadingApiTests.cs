@@ -78,6 +78,8 @@ public sealed class FiscalXReadingApiTests
         var repository = new StubRepository(new(FiscalXReadingOutcome.Created, record));
         var service = new FiscalXReadingService(repository);
         var context = Context();
+        context.Request.Headers["X-Actor-Reference"] = "operator-001";
+        context.Request.Headers["X-Actor-Display-Name"] = "Juan Dela Cruz";
 
         var generated = await FiscalXReadingEndpoint.GenerateAsync(new("operation-x", SiteId, IdentityId, ObservedAt), service, context);
         var read = await FiscalXReadingEndpoint.GetAsync(record.FiscalReportReference, service, context);
@@ -86,6 +88,9 @@ public sealed class FiscalXReadingApiTests
         Assert.Equal(StatusCodes.Status201Created, generated.HttpStatusCode);
         Assert.Equal("request-correlation", generated.CorrelationId);
         Assert.Same(record, generated.XReading);
+        Assert.Equal("operator-001", repository.LastCommand!.RequestedByRef);
+        Assert.Equal("Juan Dela Cruz", repository.LastCommand.RequestedByDisplayName);
+        Assert.Equal("x-reading-service", repository.LastCommand.ServiceIdentityRef);
         Assert.True(read.Succeeded);
         Assert.Same(record, read.XReading);
     }
@@ -97,9 +102,11 @@ public sealed class FiscalXReadingApiTests
         var service = new FiscalXReadingService(repository);
         var missing = Context(); missing.Request.Headers.Clear();
         var forbidden = Context(siteScope: Guid.NewGuid());
+        var incompleteActor = Context(); incompleteActor.Request.Headers["X-Actor-Reference"] = "operator-001";
 
         Assert.Equal(StatusCodes.Status400BadRequest, (await FiscalXReadingEndpoint.GenerateAsync(new("operation-x", SiteId, IdentityId, ObservedAt), service, missing)).HttpStatusCode);
         Assert.Equal(StatusCodes.Status403Forbidden, (await FiscalXReadingEndpoint.GenerateAsync(new("operation-x", SiteId, IdentityId, ObservedAt), service, forbidden)).HttpStatusCode);
+        Assert.Equal(StatusCodes.Status400BadRequest, (await FiscalXReadingEndpoint.GenerateAsync(new("operation-x", SiteId, IdentityId, ObservedAt), service, incompleteActor)).HttpStatusCode);
         Assert.Equal(0, repository.GenerateCalls);
     }
 
@@ -160,7 +167,8 @@ public sealed class FiscalXReadingApiTests
     private sealed class StubRepository(FiscalXReadingResult result) : IFiscalXReadingRepository
     {
         public int GenerateCalls { get; private set; }
-        public Task<FiscalXReadingResult> GenerateAsync(FiscalXReadingCommand command, CancellationToken cancellationToken = default) { GenerateCalls++; return Task.FromResult(result); }
+        public FiscalXReadingCommand? LastCommand { get; private set; }
+        public Task<FiscalXReadingResult> GenerateAsync(FiscalXReadingCommand command, CancellationToken cancellationToken = default) { GenerateCalls++; LastCommand = command; return Task.FromResult(result); }
         public Task<FiscalXReadingResult> GetByReferenceAsync(string fiscalReportReference, CancellationToken cancellationToken = default) => Task.FromResult(result with { Outcome = FiscalXReadingOutcome.Replayed });
     }
 }

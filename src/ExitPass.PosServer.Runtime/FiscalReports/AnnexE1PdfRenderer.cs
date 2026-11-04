@@ -120,7 +120,7 @@ public sealed class AnnexE1PdfRenderer
             workbook.Header.MachineIdentificationNumber,
             workbook.Header.PosTerminalNumber,
             workbook.Header.GeneratedAt.ToUniversalTime().ToString("yyyy-MM-dd HH:mm:ss 'UTC'", CultureInfo.InvariantCulture),
-            workbook.Header.GeneratedByRef
+            workbook.Header.GeneratedByDisplayName ?? workbook.Header.GeneratedByRef
         };
         foreach (var line in lines)
         {

@@ -102,6 +102,10 @@ public sealed class FiscalReportOutputApiTests
         Assert.Contains("Registered Name", receipt, StringComparison.Ordinal);
         Assert.Contains("999-999-999-000", receipt, StringComparison.Ordinal);
         Assert.Contains("PTU-TEST-PITX-L3-0001".Replace("-", string.Empty), receipt.Replace("-", string.Empty).Replace("\n", string.Empty), StringComparison.Ordinal);
+        var compactReceipt = string.Concat(receipt.Where(character => !char.IsWhiteSpace(character)));
+        Assert.Contains("PITX-L3-POS-01", compactReceipt, StringComparison.Ordinal);
+        Assert.Contains("0026_B728_3B2F_8505", compactReceipt, StringComparison.Ordinal);
+        Assert.Contains("ExitPassPOSServerV1.0.0", compactReceipt, StringComparison.Ordinal);
         Assert.DoesNotContain(record.FiscalIdentityId.ToString("D"), receipt, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain(record.SitePosServerId.ToString("D"), receipt, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("NOT RECORDED", receipt, StringComparison.Ordinal);
@@ -323,12 +327,14 @@ public sealed class FiscalReportOutputApiTests
             Guid.Parse("2d1dcdf8-f563-537c-8542-0bde7cc9da97"), SitePosServerId,
             "pitx-profile-v1", SalesInvoiceHeaderProfileVersions.TemplateVersion,
             SalesInvoiceHeaderProfileVersions.PresentationVersion,
-            "SN-TEST-PITX-L3-001", "MIN-TEST-PITX-L3-001", "PITX Level 3",
+            "0026_B728_3B2F_8505", "MIN-TEST-PITX-L3-001", "PITX Level 3",
             "ACC-TEST-2026-0001", new DateOnly(2026, 1, 1), new DateOnly(2031, 1, 1),
             "PTU-TEST-PITX-L3-0001", new DateOnly(2026, 1, 1), "SALES INVOICE", "THANK YOU",
             now, null, SalesInvoiceHeaderProfileLifecycle.Approved, now, "approver", null, now, now,
             "creator", "updater",
-            new(FiscalIdentityId, "Professional Parking Management Corporation", "PITX Level 3",
-                "999-999-999-000", "VAT", SalesInvoiceHeaderProfileLifecycle.Approved, now, now, "creator", "updater"));
+            FiscalIdentity: new(FiscalIdentityId, "Professional Parking Management Corporation", "PITX Level 3",
+                "999-999-999-000", "VAT", SalesInvoiceHeaderProfileLifecycle.Approved, now, now, "creator", "updater",
+                "ExitPass POS Server", "V1.0.0", "0026_B728_3B2F_8505"),
+            SitePosServerCode: "PITX-L3-POS-01");
     }
 }
