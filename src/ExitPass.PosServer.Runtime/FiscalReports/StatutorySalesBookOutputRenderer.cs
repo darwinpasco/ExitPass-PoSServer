@@ -24,20 +24,17 @@ public sealed class StatutorySalesBookOutputRenderer
 
     private static byte[] RenderXlsx(StatutorySalesBookReport report)
     {
-        var hasLguSupplement = report.Rows.Any(IsLguFullFeeExemption);
         using var stream = new MemoryStream();
         using (var archive = new ZipArchive(stream, ZipArchiveMode.Create, true, Encoding.UTF8))
         {
-            Add(archive, "[Content_Types].xml", ContentTypes(hasLguSupplement));
+            Add(archive, "[Content_Types].xml", ContentTypes());
             Add(archive, "_rels/.rels", RootRelationships());
-            Add(archive, "docProps/app.xml", AppProperties(report, hasLguSupplement));
+            Add(archive, "docProps/app.xml", AppProperties(report));
             Add(archive, "docProps/core.xml", CoreProperties());
-            Add(archive, "xl/workbook.xml", Workbook(report, hasLguSupplement));
-            Add(archive, "xl/_rels/workbook.xml.rels", WorkbookRelationships(hasLguSupplement));
+            Add(archive, "xl/workbook.xml", Workbook(report));
+            Add(archive, "xl/_rels/workbook.xml.rels", WorkbookRelationships());
             Add(archive, "xl/styles.xml", Styles());
             Add(archive, "xl/worksheets/sheet1.xml", Worksheet(report));
-            if (hasLguSupplement)
-                Add(archive, "xl/worksheets/sheet2.xml", LguSupplementWorksheet(report));
         }
         return stream.ToArray();
     }
@@ -49,7 +46,7 @@ public sealed class StatutorySalesBookOutputRenderer
         const double left = 20;
         const double right = width - 20;
         const double headerHeight = 58;
-        var columns = new[] { 42d, 96d, 62d, 54d, 62d, 52d, 44d, 50d, 34d, 34d, 48d, 66d, 48d, 52d, 52d, 48d, 72d };
+        var columns = new[] { 42d, 96d, 62d, 54d, 62d, 52d, 44d, 50d, 34d, 34d, 48d, 66d, 48d, 52d, 52d, 48d };
         var scale = (right - left) / columns.Sum();
         columns = columns.Select(value => value * scale).ToArray();
         var pdf = new A4FiscalReportPdf();
@@ -72,7 +69,6 @@ public sealed class StatutorySalesBookOutputRenderer
             pdf.Text(page, left, 14, $"Status: {report.Summary.ReportStatus} | Period: {report.Summary.CalendarYear:0000}-{report.Summary.CalendarMonth:00} | {(report.Summary.IsEmpty ? "No qualifying transactions" : $"{report.Summary.QualifyingTransactionCount} qualifying transaction(s)")}", 6.5);
             pdf.RightText(page, right, 14, $"Page {pageNo + 1} of {pageCount}", 6.5);
         }
-        DrawLguSupplementPdf(pdf, report, width, height, left, right);
         return pdf.Build();
     }
 
@@ -124,7 +120,7 @@ public sealed class StatutorySalesBookOutputRenderer
         var lguLabels = new[]
         {
             "LGU Privilege Type", "Free Hours Granted", "Original Parking Fee (VAT incl.)",
-            "LGU Waiver (VAT incl.)", "Final Payable (VAT incl.)", "LGU Policy Reference"
+            "LGU Waiver (VAT incl.)", "Final Payable (VAT incl.)"
         };
         for (var i = 0; i < lguLabels.Length; i++)
         {
@@ -161,12 +157,12 @@ public sealed class StatutorySalesBookOutputRenderer
             Money(row.Discount5MinorUnits), Money(row.Discount20MinorUnits), Money(row.NetSalesMinorUnits),
             row.LguPrivilegeType ?? string.Empty, Hours(row.FreeHoursGranted),
             Money(row.OriginalParkingFeeVatInclusiveMinorUnits), Money(row.LguWaiverVatInclusiveMinorUnits),
-            Money(row.LguFinalPayableVatInclusiveMinorUnits), row.LguPolicyReference ?? string.Empty
+            Money(row.LguFinalPayableVatInclusiveMinorUnits)
         };
         for (var i = 0; i < widths.Length; i++)
         {
             pdf.StrokeRect(page, x, y - height, widths[i], height, 0.3);
-            if (i is 11 or 16)
+            if (i == 11)
             {
                 var lines = A4FiscalReportPdf.Wrap(values[i], Math.Max(8, (int)(widths[i] / 2.25))).Take(2).ToArray();
                 for (var line = 0; line < lines.Length; line++)
@@ -209,8 +205,7 @@ public sealed class StatutorySalesBookOutputRenderer
                 0,
                 summary.LguOriginalParkingFeeVatInclusiveMinorUnits,
                 summary.LguWaiverVatInclusiveMinorUnits,
-                summary.LguFinalPayableVatInclusiveMinorUnits,
-                0
+                summary.LguFinalPayableVatInclusiveMinorUnits
             };
             for (var i = 5; i < widths.Length; i++)
             {
@@ -229,7 +224,7 @@ public sealed class StatutorySalesBookOutputRenderer
             Money(summary.SalesInclusiveVatMinorUnits), Money(summary.VatAmountMinorUnits), Money(summary.VatExemptSalesMinorUnits),
             Money(summary.Discount5MinorUnits), Money(summary.Discount20MinorUnits), Money(summary.NetSalesMinorUnits),
             "", "", Money(summary.LguOriginalParkingFeeVatInclusiveMinorUnits),
-            Money(summary.LguWaiverVatInclusiveMinorUnits), Money(summary.LguFinalPayableVatInclusiveMinorUnits), ""
+            Money(summary.LguWaiverVatInclusiveMinorUnits), Money(summary.LguFinalPayableVatInclusiveMinorUnits)
         };
         for (var i = 0; i < widths.Length; i++)
         {
@@ -241,84 +236,6 @@ public sealed class StatutorySalesBookOutputRenderer
         }
     }
 
-    private static void DrawLguSupplementPdf(
-        A4FiscalReportPdf pdf,
-        StatutorySalesBookReport report,
-        double width,
-        double height,
-        double left,
-        double right)
-    {
-        var rows = report.Rows.Where(IsLguFullFeeExemption).ToArray();
-        const int rowsPerPage = 5;
-        for (var pageIndex = 0; pageIndex * rowsPerPage < rows.Length; pageIndex++)
-        {
-            var page = pdf.AddPage(width, height);
-            pdf.CenterText(page, width / 2, height - 32, "SUPPLEMENTARY LGU PARKING BENEFIT DETAILS", 10, true);
-            pdf.CenterText(page, width / 2, height - 45, "For evaluator review; prescribed Annex E-2/E-3 columns remain unchanged.", 7);
-            var y = height - 72;
-            foreach (var row in rows.Skip(pageIndex * rowsPerPage).Take(rowsPerPage))
-            {
-                pdf.Text(page, left, y, $"SI: {row.SalesInvoiceNumber} | Date: {row.TransactionDate:yyyy-MM-dd} | Classification: Full Fee Exemption", 7, true);
-                pdf.Text(page, left, y - 12, $"Policy: {row.PolicyCode ?? ""} | Ordinance: {row.OrdinanceReference}", 6.5);
-                pdf.Text(page, left, y - 24, $"Original fee: PHP {Money(row.SalesInclusiveVatMinorUnits)} | VAT-exclusive: PHP {Money(row.OriginalVatExclusiveSalesMinorUnits)} | Original VAT: PHP {Money(row.VatAmountMinorUnits)}", 6.5);
-                pdf.Text(page, left, y - 36, $"LGU benefit: PHP {Money(row.NonPercentageBenefitAmountMinorUnits)} | Final VATable sales: PHP {Money(row.FinalVatableSalesMinorUnits)} | Final VAT: PHP {Money(row.FinalVatAmountMinorUnits)} | Final payable: PHP {Money(row.FinalPayableAmountMinorUnits)}", 6.5);
-                pdf.StrokeRect(page, left, y - 44, right - left, 50, 0.25);
-                y -= 66;
-            }
-            pdf.RightText(page, right, 14, $"LGU Supplement {pageIndex + 1}", 6.5);
-        }
-    }
-
-    private static string LguSupplementWorksheet(StatutorySalesBookReport report)
-    {
-        var rows = report.Rows.Where(IsLguFullFeeExemption).ToArray();
-        var last = Math.Max(12, rows.Length + 3);
-        var b = new StringBuilder(16000);
-        b.Append("<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?><worksheet xmlns=\"http://schemas.openxmlformats.org/spreadsheetml/2006/main\"><dimension ref=\"A1:M").Append(last).Append("\"/><sheetViews><sheetView workbookViewId=\"0\"/></sheetViews><sheetFormatPr defaultRowHeight=\"18\"/><cols>");
-        var widths = new[] { 12d, 18d, 18d, 22d, 22d, 18d, 16d, 14d, 16d, 18d, 14d, 14d, 14d };
-        for (var i = 0; i < widths.Length; i++) b.Append("<col min=\"").Append(i + 1).Append("\" max=\"").Append(i + 1).Append("\" width=\"").Append(widths[i].ToString(CultureInfo.InvariantCulture)).Append("\" customWidth=\"1\"/>");
-        b.Append("</cols><sheetData>");
-        b.Append("<row r=\"1\"><c r=\"A1\" s=\"2\" t=\"inlineStr\"><is><t>SUPPLEMENTARY LGU PARKING BENEFIT DETAILS - FOR EVALUATOR REVIEW</t></is></c></row>");
-        var headings = new[] { "Date", "SI Number", "Entitlement", "Policy Code", "Ordinance Reference", "Benefit Classification", "Original Fee", "VAT-exclusive Basis", "Original VAT", "LGU Benefit", "Final VATable Sales", "Final VAT", "Final Payable" };
-        b.Append("<row r=\"2\">");
-        for (var i = 0; i < headings.Length; i++) TextCell(b, ((char)('A' + i)).ToString(), 2, headings[i], 7);
-        b.Append("</row>");
-        var rowNumber = 3;
-        foreach (var row in rows)
-        {
-            b.Append("<row r=\"").Append(rowNumber).Append("\">");
-            TextCell(b, "A", rowNumber, row.TransactionDate.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture), 5);
-            TextCell(b, "B", rowNumber, row.SalesInvoiceNumber, 5);
-            TextCell(b, "C", rowNumber, report.Summary.Type == StatutorySalesBookType.AnnexE2 ? "Senior Citizen" : "PWD", 5);
-            TextCell(b, "D", rowNumber, row.PolicyCode ?? string.Empty, 5);
-            TextCell(b, "E", rowNumber, row.OrdinanceReference, 5);
-            TextCell(b, "F", rowNumber, "Full Fee Exemption", 5);
-            MoneyCell(b, "G", rowNumber, row.SalesInclusiveVatMinorUnits);
-            MoneyCell(b, "H", rowNumber, row.OriginalVatExclusiveSalesMinorUnits);
-            MoneyCell(b, "I", rowNumber, row.VatAmountMinorUnits);
-            MoneyCell(b, "J", rowNumber, row.NonPercentageBenefitAmountMinorUnits);
-            MoneyCell(b, "K", rowNumber, row.FinalVatableSalesMinorUnits);
-            MoneyCell(b, "L", rowNumber, row.FinalVatAmountMinorUnits);
-            MoneyCell(b, "M", rowNumber, row.FinalPayableAmountMinorUnits);
-            b.Append("</row>");
-            rowNumber++;
-        }
-        while (rowNumber <= last) BlankSupplementRow(b, rowNumber++);
-        b.Append("</sheetData><mergeCells count=\"1\"><mergeCell ref=\"A1:M1\"/></mergeCells><printOptions horizontalCentered=\"1\"/><pageMargins left=\"0.2362\" right=\"0.2362\" top=\"0.5\" bottom=\"0.5\" header=\"0.2\" footer=\"0.2\"/><pageSetup paperSize=\"9\" orientation=\"landscape\" fitToWidth=\"1\" fitToHeight=\"0\"/></worksheet>");
-        return b.ToString();
-    }
-
-    private static void BlankSupplementRow(StringBuilder b, int row)
-    {
-        b.Append("<row r=\"").Append(row).Append("\">");
-        for (var i = 0; i < 13; i++) b.Append("<c r=\"").Append((char)('A' + i)).Append(row).Append("\" s=\"5\"/>");
-        b.Append("</row>");
-    }
-
-    private static bool IsLguFullFeeExemption(StatutorySalesBookRow row) =>
-        string.Equals(row.BenefitClassification, "FREE_PARKING", StringComparison.OrdinalIgnoreCase);
-
     private static string Worksheet(StatutorySalesBookReport report)
     {
         var h = report.Header;
@@ -326,10 +243,10 @@ public sealed class StatutorySalesBookOutputRenderer
         var totalsRow = 17 + report.Rows.Count;
         var last = Math.Max(25, totalsRow);
         var b = new StringBuilder(24000);
-        b.Append("<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?><worksheet xmlns=\"http://schemas.openxmlformats.org/spreadsheetml/2006/main\"><sheetPr><pageSetUpPr fitToPage=\"1\"/></sheetPr><dimension ref=\"A1:Q").Append(last).Append("\"/><sheetViews><sheetView workbookViewId=\"0\"/></sheetViews><sheetFormatPr defaultRowHeight=\"15\"/><cols>");
+        b.Append("<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?><worksheet xmlns=\"http://schemas.openxmlformats.org/spreadsheetml/2006/main\"><sheetPr><pageSetUpPr fitToPage=\"1\"/></sheetPr><dimension ref=\"A1:P").Append(last).Append("\"/><sheetViews><sheetView workbookViewId=\"0\"/></sheetViews><sheetFormatPr defaultRowHeight=\"15\"/><cols>");
         var widths = type == StatutorySalesBookType.AnnexE2
-            ? new[] { 8.43, 22.140625, 14, 14, 11.7109375, 17.28515625, 11.42578125, 11.42578125, 7.140625, 6.7109375, 11.42578125, 20d, 13d, 17d, 17d, 17d, 24d }
-            : new[] { 8.43, 22.140625, 14, 14, 11.7109375, 17.28515625, 11.42578125, 11.42578125, 6.7109375, 6.85546875, 11.42578125, 20d, 13d, 17d, 17d, 17d, 24d };
+            ? new[] { 8.43, 22.140625, 14, 14, 11.7109375, 17.28515625, 11.42578125, 11.42578125, 7.140625, 6.7109375, 11.42578125, 20d, 13d, 17d, 17d, 17d }
+            : new[] { 8.43, 22.140625, 14, 14, 11.7109375, 17.28515625, 11.42578125, 11.42578125, 6.7109375, 6.85546875, 11.42578125, 20d, 13d, 17d, 17d, 17d };
         for (var i = 0; i < widths.Length; i++) b.Append("<col min=\"").Append(i + 1).Append("\" max=\"").Append(i + 1).Append("\" width=\"").Append(widths[i].ToString(CultureInfo.InvariantCulture)).Append("\" customWidth=\"1\"/>");
         b.Append("</cols><sheetData>");
         Header(b, 1, h.TaxpayerName); Header(b, 2, h.TaxpayerAddress); Header(b, 3, h.Tin); b.Append("<row r=\"4\"/>");
@@ -346,7 +263,7 @@ public sealed class StatutorySalesBookOutputRenderer
         foreach (var row in report.Rows) DataRow(b, rowNo++, row);
         TotalRow(b, rowNo++, report.Summary);
         while (rowNo <= last) BlankRow(b, rowNo++);
-        b.Append("</sheetData><mergeCells count=\"").Append(report.Summary.IsEmpty ? 24 : 23).Append("\"><mergeCell ref=\"A1:Q1\"/><mergeCell ref=\"A2:Q2\"/><mergeCell ref=\"A3:Q3\"/><mergeCell ref=\"A12:Q12\"/><mergeCell ref=\"A13:A16\"/><mergeCell ref=\"B13:B16\"/><mergeCell ref=\"C13:C16\"/><mergeCell ref=\"D13:D16\"/><mergeCell ref=\"E13:E16\"/><mergeCell ref=\"F13:F16\"/><mergeCell ref=\"G13:G16\"/><mergeCell ref=\"H13:H16\"/><mergeCell ref=\"I13:J13\"/><mergeCell ref=\"I14:I16\"/><mergeCell ref=\"J14:J16\"/><mergeCell ref=\"K13:K16\"/><mergeCell ref=\"L13:Q13\"/><mergeCell ref=\"L14:L16\"/><mergeCell ref=\"M14:M16\"/><mergeCell ref=\"N14:N16\"/><mergeCell ref=\"O14:O16\"/><mergeCell ref=\"P14:P16\"/><mergeCell ref=\"Q14:Q16\"/>");
+        b.Append("</sheetData><mergeCells count=\"").Append(report.Summary.IsEmpty ? 23 : 22).Append("\"><mergeCell ref=\"A1:P1\"/><mergeCell ref=\"A2:P2\"/><mergeCell ref=\"A3:P3\"/><mergeCell ref=\"A12:P12\"/><mergeCell ref=\"A13:A16\"/><mergeCell ref=\"B13:B16\"/><mergeCell ref=\"C13:C16\"/><mergeCell ref=\"D13:D16\"/><mergeCell ref=\"E13:E16\"/><mergeCell ref=\"F13:F16\"/><mergeCell ref=\"G13:G16\"/><mergeCell ref=\"H13:H16\"/><mergeCell ref=\"I13:J13\"/><mergeCell ref=\"I14:I16\"/><mergeCell ref=\"J14:J16\"/><mergeCell ref=\"K13:K16\"/><mergeCell ref=\"L13:P13\"/><mergeCell ref=\"L14:L16\"/><mergeCell ref=\"M14:M16\"/><mergeCell ref=\"N14:N16\"/><mergeCell ref=\"O14:O16\"/><mergeCell ref=\"P14:P16\"/>");
         if (report.Summary.IsEmpty) b.Append("<mergeCell ref=\"A").Append(totalsRow).Append(":E").Append(totalsRow).Append("\"/>");
         b.Append("</mergeCells><printOptions horizontalCentered=\"1\"/><pageMargins left=\"0.2362\" right=\"0.2362\" top=\"0.748\" bottom=\"0.748\" header=\"0.315\" footer=\"0.315\"/><pageSetup paperSize=\"9\" orientation=\"landscape\" fitToWidth=\"1\" fitToHeight=\"1\"/><headerFooter><oddFooter>&amp;LStatus: ").Append(Xml(report.Summary.ReportStatus)).Append(" | Period: ").Append(report.Summary.CalendarYear.ToString("0000", CultureInfo.InvariantCulture)).Append('-').Append(report.Summary.CalendarMonth.ToString("00", CultureInfo.InvariantCulture)).Append("&amp;RPage &amp;P of &amp;N</oddFooter></headerFooter></worksheet>");
         return b.ToString();
@@ -357,13 +274,13 @@ public sealed class StatutorySalesBookOutputRenderer
         var name = type == StatutorySalesBookType.AnnexE2 ? "Name of Senior Citizen (SC)" : "Name of Person with Disability (PWD)";
         var id = type == StatutorySalesBookType.AnnexE2 ? "OSCA ID No./SC ID No." : "PWD ID No.";
         var tin = type == StatutorySalesBookType.AnnexE2 ? "SC TIN" : "PWD TIN";
-        var labels = new[] { "Date", name, id, tin, type == StatutorySalesBookType.AnnexE2 ? "SI/OR Number" : "SI / OR Number", "Sales (inclusive of VAT)", "VAT Amount", "VAT Exempt Sales", "Discount", "", "Net Sales", "ADDITIONAL LGU PARKING-PRIVILEGE DETAIL", "", "", "", "", "" };
+        var labels = new[] { "Date", name, id, tin, type == StatutorySalesBookType.AnnexE2 ? "SI/OR Number" : "SI / OR Number", "Sales (inclusive of VAT)", "VAT Amount", "VAT Exempt Sales", "Discount", "", "Net Sales", "ADDITIONAL LGU PARKING-PRIVILEGE DETAIL", "", "", "", "" };
         var row13Height = type == StatutorySalesBookType.AnnexE2 ? "21" : "24.75";
         var row14Height = type == StatutorySalesBookType.AnnexE2 ? "15" : "15.75";
         var row15Height = type == StatutorySalesBookType.AnnexE2 ? "5.25" : "3.75";
         var row16Height = type == StatutorySalesBookType.AnnexE2 ? "2.25" : "9";
-        b.Append("<row r=\"13\" ht=\"").Append(row13Height).Append("\" customHeight=\"1\">"); Cells(b, 13, labels, new[] { 7, 8, 9, 10, 11, 12, 13, 14, 15, 15, 7, 16, 16, 16, 16, 16, 16 }); b.Append("</row><row r=\"14\" ht=\"").Append(row14Height).Append("\" customHeight=\"1\">");
-        Cells(b, 14, new[] { "", "", "", "", "", "", "", "", "5%", "20%", "", "LGU Privilege Type", "Free Hours Granted", "Original Parking Fee (VAT incl.)", "LGU Waiver (VAT incl.)", "Final Payable (VAT incl.)", "LGU Policy Reference" }, new[] { 7, 8, 9, 10, 11, 12, 13, 14, 15, 15, 7, 7, 7, 7, 7, 7, 7 }); b.Append("</row><row r=\"15\" ht=\"").Append(row15Height).Append("\" customHeight=\"1\"/><row r=\"16\" ht=\"").Append(row16Height).Append("\" customHeight=\"1\"/>");
+        b.Append("<row r=\"13\" ht=\"").Append(row13Height).Append("\" customHeight=\"1\">"); Cells(b, 13, labels, new[] { 7, 8, 9, 10, 11, 12, 13, 14, 15, 15, 7, 16, 16, 16, 16, 16 }); b.Append("</row><row r=\"14\" ht=\"").Append(row14Height).Append("\" customHeight=\"1\">");
+        Cells(b, 14, new[] { "", "", "", "", "", "", "", "", "5%", "20%", "", "LGU Privilege Type", "Free Hours Granted", "Original Parking Fee (VAT incl.)", "LGU Waiver (VAT incl.)", "Final Payable (VAT incl.)" }, new[] { 7, 8, 9, 10, 11, 12, 13, 14, 15, 15, 7, 7, 7, 7, 7, 7 }); b.Append("</row><row r=\"15\" ht=\"").Append(row15Height).Append("\" customHeight=\"1\"/><row r=\"16\" ht=\"").Append(row16Height).Append("\" customHeight=\"1\"/>");
     }
 
     private static void DataRow(StringBuilder b, int r, StatutorySalesBookRow row)
@@ -371,7 +288,7 @@ public sealed class StatutorySalesBookOutputRenderer
         b.Append("<row r=\"").Append(r).Append("\" ht=\"18\">");
         TextCell(b, "A", r, row.TransactionDate.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture), 5); TextCell(b, "B", r, row.BeneficiaryFullName, 5); TextCell(b, "C", r, row.StatutoryIdNumber, 5); TextCell(b, "D", r, row.BeneficiaryTin ?? string.Empty, 5); TextCell(b, "E", r, row.SalesInvoiceNumber, 5);
         MoneyCell(b, "F", r, row.SalesInclusiveVatMinorUnits); MoneyCell(b, "G", r, row.VatAmountMinorUnits); MoneyCell(b, "H", r, row.VatExemptSalesMinorUnits); MoneyCell(b, "I", r, row.Discount5MinorUnits); MoneyCell(b, "J", r, row.Discount20MinorUnits); MoneyCell(b, "K", r, row.NetSalesMinorUnits);
-        TextCell(b, "L", r, row.LguPrivilegeType ?? string.Empty, 5); DecimalCell(b, "M", r, row.FreeHoursGranted); MoneyCell(b, "N", r, row.OriginalParkingFeeVatInclusiveMinorUnits); MoneyCell(b, "O", r, row.LguWaiverVatInclusiveMinorUnits); MoneyCell(b, "P", r, row.LguFinalPayableVatInclusiveMinorUnits); TextCell(b, "Q", r, row.LguPolicyReference ?? string.Empty, 5); b.Append("</row>");
+        TextCell(b, "L", r, row.LguPrivilegeType ?? string.Empty, 5); DecimalCell(b, "M", r, row.FreeHoursGranted); MoneyCell(b, "N", r, row.OriginalParkingFeeVatInclusiveMinorUnits); MoneyCell(b, "O", r, row.LguWaiverVatInclusiveMinorUnits); MoneyCell(b, "P", r, row.LguFinalPayableVatInclusiveMinorUnits); b.Append("</row>");
     }
     private static void TotalRow(StringBuilder b, int r, StatutorySalesBookSummary summary)
     {
@@ -380,10 +297,10 @@ public sealed class StatutorySalesBookOutputRenderer
         for (var column = 'B'; column <= 'E'; column++) TextCell(b, column.ToString(), r, string.Empty, 7);
         MoneyCell(b, "F", r, summary.SalesInclusiveVatMinorUnits, 6); MoneyCell(b, "G", r, summary.VatAmountMinorUnits, 6);
         MoneyCell(b, "H", r, summary.VatExemptSalesMinorUnits, 6); MoneyCell(b, "I", r, summary.Discount5MinorUnits, 6);
-        MoneyCell(b, "J", r, summary.Discount20MinorUnits, 6); MoneyCell(b, "K", r, summary.NetSalesMinorUnits, 6); TextCell(b, "L", r, string.Empty, 7); TextCell(b, "M", r, string.Empty, 7); MoneyCell(b, "N", r, summary.LguOriginalParkingFeeVatInclusiveMinorUnits, 6); MoneyCell(b, "O", r, summary.LguWaiverVatInclusiveMinorUnits, 6); MoneyCell(b, "P", r, summary.LguFinalPayableVatInclusiveMinorUnits, 6); TextCell(b, "Q", r, string.Empty, 7);
+        MoneyCell(b, "J", r, summary.Discount20MinorUnits, 6); MoneyCell(b, "K", r, summary.NetSalesMinorUnits, 6); TextCell(b, "L", r, string.Empty, 7); TextCell(b, "M", r, string.Empty, 7); MoneyCell(b, "N", r, summary.LguOriginalParkingFeeVatInclusiveMinorUnits, 6); MoneyCell(b, "O", r, summary.LguWaiverVatInclusiveMinorUnits, 6); MoneyCell(b, "P", r, summary.LguFinalPayableVatInclusiveMinorUnits, 6);
         b.Append("</row>");
     }
-    private static void BlankRow(StringBuilder b, int r) { b.Append("<row r=\"").Append(r).Append("\" ht=\"18\">"); for (var i = 0; i < 17; i++) b.Append("<c r=\"").Append((char)('A' + i)).Append(r).Append("\" s=\"5\"/>"); b.Append("</row>"); }
+    private static void BlankRow(StringBuilder b, int r) { b.Append("<row r=\"").Append(r).Append("\" ht=\"18\">"); for (var i = 0; i < 16; i++) b.Append("<c r=\"").Append((char)('A' + i)).Append(r).Append("\" s=\"5\"/>"); b.Append("</row>"); }
     private static void Header(StringBuilder b, int r, string value) => b.Append("<row r=\"").Append(r).Append("\"><c r=\"A").Append(r).Append("\" s=\"1\" t=\"inlineStr\"><is><t xml:space=\"preserve\">").Append(Xml(value)).Append("</t></is></c></row>");
     private static void HeaderWithAnnex(StringBuilder b, int r, string value, string annex) => b.Append("<row r=\"").Append(r).Append("\"><c r=\"A").Append(r).Append("\" s=\"1\" t=\"inlineStr\"><is><t xml:space=\"preserve\">").Append(Xml(value)).Append("</t></is></c><c r=\"K").Append(r).Append("\" s=\"3\" t=\"inlineStr\"><is><t>").Append(Xml(annex)).Append("</t></is></c></row>");
     private static void Cells(StringBuilder b,int r,IReadOnlyList<string> values,IReadOnlyList<int> styles){for(var i=0;i<values.Count;i++)TextCell(b,((char)('A'+i)).ToString(),r,values[i],styles[i]);}
@@ -391,35 +308,19 @@ public sealed class StatutorySalesBookOutputRenderer
     private static void MoneyCell(StringBuilder b,string c,int r,long value,int style=4)=>b.Append("<c r=\"").Append(c).Append(r).Append("\" s=\"").Append(style).Append("\"><v>").Append(Money(value)).Append("</v></c>");
     private static void DecimalCell(StringBuilder b,string c,int r,decimal? value,int style=4){if(value.HasValue)b.Append("<c r=\"").Append(c).Append(r).Append("\" s=\"").Append(style).Append("\"><v>").Append(value.Value.ToString("0.##",CultureInfo.InvariantCulture)).Append("</v></c>");else TextCell(b,c,r,string.Empty,5);}
     private static string Styles() => "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?><styleSheet xmlns=\"http://schemas.openxmlformats.org/spreadsheetml/2006/main\"><fonts count=\"4\"><font><sz val=\"9\"/><name val=\"Arial\"/></font><font><b/><sz val=\"10\"/><name val=\"Arial\"/></font><font><b/><sz val=\"9\"/><name val=\"Arial\"/></font><font><b/><color rgb=\"FFFFFFFF\"/><sz val=\"9\"/><name val=\"Arial\"/></font></fonts><fills count=\"12\"><fill><patternFill patternType=\"none\"/></fill><fill><patternFill patternType=\"gray125\"/></fill><fill><patternFill patternType=\"solid\"><fgColor rgb=\"FFA6A6A6\"/></patternFill></fill><fill><patternFill patternType=\"solid\"><fgColor rgb=\"FF00B0F0\"/></patternFill></fill><fill><patternFill patternType=\"solid\"><fgColor rgb=\"FFFFFF00\"/></patternFill></fill><fill><patternFill patternType=\"solid\"><fgColor rgb=\"FF9999FF\"/></patternFill></fill><fill><patternFill patternType=\"solid\"><fgColor rgb=\"FFFFC000\"/></patternFill></fill><fill><patternFill patternType=\"solid\"><fgColor rgb=\"FF92D050\"/></patternFill></fill><fill><patternFill patternType=\"solid\"><fgColor rgb=\"FFED7D31\"/></patternFill></fill><fill><patternFill patternType=\"solid\"><fgColor rgb=\"FFE7E6E6\"/></patternFill></fill><fill><patternFill patternType=\"solid\"><fgColor rgb=\"FFFFD966\"/></patternFill></fill><fill><patternFill patternType=\"solid\"><fgColor rgb=\"FF375623\"/></patternFill></fill></fills><borders count=\"2\"><border/><border><left style=\"thin\"><color auto=\"1\"/></left><right style=\"thin\"><color auto=\"1\"/></right><top style=\"thin\"><color auto=\"1\"/></top><bottom style=\"thin\"><color auto=\"1\"/></bottom></border></borders><cellStyleXfs count=\"1\"><xf numFmtId=\"0\" fontId=\"0\" fillId=\"0\" borderId=\"0\"/></cellStyleXfs><cellXfs count=\"17\"><xf numFmtId=\"0\" fontId=\"0\" fillId=\"0\" borderId=\"0\"/><xf numFmtId=\"0\" fontId=\"0\" fillId=\"0\" borderId=\"0\" applyAlignment=\"1\"><alignment horizontal=\"center\"/></xf><xf numFmtId=\"0\" fontId=\"1\" fillId=\"0\" borderId=\"0\" applyAlignment=\"1\"><alignment horizontal=\"center\"/></xf><xf numFmtId=\"0\" fontId=\"2\" fillId=\"0\" borderId=\"0\" applyAlignment=\"1\"><alignment horizontal=\"right\"/></xf><xf numFmtId=\"4\" fontId=\"0\" fillId=\"0\" borderId=\"1\" applyAlignment=\"1\"><alignment horizontal=\"right\"/></xf><xf numFmtId=\"0\" fontId=\"0\" fillId=\"0\" borderId=\"1\" applyAlignment=\"1\"><alignment horizontal=\"center\" vertical=\"center\" wrapText=\"1\"/></xf><xf numFmtId=\"4\" fontId=\"2\" fillId=\"2\" borderId=\"1\"/><xf numFmtId=\"0\" fontId=\"2\" fillId=\"2\" borderId=\"1\" applyAlignment=\"1\"><alignment horizontal=\"center\" vertical=\"center\" wrapText=\"1\"/></xf><xf numFmtId=\"0\" fontId=\"2\" fillId=\"3\" borderId=\"1\" applyAlignment=\"1\"><alignment horizontal=\"center\" vertical=\"center\" wrapText=\"1\"/></xf><xf numFmtId=\"0\" fontId=\"2\" fillId=\"4\" borderId=\"1\" applyAlignment=\"1\"><alignment horizontal=\"center\" vertical=\"center\" wrapText=\"1\"/></xf><xf numFmtId=\"0\" fontId=\"2\" fillId=\"5\" borderId=\"1\" applyAlignment=\"1\"><alignment horizontal=\"center\" vertical=\"center\" wrapText=\"1\"/></xf><xf numFmtId=\"0\" fontId=\"2\" fillId=\"6\" borderId=\"1\" applyAlignment=\"1\"><alignment horizontal=\"center\" vertical=\"center\" wrapText=\"1\"/></xf><xf numFmtId=\"0\" fontId=\"2\" fillId=\"7\" borderId=\"1\" applyAlignment=\"1\"><alignment horizontal=\"center\" vertical=\"center\" wrapText=\"1\"/></xf><xf numFmtId=\"0\" fontId=\"2\" fillId=\"8\" borderId=\"1\" applyAlignment=\"1\"><alignment horizontal=\"center\" vertical=\"center\" wrapText=\"1\"/></xf><xf numFmtId=\"0\" fontId=\"2\" fillId=\"9\" borderId=\"1\" applyAlignment=\"1\"><alignment horizontal=\"center\" vertical=\"center\" wrapText=\"1\"/></xf><xf numFmtId=\"0\" fontId=\"2\" fillId=\"10\" borderId=\"1\" applyAlignment=\"1\"><alignment horizontal=\"center\" vertical=\"center\" wrapText=\"1\"/></xf><xf numFmtId=\"0\" fontId=\"3\" fillId=\"11\" borderId=\"1\" applyAlignment=\"1\"><alignment horizontal=\"center\" vertical=\"center\" wrapText=\"1\"/></xf></cellXfs><cellStyles count=\"1\"><cellStyle name=\"Normal\" xfId=\"0\" builtinId=\"0\"/></cellStyles></styleSheet>";
-    private static string Workbook(StatutorySalesBookReport report, bool hasLguSupplement)
+    private static string Workbook(StatutorySalesBookReport report)
     {
         var primary = report.Summary.Type == StatutorySalesBookType.AnnexE2 ? "E-2" : "E-3";
-        var supplement = hasLguSupplement ? "<sheet name=\"LGU Supplement\" sheetId=\"2\" r:id=\"rId2\"/>" : string.Empty;
-        return $"<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?><workbook xmlns=\"http://schemas.openxmlformats.org/spreadsheetml/2006/main\" xmlns:r=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships\"><bookViews><workbookView/></bookViews><sheets><sheet name=\"{primary}\" sheetId=\"1\" r:id=\"rId1\"/>{supplement}</sheets><definedNames><definedName name=\"_xlnm.Print_Area\" localSheetId=\"0\">'{primary}'!$A$1:$Q${Math.Max(25, 17 + report.Rows.Count)}</definedName></definedNames><calcPr calcId=\"0\" calcMode=\"manual\"/></workbook>";
+        return $"<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?><workbook xmlns=\"http://schemas.openxmlformats.org/spreadsheetml/2006/main\" xmlns:r=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships\"><bookViews><workbookView/></bookViews><sheets><sheet name=\"{primary}\" sheetId=\"1\" r:id=\"rId1\"/></sheets><definedNames><definedName name=\"_xlnm.Print_Area\" localSheetId=\"0\">'{primary}'!$A$1:$P${Math.Max(25, 17 + report.Rows.Count)}</definedName></definedNames><calcPr calcId=\"0\" calcMode=\"manual\"/></workbook>";
     }
 
-    private static string WorkbookRelationships(bool hasLguSupplement)
-    {
-        var supplement = hasLguSupplement
-            ? "<Relationship Id=\"rId2\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet\" Target=\"worksheets/sheet2.xml\"/>"
-            : string.Empty;
-        var stylesId = hasLguSupplement ? "rId3" : "rId2";
-        return $"<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?><Relationships xmlns=\"http://schemas.openxmlformats.org/package/2006/relationships\"><Relationship Id=\"rId1\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet\" Target=\"worksheets/sheet1.xml\"/>{supplement}<Relationship Id=\"{stylesId}\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles\" Target=\"styles.xml\"/></Relationships>";
-    }
-    private static string ContentTypes(bool hasLguSupplement)
-    {
-        var supplement = hasLguSupplement
-            ? "<Override PartName=\"/xl/worksheets/sheet2.xml\" ContentType=\"application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml\"/>"
-            : string.Empty;
-        return $"<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?><Types xmlns=\"http://schemas.openxmlformats.org/package/2006/content-types\"><Default Extension=\"rels\" ContentType=\"application/vnd.openxmlformats-package.relationships+xml\"/><Default Extension=\"xml\" ContentType=\"application/xml\"/><Override PartName=\"/xl/workbook.xml\" ContentType=\"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml\"/><Override PartName=\"/xl/worksheets/sheet1.xml\" ContentType=\"application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml\"/>{supplement}<Override PartName=\"/xl/styles.xml\" ContentType=\"application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml\"/><Override PartName=\"/docProps/core.xml\" ContentType=\"application/vnd.openxmlformats-package.core-properties+xml\"/><Override PartName=\"/docProps/app.xml\" ContentType=\"application/vnd.openxmlformats-officedocument.extended-properties+xml\"/></Types>";
-    }
+    private static string WorkbookRelationships() => "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?><Relationships xmlns=\"http://schemas.openxmlformats.org/package/2006/relationships\"><Relationship Id=\"rId1\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet\" Target=\"worksheets/sheet1.xml\"/><Relationship Id=\"rId2\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles\" Target=\"styles.xml\"/></Relationships>";
+    private static string ContentTypes() => "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?><Types xmlns=\"http://schemas.openxmlformats.org/package/2006/content-types\"><Default Extension=\"rels\" ContentType=\"application/vnd.openxmlformats-package.relationships+xml\"/><Default Extension=\"xml\" ContentType=\"application/xml\"/><Override PartName=\"/xl/workbook.xml\" ContentType=\"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml\"/><Override PartName=\"/xl/worksheets/sheet1.xml\" ContentType=\"application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml\"/><Override PartName=\"/xl/styles.xml\" ContentType=\"application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml\"/><Override PartName=\"/docProps/core.xml\" ContentType=\"application/vnd.openxmlformats-package.core-properties+xml\"/><Override PartName=\"/docProps/app.xml\" ContentType=\"application/vnd.openxmlformats-officedocument.extended-properties+xml\"/></Types>";
     private static string RootRelationships() => "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?><Relationships xmlns=\"http://schemas.openxmlformats.org/package/2006/relationships\"><Relationship Id=\"rId1\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument\" Target=\"xl/workbook.xml\"/><Relationship Id=\"rId2\" Type=\"http://schemas.openxmlformats.org/package/2006/relationships/metadata/core-properties\" Target=\"docProps/core.xml\"/><Relationship Id=\"rId3\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/extended-properties\" Target=\"docProps/app.xml\"/></Relationships>";
-    private static string AppProperties(StatutorySalesBookReport report, bool hasLguSupplement)
+    private static string AppProperties(StatutorySalesBookReport report)
     {
         var primary = report.Summary.Type == StatutorySalesBookType.AnnexE2 ? "E-2" : "E-3";
-        var supplement = hasLguSupplement ? "<vt:lpstr>LGU Supplement</vt:lpstr>" : string.Empty;
-        var count = hasLguSupplement ? 2 : 1;
-        return $"<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?><Properties xmlns=\"http://schemas.openxmlformats.org/officeDocument/2006/extended-properties\" xmlns:vt=\"http://schemas.openxmlformats.org/officeDocument/2006/docPropsVTypes\"><Application>ExitPass POS Server</Application><TitlesOfParts><vt:vector size=\"{count}\" baseType=\"lpstr\"><vt:lpstr>{primary}</vt:lpstr>{supplement}</vt:vector></TitlesOfParts></Properties>";
+        return $"<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?><Properties xmlns=\"http://schemas.openxmlformats.org/officeDocument/2006/extended-properties\" xmlns:vt=\"http://schemas.openxmlformats.org/officeDocument/2006/docPropsVTypes\"><Application>ExitPass POS Server</Application><TitlesOfParts><vt:vector size=\"1\" baseType=\"lpstr\"><vt:lpstr>{primary}</vt:lpstr></vt:vector></TitlesOfParts></Properties>";
     }
     private static string CoreProperties() => "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?><cp:coreProperties xmlns:cp=\"http://schemas.openxmlformats.org/package/2006/metadata/core-properties\" xmlns:dc=\"http://purl.org/dc/elements/1.1/\" xmlns:dcterms=\"http://purl.org/dc/terms/\" xmlns:xsi=\"http://www.w3.org/2001/XMLSchema-instance\"><dc:creator>ExitPass POS Server</dc:creator><cp:lastModifiedBy>ExitPass POS Server</cp:lastModifiedBy><dcterms:created xsi:type=\"dcterms:W3CDTF\">2000-01-01T00:00:00Z</dcterms:created><dcterms:modified xsi:type=\"dcterms:W3CDTF\">2000-01-01T00:00:00Z</dcterms:modified></cp:coreProperties>";
     private static void Add(ZipArchive archive,string name,string content){var entry=archive.CreateEntry(name,CompressionLevel.NoCompression);entry.LastWriteTime=FixedZipTime;using var writer=new StreamWriter(entry.Open(),new UTF8Encoding(false)){NewLine="\n"};writer.Write(content);}
