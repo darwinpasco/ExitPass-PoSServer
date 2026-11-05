@@ -22,21 +22,16 @@ public sealed class PostgresCloseableFiscalBusinessDateRepository(NpgsqlDataSour
 
             await using var reader = await command.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
             var periods = new List<CloseableFiscalBusinessDate>();
-            CloseableFiscalBusinessDate? activePeriod = null;
             while (await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
             {
-                var period = new CloseableFiscalBusinessDate(
+                periods.Add(new CloseableFiscalBusinessDate(
                     reader.GetGuid(0),
                     reader.GetFieldValue<DateOnly>(1),
                     reader.GetFieldValue<DateTimeOffset>(2),
                     reader.GetFieldValue<DateTimeOffset>(3),
                     reader.GetString(4).ToUpperInvariant(),
                     reader.GetInt64(5),
-                    reader.GetInt64(6),
-                    reader.GetString(7),
-                    reader.GetBoolean(8));
-                if (reader.GetBoolean(9)) activePeriod = period;
-                else periods.Add(period);
+                    reader.GetInt64(6)));
             }
 
             return new CloseableFiscalBusinessDatesSnapshot(
@@ -44,8 +39,7 @@ public sealed class PostgresCloseableFiscalBusinessDateRepository(NpgsqlDataSour
                 fiscalIdentityId,
                 currencyCode,
                 periods,
-                "closeable_fiscal_business_dates_read",
-                ActiveFiscalBusinessDate: activePeriod);
+                "closeable_fiscal_business_dates_read");
         }
         catch (NpgsqlException)
         {
@@ -90,7 +84,7 @@ public sealed class PostgresCloseableFiscalBusinessDateRepository(NpgsqlDataSour
                     (last_status.code_key = 'closed'
                      AND last_z.x_z_report_id IS NOT NULL)
                   )
-        ), eligible_periods AS (
+        ), candidate_periods AS (
             SELECT period.fiscal_reporting_period_id,
                    period.business_day_date,
                    period.period_start_at,
@@ -131,6 +125,7 @@ public sealed class PostgresCloseableFiscalBusinessDateRepository(NpgsqlDataSour
               AND period.fiscal_identity_id = @identity
               AND period.currency_code = @currency
               AND status.code_key = 'open'
+              AND period.period_end_at <= transaction_timestamp()
               AND NOT EXISTS (
                   SELECT 1
                   FROM pos.x_z_reports report
@@ -174,8 +169,6 @@ public sealed class PostgresCloseableFiscalBusinessDateRepository(NpgsqlDataSour
                              'in_progress', 'uncertain', 'unknown_commit_outcome', 'rejected')
                     )
               )
-        ), candidate_periods AS (
-            SELECT * FROM eligible_periods WHERE period_end_at <= transaction_timestamp()
         ), closeable_chain AS (
             SELECT period.fiscal_reporting_period_id,
                    period.business_day_date,
@@ -204,25 +197,6 @@ public sealed class PostgresCloseableFiscalBusinessDateRepository(NpgsqlDataSour
             JOIN closeable_chain chain
               ON period.period_sequence = chain.period_sequence + 1
              AND period.expected_prior_period_id = chain.fiscal_reporting_period_id
-        ), active_period AS (
-            SELECT period.fiscal_reporting_period_id,
-                   period.business_day_date,
-                   period.period_start_at,
-                   period.period_end_at,
-                   period.status,
-                   period.transaction_count,
-                   state.state_version AS expected_state_version,
-                   CASE WHEN period.period_sequence = state.last_closed_period_sequence + 1
-                              AND period.expected_prior_period_id IS NOT DISTINCT FROM state.last_closed_reporting_period_id
-                        THEN 'EARLY_CLOSE_READY' ELSE 'PRIOR_PERIOD_UNRESOLVED' END AS close_readiness,
-                   period.period_sequence = state.last_closed_period_sequence + 1
-                     AND period.expected_prior_period_id IS NOT DISTINCT FROM state.last_closed_reporting_period_id AS can_close_early,
-                   true AS is_active,
-                   period.period_sequence
-            FROM eligible_periods period
-            CROSS JOIN scope_state state
-            WHERE period.period_start_at <= transaction_timestamp()
-              AND period.period_end_at > transaction_timestamp()
         )
         SELECT fiscal_reporting_period_id,
                business_day_date,
@@ -230,15 +204,8 @@ public sealed class PostgresCloseableFiscalBusinessDateRepository(NpgsqlDataSour
                period_end_at,
                status,
                transaction_count,
-               expected_state_version,
-               'NORMAL_CLOSE_READY' AS close_readiness,
-               false AS can_close_early,
-               false AS is_active
+               expected_state_version
         FROM closeable_chain
-        UNION ALL
-        SELECT fiscal_reporting_period_id,business_day_date,period_start_at,period_end_at,status,
-               transaction_count,expected_state_version,close_readiness,can_close_early,is_active
-        FROM active_period
-        ORDER BY business_day_date, fiscal_reporting_period_id;
+        ORDER BY business_day_date, period_sequence, fiscal_reporting_period_id;
         """;
 }

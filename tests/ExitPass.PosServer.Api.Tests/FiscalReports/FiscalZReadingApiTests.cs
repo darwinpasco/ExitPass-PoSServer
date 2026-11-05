@@ -107,21 +107,6 @@ public sealed class FiscalZReadingApiTests
         Assert.Same(record, read.ZReading);
     }
 
-    [Fact]
-    public async Task EarlyCloseRequestIsForwardedOnlyThroughAuthorizedCloseEndpoint()
-    {
-        var repository = new StubRepository(new(FiscalZReadingOutcome.Created, Record()));
-        var response = await FiscalZReadingEndpoint.CloseAsync(
-            new("early-operation", SiteId, IdentityId, "PHP", PeriodId, 1, true, "Authorized maintenance", true),
-            new FiscalZReadingService(repository),
-            Context());
-
-        Assert.Equal(StatusCodes.Status201Created, response.HttpStatusCode);
-        Assert.True(repository.LastCommand?.EarlyClose);
-        Assert.True(repository.LastCommand?.ConfirmEarlyClose);
-        Assert.Equal("Authorized maintenance", repository.LastCommand?.EarlyCloseReason);
-    }
-
     [Theory]
     [InlineData(FiscalZReadingOutcome.Created, BirSalesSummaryOutcome.Created, 201)]
     [InlineData(FiscalZReadingOutcome.Replayed, BirSalesSummaryOutcome.Replayed, 200)]

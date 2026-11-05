@@ -19,16 +19,13 @@ public sealed class FiscalZReadingService
 
     public async Task<FiscalZReadingResult> CloseAsync(FiscalZReadingCommand command, CancellationToken cancellationToken = default)
     {
-        var earlyCloseReason = command.EarlyCloseReason?.Trim();
         if (string.IsNullOrWhiteSpace(command.OperationKey) || command.OperationKey.Length > 200 ||
             command.SitePosServerId == Guid.Empty || command.FiscalIdentityId == Guid.Empty ||
             command.FiscalReportingPeriodId == Guid.Empty || command.ExpectedStateVersion < 1 ||
             string.IsNullOrWhiteSpace(command.CurrencyCode) || command.CurrencyCode.Length != 3 ||
             command.CurrencyCode.Any(character => character is < 'A' or > 'Z') ||
             !IsSafeReference(command.RequestedByRef) || !IsSafeReference(command.ServiceIdentityRef) ||
-            !IsSafeReference(command.CorrelationId) ||
-            (command.EarlyClose && (!command.ConfirmEarlyClose || !IsSafeReason(earlyCloseReason))) ||
-            (!command.EarlyClose && (command.ConfirmEarlyClose || earlyCloseReason is not null)))
+            !IsSafeReference(command.CorrelationId))
         {
             return new FiscalZReadingResult(
                 FiscalZReadingOutcome.InvalidRequest,
@@ -41,8 +38,7 @@ public sealed class FiscalZReadingService
             CurrencyCode = command.CurrencyCode.Trim(),
             RequestedByRef = command.RequestedByRef.Trim(),
             ServiceIdentityRef = command.ServiceIdentityRef.Trim(),
-            CorrelationId = command.CorrelationId.Trim(),
-            EarlyCloseReason = command.EarlyClose ? earlyCloseReason : null
+            CorrelationId = command.CorrelationId.Trim()
         };
         var zResult = await repository.CloseAsync(normalized, cancellationToken).ConfigureAwait(false);
         if (zResult.Outcome is not (FiscalZReadingOutcome.Created or FiscalZReadingOutcome.Replayed) ||
@@ -63,10 +59,6 @@ public sealed class FiscalZReadingService
 
     private static bool IsSafeReference(string? value) =>
         !string.IsNullOrWhiteSpace(value) && value.Length <= 200 && !value.Contains('\r') && !value.Contains('\n');
-
-    private static bool IsSafeReason(string? value) =>
-        !string.IsNullOrWhiteSpace(value) && value.Length <= 500 &&
-        !value.Any(char.IsControl);
 
     private async Task<BirSalesSummaryCompletion> EnsureBirSalesSummaryAsync(
         FiscalZReadingRecord zReading,

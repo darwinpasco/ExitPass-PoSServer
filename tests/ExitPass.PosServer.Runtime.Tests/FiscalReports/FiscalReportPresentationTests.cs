@@ -37,42 +37,6 @@ public sealed class FiscalReportPresentationTests
     }
 
     [Fact]
-    public void EarlyZPresentationPreservesScheduledEndAndActualClosureEvidence()
-    {
-        var scheduled = ZRecord().PeriodEndAt;
-        var actual = scheduled.AddHours(-2);
-        var record = ZRecord() with
-        {
-            GeneratedAt = actual,
-            CommittedAt = actual,
-            ClosedAt = actual,
-            IsEarlyClosure = true,
-            EarlyClosureReason = "Authorized maintenance"
-        };
-
-        var result = new FiscalReportPresentationService().Present(record);
-        Assert.True(result.Succeeded);
-        Assert.True(result.Presentation?.IsEarlyClosure);
-        Assert.Equal("Authorized maintenance", result.Presentation?.EarlyClosureReason);
-        Assert.Equal(scheduled, result.Presentation?.PeriodEndAt);
-        Assert.Equal(actual, result.Presentation?.ClosedAt);
-
-        var text = Text(new FiscalReportOutputRenderer(), result.Presentation!);
-        Assert.Contains("Scheduled Period End", text, StringComparison.Ordinal);
-        Assert.Contains("Actual Closure Time", text, StringComparison.Ordinal);
-        Assert.Contains("Early Closure", text, StringComparison.Ordinal);
-        Assert.Contains("Authorized maintenance", text, StringComparison.Ordinal);
-    }
-
-    [Fact]
-    public void EarlyZPresentationFailsClosedWithoutReasonOrConsistentTiming()
-    {
-        var record = ZRecord() with { IsEarlyClosure = true, EarlyClosureReason = null };
-        Assert.Equal(FiscalReportPresentationErrorCode.MalformedSnapshot,
-            new FiscalReportPresentationService().Present(record).ErrorCode);
-    }
-
-    [Fact]
     public void UnsupportedVersionWrongKindAndMalformedSnapshotsFailClosed()
     {
         var service = new FiscalReportPresentationService();

@@ -10,10 +10,7 @@ public sealed record CloseFiscalZReadingRequest(
     Guid? FiscalIdentityId,
     string? CurrencyCode,
     Guid? FiscalReportingPeriodId,
-    long? ExpectedStateVersion,
-    bool EarlyClose = false,
-    string? EarlyCloseReason = null,
-    bool ConfirmEarlyClose = false);
+    long? ExpectedStateVersion);
 
 public sealed record FiscalZReadingApiResponse(
     bool Succeeded,
@@ -55,10 +52,7 @@ public static class FiscalZReadingEndpoint
             actor!.ActorReference,
             actor.ServiceIdentityReference,
             correlation,
-            actor.ActorDisplayName,
-            request.EarlyClose,
-            request.EarlyCloseReason,
-            request.ConfirmEarlyClose), cancellationToken).ConfigureAwait(false);
+            actor.ActorDisplayName), cancellationToken).ConfigureAwait(false);
         return Map(result, correlation);
     }
 

@@ -199,13 +199,6 @@ public sealed class FiscalReportOutputRenderer
         Add("metadata", "period_sequence", count: presentation.PeriodSequence);
         Add("metadata", "period_start_at", value: Timestamp(presentation.PeriodStartAt));
         Add("metadata", "period_end_at", value: Timestamp(presentation.PeriodEndAt));
-        if (presentation.ReportKind == FiscalZReadingContract.ReportKind)
-        {
-            Add("metadata", "scheduled_period_end_at", value: Timestamp(presentation.PeriodEndAt));
-            Add("metadata", "actual_closure_time", value: presentation.ClosedAt is null ? "unavailable" : Timestamp(presentation.ClosedAt.Value));
-            Add("metadata", "early_closure", value: presentation.IsEarlyClosure ? "true" : "false");
-            if (presentation.IsEarlyClosure) Add("metadata", "early_closure_reason", value: presentation.EarlyClosureReason);
-        }
         Add("metadata", "generated_at", value: Timestamp(presentation.GeneratedAt));
         Add("metadata", "committed_at", value: Timestamp(presentation.CommittedAt));
         Add("metadata", "requested_by_ref", value: presentation.RequestedByRef);
@@ -325,13 +318,7 @@ public sealed class FiscalReportOutputRenderer
         }
         else
         {
-            AddValue(lines, "Scheduled Period End", PhtTimestamp(presentation.PeriodEndAt), width);
-            AddValue(lines, "Actual Closure Time", presentation.ClosedAt is null ? "Unavailable" : PhtTimestamp(presentation.ClosedAt.Value), width);
-            if (presentation.IsEarlyClosure)
-            {
-                AddValue(lines, "Early Closure", "YES", width);
-                AddValue(lines, "Early Close Reason", presentation.EarlyClosureReason ?? "Unavailable", width);
-            }
+            AddValue(lines, "Period End", PhtTimestamp(presentation.PeriodEndAt), width);
         }
 
         var beginningInvoice = BeginningInvoice(presentation.FiscalNumberRanges);
