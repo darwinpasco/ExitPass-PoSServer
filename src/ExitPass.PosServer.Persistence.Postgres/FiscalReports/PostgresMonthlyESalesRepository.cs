@@ -186,20 +186,28 @@ public sealed class PostgresMonthlyESalesRepository(NpgsqlDataSource dataSource)
                 SafeMessage: "The governed Monthly eSales taxpayer or site header is not stable across the selected month.");
 
         var machines = new List<MonthlyESalesMachineSection>();
-        foreach (var group in sources.GroupBy(source => source.MachineIdentificationNumber!.Trim(), StringComparer.Ordinal)
-                     .OrderBy(group => group.Key, StringComparer.Ordinal))
+        foreach (var group in sources.GroupBy(source => new
+                 {
+                     Min = source.MachineIdentificationNumber!.Trim(),
+                     Serial = source.PosSerialNumber?.Trim() ?? string.Empty,
+                     Ptu = source.PtuNumber?.Trim() ?? string.Empty
+                 })
+                     .OrderBy(group => group.Key.Min, StringComparer.Ordinal)
+                     .ThenBy(group => group.Key.Serial, StringComparer.Ordinal)
+                     .ThenBy(group => group.Key.Ptu, StringComparer.Ordinal))
         {
             var ordered = group.OrderBy(source => source.PeriodSequence).ToArray();
-            var serial = Stable(ordered.Select(source => source.PosSerialNumber));
-            var ptu = Stable(ordered.Select(source => source.PtuNumber));
-            if (!serial.Valid || !ptu.Valid)
-                return new(MonthlyESalesOutcome.UnsupportedSourceClassification,
-                    SafeMessage: $"The governed machine header is not stable for MIN {group.Key}.");
-            var total = report.Rows.Single(row => string.Equals(row.MachineIdentificationNumber, group.Key, StringComparison.Ordinal));
+            var machineResult = MonthlyESalesAggregator.Build(
+                new(report.SitePosServerId, report.FiscalIdentityId, report.CurrencyCode, report.CalendarYear, report.CalendarMonth),
+                ordered[^1].BusinessDayDate,
+                ordered);
+            if (machineResult.Report is null)
+                return new(machineResult.Outcome, SafeMessage: machineResult.SafeMessage);
+            var total = machineResult.Report.Rows.Single();
             machines.Add(new(
-                serial.Value ?? string.Empty,
-                group.Key,
-                ptu.Value ?? string.Empty,
+                group.Key.Serial,
+                group.Key.Min,
+                group.Key.Ptu,
                 total,
                 ordered.Select(source => new MonthlyESalesDailyRow(
                     source.BusinessDayDate,
@@ -211,6 +219,19 @@ public sealed class PostgresMonthlyESalesRepository(NpgsqlDataSource dataSource)
                     source.VatAmountMinorUnits,
                     source.VatExemptSalesAmountMinorUnits,
                     source.ZeroRatedSalesAmountMinorUnits)).ToArray()));
+        }
+        foreach (var total in report.Rows)
+        {
+            var sections = machines.Where(machine =>
+                string.Equals(machine.MachineIdentificationNumber, total.MachineIdentificationNumber, StringComparison.Ordinal)).ToArray();
+            if (sections.Sum(section => section.Total.TransactionCount) != total.TransactionCount ||
+                sections.Sum(section => section.Total.MonthlySalesAmountMinorUnits) != total.MonthlySalesAmountMinorUnits ||
+                sections.Sum(section => section.Total.VatableSalesAmountMinorUnits) != total.VatableSalesAmountMinorUnits ||
+                sections.Sum(section => section.Total.VatAmountMinorUnits) != total.VatAmountMinorUnits ||
+                sections.Sum(section => section.Total.VatExemptSalesAmountMinorUnits) != total.VatExemptSalesAmountMinorUnits ||
+                sections.Sum(section => section.Total.ZeroRatedSalesAmountMinorUnits) != total.ZeroRatedSalesAmountMinorUnits)
+                return new(MonthlyESalesOutcome.UnsupportedSourceClassification,
+                    SafeMessage: $"The governed machine sections do not reconcile for MIN {total.MachineIdentificationNumber}.");
         }
         var reportAsOf = sources.Select(source => source.BirSalesSummaryCommittedAt).Where(value => value.HasValue)
             .Select(value => value!.Value).DefaultIfEmpty(DateTimeOffset.UnixEpoch).Max();

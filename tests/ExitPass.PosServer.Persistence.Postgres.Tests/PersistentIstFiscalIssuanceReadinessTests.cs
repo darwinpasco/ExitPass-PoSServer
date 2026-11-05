@@ -44,7 +44,10 @@ public sealed class PersistentIstFiscalIssuanceReadinessTests
         Assert.Contains("FROM pos.sales_invoice_header_profiles", source);
         Assert.Contains("EffectiveFrom cannot be in the past", source);
         Assert.Contains("approved first-of-month fiscal business-day boundary at 07:00:00+08:00", source);
-        Assert.Contains("$effectiveAt.Day -ne 1", source, StringComparison.Ordinal);
+        Assert.Contains("$isStandardBoundary", source, StringComparison.Ordinal);
+        Assert.Contains("$AllowImmediateDevelopmentActivation", source, StringComparison.Ordinal);
+        Assert.Contains("$DatabaseName -ceq 'exitpass_pos_ist'", source, StringComparison.Ordinal);
+        Assert.Contains("$ContainerName -ceq 'exitpass-pos-ist-persistent-db'", source, StringComparison.Ordinal);
         Assert.Contains("lifecycle_status='APPROVED' AND retired_at IS NULL", source, StringComparison.Ordinal);
         Assert.DoesNotContain("lifecycle_status='RETIRED',", source, StringComparison.Ordinal);
         Assert.Contains("ON CONFLICT(sales_invoice_header_profile_id) DO NOTHING", source, StringComparison.OrdinalIgnoreCase);
