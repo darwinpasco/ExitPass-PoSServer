@@ -77,6 +77,8 @@ public sealed class PostgresFiscalCloseBoundaryFoundationTests
         Assert.Contains("transaction_timestamp(),NULL", source, StringComparison.Ordinal);
         Assert.Contains("command.BusinessDateLabel != before.ProposedNextBusinessDateLabel", source, StringComparison.Ordinal);
         Assert.Contains("fiscal_business_date_open_operations", source, StringComparison.Ordinal);
+        var applyOrder = File.ReadAllText(FindSource("db", "rebuild", "pos_sql_apply_order.txt"));
+        Assert.Contains("db/state/tables/pos.fiscal_business_date_open_operations.sql", applyOrder, StringComparison.Ordinal);
         Assert.Contains("semantic_request_hash", source, StringComparison.Ordinal);
         Assert.Contains("before.LastClosedPeriod is { ZReadingReference: null }", source, StringComparison.Ordinal);
         Assert.DoesNotContain("business_day_cutoff_local_time +", source, StringComparison.OrdinalIgnoreCase);
@@ -93,7 +95,8 @@ public sealed class PostgresFiscalCloseBoundaryFoundationTests
         Assert.True(dropForeignKey >= 0 && dropForeignKey < convertActive);
         Assert.True(dropNotNull >= 0 && dropNotNull < convertActive);
         Assert.Contains("period_end_at = NULL", source, StringComparison.Ordinal);
-        Assert.Contains("period_end_at = closed_at", source, StringComparison.Ordinal);
+        Assert.Contains("NOT is_manual_lifecycle OR period_end_at = closed_at", source, StringComparison.Ordinal);
+        Assert.Contains("pos-server-fiscal-report-request:sha256:v2-manual-close", source, StringComparison.Ordinal);
         Assert.Contains("ux_fiscal_reporting_periods__business_date_label", source, StringComparison.Ordinal);
     }
 

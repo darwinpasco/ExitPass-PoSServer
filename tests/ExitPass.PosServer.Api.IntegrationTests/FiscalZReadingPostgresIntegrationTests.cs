@@ -25,6 +25,72 @@ public sealed class FiscalZReadingPostgresIntegrationTests : IDisposable
     private readonly string artifactRoot = Path.Combine(Path.GetTempPath(), "exitpass-z-reading-artifacts-" + Guid.NewGuid().ToString("N"));
 
     [Fact]
+    public async Task OpenReplayReturnsOriginalClosedPeriodAfterSuccessorOpens()
+    {
+        var connectionString = Environment.GetEnvironmentVariable(ConnectionVariable);
+        if (string.IsNullOrWhiteSpace(connectionString)) return;
+
+        await RebuildAsync(connectionString);
+        await ExecuteFileAsync(connectionString, Path.Combine(FindRepositoryRoot(), "tests", "ExitPass.PosServer.Api.IntegrationTests", "Fixtures", "fiscal_x_reading_runtime_fixture.sql"));
+        await ExecuteAsync(connectionString, $"INSERT INTO pos.site_pos_server_fiscal_identity_history(site_pos_server_fiscal_identity_history_id,site_pos_server_id,fiscal_identity_id,effective_start_at,assignment_reason_text) VALUES('73000000-0000-4000-8000-000000000090','{SiteId:D}','{IdentityId:D}','2026-01-01T00:00:00Z','Synthetic lifecycle replay scope')");
+        await using var app = await StartApiAsync(connectionString);
+        using var client = CreateClient(app);
+        Authorize(client);
+
+        using var initialized = await client.PostAsJsonAsync(
+            "/v1/admin/fiscal-z-close-states/initialize",
+            new InitializeFiscalZCloseStateRequest("lifecycle-replay-state", SiteId, IdentityId, "PHP", "approved_new_scope_zero", 0, 0, 0, "approved-lifecycle-replay"));
+        Assert.True(initialized.IsSuccessStatusCode, await initialized.Content.ReadAsStringAsync());
+
+        using var setupClose = await client.PostAsJsonAsync(
+            "/v1/fiscal-reports/z-readings/",
+            new CloseFiscalZReadingRequest("lifecycle-replay-setup-close", SiteId, IdentityId, "PHP", PeriodId, 1, true));
+        Assert.True(setupClose.IsSuccessStatusCode, await setupClose.Content.ReadAsStringAsync());
+
+        var openARequest = new OpenFiscalBusinessDateRequest(
+            "lifecycle-open-k1", SiteId, IdentityId, "PHP", new DateOnly(2026, 8, 4), true);
+        using var openAResponse = await client.PostAsJsonAsync("/v1/fiscal-reports/business-dates/open", openARequest);
+        var openAText = await openAResponse.Content.ReadAsStringAsync();
+        Assert.True(openAResponse.StatusCode == HttpStatusCode.Created, openAText);
+        using var openA = System.Text.Json.JsonDocument.Parse(openAText);
+        var periodA = openA.RootElement.GetProperty("openedPeriod").GetProperty("fiscalReportingPeriodId").GetGuid();
+
+        using var closeA = await client.PostAsJsonAsync(
+            "/v1/fiscal-reports/z-readings/",
+            new CloseFiscalZReadingRequest("lifecycle-close-a", SiteId, IdentityId, "PHP", periodA, 2, true));
+        Assert.True(closeA.IsSuccessStatusCode, await closeA.Content.ReadAsStringAsync());
+
+        var openBRequest = new OpenFiscalBusinessDateRequest(
+            "lifecycle-open-k2", SiteId, IdentityId, "PHP", new DateOnly(2026, 8, 5), true);
+        using var openBResponse = await client.PostAsJsonAsync("/v1/fiscal-reports/business-dates/open", openBRequest);
+        var openBText = await openBResponse.Content.ReadAsStringAsync();
+        Assert.True(openBResponse.StatusCode == HttpStatusCode.Created, openBText);
+        using var openB = System.Text.Json.JsonDocument.Parse(openBText);
+        var periodB = openB.RootElement.GetProperty("openedPeriod").GetProperty("fiscalReportingPeriodId").GetGuid();
+        Assert.NotEqual(periodA, periodB);
+
+        var periodsBeforeReplay = await ScalarAsync<long>(connectionString, "SELECT count(*) FROM pos.fiscal_reporting_periods");
+        var operationsBeforeReplay = await ScalarAsync<long>(connectionString, "SELECT count(*) FROM pos.fiscal_business_date_open_operations");
+        var zReadingsBeforeReplay = await ScalarAsync<long>(connectionString, "SELECT count(*) FROM pos.x_z_reports WHERE report_kind_code_id='1c628bc2-49c3-53e8-ae83-2082bcf28467'");
+
+        using var replayResponse = await client.PostAsJsonAsync("/v1/fiscal-reports/business-dates/open", openARequest);
+        var replayText = await replayResponse.Content.ReadAsStringAsync();
+        Assert.Equal(HttpStatusCode.OK, replayResponse.StatusCode);
+        using var replay = System.Text.Json.JsonDocument.Parse(replayText);
+        Assert.Equal(periodA, replay.RootElement.GetProperty("openedPeriod").GetProperty("fiscalReportingPeriodId").GetGuid());
+        Assert.Equal("CLOSED", replay.RootElement.GetProperty("openedPeriod").GetProperty("status").GetString());
+        Assert.Equal(periodB, replay.RootElement.GetProperty("lifecycle").GetProperty("activePeriod").GetProperty("fiscalReportingPeriodId").GetGuid());
+        Assert.Equal(periodsBeforeReplay, await ScalarAsync<long>(connectionString, "SELECT count(*) FROM pos.fiscal_reporting_periods"));
+        Assert.Equal(operationsBeforeReplay, await ScalarAsync<long>(connectionString, "SELECT count(*) FROM pos.fiscal_business_date_open_operations"));
+        Assert.Equal(zReadingsBeforeReplay, await ScalarAsync<long>(connectionString, "SELECT count(*) FROM pos.x_z_reports WHERE report_kind_code_id='1c628bc2-49c3-53e8-ae83-2082bcf28467'"));
+
+        using var conflict = await client.PostAsJsonAsync(
+            "/v1/fiscal-reports/business-dates/open",
+            openARequest with { BusinessDateLabel = new DateOnly(2026, 8, 6) });
+        Assert.Equal(HttpStatusCode.Conflict, conflict.StatusCode);
+    }
+
+    [Fact]
     public async Task ZReadingApiClosesAtomicallyReplaysConflictsReadsAndPreservesUnrelatedState()
     {
         var connectionString = Environment.GetEnvironmentVariable(ConnectionVariable);

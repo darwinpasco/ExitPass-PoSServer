@@ -592,7 +592,7 @@ public sealed class PostgresFiscalZReadingRepository(
         const string sql = """
             SELECT count(*)
             FROM pos.idempotency_records
-            WHERE idempotency_scope LIKE @scope_prefix ESCAPE '\\'
+            WHERE idempotency_scope LIKE @scope_prefix ESCAPE '\'
               AND created_at >= @period_opened_at
               AND linked_fiscal_document_id IS NULL;
             """;

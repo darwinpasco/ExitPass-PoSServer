@@ -83,7 +83,8 @@ CREATE TABLE IF NOT EXISTS pos.fiscal_reporting_periods (
     CONSTRAINT ck_fiscal_reporting_periods__closed_posture CHECK (
         (period_status_code_id = 'af7ee931-a023-507e-81a4-17adf047eb94'
          AND closed_at IS NOT NULL
-         AND period_end_at = closed_at)
+         AND period_end_at IS NOT NULL
+         AND (NOT is_manual_lifecycle OR period_end_at = closed_at))
         OR (period_status_code_id <> 'af7ee931-a023-507e-81a4-17adf047eb94'
             AND closed_at IS NULL
             AND period_end_at IS NULL)

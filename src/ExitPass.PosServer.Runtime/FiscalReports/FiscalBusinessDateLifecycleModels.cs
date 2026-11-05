@@ -58,7 +58,8 @@ public enum OpenFiscalBusinessDateOutcome
 public sealed record OpenFiscalBusinessDateResult(
     OpenFiscalBusinessDateOutcome Outcome,
     FiscalBusinessDateLifecycleSnapshot? Snapshot = null,
-    string? SafeMessage = null);
+    string? SafeMessage = null,
+    FiscalBusinessDateLifecyclePeriod? OpenedPeriod = null);
 
 public interface IFiscalBusinessDateLifecycleRepository
 {

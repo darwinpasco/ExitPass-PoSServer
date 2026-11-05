@@ -77,7 +77,8 @@ public static class FiscalBusinessDateLifecycleEndpoint
             succeeded = result.Outcome is OpenFiscalBusinessDateOutcome.Opened or OpenFiscalBusinessDateOutcome.Replayed,
             code = $"fiscal_business_date_{result.Outcome.ToString().ToLowerInvariant()}",
             message = result.SafeMessage,
-            lifecycle = result.Snapshot
+            lifecycle = result.Snapshot,
+            openedPeriod = result.OpenedPeriod
         }, statusCode: status);
     }
 }

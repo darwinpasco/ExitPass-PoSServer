@@ -60,7 +60,8 @@ ALTER TABLE pos.fiscal_reporting_periods
         CHECK (
             (period_status_code_id = 'af7ee931-a023-507e-81a4-17adf047eb94'
              AND closed_at IS NOT NULL
-             AND period_end_at = closed_at)
+             AND period_end_at IS NOT NULL
+             AND (NOT is_manual_lifecycle OR period_end_at = closed_at))
             OR
             (period_status_code_id <> 'af7ee931-a023-507e-81a4-17adf047eb94'
              AND closed_at IS NULL
@@ -106,6 +107,13 @@ CREATE TABLE IF NOT EXISTS pos.fiscal_business_date_open_operations (
 
 ALTER TABLE pos.fiscal_reporting_periods
     ALTER COLUMN is_manual_lifecycle SET DEFAULT true;
+
+ALTER TABLE pos.fiscal_report_requests
+    DROP CONSTRAINT IF EXISTS ck_fiscal_report_requests__semantic_version,
+    ADD CONSTRAINT ck_fiscal_report_requests__semantic_version CHECK (
+        semantic_hash_version IN (
+            'pos-server-fiscal-report-request:sha256:v1',
+            'pos-server-fiscal-report-request:sha256:v2-manual-close'));
 
 ALTER TABLE pos.x_z_reports
     ADD CONSTRAINT fk_x_z_reports__period_identity

@@ -50,13 +50,17 @@ public sealed class PostgresFiscalBusinessDateLifecycleRepository(NpgsqlDataSour
                 if (await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
                 {
                     var matches = string.Equals(reader.GetString(0), semanticHash, StringComparison.Ordinal);
+                    var replayPeriodId = reader.GetGuid(1);
                     await reader.CloseAsync().ConfigureAwait(false);
                     if (!matches)
                         return new(OpenFiscalBusinessDateOutcome.Conflict, SafeMessage: "The open operation key is bound to different semantics.");
                     var replaySnapshot = await ReadSnapshotAsync(connection, transaction, command.SitePosServerId,
                         command.FiscalIdentityId, command.CurrencyCode, cancellationToken).ConfigureAwait(false);
+                    var replayPeriod = await ReadPeriodAsync(connection, transaction, replayPeriodId, cancellationToken).ConfigureAwait(false);
+                    if (replayPeriod is null)
+                        return new(OpenFiscalBusinessDateOutcome.PersistenceFailure, SafeMessage: "The opened fiscal business date could not be read safely.");
                     await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
-                    return new(OpenFiscalBusinessDateOutcome.Replayed, replaySnapshot);
+                    return new(OpenFiscalBusinessDateOutcome.Replayed, replaySnapshot, OpenedPeriod: replayPeriod);
                 }
             }
 
@@ -135,8 +139,11 @@ public sealed class PostgresFiscalBusinessDateLifecycleRepository(NpgsqlDataSour
 
             var after = await ReadSnapshotAsync(connection, transaction, command.SitePosServerId,
                 command.FiscalIdentityId, command.CurrencyCode, cancellationToken).ConfigureAwait(false);
+            var openedPeriod = await ReadPeriodAsync(connection, transaction, periodId, cancellationToken).ConfigureAwait(false);
+            if (openedPeriod is null)
+                return new(OpenFiscalBusinessDateOutcome.PersistenceFailure, SafeMessage: "The opened fiscal business date could not be read safely.");
             await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
-            return new(OpenFiscalBusinessDateOutcome.Opened, after);
+            return new(OpenFiscalBusinessDateOutcome.Opened, after, OpenedPeriod: openedPeriod);
         }
         catch (FiscalCloseBoundaryException ex) when (ex.ErrorCode == FiscalCloseBoundaryErrorCode.LockTimeout)
         {
@@ -204,6 +211,35 @@ public sealed class PostgresFiscalBusinessDateLifecycleRepository(NpgsqlDataSour
         return new(site, identity, currency, timezone,
             active?.Status ?? FiscalBusinessDateLifecycleStates.NoOpenPeriod,
             proposed, active, lastClosed, now);
+    }
+
+    private static async Task<FiscalBusinessDateLifecyclePeriod?> ReadPeriodAsync(
+        NpgsqlConnection connection,
+        NpgsqlTransaction transaction,
+        Guid fiscalReportingPeriodId,
+        CancellationToken cancellationToken)
+    {
+        const string sql = """
+            SELECT p.fiscal_reporting_period_id,p.business_day_date,status.code_key,p.opened_at,p.closed_at,
+                   p.period_sequence,
+                   (SELECT count(*) FROM pos.fiscal_documents d WHERE d.fiscal_reporting_period_id=p.fiscal_reporting_period_id),
+                   COALESCE(state.state_version,0),z.report_number
+            FROM pos.fiscal_reporting_periods p
+            JOIN pos.controlled_codes status ON status.controlled_code_id=p.period_status_code_id
+            LEFT JOIN pos.fiscal_z_close_states state ON state.site_pos_server_id=p.site_pos_server_id
+                 AND state.fiscal_identity_id=p.fiscal_identity_id AND state.currency_code=p.currency_code
+            LEFT JOIN pos.x_z_reports z ON z.fiscal_reporting_period_id=p.fiscal_reporting_period_id
+                 AND z.report_kind_code_id='1c628bc2-49c3-53e8-ae83-2082bcf28467'
+            WHERE p.fiscal_reporting_period_id=@period;
+            """;
+        await using var command = new NpgsqlCommand(sql, connection, transaction);
+        command.Parameters.AddWithValue("period", fiscalReportingPeriodId);
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
+        if (!await reader.ReadAsync(cancellationToken).ConfigureAwait(false)) return null;
+        return new(
+            reader.GetGuid(0), reader.GetFieldValue<DateOnly>(1), reader.GetString(2).ToUpperInvariant(),
+            reader.GetFieldValue<DateTimeOffset>(3), reader.IsDBNull(4) ? null : reader.GetFieldValue<DateTimeOffset>(4),
+            reader.GetInt64(5), reader.GetInt64(6), reader.GetInt64(7), reader.IsDBNull(8) ? null : reader.GetString(8));
     }
 
     private static string ComputeHash(OpenFiscalBusinessDateCommand command)
