@@ -63,23 +63,9 @@ CREATE TABLE IF NOT EXISTS pos.x_z_reports (
     CONSTRAINT fk_x_z_reports__request_kind FOREIGN KEY (fiscal_report_request_id, report_kind_code_id)
         REFERENCES pos.fiscal_report_requests (fiscal_report_request_id, report_type_code_id),
     CONSTRAINT fk_x_z_reports__period_identity FOREIGN KEY (
-        fiscal_reporting_period_id,
-        fiscal_reporting_contract_version_id,
-        site_pos_server_id,
-        fiscal_identity_id,
-        business_day_date,
-        period_start_at,
-        period_end_at,
-        currency_code
+        fiscal_reporting_period_id, site_pos_server_id, fiscal_identity_id, currency_code
     ) REFERENCES pos.fiscal_reporting_periods (
-        fiscal_reporting_period_id,
-        fiscal_reporting_contract_version_id,
-        site_pos_server_id,
-        fiscal_identity_id,
-        business_day_date,
-        period_start_at,
-        period_end_at,
-        currency_code
+        fiscal_reporting_period_id, site_pos_server_id, fiscal_identity_id, currency_code
     ),
     CONSTRAINT fk_x_z_reports__begin_doc FOREIGN KEY (begin_fiscal_document_id)
         REFERENCES pos.fiscal_documents (fiscal_document_id),
@@ -334,7 +320,7 @@ ALTER TABLE pos.x_z_reports
 
 ALTER TABLE pos.x_z_reports
     ADD CONSTRAINT fk_x_z_reports__request_kind FOREIGN KEY (fiscal_report_request_id, report_kind_code_id) REFERENCES pos.fiscal_report_requests (fiscal_report_request_id, report_type_code_id),
-    ADD CONSTRAINT fk_x_z_reports__period_identity FOREIGN KEY (fiscal_reporting_period_id,fiscal_reporting_contract_version_id,site_pos_server_id,fiscal_identity_id,business_day_date,period_start_at,period_end_at,currency_code) REFERENCES pos.fiscal_reporting_periods (fiscal_reporting_period_id,fiscal_reporting_contract_version_id,site_pos_server_id,fiscal_identity_id,business_day_date,period_start_at,period_end_at,currency_code),
+    ADD CONSTRAINT fk_x_z_reports__period_identity FOREIGN KEY (fiscal_reporting_period_id,site_pos_server_id,fiscal_identity_id,currency_code) REFERENCES pos.fiscal_reporting_periods (fiscal_reporting_period_id,site_pos_server_id,fiscal_identity_id,currency_code),
     ADD CONSTRAINT uq_x_z_reports__request UNIQUE (fiscal_report_request_id),
     ADD CONSTRAINT uq_x_z_reports__fiscal_report_number UNIQUE (fiscal_identity_id, report_number),
     ADD CONSTRAINT ck_x_z_reports__kind_family CHECK (report_kind_code_id IN ('5dc3cc94-b3ab-5582-a598-e779871fc3e2','1c628bc2-49c3-53e8-ae83-2082bcf28467')),

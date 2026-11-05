@@ -18,7 +18,8 @@ public sealed record FiscalZReadingCommand(
     string RequestedByRef,
     string ServiceIdentityRef,
     string CorrelationId,
-    string? RequestedByDisplayName = null);
+    string? RequestedByDisplayName = null,
+    bool ConfirmClose = false);
 
 public sealed record FiscalZReadingPeriod(
     Guid FiscalReportingPeriodId,
@@ -27,14 +28,15 @@ public sealed record FiscalZReadingPeriod(
     Guid FiscalIdentityId,
     DateOnly BusinessDayDate,
     DateTimeOffset PeriodStartAt,
-    DateTimeOffset PeriodEndAt,
+    DateTimeOffset? PeriodEndAt,
     string ReportingTimezoneName,
     TimeOnly BusinessDayCutoffLocalTime,
     string CurrencyCode,
     long PeriodSequence,
     Guid? ExpectedPriorPeriodId,
     string Status,
-    DateTimeOffset DatabaseNow);
+    DateTimeOffset DatabaseNow,
+    bool IsManualLifecycle = false);
 
 public sealed record FiscalZReadingCounterSnapshot(
     long PreviousResetCounterValue,
@@ -95,7 +97,6 @@ public enum FiscalZReadingOutcome
     FiscalIdentityNotFound,
     ReportingConfigurationUnavailable,
     PeriodUnavailable,
-    PeriodNotEnded,
     PeriodNotOpen,
     StateInitializationRequired,
     StaleStateVersion,

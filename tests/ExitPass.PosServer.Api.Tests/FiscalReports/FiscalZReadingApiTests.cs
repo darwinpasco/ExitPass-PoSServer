@@ -23,6 +23,10 @@ public sealed class FiscalZReadingApiTests
     {
         var source = File.ReadAllText(FindSource("src", "ExitPass.PosServer.Api", "FiscalReports", "FiscalZReadingEndpointRouteBuilderExtensions.cs"));
         Assert.Contains("/v1/fiscal-reports/z-readings", source, StringComparison.Ordinal);
+        Assert.Contains("/v1/fiscal-reports/business-dates", source, StringComparison.Ordinal);
+        Assert.Contains("lifecycle.MapGet(\"/current\"", source, StringComparison.Ordinal);
+        Assert.Contains("lifecycle.MapPost(\"/open\"", source, StringComparison.Ordinal);
+        Assert.DoesNotContain("close-all", source, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("ClosePolicyName", source, StringComparison.Ordinal);
         Assert.Contains("ReadPolicyName", source, StringComparison.Ordinal);
         Assert.DoesNotContain("MapGet(\"/exports", source, StringComparison.OrdinalIgnoreCase);
@@ -87,7 +91,7 @@ public sealed class FiscalZReadingApiTests
         var context = Context(allowActorDelegation: true);
         context.Request.Headers["X-Actor-Reference"] = "operator-002";
         context.Request.Headers["X-Actor-Display-Name"] = "Maria Santos";
-        var created = await FiscalZReadingEndpoint.CloseAsync(new("z-operation", SiteId, IdentityId, "PHP", PeriodId, 1), service, context);
+        var created = await FiscalZReadingEndpoint.CloseAsync(new("z-operation", SiteId, IdentityId, "PHP", PeriodId, 1, true), service, context);
         Assert.Equal(StatusCodes.Status201Created, created.HttpStatusCode);
         Assert.Same(record, created.ZReading);
         Assert.Equal("operator-002", repository.LastCommand!.RequestedByRef);
@@ -95,7 +99,7 @@ public sealed class FiscalZReadingApiTests
         Assert.Equal("z-service", repository.LastCommand.ServiceIdentityRef);
 
         repository.Result = new(FiscalZReadingOutcome.Conflict, SafeMessage: "The operation is already bound.");
-        var conflict = await FiscalZReadingEndpoint.CloseAsync(new("z-operation", SiteId, IdentityId, "PHP", PeriodId, 1), service, Context());
+        var conflict = await FiscalZReadingEndpoint.CloseAsync(new("z-operation", SiteId, IdentityId, "PHP", PeriodId, 1, true), service, Context());
         var serialized = System.Text.Json.JsonSerializer.Serialize(conflict);
         Assert.Equal(StatusCodes.Status409Conflict, conflict.HttpStatusCode);
         Assert.DoesNotContain("hash", serialized, StringComparison.OrdinalIgnoreCase);
@@ -133,7 +137,7 @@ public sealed class FiscalZReadingApiTests
         var service = new FiscalZReadingService(zRepository, new BirSalesSummaryService(summaryRepository));
 
         var response = await FiscalZReadingEndpoint.CloseAsync(
-            new("z-operation", SiteId, IdentityId, "PHP", PeriodId, 1), service, Context());
+            new("z-operation", SiteId, IdentityId, "PHP", PeriodId, 1, true), service, Context());
 
         Assert.Equal(expectedStatus, response.HttpStatusCode);
         Assert.Equal(["z-committed", "bir-summary"], sequence);
@@ -154,7 +158,7 @@ public sealed class FiscalZReadingApiTests
         var service = new FiscalZReadingService(zRepository, new BirSalesSummaryService(summaryRepository));
 
         var response = await FiscalZReadingEndpoint.CloseAsync(
-            new("z-operation", SiteId, IdentityId, "PHP", PeriodId, 1), service, Context());
+            new("z-operation", SiteId, IdentityId, "PHP", PeriodId, 1, true), service, Context());
 
         Assert.True(response.Succeeded);
         Assert.Equal(StatusCodes.Status201Created, response.HttpStatusCode);
@@ -173,7 +177,7 @@ public sealed class FiscalZReadingApiTests
             new BirSalesSummaryService(summaryRepository));
 
         var response = await FiscalZReadingEndpoint.CloseAsync(
-            new("z-operation", SiteId, IdentityId, "PHP", PeriodId, 1), service, Context());
+            new("z-operation", SiteId, IdentityId, "PHP", PeriodId, 1, true), service, Context());
 
         Assert.Equal(StatusCodes.Status422UnprocessableEntity, response.HttpStatusCode);
         Assert.Equal(0, summaryRepository.GenerateCalls);

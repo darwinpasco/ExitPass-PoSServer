@@ -12,6 +12,7 @@ public sealed class PostgresFiscalZReadingRepository(
     FiscalXReadingAggregationService aggregationService) : IFiscalZReadingRepository
 {
     private static readonly Guid OpenStatusId = Guid.Parse("1a6f7021-bc84-5c01-afaa-c5d6685633c8");
+    private static readonly Guid ClosingStatusId = Guid.Parse("f0a44431-611b-5809-b3a9-5b8be8614552");
     private static readonly Guid ClosedStatusId = Guid.Parse("af7ee931-a023-507e-81a4-17adf047eb94");
     private static readonly Guid ZReadingKindId = Guid.Parse("1c628bc2-49c3-53e8-ae83-2082bcf28467");
     private static readonly Guid ZCloseTransitionTypeId = Guid.Parse("52a28fc9-7c24-5810-8f98-30dbc7c134b9");
@@ -64,12 +65,6 @@ public sealed class PostgresFiscalZReadingRepository(
                         : FiscalZReadingOutcome.PeriodNotOpen,
                     "The fiscal reporting period is not eligible for Z close.");
             }
-            if (period.DatabaseNow < period.PeriodEndAt)
-            {
-                return Failure(FiscalZReadingOutcome.PeriodNotEnded,
-                    "The fiscal reporting period has not reached its governed end instant.");
-            }
-
             var state = await PostgresFiscalZCloseTransitionFoundation.ReadStateForUpdateAsync(
                 connection, transaction, command.SitePosServerId, command.FiscalIdentityId,
                 command.CurrencyCode, cancellationToken).ConfigureAwait(false);
@@ -84,6 +79,11 @@ public sealed class PostgresFiscalZReadingRepository(
                 command.FiscalIdentityId, command.CurrencyCode, cancellationToken).ConfigureAwait(false);
             ValidateStateContinuity(state, sequence);
 
+            await MarkPeriodClosingAsync(connection, transaction, period.FiscalReportingPeriodId,
+                command.ServiceIdentityRef, cancellationToken).ConfigureAwait(false);
+
+            await EnsureNoUnresolvedFiscalCreationAsync(
+                connection, transaction, period.SitePosServerId, period.PeriodStartAt, cancellationToken).ConfigureAwait(false);
             await EnsureAllPeriodDocumentsAssignedAsync(connection, transaction, period, cancellationToken).ConfigureAwait(false);
             var sourceDocuments = await ReadSourceDocumentsAsync(connection, transaction, period, cancellationToken).ConfigureAwait(false);
             var sourceGaps = await ReadSourceGapsAsync(connection, transaction, sourceDocuments, cancellationToken).ConfigureAwait(false);
@@ -101,19 +101,20 @@ public sealed class PostgresFiscalZReadingRepository(
 
             var identifiers = await ResolveReportingCodeIdsAsync(connection, transaction, aggregate, cancellationToken).ConfigureAwait(false);
             var committedAt = await ClockAsync(connection, transaction, cancellationToken).ConfigureAwait(false);
+            var closedPeriod = period with { PeriodEndAt = committedAt, Status = "closing" };
             var requestId = Guid.NewGuid();
             var reportId = Guid.NewGuid();
             var transitionId = Guid.NewGuid();
             var reportReference = $"Z-{period.BusinessDayDate:yyyyMMdd}-{resultingZ:D8}-{reportId:N}".ToUpperInvariant();
 
-            await InsertRequestAsync(connection, transaction, command, period, identifiers, requestId, semanticHash, committedAt, cancellationToken).ConfigureAwait(false);
-            await InsertScopeAsync(connection, transaction, period, identifiers, requestId, cancellationToken).ConfigureAwait(false);
-            await InsertSnapshotAsync(connection, transaction, period, aggregate, state, resultingZ, resultingGta,
+            await InsertRequestAsync(connection, transaction, command, closedPeriod, identifiers, requestId, semanticHash, committedAt, cancellationToken).ConfigureAwait(false);
+            await InsertScopeAsync(connection, transaction, closedPeriod, identifiers, requestId, cancellationToken).ConfigureAwait(false);
+            await InsertSnapshotAsync(connection, transaction, closedPeriod, aggregate, state, resultingZ, resultingGta,
                 identifiers, requestId, reportId, reportReference, committedAt, cancellationToken).ConfigureAwait(false);
             await InsertChildrenAsync(connection, transaction, period.FiscalIdentityId, aggregate, identifiers, reportId, cancellationToken).ConfigureAwait(false);
             await InsertCounterSnapshotAsync(connection, transaction, state, sequence, reportId, currentGta,
                 resultingZ, resultingGta, resultingVersion, cancellationToken).ConfigureAwait(false);
-            await InsertTransitionAsync(connection, transaction, command, period, state, sequence, reportId,
+            await InsertTransitionAsync(connection, transaction, command, closedPeriod, state, sequence, reportId,
                 transitionId, semanticHash, currentGta, resultingZ, resultingGta, resultingVersion,
                 committedAt, cancellationToken).ConfigureAwait(false);
 
@@ -266,7 +267,8 @@ public sealed class PostgresFiscalZReadingRepository(
                    p.fiscal_identity_id,p.business_day_date,p.period_start_at,p.period_end_at,
                    p.reporting_timezone_name,p.business_day_cutoff_local_time,p.currency_code,p.period_sequence,
                    p.expected_prior_period_id,status.code_key,transaction_timestamp(),site.is_active,identity.is_active,
-                   contract.contract_key,contract.contract_version,contract.semantic_hash_version,contract.is_active
+                   contract.contract_key,contract.contract_version,contract.semantic_hash_version,contract.is_active,
+                   p.is_manual_lifecycle
             FROM pos.fiscal_reporting_periods p
             JOIN pos.controlled_codes status ON status.controlled_code_id=p.period_status_code_id
             JOIN pos.site_pos_servers site ON site.site_pos_server_id=p.site_pos_server_id
@@ -294,9 +296,9 @@ public sealed class PostgresFiscalZReadingRepository(
             throw new FiscalZReadingSafeException(FiscalZReadingOutcome.ReportingConfigurationUnavailable,
                 "The governed fiscal reporting configuration is unavailable.");
         return new(reader.GetGuid(0), reader.GetGuid(1), reader.GetGuid(2), reader.GetGuid(3),
-            reader.GetFieldValue<DateOnly>(4), reader.GetFieldValue<DateTimeOffset>(5), reader.GetFieldValue<DateTimeOffset>(6),
+            reader.GetFieldValue<DateOnly>(4), reader.GetFieldValue<DateTimeOffset>(5), reader.IsDBNull(6) ? null : reader.GetFieldValue<DateTimeOffset>(6),
             reader.GetString(7), reader.GetFieldValue<TimeOnly>(8), reader.GetString(9), reader.GetInt64(10),
-            reader.IsDBNull(11) ? null : reader.GetGuid(11), reader.GetString(12), reader.GetFieldValue<DateTimeOffset>(13));
+            reader.IsDBNull(11) ? null : reader.GetGuid(11), reader.GetString(12), reader.GetFieldValue<DateTimeOffset>(13), reader.GetBoolean(20));
     }
 
     private static void ValidateStateContinuity(LockedFiscalZCloseState state, FiscalZClosePeriodSequenceGuard sequence)
@@ -462,7 +464,10 @@ public sealed class PostgresFiscalZReadingRepository(
         {
             p.AddWithValue("id", requestId); p.AddWithValue("contract", period.FiscalReportingContractVersionId); p.AddWithValue("period", period.FiscalReportingPeriodId);
             p.AddWithValue("site", period.SitePosServerId); p.AddWithValue("kind", ids.Get("fiscal_report_kind", "z_reading")); p.AddWithValue("status", ids.Get("fiscal_report_status", "committed"));
-            p.AddWithValue("operation", command.OperationKey); p.AddWithValue("hash", hash); p.AddWithValue("version", FiscalZReadingContract.SemanticHashVersion);
+            p.AddWithValue("operation", command.OperationKey); p.AddWithValue("hash", hash);
+            p.AddWithValue("version", period.IsManualLifecycle
+                ? FiscalZReadingSemanticRequestHasher.ManualCloseSemanticHashVersion
+                : FiscalZReadingContract.SemanticHashVersion);
             p.AddWithValue("business", period.BusinessDayDate); p.AddWithValue("at", committedAt); p.AddWithValue("actor", command.RequestedByRef); AddNullable(p, "actor_name", command.RequestedByDisplayName, NpgsqlDbType.Text); p.AddWithValue("service", command.ServiceIdentityRef);
         });
 
@@ -484,7 +489,7 @@ public sealed class PostgresFiscalZReadingRepository(
             p.AddWithValue("id", reportId); p.AddWithValue("request", requestId); p.AddWithValue("contract", period.FiscalReportingContractVersionId);
             p.AddWithValue("period", period.FiscalReportingPeriodId); p.AddWithValue("kind", ids.Get("fiscal_report_kind", "z_reading")); p.AddWithValue("site", period.SitePosServerId);
             p.AddWithValue("identity", period.FiscalIdentityId); p.AddWithValue("reference", reference); p.AddWithValue("business", period.BusinessDayDate); p.AddWithValue("start", period.PeriodStartAt);
-            p.AddWithValue("end", period.PeriodEndAt); p.AddWithValue("timezone", period.ReportingTimezoneName); p.AddWithValue("cutoff", period.BusinessDayCutoffLocalTime); p.AddWithValue("count", aggregate.QualifyingDocumentCount);
+            p.AddWithValue("end", period.PeriodEndAt!.Value); p.AddWithValue("timezone", period.ReportingTimezoneName); p.AddWithValue("cutoff", period.BusinessDayCutoffLocalTime); p.AddWithValue("count", aggregate.QualifyingDocumentCount);
             p.AddWithValue("detail_version", FiscalXReadingContract.SnapshotDetailVersion);
             p.AddWithValue("issued_count", aggregate.DocumentCounts.IssuedSalesInvoiceCount); p.AddWithValue("void_count", aggregate.DocumentCounts.VoidTransactionCount);
             AddNullable(p, "begin_doc", aggregate.BeginFiscalDocumentId, NpgsqlDbType.Uuid); AddNullable(p, "end_doc", aggregate.EndFiscalDocumentId, NpgsqlDbType.Uuid);
@@ -563,13 +568,57 @@ public sealed class PostgresFiscalZReadingRepository(
             AddNullable(p, "currency", currency, NpgsqlDbType.Char);
         });
 
+    private static async Task MarkPeriodClosingAsync(
+        NpgsqlConnection c, NpgsqlTransaction t, Guid periodId, string serviceIdentityRef, CancellationToken ct)
+    {
+        const string sql = "UPDATE pos.fiscal_reporting_periods SET period_status_code_id=@closing,closing_started_at=clock_timestamp(),updated_by_ref=@actor,updated_at=clock_timestamp() WHERE fiscal_reporting_period_id=@period AND period_status_code_id=@open AND period_end_at IS NULL";
+        await using var command = CreateCommand(c, t, sql);
+        command.Parameters.AddWithValue("closing", ClosingStatusId);
+        command.Parameters.AddWithValue("actor", serviceIdentityRef);
+        command.Parameters.AddWithValue("period", periodId);
+        command.Parameters.AddWithValue("open", OpenStatusId);
+        if (await command.ExecuteNonQueryAsync(ct).ConfigureAwait(false) != 1)
+            throw new FiscalZReadingSafeException(FiscalZReadingOutcome.PeriodNotOpen,
+                "The fiscal reporting period was no longer OPEN when manual close began.");
+    }
+
+    private static async Task EnsureNoUnresolvedFiscalCreationAsync(
+        NpgsqlConnection connection,
+        NpgsqlTransaction transaction,
+        Guid sitePosServerId,
+        DateTimeOffset periodOpenedAt,
+        CancellationToken cancellationToken)
+    {
+        const string sql = """
+            SELECT count(*)
+            FROM pos.idempotency_records
+            WHERE idempotency_scope LIKE @scope_prefix ESCAPE '\'
+              AND created_at >= @period_opened_at
+              AND linked_fiscal_document_id IS NULL;
+            """;
+        await using var command = CreateCommand(connection, transaction, sql);
+        command.Parameters.AddWithValue(
+            "scope_prefix",
+            $"fiscal\\_document\\_creation:{sitePosServerId:N}:%");
+        command.Parameters.AddWithValue("period_opened_at", periodOpenedAt);
+        var unresolved = Convert.ToInt64(
+            await command.ExecuteScalarAsync(cancellationToken).ConfigureAwait(false),
+            System.Globalization.CultureInfo.InvariantCulture);
+        if (unresolved != 0)
+        {
+            throw new FiscalZReadingSafeException(
+                FiscalZReadingOutcome.ReconciliationFailure,
+                "The fiscal business date has unresolved fiscal issuance operations and cannot be closed.");
+        }
+    }
+
     private static async Task ClosePeriodAsync(
         NpgsqlConnection c, NpgsqlTransaction t, Guid periodId, DateTimeOffset committedAt,
         string serviceIdentityRef, CancellationToken ct)
     {
-        const string sql = "UPDATE pos.fiscal_reporting_periods SET period_status_code_id=@closed,closing_started_at=@at,closed_at=@at,updated_by_ref=@actor,updated_at=@at WHERE fiscal_reporting_period_id=@period AND period_status_code_id=@open";
+        const string sql = "UPDATE pos.fiscal_reporting_periods SET period_status_code_id=@closed,period_end_at=@at,closed_at=@at,updated_by_ref=@actor,updated_at=@at WHERE fiscal_reporting_period_id=@period AND period_status_code_id=@closing AND period_end_at IS NULL";
         await using var command = CreateCommand(c, t, sql); command.Parameters.AddWithValue("closed", ClosedStatusId); command.Parameters.AddWithValue("at", committedAt);
-        command.Parameters.AddWithValue("actor", serviceIdentityRef); command.Parameters.AddWithValue("period", periodId); command.Parameters.AddWithValue("open", OpenStatusId);
+        command.Parameters.AddWithValue("actor", serviceIdentityRef); command.Parameters.AddWithValue("period", periodId); command.Parameters.AddWithValue("closing", ClosingStatusId);
         if (await command.ExecuteNonQueryAsync(ct).ConfigureAwait(false) != 1)
             throw new FiscalZReadingSafeException(FiscalZReadingOutcome.PeriodNotOpen,
                 "The fiscal reporting period was no longer OPEN at durable close.");
@@ -644,7 +693,7 @@ public sealed class PostgresFiscalZReadingRepository(
     };
 
     private static FiscalZReadingResult Failure(FiscalZReadingOutcome outcome, string message) => new(outcome, SafeMessage: message);
-    private static void AddPeriodParameters(NpgsqlCommand c,FiscalZReadingPeriod p) { c.Parameters.AddWithValue("period",p.FiscalReportingPeriodId);c.Parameters.AddWithValue("site",p.SitePosServerId);c.Parameters.AddWithValue("identity",p.FiscalIdentityId);c.Parameters.AddWithValue("currency",p.CurrencyCode);c.Parameters.AddWithValue("business",p.BusinessDayDate);c.Parameters.AddWithValue("start",p.PeriodStartAt);c.Parameters.AddWithValue("end",p.PeriodEndAt); }
+    private static void AddPeriodParameters(NpgsqlCommand c,FiscalZReadingPeriod p) { c.Parameters.AddWithValue("period",p.FiscalReportingPeriodId);c.Parameters.AddWithValue("site",p.SitePosServerId);c.Parameters.AddWithValue("identity",p.FiscalIdentityId);c.Parameters.AddWithValue("currency",p.CurrencyCode);c.Parameters.AddWithValue("business",p.BusinessDayDate);c.Parameters.AddWithValue("start",p.PeriodStartAt);AddNullable(c.Parameters,"end",p.PeriodEndAt,NpgsqlDbType.TimestampTz); }
     private static void AddAmountParameters(NpgsqlParameterCollection p,FiscalXReadingAmounts a) { p.AddWithValue("gross",a.GrossSalesAmountMinorUnits);p.AddWithValue("net",a.NetSalesAmountMinorUnits);p.AddWithValue("vatable",a.VatableSalesAmountMinorUnits);p.AddWithValue("vat",a.VatAmountMinorUnits);p.AddWithValue("vat_exempt",a.VatExemptSalesAmountMinorUnits);p.AddWithValue("zero_rated",a.ZeroRatedSalesAmountMinorUnits);p.AddWithValue("discount",a.DiscountAmountMinorUnits);p.AddWithValue("senior",a.SeniorCitizenDiscountAmountMinorUnits);p.AddWithValue("pwd",a.PwdDiscountAmountMinorUnits);p.AddWithValue("other_stat",a.OtherStatutoryDiscountAmountMinorUnits);p.AddWithValue("vat_exemption",a.VatExemptionAmountMinorUnits);p.AddWithValue("coupon",a.CouponDiscountAmountMinorUnits);p.AddWithValue("promo",a.PromotionalDiscountAmountMinorUnits);p.AddWithValue("void",a.VoidAmountMinorUnits); }
     private static void AddNullable(NpgsqlParameterCollection p,string name,object? value,NpgsqlDbType type) { p.Add(new NpgsqlParameter(name,type){Value=value??DBNull.Value}); }
     private static NpgsqlCommand CreateCommand(NpgsqlConnection c,NpgsqlTransaction? t,string sql) { var command=c.CreateCommand();command.CommandText=sql;command.Transaction=t;return command; }

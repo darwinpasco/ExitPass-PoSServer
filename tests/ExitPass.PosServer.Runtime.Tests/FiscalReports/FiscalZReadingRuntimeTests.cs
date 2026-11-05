@@ -33,6 +33,21 @@ public sealed class FiscalZReadingRuntimeTests
     }
 
     [Fact]
+    public void ManualCloseHashIsStableWhenActualClosureTimeBecomesKnown()
+    {
+        var open = Period() with { PeriodEndAt = null, IsManualLifecycle = true };
+        var committed = open with { PeriodEndAt = DateTimeOffset.Parse("2026-08-06T02:15:00Z") };
+
+        Assert.Equal(
+            FiscalZReadingSemanticRequestHasher.Compute(Command(), open),
+            FiscalZReadingSemanticRequestHasher.Compute(Command(), committed));
+        Assert.Contains(
+            FiscalZReadingSemanticRequestHasher.ManualCloseSemanticHashVersion,
+            FiscalZReadingSemanticRequestHasher.CanonicalSource(Command(), open),
+            StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void TransitionHashCoversEveryCounterAndGtaTransitionValue()
     {
         var first = FiscalZReadingSemanticRequestHasher.ComputeTransition(new('a', 64), 1, 1, 2, 3, 100, 50, 150);
@@ -71,7 +86,7 @@ public sealed class FiscalZReadingRuntimeTests
         [new("parking_fee", 10_000, 2_000, 0, 8_000, "PHP")], [new("cash", 8_000, "PHP")],
         [new("vat_exempt", false, 8_000, 0, "PHP")], [new("coupon", 2_000, 0, "PHP")], null);
 
-    private static FiscalZReadingCommand Command() => new("z-operation", SiteId, IdentityId, "PHP", PeriodId, 1, "actor", "service", "correlation");
+    private static FiscalZReadingCommand Command() => new("z-operation", SiteId, IdentityId, "PHP", PeriodId, 1, "actor", "service", "correlation", ConfirmClose: true);
     private static FiscalZReadingPeriod Period() => new(PeriodId, ContractId, SiteId, IdentityId, new(2026, 8, 3),
         DateTimeOffset.Parse("2026-08-03T00:00:00Z"), DateTimeOffset.Parse("2026-08-04T00:00:00Z"),
         "Asia/Manila", new(0, 0), "PHP", 1, null, "open", DateTimeOffset.Parse("2026-08-04T01:00:00Z"));

@@ -6,6 +6,12 @@ public static class FiscalZReadingEndpointRouteBuilderExtensions
 {
     public static IEndpointRouteBuilder MapFiscalZReadingEndpoints(this IEndpointRouteBuilder endpoints)
     {
+        var lifecycle = endpoints.MapGroup("/v1/fiscal-reports/business-dates");
+        lifecycle.MapGet("/current", FiscalBusinessDateLifecycleEndpoint.ReadAsync)
+            .RequireAuthorization(FiscalZReadingAuthorization.ReadPolicyName);
+        lifecycle.MapPost("/open", FiscalBusinessDateLifecycleEndpoint.OpenAsync)
+            .RequireAuthorization(FiscalZReadingAuthorization.ClosePolicyName);
+
         var group = endpoints.MapGroup("/v1/fiscal-reports/z-readings");
         group.MapGet("/history", (Guid sitePosServerId, Guid fiscalIdentityId, string? currencyCode,
             FiscalReportingHistoryService service, HttpContext context, CancellationToken ct) =>

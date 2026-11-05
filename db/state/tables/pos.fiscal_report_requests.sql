@@ -54,7 +54,9 @@ CREATE TABLE IF NOT EXISTS pos.fiscal_report_requests (
     CONSTRAINT ck_fiscal_report_requests__operation_key CHECK (char_length(btrim(operation_idempotency_key)) > 0),
     CONSTRAINT ck_fiscal_report_requests__semantic_hash CHECK (semantic_request_hash ~ '^[0-9a-f]{64}$'),
     CONSTRAINT ck_fiscal_report_requests__semantic_version CHECK (
-        semantic_hash_version = 'pos-server-fiscal-report-request:sha256:v1'
+        semantic_hash_version IN (
+            'pos-server-fiscal-report-request:sha256:v1',
+            'pos-server-fiscal-report-request:sha256:v2-manual-close')
     ),
     CONSTRAINT ck_fiscal_report_requests__actor_refs CHECK (
         char_length(btrim(requested_by_ref)) > 0 AND char_length(btrim(service_identity_ref)) > 0
@@ -115,7 +117,7 @@ ALTER TABLE pos.fiscal_report_requests
     ADD CONSTRAINT ck_fiscal_report_requests__status_family CHECK (report_status_code_id IN ('3ffc8385-4f56-5ae8-a2f6-b0c1bddafa76','7440d7ed-a192-5613-bb65-019058a80256','d5273f98-440f-5a89-aab0-cb34f74d6b80','27c4af8e-00e8-50ec-a3f0-53efb2def09a','48f0ed5e-0fe1-5fa5-bfec-586bcf5b1b55','84ef4d12-b3a1-5385-88b1-3a3eadeb8a04','acce1c93-a76e-5142-9b42-4314616373c4','523aa5d7-85bc-526d-b36c-22a0075d50db','f89b81d9-14eb-5509-94fe-84caf60eb21f')),
     ADD CONSTRAINT ck_fiscal_report_requests__operation_key CHECK (char_length(btrim(operation_idempotency_key)) > 0),
     ADD CONSTRAINT ck_fiscal_report_requests__semantic_hash CHECK (semantic_request_hash ~ '^[0-9a-f]{64}$'),
-    ADD CONSTRAINT ck_fiscal_report_requests__semantic_version CHECK (semantic_hash_version = 'pos-server-fiscal-report-request:sha256:v1'),
+    ADD CONSTRAINT ck_fiscal_report_requests__semantic_version CHECK (semantic_hash_version IN ('pos-server-fiscal-report-request:sha256:v1','pos-server-fiscal-report-request:sha256:v2-manual-close')),
     ADD CONSTRAINT ck_fiscal_report_requests__actor_refs CHECK (char_length(btrim(requested_by_ref)) > 0 AND char_length(btrim(service_identity_ref)) > 0);
 
 ALTER TABLE pos.fiscal_report_requests

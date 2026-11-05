@@ -163,7 +163,7 @@ public sealed class FiscalReportPresentationTests
         Assert.DoesNotContain("Cancelled", x, StringComparison.Ordinal);
         Assert.DoesNotContain("Returns:", x, StringComparison.Ordinal);
         Assert.Contains("Observation Cutoff", x, StringComparison.Ordinal);
-        Assert.Contains("Scheduled Period End", x, StringComparison.Ordinal);
+        Assert.DoesNotContain("Scheduled Period End", x, StringComparison.Ordinal);
         Assert.Contains("GRAND TOTAL AMOUNT (GTA)", z, StringComparison.Ordinal);
         Assert.Contains("Previous GTA", z, StringComparison.Ordinal);
         Assert.Contains("Period Net GTA", z, StringComparison.Ordinal);

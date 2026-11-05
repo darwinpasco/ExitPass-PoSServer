@@ -167,7 +167,7 @@ public sealed class PostgresFiscalXReadingRepository(
     {
         const string sql = """
             SELECT p.fiscal_reporting_period_id, p.fiscal_reporting_contract_version_id, p.site_pos_server_id,
-                   p.fiscal_identity_id, p.business_day_date, p.period_start_at, p.period_end_at,
+                   p.fiscal_identity_id, p.business_day_date, p.period_start_at, @observed_at,
                    p.reporting_timezone_name, p.business_day_cutoff_local_time, p.currency_code, p.period_sequence
             FROM pos.fiscal_reporting_periods p
             JOIN pos.controlled_codes status ON status.controlled_code_id = p.period_status_code_id
@@ -177,7 +177,7 @@ public sealed class PostgresFiscalXReadingRepository(
               AND p.fiscal_identity_id = @fiscal_identity_id
               AND status_set.code_set_key = 'fiscal_reporting_period_status' AND status.code_key = 'open'
               AND p.period_start_at <= @observed_at
-              AND @observed_at < p.period_end_at
+              AND p.period_end_at IS NULL
               AND contract.contract_key = 'pos-server-fiscal-reporting' AND contract.contract_version = 'v1'
               AND contract.semantic_hash_version = @semantic_hash_version AND contract.is_active
             ORDER BY p.period_sequence DESC

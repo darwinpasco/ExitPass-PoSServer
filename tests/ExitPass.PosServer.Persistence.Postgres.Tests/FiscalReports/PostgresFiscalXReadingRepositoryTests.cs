@@ -35,7 +35,7 @@ public sealed class PostgresFiscalXReadingRepositoryTests
         Assert.Contains("pos.fiscal_sequence_gap_audit", source, StringComparison.Ordinal);
         Assert.Contains("status.code_key = 'open'", source, StringComparison.Ordinal);
         Assert.Contains("p.period_start_at <= @observed_at", source, StringComparison.Ordinal);
-        Assert.Contains("@observed_at < p.period_end_at", source, StringComparison.Ordinal);
+        Assert.Contains("p.period_end_at IS NULL", source, StringComparison.Ordinal);
         Assert.DoesNotContain("p.reporting_timezone_name = site.reporting_timezone_name", source, StringComparison.Ordinal);
         Assert.DoesNotContain("p.business_day_cutoff_local_time = site.business_day_cutoff_local_time", source, StringComparison.Ordinal);
         Assert.DoesNotContain("document_context", source, StringComparison.OrdinalIgnoreCase);

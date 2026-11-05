@@ -40,7 +40,7 @@ public static class FiscalBusinessDateResolutionEndpoint
             return Results.Ok(new ResolveFiscalBusinessDateResponse(
                 true,
                 "fiscal_business_date_resolved",
-                "The POS Server fiscal business date was resolved from the immutable event timestamp.",
+                "The POS Server fiscal business date was resolved from the authoritative OPEN manual period.",
                 result.BusinessDayDate,
                 result.PeriodStartAt,
                 result.PeriodEndAt,

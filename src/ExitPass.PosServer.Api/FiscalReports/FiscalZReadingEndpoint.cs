@@ -10,7 +10,8 @@ public sealed record CloseFiscalZReadingRequest(
     Guid? FiscalIdentityId,
     string? CurrencyCode,
     Guid? FiscalReportingPeriodId,
-    long? ExpectedStateVersion);
+    long? ExpectedStateVersion,
+    bool ConfirmClose = false);
 
 public sealed record FiscalZReadingApiResponse(
     bool Succeeded,
@@ -52,7 +53,8 @@ public static class FiscalZReadingEndpoint
             actor!.ActorReference,
             actor.ServiceIdentityReference,
             correlation,
-            actor.ActorDisplayName), cancellationToken).ConfigureAwait(false);
+            actor.ActorDisplayName,
+            request.ConfirmClose), cancellationToken).ConfigureAwait(false);
         return Map(result, correlation);
     }
 
@@ -80,7 +82,6 @@ public static class FiscalZReadingEndpoint
         FiscalZReadingOutcome.Replayed => Success("fiscal_z_reading_replayed", StatusCodes.Status200OK, result.Record!, correlationId, result.BirSalesSummaryCompletion),
         FiscalZReadingOutcome.Conflict => Error("fiscal_z_reading_semantic_conflict", StatusCodes.Status409Conflict, result.SafeMessage, correlationId),
         FiscalZReadingOutcome.PeriodAlreadyClosed => Error("fiscal_reporting_period_already_closed", StatusCodes.Status409Conflict, result.SafeMessage, correlationId),
-        FiscalZReadingOutcome.PeriodNotEnded => Error("fiscal_reporting_period_not_ended", StatusCodes.Status409Conflict, result.SafeMessage, correlationId),
         FiscalZReadingOutcome.PeriodNotOpen => Error("fiscal_reporting_period_not_open", StatusCodes.Status409Conflict, result.SafeMessage, correlationId),
         FiscalZReadingOutcome.PeriodUnavailable or FiscalZReadingOutcome.SitePosServerNotFound or FiscalZReadingOutcome.FiscalIdentityNotFound or FiscalZReadingOutcome.NotFound =>
             Error("fiscal_z_reading_not_found", StatusCodes.Status404NotFound, "The requested Z Reading resource is unavailable.", correlationId),
