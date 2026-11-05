@@ -21,7 +21,8 @@ param(
     [string] $AptTerminalSerialNumber = 'ACE4_2E00_653A_D952',
     [string] $EffectiveFrom,
     [string] $ApprovedByRef,
-    [string] $EvidenceDir
+    [string] $EvidenceDir,
+    [switch] $AllowImmediateDevelopmentActivation
 )
 
 Set-StrictMode -Version Latest
@@ -100,7 +101,13 @@ if ([string]::IsNullOrWhiteSpace($WebPayTerminalSerialNumber) -or
 }
 $effectiveAt = [DateTimeOffset]::MinValue
 if (-not [DateTimeOffset]::TryParse($EffectiveFrom, [Globalization.CultureInfo]::InvariantCulture, [Globalization.DateTimeStyles]::RoundtripKind, [ref]$effectiveAt) -or
-    $effectiveAt.Offset -ne [TimeSpan]::FromHours(8) -or $effectiveAt.TimeOfDay -ne [TimeSpan]::FromHours(7) -or $effectiveAt.Day -ne 1) {
+    $effectiveAt.Offset -ne [TimeSpan]::FromHours(8)) {
+    throw 'EffectiveFrom must be an approved timestamp with the +08:00 Philippine offset.'
+}
+$isStandardBoundary = $effectiveAt.TimeOfDay -eq [TimeSpan]::FromHours(7) -and $effectiveAt.Day -eq 1
+$isApprovedDevelopmentTarget = $ContainerName -ceq 'exitpass-pos-ist-persistent-db' -and
+    $DatabaseName -ceq 'exitpass_pos_ist' -and $DatabaseUser -ceq 'exitpass_ist'
+if (-not $isStandardBoundary -and (-not $AllowImmediateDevelopmentActivation -or -not $isApprovedDevelopmentTarget)) {
     throw 'EffectiveFrom must be an approved first-of-month fiscal business-day boundary at 07:00:00+08:00.'
 }
 if ($effectiveAt -lt [DateTimeOffset]::Now) {
