@@ -132,9 +132,13 @@ public sealed class FiscalReportPresentationService
         }
 
         var counter = record.CounterSnapshot;
+        var validClosureTiming = record.IsEarlyClosure
+            ? record.GeneratedAt < record.PeriodEndAt && record.ClosedAt < record.PeriodEndAt &&
+              !string.IsNullOrWhiteSpace(record.EarlyClosureReason)
+            : record.GeneratedAt >= record.PeriodEndAt && record.ClosedAt >= record.PeriodEndAt &&
+              record.EarlyClosureReason is null;
         if (!string.Equals(record.PeriodStatus, "CLOSED", StringComparison.Ordinal) ||
-            record.GeneratedAt < record.PeriodEndAt ||
-            record.ClosedAt < record.PeriodEndAt ||
+            !validClosureTiming ||
             counter.ResultingResetCounterValue != counter.PreviousResetCounterValue ||
             counter.ResultingZCounterValue != counter.PreviousZCounterValue + 1 ||
             counter.ResultingStateVersion != counter.ExpectedStateVersion + 1 ||
@@ -208,7 +212,9 @@ public sealed class FiscalReportPresentationService
             null,
             record.RequestedByRef,
             record.SnapshotDetailVersion,
-            record.RequestedByDisplayName);
+            record.RequestedByDisplayName,
+            record.IsEarlyClosure,
+            record.EarlyClosureReason);
     }
 
     private static FiscalReportPresentationResult? ValidateCommon(
@@ -356,7 +362,9 @@ public sealed class FiscalReportPresentationService
         FiscalXReadingPriorZSnapshot? priorZ,
         string requestedByRef,
         string? snapshotDetailVersion,
-        string? requestedByDisplayName)
+        string? requestedByDisplayName,
+        bool isEarlyClosure = false,
+        string? earlyClosureReason = null)
     {
         var tenderRows = tenders
             .OrderBy(item => item.Classification, StringComparer.Ordinal)
@@ -444,7 +452,9 @@ public sealed class FiscalReportPresentationService
             priorZ,
             requestedByRef,
             snapshotDetailVersion,
-            requestedByDisplayName);
+            requestedByDisplayName,
+            isEarlyClosure,
+            earlyClosureReason);
         var snapshotIdentity = FiscalReportOutputRenderer.ComputeSnapshotIdentity(model);
         return FiscalReportPresentationResult.Success(model with { SnapshotIdentity = snapshotIdentity });
     }

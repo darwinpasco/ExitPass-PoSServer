@@ -7,7 +7,9 @@ public sealed record CloseableFiscalBusinessDate(
     DateTimeOffset PeriodEnd,
     string Status,
     long TransactionCount,
-    long ExpectedStateVersion);
+    long ExpectedStateVersion,
+    string CloseReadiness = "NORMAL_CLOSE_READY",
+    bool CanCloseEarly = false);
 
 public sealed record CloseableFiscalBusinessDatesSnapshot(
     Guid SitePosServerId,
@@ -15,7 +17,8 @@ public sealed record CloseableFiscalBusinessDatesSnapshot(
     string CurrencyCode,
     IReadOnlyList<CloseableFiscalBusinessDate> FiscalBusinessDates,
     string Code,
-    string? SafeMessage = null);
+    string? SafeMessage = null,
+    CloseableFiscalBusinessDate? ActiveFiscalBusinessDate = null);
 
 public interface ICloseableFiscalBusinessDateRepository
 {

@@ -33,6 +33,19 @@ public sealed class FiscalZReadingRuntimeTests
     }
 
     [Fact]
+    public void EarlyCloseSemanticsAreHashBoundWithoutChangingNormalCanonicalSource()
+    {
+        var normal = FiscalZReadingSemanticRequestHasher.CanonicalSource(Command(), Period());
+        var early = Command() with { EarlyClose = true, EarlyCloseReason = "Authorized maintenance", ConfirmEarlyClose = true };
+        var changedReason = early with { EarlyCloseReason = "Weather emergency" };
+
+        Assert.DoesNotContain("earlyClose", normal, StringComparison.Ordinal);
+        Assert.Contains("\"earlyClose\":true", FiscalZReadingSemanticRequestHasher.CanonicalSource(early, Period()), StringComparison.Ordinal);
+        Assert.NotEqual(FiscalZReadingSemanticRequestHasher.Compute(Command(), Period()), FiscalZReadingSemanticRequestHasher.Compute(early, Period()));
+        Assert.NotEqual(FiscalZReadingSemanticRequestHasher.Compute(early, Period()), FiscalZReadingSemanticRequestHasher.Compute(changedReason, Period()));
+    }
+
+    [Fact]
     public void TransitionHashCoversEveryCounterAndGtaTransitionValue()
     {
         var first = FiscalZReadingSemanticRequestHasher.ComputeTransition(new('a', 64), 1, 1, 2, 3, 100, 50, 150);
@@ -52,6 +65,22 @@ public sealed class FiscalZReadingRuntimeTests
         Assert.Equal(0, repository.CloseCalls);
         Assert.Equal(FiscalZReadingOutcome.Replayed, (await service.CloseAsync(Command())).Outcome);
         Assert.Equal(1, repository.CloseCalls);
+    }
+
+    [Fact]
+    public async Task ServiceRequiresConfirmedReasonForEarlyCloseAndNormalizesIt()
+    {
+        var repository = new StubRepository(new(FiscalZReadingOutcome.Created, Record()));
+        var service = new FiscalZReadingService(repository);
+
+        Assert.Equal(FiscalZReadingOutcome.InvalidRequest, (await service.CloseAsync(Command() with { EarlyClose = true })).Outcome);
+        Assert.Equal(FiscalZReadingOutcome.InvalidRequest, (await service.CloseAsync(Command() with { EarlyClose = true, ConfirmEarlyClose = true, EarlyCloseReason = " " })).Outcome);
+        Assert.Equal(FiscalZReadingOutcome.InvalidRequest, (await service.CloseAsync(Command() with { EarlyCloseReason = "unexpected" })).Outcome);
+        Assert.Equal(0, repository.CloseCalls);
+
+        var result = await service.CloseAsync(Command() with { EarlyClose = true, ConfirmEarlyClose = true, EarlyCloseReason = "  Authorized maintenance  " });
+        Assert.Equal(FiscalZReadingOutcome.Created, result.Outcome);
+        Assert.Equal("Authorized maintenance", repository.LastCommand?.EarlyCloseReason);
     }
 
     [Fact]
@@ -87,7 +116,8 @@ public sealed class FiscalZReadingRuntimeTests
     private sealed class StubRepository(FiscalZReadingResult result) : IFiscalZReadingRepository
     {
         public int CloseCalls { get; private set; }
-        public Task<FiscalZReadingResult> CloseAsync(FiscalZReadingCommand command, CancellationToken cancellationToken = default) { CloseCalls++; return Task.FromResult(result); }
+        public FiscalZReadingCommand? LastCommand { get; private set; }
+        public Task<FiscalZReadingResult> CloseAsync(FiscalZReadingCommand command, CancellationToken cancellationToken = default) { CloseCalls++; LastCommand = command; return Task.FromResult(result); }
         public Task<FiscalZReadingResult> GetByReferenceAsync(string fiscalReportReference, CancellationToken cancellationToken = default) => Task.FromResult(result);
     }
 }

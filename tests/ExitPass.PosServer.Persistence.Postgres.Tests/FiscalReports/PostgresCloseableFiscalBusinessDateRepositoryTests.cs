@@ -13,11 +13,10 @@ public sealed class PostgresCloseableFiscalBusinessDateRepositoryTests
         Assert.Contains("period.fiscal_identity_id = @identity", source, StringComparison.Ordinal);
         Assert.Contains("period.currency_code = @currency", source, StringComparison.Ordinal);
         Assert.Contains("status.code_key = 'open'", source, StringComparison.Ordinal);
-        Assert.Contains("period.period_end_at <= transaction_timestamp()", source, StringComparison.Ordinal);
-        Assert.Contains(
-            "ORDER BY business_day_date, period_sequence, fiscal_reporting_period_id",
-            source,
-            StringComparison.Ordinal);
+        Assert.Contains("SELECT * FROM eligible_periods WHERE period_end_at <= transaction_timestamp()", source, StringComparison.Ordinal);
+        Assert.Contains("period.period_start_at <= transaction_timestamp()", source, StringComparison.Ordinal);
+        Assert.Contains("period.period_end_at > transaction_timestamp()", source, StringComparison.Ordinal);
+        Assert.Contains("EARLY_CLOSE_READY", source, StringComparison.Ordinal);
         Assert.DoesNotContain("DateTimeOffset.UtcNow", source, StringComparison.Ordinal);
         Assert.DoesNotContain("site_group", source, StringComparison.OrdinalIgnoreCase);
     }

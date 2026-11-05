@@ -3,7 +3,7 @@ namespace ExitPass.PosServer.Runtime.FiscalReports;
 public static class FiscalReportPresentationContract
 {
     public const string XPresentationVersion = "fiscal-x-reading-presentation-json-v2";
-    public const string ZPresentationVersion = "fiscal-z-reading-presentation-json-v2";
+    public const string ZPresentationVersion = "fiscal-z-reading-presentation-json-v3";
     public const string JsonExportVersion = "fiscal-x-z-reading-export-json-v2";
     public const string CsvExportVersion = "fiscal-x-z-reading-export-csv-v2";
     public const string PdfExportVersion = "fiscal-x-z-reading-receipt-pdf-v2";
@@ -53,7 +53,9 @@ public sealed record FiscalReportPresentationModel(
     FiscalXReadingPriorZSnapshot? PriorZ,
     string RequestedByRef,
     string? SourceDetailContractVersion,
-    string? RequestedByDisplayName = null);
+    string? RequestedByDisplayName = null,
+    bool IsEarlyClosure = false,
+    string? EarlyClosureReason = null);
 
 public sealed record FiscalReportTenderPresentation(
     string Classification,

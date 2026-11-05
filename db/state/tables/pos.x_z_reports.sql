@@ -57,6 +57,8 @@ CREATE TABLE IF NOT EXISTS pos.x_z_reports (
     currency_code char(3) NOT NULL,
     generated_at timestamptz NOT NULL,
     committed_at timestamptz NOT NULL,
+    is_early_closure boolean NOT NULL DEFAULT false,
+    early_closure_reason text NULL,
     created_at timestamptz NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at timestamptz NOT NULL DEFAULT CURRENT_TIMESTAMP,
     CONSTRAINT pk_x_z_reports PRIMARY KEY (x_z_report_id),
@@ -204,11 +206,21 @@ CREATE TABLE IF NOT EXISTS pos.x_z_reports (
             )
             OR (
                 report_kind_code_id = '1c628bc2-49c3-53e8-ae83-2082bcf28467'
-                AND generated_at >= period_end_at
+                AND (
+                    (NOT is_early_closure AND generated_at >= period_end_at)
+                    OR (is_early_closure AND generated_at >= period_start_at AND generated_at < period_end_at)
+                )
             )
         )
         AND committed_at >= generated_at
         AND updated_at = created_at
+    ),
+    CONSTRAINT ck_x_z_reports__early_closure CHECK (
+        (is_early_closure
+            AND report_kind_code_id = '1c628bc2-49c3-53e8-ae83-2082bcf28467'
+            AND early_closure_reason IS NOT NULL
+            AND char_length(btrim(early_closure_reason)) > 0)
+        OR (NOT is_early_closure AND early_closure_reason IS NULL)
     )
 );
 
@@ -255,7 +267,9 @@ ALTER TABLE pos.x_z_reports
     ADD COLUMN IF NOT EXISTS refund_amount_minor_units bigint NULL,
     ADD COLUMN IF NOT EXISTS adjustment_amount_minor_units bigint NULL,
     ADD COLUMN IF NOT EXISTS service_charge_amount_minor_units bigint NULL,
-    ADD COLUMN IF NOT EXISTS committed_at timestamptz NULL;
+    ADD COLUMN IF NOT EXISTS committed_at timestamptz NULL,
+    ADD COLUMN IF NOT EXISTS is_early_closure boolean NOT NULL DEFAULT false,
+    ADD COLUMN IF NOT EXISTS early_closure_reason text NULL;
 
 ALTER TABLE pos.x_z_reports DROP COLUMN IF EXISTS report_snapshot_context;
 
@@ -318,6 +332,7 @@ ALTER TABLE pos.x_z_reports
     DROP CONSTRAINT IF EXISTS ck_x_z_reports__gta_relationship,
     DROP CONSTRAINT IF EXISTS ck_x_z_reports__currency,
     DROP CONSTRAINT IF EXISTS ck_x_z_reports__timestamps,
+    DROP CONSTRAINT IF EXISTS ck_x_z_reports__early_closure,
     DROP CONSTRAINT IF EXISTS ck_x_z_reports__beginning_si_ref,
     DROP CONSTRAINT IF EXISTS ck_x_z_reports__ending_si_ref,
     DROP CONSTRAINT IF EXISTS ck_x_z_reports__reset_counter_nonnegative,
@@ -350,7 +365,8 @@ ALTER TABLE pos.x_z_reports
     ADD CONSTRAINT ck_x_z_reports__discount_breakdown CHECK (senior_citizen_discount_amount_minor_units + pwd_discount_amount_minor_units + other_statutory_discount_amount_minor_units + coupon_discount_amount_minor_units + promotional_discount_amount_minor_units <= discount_amount_minor_units),
     ADD CONSTRAINT ck_x_z_reports__gta_relationship CHECK (present_grand_total_amount_minor_units = previous_grand_total_amount_minor_units + current_grand_total_amount_minor_units),
     ADD CONSTRAINT ck_x_z_reports__currency CHECK (currency_code ~ '^[A-Z]{3}$'),
-    ADD CONSTRAINT ck_x_z_reports__timestamps CHECK ((((report_kind_code_id = '5dc3cc94-b3ab-5582-a598-e779871fc3e2') AND generated_at >= period_start_at) OR ((report_kind_code_id = '1c628bc2-49c3-53e8-ae83-2082bcf28467') AND generated_at >= period_end_at)) AND committed_at >= generated_at AND updated_at = created_at);
+    ADD CONSTRAINT ck_x_z_reports__timestamps CHECK ((((report_kind_code_id = '5dc3cc94-b3ab-5582-a598-e779871fc3e2') AND NOT is_early_closure AND generated_at >= period_start_at) OR ((report_kind_code_id = '1c628bc2-49c3-53e8-ae83-2082bcf28467') AND ((NOT is_early_closure AND generated_at >= period_end_at) OR (is_early_closure AND generated_at >= period_start_at AND generated_at < period_end_at)))) AND committed_at >= generated_at AND updated_at = created_at),
+    ADD CONSTRAINT ck_x_z_reports__early_closure CHECK ((is_early_closure AND report_kind_code_id = '1c628bc2-49c3-53e8-ae83-2082bcf28467' AND early_closure_reason IS NOT NULL AND char_length(btrim(early_closure_reason)) > 0) OR (NOT is_early_closure AND early_closure_reason IS NULL));
 
 DO $$
 DECLARE
@@ -390,7 +406,9 @@ FOR EACH ROW EXECUTE FUNCTION pos.reject_fiscal_reporting_snapshot_mutation();
 
 COMMENT ON TABLE pos.x_z_reports IS 'Immutable first-class X Reading and Z Reading aggregate snapshots. The table neither aggregates fiscal documents nor closes periods.';
 COMMENT ON COLUMN pos.x_z_reports.report_number IS 'Stable internal report reference unique within fiscal identity. External BIR numbering remains a compliance dependency.';
-COMMENT ON COLUMN pos.x_z_reports.generated_at IS 'Immutable observation time. X Reading requires period start or later; Z Reading requires period end or later.';
+COMMENT ON COLUMN pos.x_z_reports.generated_at IS 'Immutable observation time. X Reading requires period start or later; normal Z requires period end or later; authorized early Z requires period start or later and precedes scheduled period end.';
+COMMENT ON COLUMN pos.x_z_reports.is_early_closure IS 'Immutable true only for an authorized Z Reading committed before the scheduled period end.';
+COMMENT ON COLUMN pos.x_z_reports.early_closure_reason IS 'Immutable operator-provided reason required only for an authorized early Z Reading.';
 COMMENT ON COLUMN pos.x_z_reports.current_grand_total_amount_minor_units IS 'Current period contribution to GTA; future Z runtime must persist the supplied aggregate without policy recalculation.';
 COMMENT ON COLUMN pos.x_z_reports.present_grand_total_amount_minor_units IS 'Resulting GTA, constrained as previous plus current. Preserved column name for additive compatibility.';
 COMMENT ON COLUMN pos.x_z_reports.refund_amount_minor_units IS 'Reserved first-class non-negative category total. Future runtime fails closed until refund period/sign rules are governed.';

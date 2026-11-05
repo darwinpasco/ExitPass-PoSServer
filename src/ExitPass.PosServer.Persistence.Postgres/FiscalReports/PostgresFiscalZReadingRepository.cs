@@ -64,10 +64,15 @@ public sealed class PostgresFiscalZReadingRepository(
                         : FiscalZReadingOutcome.PeriodNotOpen,
                     "The fiscal reporting period is not eligible for Z close.");
             }
-            if (period.DatabaseNow < period.PeriodEndAt)
+            if (!command.EarlyClose && period.DatabaseNow < period.PeriodEndAt)
             {
                 return Failure(FiscalZReadingOutcome.PeriodNotEnded,
                     "The fiscal reporting period has not reached its governed end instant.");
+            }
+            if (command.EarlyClose && period.DatabaseNow >= period.PeriodEndAt)
+            {
+                return Failure(FiscalZReadingOutcome.InvalidRequest,
+                    "Early close is only valid before the governed period end instant.");
             }
 
             var state = await PostgresFiscalZCloseTransitionFoundation.ReadStateForUpdateAsync(
@@ -85,6 +90,8 @@ public sealed class PostgresFiscalZReadingRepository(
             ValidateStateContinuity(state, sequence);
 
             await EnsureAllPeriodDocumentsAssignedAsync(connection, transaction, period, cancellationToken).ConfigureAwait(false);
+            if (command.EarlyClose)
+                await EnsureNoUnresolvedFiscalIssuanceAsync(connection, transaction, period, cancellationToken).ConfigureAwait(false);
             var sourceDocuments = await ReadSourceDocumentsAsync(connection, transaction, period, cancellationToken).ConfigureAwait(false);
             var sourceGaps = await ReadSourceGapsAsync(connection, transaction, sourceDocuments, cancellationToken).ConfigureAwait(false);
             var aggregate = aggregationService.Aggregate(sourceDocuments, sourceGaps, period.CurrencyCode);
@@ -108,7 +115,7 @@ public sealed class PostgresFiscalZReadingRepository(
 
             await InsertRequestAsync(connection, transaction, command, period, identifiers, requestId, semanticHash, committedAt, cancellationToken).ConfigureAwait(false);
             await InsertScopeAsync(connection, transaction, period, identifiers, requestId, cancellationToken).ConfigureAwait(false);
-            await InsertSnapshotAsync(connection, transaction, period, aggregate, state, resultingZ, resultingGta,
+            await InsertSnapshotAsync(connection, transaction, command, period, aggregate, state, resultingZ, resultingGta,
                 identifiers, requestId, reportId, reportReference, committedAt, cancellationToken).ConfigureAwait(false);
             await InsertChildrenAsync(connection, transaction, period.FiscalIdentityId, aggregate, identifiers, reportId, cancellationToken).ConfigureAwait(false);
             await InsertCounterSnapshotAsync(connection, transaction, state, sequence, reportId, currentGta,
@@ -336,6 +343,23 @@ public sealed class PostgresFiscalZReadingRepository(
                 "A fiscal document in the governed period lacks an unambiguous matching period assignment.");
     }
 
+    private static async Task EnsureNoUnresolvedFiscalIssuanceAsync(
+        NpgsqlConnection connection, NpgsqlTransaction transaction, FiscalZReadingPeriod period, CancellationToken cancellationToken)
+    {
+        const string sql = """
+            SELECT count(*)
+            FROM pos.idempotency_records request
+            WHERE request.idempotency_scope LIKE
+                    'fiscal_document_creation:' || replace(CAST(@site AS text), '-', '') || ':%'
+              AND request.linked_fiscal_document_id IS NULL;
+            """;
+        await using var command = CreateCommand(connection, transaction, sql);
+        AddPeriodParameters(command, period);
+        if (Convert.ToInt64(await command.ExecuteScalarAsync(cancellationToken).ConfigureAwait(false)) != 0)
+            throw new FiscalZReadingSafeException(FiscalZReadingOutcome.ReconciliationFailure,
+                "Unresolved fiscal issuance prevents an early fiscal business-date close.");
+    }
+
     private static async Task<(string SemanticHash, Guid ReportKindId, string ReportReference)?> ReadOperationAsync(
         NpgsqlConnection connection, NpgsqlTransaction? transaction, Guid sitePosServerId,
         string operationKey, CancellationToken cancellationToken)
@@ -471,13 +495,13 @@ public sealed class PostgresFiscalZReadingRepository(
         { p.AddWithValue("id", Guid.NewGuid()); p.AddWithValue("request", requestId); p.AddWithValue("period", period.FiscalReportingPeriodId); p.AddWithValue("scope", ids.Get("fiscal_report_scope_type", "site_pos_server_period")); });
 
     private static Task InsertSnapshotAsync(
-        NpgsqlConnection c, NpgsqlTransaction t, FiscalZReadingPeriod period, FiscalXReadingAggregate aggregate,
+        NpgsqlConnection c, NpgsqlTransaction t, FiscalZReadingCommand command, FiscalZReadingPeriod period, FiscalXReadingAggregate aggregate,
         LockedFiscalZCloseState state, long resultingZ, long resultingGta, ReportingCodeIds ids,
         Guid requestId, Guid reportId, string reference, DateTimeOffset committedAt, CancellationToken ct)
     {
         const string sql = """
-        INSERT INTO pos.x_z_reports(x_z_report_id,fiscal_report_request_id,fiscal_reporting_contract_version_id,fiscal_reporting_period_id,report_kind_code_id,site_pos_server_id,fiscal_identity_id,report_number,business_day_date,period_start_at,period_end_at,reporting_timezone_name,business_day_cutoff_local_time,transaction_count,snapshot_detail_version,issued_sales_invoice_count,void_transaction_count,cancellation_transaction_count,return_transaction_count,refund_transaction_count,begin_fiscal_document_id,end_fiscal_document_id,beginning_si_ref,ending_si_ref,first_fiscal_sequence_value,last_fiscal_sequence_value,fiscal_sequence_gap_count,reset_counter_value,z_counter_value,previous_grand_total_amount_minor_units,current_grand_total_amount_minor_units,present_grand_total_amount_minor_units,gross_sales_amount_minor_units,net_sales_amount_minor_units,vatable_sales_amount_minor_units,vat_amount_minor_units,vat_exempt_sales_amount_minor_units,zero_rated_sales_amount_minor_units,discount_amount_minor_units,senior_citizen_discount_amount_minor_units,pwd_discount_amount_minor_units,other_statutory_discount_amount_minor_units,vat_exemption_amount_minor_units,coupon_discount_amount_minor_units,promotional_discount_amount_minor_units,void_amount_minor_units,refund_amount_minor_units,return_amount_minor_units,adjustment_amount_minor_units,service_charge_amount_minor_units,currency_code,generated_at,committed_at,created_at,updated_at)
-        VALUES(@id,@request,@contract,@period,@kind,@site,@identity,@reference,@business,@start,@end,@timezone,@cutoff,@count,@detail_version,@issued_count,@void_count,NULL,NULL,NULL,@begin_doc,@end_doc,@begin_ref,@end_ref,@first_seq,@last_seq,@gap_count,@reset,@z,@previous_gta,@current_gta,@resulting_gta,@gross,@net,@vatable,@vat,@vat_exempt,@zero_rated,@discount,@senior,@pwd,@other_stat,@vat_exemption,@coupon,@promo,@void,0,0,0,0,@currency,@committed,@committed,@committed,@committed)
+        INSERT INTO pos.x_z_reports(x_z_report_id,fiscal_report_request_id,fiscal_reporting_contract_version_id,fiscal_reporting_period_id,report_kind_code_id,site_pos_server_id,fiscal_identity_id,report_number,business_day_date,period_start_at,period_end_at,reporting_timezone_name,business_day_cutoff_local_time,transaction_count,snapshot_detail_version,issued_sales_invoice_count,void_transaction_count,cancellation_transaction_count,return_transaction_count,refund_transaction_count,begin_fiscal_document_id,end_fiscal_document_id,beginning_si_ref,ending_si_ref,first_fiscal_sequence_value,last_fiscal_sequence_value,fiscal_sequence_gap_count,reset_counter_value,z_counter_value,previous_grand_total_amount_minor_units,current_grand_total_amount_minor_units,present_grand_total_amount_minor_units,gross_sales_amount_minor_units,net_sales_amount_minor_units,vatable_sales_amount_minor_units,vat_amount_minor_units,vat_exempt_sales_amount_minor_units,zero_rated_sales_amount_minor_units,discount_amount_minor_units,senior_citizen_discount_amount_minor_units,pwd_discount_amount_minor_units,other_statutory_discount_amount_minor_units,vat_exemption_amount_minor_units,coupon_discount_amount_minor_units,promotional_discount_amount_minor_units,void_amount_minor_units,refund_amount_minor_units,return_amount_minor_units,adjustment_amount_minor_units,service_charge_amount_minor_units,currency_code,generated_at,committed_at,is_early_closure,early_closure_reason,created_at,updated_at)
+        VALUES(@id,@request,@contract,@period,@kind,@site,@identity,@reference,@business,@start,@end,@timezone,@cutoff,@count,@detail_version,@issued_count,@void_count,NULL,NULL,NULL,@begin_doc,@end_doc,@begin_ref,@end_ref,@first_seq,@last_seq,@gap_count,@reset,@z,@previous_gta,@current_gta,@resulting_gta,@gross,@net,@vatable,@vat,@vat_exempt,@zero_rated,@discount,@senior,@pwd,@other_stat,@vat_exemption,@coupon,@promo,@void,0,0,0,0,@currency,@committed,@committed,@early,@early_reason,@committed,@committed)
         """;
         return ExecuteAsync(c, t, sql, ct, p =>
         {
@@ -493,6 +517,7 @@ public sealed class PostgresFiscalZReadingRepository(
             p.AddWithValue("gap_count", aggregate.FiscalNumberRanges.Sum(range => (long)range.Gaps.Count)); p.AddWithValue("reset", state.ResetCounterValue); p.AddWithValue("z", resultingZ);
             p.AddWithValue("previous_gta", state.GrandTotalAmountMinorUnits); p.AddWithValue("current_gta", aggregate.Amounts.NetSalesAmountMinorUnits); p.AddWithValue("resulting_gta", resultingGta);
             AddAmountParameters(p, aggregate.Amounts); p.AddWithValue("currency", period.CurrencyCode); p.AddWithValue("committed", committedAt);
+            p.AddWithValue("early", command.EarlyClose); AddNullable(p, "early_reason", command.EarlyCloseReason, NpgsqlDbType.Text);
         });
     }
 
@@ -576,8 +601,8 @@ public sealed class PostgresFiscalZReadingRepository(
     }
 
     private static Task InsertAuditAsync(NpgsqlConnection c, NpgsqlTransaction t, FiscalZReadingCommand command, ReportingCodeIds ids, Guid requestId, CancellationToken ct) =>
-        ExecuteAsync(c, t, "INSERT INTO pos.fiscal_action_audit(fiscal_action_audit_id,site_pos_server_id,fiscal_report_request_id,audit_action_type_code_id,audit_result_code_id,actor_ref,service_identity_ref,correlation_ref,occurred_at,created_at) VALUES(@id,@site,@request,@action,@result,@actor,@service,@correlation,clock_timestamp(),clock_timestamp())", ct, p =>
-        { p.AddWithValue("id", Guid.NewGuid()); p.AddWithValue("site", command.SitePosServerId); p.AddWithValue("request", requestId); p.AddWithValue("action", ids.Get("fiscal_report_kind", "z_reading")); p.AddWithValue("result", ids.Get("fiscal_action_audit_result", "success")); p.AddWithValue("actor", command.RequestedByRef); p.AddWithValue("service", command.ServiceIdentityRef); p.AddWithValue("correlation", command.CorrelationId); });
+        ExecuteAsync(c, t, "INSERT INTO pos.fiscal_action_audit(fiscal_action_audit_id,site_pos_server_id,fiscal_report_request_id,audit_action_type_code_id,audit_result_code_id,actor_ref,service_identity_ref,correlation_ref,audit_context,occurred_at,created_at) VALUES(@id,@site,@request,@action,@result,@actor,@service,@correlation,CASE WHEN @early THEN jsonb_build_object('earlyClosure',true,'reason',@reason) ELSE NULL END,clock_timestamp(),clock_timestamp())", ct, p =>
+        { p.AddWithValue("id", Guid.NewGuid()); p.AddWithValue("site", command.SitePosServerId); p.AddWithValue("request", requestId); p.AddWithValue("action", ids.Get("fiscal_report_kind", "z_reading")); p.AddWithValue("result", ids.Get("fiscal_action_audit_result", "success")); p.AddWithValue("actor", command.RequestedByRef); p.AddWithValue("service", command.ServiceIdentityRef); p.AddWithValue("correlation", command.CorrelationId); p.AddWithValue("early", command.EarlyClose); AddNullable(p, "reason", command.EarlyCloseReason, NpgsqlDbType.Text); });
 
     private static async Task<FiscalZReadingRecord?> ReadRecordAsync(NpgsqlConnection c, NpgsqlTransaction? t, string reference, CancellationToken ct)
     {
@@ -598,7 +623,8 @@ public sealed class PostgresFiscalZReadingRepository(
                s.resulting_state_version,status.code_key,period.period_sequence,request_status.code_key,
                COALESCE(a.correlation_ref,'unavailable'),r.issued_sales_invoice_count,r.void_transaction_count,
                r.cancellation_transaction_count,r.return_transaction_count,r.refund_transaction_count,req.requested_by_ref,
-               r.snapshot_detail_version,req.requested_by_display_name
+               r.snapshot_detail_version,req.requested_by_display_name,
+               r.is_early_closure,r.early_closure_reason
         FROM pos.x_z_reports r
         JOIN pos.fiscal_report_requests req ON req.fiscal_report_request_id=r.fiscal_report_request_id
         JOIN pos.controlled_codes kind ON kind.controlled_code_id=r.report_kind_code_id
@@ -607,7 +633,7 @@ public sealed class PostgresFiscalZReadingRepository(
         JOIN pos.controlled_codes status ON status.controlled_code_id=period.period_status_code_id
         JOIN pos.controlled_codes request_status ON request_status.controlled_code_id=req.report_status_code_id
         JOIN pos.fiscal_z_counter_snapshots s ON s.x_z_report_id=r.x_z_report_id
-        LEFT JOIN LATERAL(SELECT correlation_ref FROM pos.fiscal_action_audit WHERE fiscal_report_request_id=req.fiscal_report_request_id ORDER BY occurred_at LIMIT 1)a ON true
+        LEFT JOIN LATERAL(SELECT correlation_ref,audit_context FROM pos.fiscal_action_audit WHERE fiscal_report_request_id=req.fiscal_report_request_id ORDER BY occurred_at LIMIT 1)a ON true
         WHERE r.report_number=@reference AND kind.code_key='z_reading';
         """;
         await using var cmd = CreateCommand(c, t, sql); cmd.Parameters.AddWithValue("reference", reference);
@@ -622,9 +648,11 @@ public sealed class PostgresFiscalZReadingRepository(
         var requestedBy = reader.GetString(57);
         var detailVersion = reader.IsDBNull(58) ? null : reader.GetString(58);
         var requestedByDisplayName = reader.IsDBNull(59) ? null : reader.GetString(59);
+        var isEarlyClosure = reader.GetBoolean(60);
+        var earlyClosureReason = reader.IsDBNull(61) ? null : reader.GetString(61);
         await reader.DisposeAsync().ConfigureAwait(false);
         var tenders=await ReadTenderChildrenAsync(c,t,id,ct).ConfigureAwait(false); var discounts=await ReadDiscountChildrenAsync(c,t,id,ct).ConfigureAwait(false); var ranges=await ReadRangeChildrenAsync(c,t,id,ct).ConfigureAwait(false);
-        return new(id,head.Reference,head.Request,head.Operation,head.Kind,head.Contract,head.HashVersion,head.Site,head.Identity,head.Period,head.Prior,head.Business,head.Start,head.End,head.Timezone,head.Cutoff,head.Currency,head.Generated,head.Committed,head.Closed,head.Count,amounts,tenders,discounts,ranges,counter,head.Status,head.Correlation,head.Reference,true,head.PeriodSequence,head.ReportStatus,documentCounts,requestedBy,detailVersion,requestedByDisplayName);
+        return new(id,head.Reference,head.Request,head.Operation,head.Kind,head.Contract,head.HashVersion,head.Site,head.Identity,head.Period,head.Prior,head.Business,head.Start,head.End,head.Timezone,head.Cutoff,head.Currency,head.Generated,head.Committed,head.Closed,head.Count,amounts,tenders,discounts,ranges,counter,head.Status,head.Correlation,head.Reference,true,head.PeriodSequence,head.ReportStatus,documentCounts,requestedBy,detailVersion,requestedByDisplayName,isEarlyClosure,earlyClosureReason);
     }
 
     private static async Task<IReadOnlyList<FiscalXReadingTenderBreakdown>> ReadTenderChildrenAsync(NpgsqlConnection c,NpgsqlTransaction? t,Guid id,CancellationToken ct) { const string sql="SELECT code.code_key,x.tender_transaction_count,x.amount_minor_units,x.currency_code FROM pos.fiscal_report_tender_breakdowns x JOIN pos.controlled_codes code ON code.controlled_code_id=x.tender_classification_code_id WHERE x.x_z_report_id=@id ORDER BY code.sort_order,code.code_key"; await using var cmd=CreateCommand(c,t,sql);cmd.Parameters.AddWithValue("id",id);await using var r=await cmd.ExecuteReaderAsync(ct).ConfigureAwait(false);var result=new List<FiscalXReadingTenderBreakdown>();while(await r.ReadAsync(ct).ConfigureAwait(false))result.Add(new(r.GetString(0),r.GetInt64(1),r.GetInt64(2),r.GetString(3)));return result; }

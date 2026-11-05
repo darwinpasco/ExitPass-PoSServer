@@ -18,7 +18,10 @@ public sealed record FiscalZReadingCommand(
     string RequestedByRef,
     string ServiceIdentityRef,
     string CorrelationId,
-    string? RequestedByDisplayName = null);
+    string? RequestedByDisplayName = null,
+    bool EarlyClose = false,
+    string? EarlyCloseReason = null,
+    bool ConfirmEarlyClose = false);
 
 public sealed record FiscalZReadingPeriod(
     Guid FiscalReportingPeriodId,
@@ -83,7 +86,9 @@ public sealed record FiscalZReadingRecord(
     FiscalReportDocumentCounts? DocumentCounts = null,
     string RequestedByRef = "unavailable",
     string? SnapshotDetailVersion = null,
-    string? RequestedByDisplayName = null);
+    string? RequestedByDisplayName = null,
+    bool IsEarlyClosure = false,
+    string? EarlyClosureReason = null);
 
 public enum FiscalZReadingOutcome
 {

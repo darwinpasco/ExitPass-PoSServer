@@ -33,6 +33,12 @@ public static class FiscalZReadingSemanticRequestHasher
             writer.WriteNumber("expectedStateVersion", command.ExpectedStateVersion);
             writer.WriteString("contractVersion", FiscalZReadingContract.ContractVersion);
             writer.WriteString("closeIntent", "atomic_open_to_closed");
+            if (command.EarlyClose)
+            {
+                writer.WriteBoolean("earlyClose", true);
+                writer.WriteString("earlyCloseReason", command.EarlyCloseReason);
+                writer.WriteBoolean("confirmEarlyClose", command.ConfirmEarlyClose);
+            }
             writer.WriteEndObject();
         }
         return Encoding.UTF8.GetString(stream.ToArray());
