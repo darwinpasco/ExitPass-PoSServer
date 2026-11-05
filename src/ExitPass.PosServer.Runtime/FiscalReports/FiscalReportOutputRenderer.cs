@@ -314,7 +314,6 @@ public sealed class FiscalReportOutputRenderer
         if (presentation.ReportKind == FiscalXReadingContract.ReportKind)
         {
             AddValue(lines, "Observation Cutoff", PhtTimestamp(presentation.GeneratedAt), width);
-            AddValue(lines, "Scheduled Period End", PhtTimestamp(presentation.PeriodEndAt), width);
         }
         else
         {

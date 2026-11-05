@@ -33,7 +33,7 @@ public sealed record FiscalReportingPeriodAssignment(
     string CurrencyCode,
     DateOnly BusinessDayDate,
     DateTimeOffset PeriodStartAt,
-    DateTimeOffset PeriodEndAt,
+    DateTimeOffset? PeriodEndAt,
     long PeriodSequence,
     Guid? ExpectedPriorPeriodId,
     DateTimeOffset FiscalEventAt);

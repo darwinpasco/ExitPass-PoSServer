@@ -1,7 +1,7 @@
 namespace ExitPass.PosServer.Runtime.FiscalReports;
 
 public sealed record FiscalReportingPeriodSnapshot(Guid FiscalReportingPeriodId, Guid SitePosServerId, Guid FiscalIdentityId,
-    DateOnly BusinessDayDate, DateTimeOffset PeriodStartAt, DateTimeOffset PeriodEndAt, string CurrencyCode,
+    DateOnly BusinessDayDate, DateTimeOffset PeriodStartAt, DateTimeOffset? PeriodEndAt, string CurrencyCode,
     long PeriodSequence, string Status, long ExpectedZStateVersion);
 
 public sealed record FiscalReadingHistoryItem(string ReportReference, string ReportKind, Guid FiscalReportingPeriodId,

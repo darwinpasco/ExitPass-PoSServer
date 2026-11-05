@@ -1,4 +1,3 @@
-using ExitPass.PosServer.Persistence.Postgres.FiscalReports;
 using ExitPass.PosServer.Runtime.FiscalDocuments;
 using Npgsql;
 
@@ -20,41 +19,31 @@ public sealed class PostgresFiscalBusinessDateResolutionRepository(NpgsqlDataSou
                 await readOnly.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
             }
 
-            const string configurationSql = """
-                SELECT reporting_timezone_name, business_day_cutoff_local_time
-                FROM pos.site_pos_servers
-                WHERE site_pos_server_id = @site_pos_server_id
-                  AND is_active;
+            const string periodSql = """
+                SELECT period.business_day_date,period.period_start_at,period.period_end_at,
+                       period.reporting_timezone_name,period.business_day_cutoff_local_time
+                FROM pos.fiscal_reporting_periods period
+                WHERE period.site_pos_server_id=@site_pos_server_id
+                  AND period.period_status_code_id='1a6f7021-bc84-5c01-afaa-c5d6685633c8'
+                ORDER BY period.period_sequence DESC
+                LIMIT 2;
                 """;
-            await using var configuration = new NpgsqlCommand(configurationSql, connection, transaction);
-            configuration.Parameters.AddWithValue("site_pos_server_id", query.SitePosServerId);
-            await using var reader = await configuration.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
-            if (!await reader.ReadAsync(cancellationToken).ConfigureAwait(false) ||
-                reader.IsDBNull(0) ||
-                reader.IsDBNull(1))
+            await using var periodCommand = new NpgsqlCommand(periodSql, connection, transaction);
+            periodCommand.Parameters.AddWithValue("site_pos_server_id", query.SitePosServerId);
+            await using var reader = await periodCommand.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
+            if (!await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
             {
                 throw new FiscalBusinessDateResolutionUnavailableException(
-                    "The active Site POS Server fiscal timezone and cutoff are unavailable.");
+                    "FISCAL_BUSINESS_DATE_NOT_OPEN");
             }
-
-            var timezone = reader.GetString(0);
-            var cutoff = reader.GetFieldValue<TimeOnly>(1);
+            var businessDate = reader.GetFieldValue<DateOnly>(0);
+            var periodStart = reader.GetFieldValue<DateTimeOffset>(1);
+            DateTimeOffset? periodEnd = reader.IsDBNull(2) ? null : reader.GetFieldValue<DateTimeOffset>(2);
+            var timezone = reader.GetString(3);
+            var cutoff = reader.GetFieldValue<TimeOnly>(4);
+            if (await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
+                throw new FiscalBusinessDateResolutionUnavailableException("The OPEN fiscal business date is ambiguous.");
             await reader.CloseAsync().ConfigureAwait(false);
-
-            (DateOnly BusinessDayDate, DateTimeOffset PeriodStartAt, DateTimeOffset PeriodEndAt) window;
-            try
-            {
-                window = PostgresFiscalCloseBoundaryCoordinator.ResolveBusinessDayWindow(
-                    query.FiscalEventAt,
-                    timezone,
-                    cutoff);
-            }
-            catch (Exception ex) when (ex is TimeZoneNotFoundException or InvalidTimeZoneException)
-            {
-                throw new FiscalBusinessDateResolutionUnavailableException(
-                    "The Site POS Server fiscal timezone is invalid.",
-                    ex);
-            }
 
             var scope = string.Join(
                 ":",
@@ -80,9 +69,9 @@ public sealed class PostgresFiscalBusinessDateResolutionRepository(NpgsqlDataSou
             await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
 
             return new FiscalBusinessDateResolution(
-                window.BusinessDayDate,
-                window.PeriodStartAt,
-                window.PeriodEndAt,
+                businessDate,
+                periodStart,
+                periodEnd,
                 timezone,
                 cutoff,
                 exists,

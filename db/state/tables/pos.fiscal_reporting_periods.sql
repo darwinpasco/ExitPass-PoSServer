@@ -9,7 +9,9 @@ CREATE TABLE IF NOT EXISTS pos.fiscal_reporting_periods (
     period_status_code_id uuid NOT NULL,
     business_day_date date NOT NULL,
     period_start_at timestamptz NOT NULL,
-    period_end_at timestamptz NOT NULL,
+    period_end_at timestamptz NULL,
+    legacy_scheduled_period_end_at timestamptz NULL,
+    is_manual_lifecycle boolean NOT NULL DEFAULT true,
     reporting_timezone_name text NOT NULL,
     business_day_cutoff_local_time time without time zone NOT NULL,
     currency_code char(3) NOT NULL,
@@ -62,7 +64,9 @@ CREATE TABLE IF NOT EXISTS pos.fiscal_reporting_periods (
         'f0a44431-611b-5809-b3a9-5b8be8614552',
         'af7ee931-a023-507e-81a4-17adf047eb94'
     )),
-    CONSTRAINT ck_fiscal_reporting_periods__period_range CHECK (period_end_at > period_start_at),
+    CONSTRAINT ck_fiscal_reporting_periods__period_range CHECK (
+        period_end_at IS NULL OR period_end_at > period_start_at
+    ),
     CONSTRAINT ck_fiscal_reporting_periods__timezone CHECK (char_length(btrim(reporting_timezone_name)) > 0),
     CONSTRAINT ck_fiscal_reporting_periods__currency CHECK (currency_code ~ '^[A-Z]{3}$'),
     CONSTRAINT ck_fiscal_reporting_periods__sequence CHECK (period_sequence > 0),
@@ -77,10 +81,26 @@ CREATE TABLE IF NOT EXISTS pos.fiscal_reporting_periods (
         AND (closed_at IS NULL OR (closing_started_at IS NOT NULL AND closed_at >= closing_started_at))
     ),
     CONSTRAINT ck_fiscal_reporting_periods__closed_posture CHECK (
-        (period_status_code_id = 'af7ee931-a023-507e-81a4-17adf047eb94' AND closed_at IS NOT NULL)
-        OR (period_status_code_id <> 'af7ee931-a023-507e-81a4-17adf047eb94' AND closed_at IS NULL)
+        (period_status_code_id = 'af7ee931-a023-507e-81a4-17adf047eb94'
+         AND closed_at IS NOT NULL
+         AND period_end_at = closed_at)
+        OR (period_status_code_id <> 'af7ee931-a023-507e-81a4-17adf047eb94'
+            AND closed_at IS NULL
+            AND period_end_at IS NULL)
     )
 );
+
+CREATE UNIQUE INDEX IF NOT EXISTS ux_fiscal_reporting_periods__active_scope
+    ON pos.fiscal_reporting_periods (site_pos_server_id, fiscal_identity_id, currency_code)
+    WHERE period_status_code_id IN (
+        '1a6f7021-bc84-5c01-afaa-c5d6685633c8',
+        'f0a44431-611b-5809-b3a9-5b8be8614552'
+    );
+
+CREATE UNIQUE INDEX IF NOT EXISTS ux_fiscal_reporting_periods__business_date_label
+    ON pos.fiscal_reporting_periods (
+        site_pos_server_id, fiscal_identity_id, currency_code, business_day_date
+    );
 
 CREATE INDEX IF NOT EXISTS ix_fiscal_reporting_periods__site_business_date
     ON pos.fiscal_reporting_periods (site_pos_server_id, business_day_date DESC, period_sequence DESC);
@@ -113,7 +133,8 @@ FOR EACH ROW EXECUTE FUNCTION pos.protect_closed_fiscal_reporting_period();
 
 COMMENT ON TABLE pos.fiscal_reporting_periods IS 'Site POS Server fiscal reporting period identity with snapshotted timezone/cutoff and future close posture. No close is executed by schema.';
 COMMENT ON COLUMN pos.fiscal_reporting_periods.period_start_at IS 'Inclusive UTC instant for the governed half-open reporting interval.';
-COMMENT ON COLUMN pos.fiscal_reporting_periods.period_end_at IS 'Exclusive UTC instant for the governed half-open reporting interval.';
+COMMENT ON COLUMN pos.fiscal_reporting_periods.period_end_at IS 'Actual exclusive UTC close instant. NULL while the manually governed period is OPEN or CLOSING.';
+COMMENT ON COLUMN pos.fiscal_reporting_periods.legacy_scheduled_period_end_at IS 'Preserved scheduled boundary for an active legacy fixed-cutoff period converted to manual lifecycle; never used as actual fiscal truth.';
 COMMENT ON COLUMN pos.fiscal_reporting_periods.reporting_timezone_name IS 'Historical timezone-name snapshot used to derive business date; no production timezone is assumed.';
 COMMENT ON COLUMN pos.fiscal_reporting_periods.business_day_cutoff_local_time IS 'Historical local business-day cutoff snapshot.';
 COMMENT ON FUNCTION pos.protect_closed_fiscal_reporting_period() IS 'Allows future OPEN/CLOSING lifecycle changes but rejects UPDATE or DELETE after a period is CLOSED.';

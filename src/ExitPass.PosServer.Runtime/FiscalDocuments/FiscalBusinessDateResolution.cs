@@ -9,7 +9,7 @@ public sealed record FiscalBusinessDateResolutionQuery(
 public sealed record FiscalBusinessDateResolution(
     DateOnly BusinessDayDate,
     DateTimeOffset PeriodStartAt,
-    DateTimeOffset PeriodEndAt,
+    DateTimeOffset? PeriodEndAt,
     string ReportingTimezoneName,
     TimeOnly BusinessDayCutoffLocalTime,
     bool IdempotencyRecordExists,

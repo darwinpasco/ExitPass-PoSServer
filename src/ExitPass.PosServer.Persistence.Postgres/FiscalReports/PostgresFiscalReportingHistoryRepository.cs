@@ -32,17 +32,15 @@ public sealed class PostgresFiscalReportingHistoryRepository(NpgsqlDataSource da
                  AND state.fiscal_identity_id=p.fiscal_identity_id AND state.currency_code=p.currency_code
             WHERE p.site_pos_server_id=@site AND p.fiscal_identity_id=@identity AND p.currency_code=@currency
               AND status.code_key='open'
-              AND ((@report_kind='X' AND p.period_start_at <= transaction_timestamp() AND transaction_timestamp() < p.period_end_at)
-                OR (@report_kind='Z' AND p.period_end_at <= transaction_timestamp()))
-            ORDER BY CASE WHEN @report_kind='Z' THEN p.period_sequence END ASC,
-                     CASE WHEN @report_kind='X' THEN p.period_sequence END DESC
+              AND p.period_end_at IS NULL
+            ORDER BY p.period_sequence DESC
             LIMIT 1;
             """;
         await using var command = new NpgsqlCommand(sql, connection);
         command.Parameters.AddWithValue("site", site); command.Parameters.AddWithValue("identity", identity); command.Parameters.AddWithValue("currency", currency); command.Parameters.AddWithValue("report_kind", reportKind);
         await using var reader = await command.ExecuteReaderAsync(ct).ConfigureAwait(false);
         return await reader.ReadAsync(ct).ConfigureAwait(false)
-            ? new(reader.GetGuid(0),reader.GetGuid(1),reader.GetGuid(2),reader.GetFieldValue<DateOnly>(3),reader.GetFieldValue<DateTimeOffset>(4),reader.GetFieldValue<DateTimeOffset>(5),reader.GetString(6),reader.GetInt64(7),reader.GetString(8).ToUpperInvariant(),reader.GetInt64(9))
+            ? new(reader.GetGuid(0),reader.GetGuid(1),reader.GetGuid(2),reader.GetFieldValue<DateOnly>(3),reader.GetFieldValue<DateTimeOffset>(4),reader.IsDBNull(5)?null:reader.GetFieldValue<DateTimeOffset>(5),reader.GetString(6),reader.GetInt64(7),reader.GetString(8).ToUpperInvariant(),reader.GetInt64(9))
             : null;
     }
 

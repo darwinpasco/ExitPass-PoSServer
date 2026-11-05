@@ -25,11 +25,11 @@ public sealed class FiscalZReadingService
             string.IsNullOrWhiteSpace(command.CurrencyCode) || command.CurrencyCode.Length != 3 ||
             command.CurrencyCode.Any(character => character is < 'A' or > 'Z') ||
             !IsSafeReference(command.RequestedByRef) || !IsSafeReference(command.ServiceIdentityRef) ||
-            !IsSafeReference(command.CorrelationId))
+            !IsSafeReference(command.CorrelationId) || !command.ConfirmClose)
         {
             return new FiscalZReadingResult(
                 FiscalZReadingOutcome.InvalidRequest,
-                SafeMessage: "The Z Reading close request is incomplete or invalid.");
+                SafeMessage: "A confirmed manual Z Reading close request is incomplete or invalid.");
         }
 
         var normalized = command with
