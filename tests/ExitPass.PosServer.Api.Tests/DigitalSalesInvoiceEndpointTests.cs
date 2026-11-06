@@ -423,6 +423,9 @@ public sealed class DigitalSalesInvoiceEndpointTests
         Assert.DoesNotContain("ORIGINAL", response.CanonicalText, StringComparison.Ordinal);
         Assert.Contains("1474119573117", response.CanonicalText, StringComparison.Ordinal);
         Assert.Contains("2026-09-30 22:39", response.CanonicalText, StringComparison.Ordinal);
+        Assert.Contains("PRINT DATE", response.CanonicalText, StringComparison.Ordinal);
+        Assert.Contains("REPRINT DATE", response.CanonicalText, StringComparison.Ordinal);
+        Assert.Contains("2026-10-01 08:00", response.CanonicalText, StringComparison.Ordinal);
         Assert.DoesNotContain("2026-09-30T14:39:48.6742010+00:00", response.CanonicalText, StringComparison.Ordinal);
         Assert.DoesNotContain("PHT", response.CanonicalText, StringComparison.Ordinal);
         Assert.DoesNotContain("ISSUANCE-TIME", response.CanonicalText, StringComparison.Ordinal);
