@@ -392,20 +392,37 @@ public sealed class StatutorySalesBookRuntimeTests
     }
 
     [Theory]
-    [InlineData(false, 2, 2, 2, StatutorySalesBookStatuses.Preliminary)]
-    [InlineData(true, 0, 0, 0, StatutorySalesBookStatuses.Preliminary)]
-    [InlineData(true, 1, 0, 0, StatutorySalesBookStatuses.Preliminary)]
-    [InlineData(true, 1, 1, 0, StatutorySalesBookStatuses.Preliminary)]
-    [InlineData(true, 2, 2, 1, StatutorySalesBookStatuses.Preliminary)]
-    [InlineData(true, 2, 2, 2, StatutorySalesBookStatuses.Final)]
+    [InlineData(2026, 11, "2026-11-06", 2, 2, 2, StatutorySalesBookStatuses.Preliminary)]
+    [InlineData(2026, 10, "2026-11-01", 0, 0, 0, StatutorySalesBookStatuses.Preliminary)]
+    [InlineData(2026, 10, "2026-11-01", 1, 0, 0, StatutorySalesBookStatuses.Preliminary)]
+    [InlineData(2026, 10, "2026-11-01", 1, 1, 0, StatutorySalesBookStatuses.Preliminary)]
+    [InlineData(2026, 10, "2026-11-01", 2, 2, 1, StatutorySalesBookStatuses.Preliminary)]
+    [InlineData(2026, 10, "2026-11-01", 2, 2, 2, StatutorySalesBookStatuses.Final)]
     public void FinalStatusRequiresCompletedMonthlyCoverageAndCommittedZEvidence(
-        bool reportingMonthComplete,
+        int calendarYear,
+        int calendarMonth,
+        string currentSiteDate,
         int scoped,
         int closed,
         int committedZ,
         string expected)
     {
-        Assert.Equal(expected, StatutorySalesBookStatuses.Resolve(reportingMonthComplete, scoped, closed, committedZ));
+        Assert.Equal(expected, StatutorySalesBookStatuses.Resolve(
+            calendarYear, calendarMonth, DateOnly.Parse(currentSiteDate), scoped, closed, committedZ));
+    }
+
+    [Fact]
+    public void PhtMonthBoundaryUsesTheSiteLocalCalendarMonth()
+    {
+        var instant = DateTimeOffset.Parse("2026-10-31T16:30:00Z");
+        var pht = TimeZoneInfo.ConvertTimeBySystemTimeZoneId(instant, "Asia/Manila");
+        var currentSiteDate = DateOnly.FromDateTime(pht.DateTime);
+
+        Assert.Equal(new DateOnly(2026, 11, 1), currentSiteDate);
+        Assert.Equal(StatutorySalesBookStatuses.Preliminary,
+            StatutorySalesBookStatuses.Resolve(2026, 11, currentSiteDate, 1, 1, 1));
+        Assert.Equal(StatutorySalesBookStatuses.Final,
+            StatutorySalesBookStatuses.Resolve(2026, 10, currentSiteDate, 1, 1, 1));
     }
 
     [Fact]

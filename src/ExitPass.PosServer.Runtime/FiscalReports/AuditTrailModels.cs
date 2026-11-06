@@ -74,14 +74,17 @@ public sealed record AuditTrailRow(
 public sealed record AuditTrailSalesFacts(
     string? PlateNumber,
     DateTimeOffset? EntryAt,
-    long OriginalParkingFeeMinorUnits,
+    long? OriginalParkingFeeMinorUnits,
     long FiscalGrossSalesMinorUnits,
     long FinalPayableMinorUnits,
     long AmountPaidMinorUnits,
     string? PaymentMethod,
     long? StatutoryDiscountMinorUnits = null,
     long? LguFullFeeWaiverMinorUnits = null,
-    string? EntitlementType = null);
+    string? EntitlementType = null,
+    IReadOnlyList<AuditTrailCommercialDiscount>? CommercialDiscounts = null);
+
+public sealed record AuditTrailCommercialDiscount(string Classification, long AmountMinorUnits);
 
 public static class AuditTrailSalesDescription
 {
@@ -95,13 +98,17 @@ public static class AuditTrailSalesDescription
             "Entry:",
             facts.EntryAt?.ToOffset(PhilippineOffset).ToString("yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture) ?? string.Empty,
             facts.EntryAt?.ToOffset(PhilippineOffset).ToString("HH:mm:ss", System.Globalization.CultureInfo.InvariantCulture) ?? string.Empty,
-            $"Original Parking Fee:{Money(facts.OriginalParkingFeeMinorUnits)}",
+            facts.OriginalParkingFeeMinorUnits is null
+                ? "Original Parking Fee:UNAVAILABLE (PRE-DISCOUNT AMOUNT NOT PROVEN)"
+                : $"Original Parking Fee:{Money(facts.OriginalParkingFeeMinorUnits.Value)}",
             $"Fiscal Gross Sales:{Money(facts.FiscalGrossSalesMinorUnits)}"
         };
         if (facts.StatutoryDiscountMinorUnits is not null)
             lines.Add($"Statutory Discount:{Money(facts.StatutoryDiscountMinorUnits.Value)}");
         if (facts.LguFullFeeWaiverMinorUnits is not null)
             lines.Add($"LGU Full-Fee Waiver:{Money(facts.LguFullFeeWaiverMinorUnits.Value)}");
+        foreach (var discount in facts.CommercialDiscounts ?? [])
+            lines.Add($"Commercial Discount ({Classification(discount.Classification)}):{Money(discount.AmountMinorUnits)}");
         lines.Add($"Final Payable:{Money(facts.FinalPayableMinorUnits)}");
         lines.Add($"Amount Paid:{Money(facts.AmountPaidMinorUnits)}");
         lines.Add($"Payment:{Payment(facts)}");
@@ -119,6 +126,9 @@ public static class AuditTrailSalesDescription
 
     private static string Money(long minorUnits) =>
         $"PHP {(minorUnits / 100m).ToString("N2", System.Globalization.CultureInfo.InvariantCulture)}";
+
+    private static string Classification(string value) =>
+        value.Trim().ToUpperInvariant().Replace('_', ' ').Replace('-', ' ');
 }
 
 public sealed record AuditTrailReport(

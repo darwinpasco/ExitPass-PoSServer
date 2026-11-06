@@ -158,8 +158,9 @@ public sealed class PostgresAuditTrailRepository(NpgsqlDataSource dataSource) : 
                    h.terminal_id,xz.report_number,xz.transaction_count,xz.net_sales_amount_minor_units,
                    bir.bir_sales_summary_report_id,bir.transaction_count,bir.net_sales_amount_minor_units,
                    COALESCE(tender.code_key,''),COALESCE(tender.amount_minor_units,0),
-                   COALESCE(discounts.discount_amount_minor_units,0),COALESCE(lines.net_amount_minor_units,0),
+                   COALESCE(discounts.discount_amount_minor_units,0),COALESCE(discounts.classifications_json,'{}'),
                    COALESCE(lines.gross_amount_minor_units,0),
+                   COALESCE(lines.discount_amount_minor_units,0),
                    COALESCE(payable.amount_minor_units,statutory.final_payable_amount_minor_units,tender.amount_minor_units,0),
                    statutory.original_amount_minor_units,statutory.statutory_discount_amount_minor_units,
                    statutory.final_payable_amount_minor_units,statutory.non_percentage_benefit_amount_minor_units,
@@ -175,12 +176,22 @@ public sealed class PostgresAuditTrailRepository(NpgsqlDataSource dataSource) : 
                 WHERE t.fiscal_document_id=d.fiscal_document_id
             ) tender ON true
             LEFT JOIN LATERAL (
-                SELECT sum(p.discount_amount_minor_units) AS discount_amount_minor_units
-                FROM pos.fiscal_discount_privilege_details p WHERE p.fiscal_document_id=d.fiscal_document_id
+                SELECT COALESCE(sum(classified.amount_minor_units),0) AS discount_amount_minor_units,
+                       COALESCE(jsonb_object_agg(classified.classification,classified.amount_minor_units
+                           ORDER BY classified.classification),'{}'::jsonb)::text AS classifications_json
+                FROM (
+                    SELECT classification.code_key AS classification,
+                           sum(privilege.discount_amount_minor_units) AS amount_minor_units
+                    FROM pos.fiscal_discount_privilege_details privilege
+                    JOIN pos.controlled_codes classification
+                      ON classification.controlled_code_id=privilege.discount_privilege_type_code_id
+                    WHERE privilege.fiscal_document_id=d.fiscal_document_id
+                    GROUP BY classification.code_key
+                ) classified
             ) discounts ON true
             LEFT JOIN LATERAL (
-                SELECT sum(line.net_amount_minor_units) AS net_amount_minor_units,
-                       sum(line.gross_amount_minor_units) AS gross_amount_minor_units
+                SELECT sum(line.gross_amount_minor_units) AS gross_amount_minor_units,
+                       sum(line.discount_amount_minor_units) AS discount_amount_minor_units
                 FROM pos.fiscal_document_lines line
                 WHERE line.fiscal_document_id=d.fiscal_document_id AND line.is_active
             ) lines ON true
@@ -241,19 +252,24 @@ public sealed class PostgresAuditTrailRepository(NpgsqlDataSource dataSource) : 
         var tender = reader.GetString(20);
         var tenderAmount = reader.GetInt64(21);
         var discount = reader.GetInt64(22);
-        var lineNet = reader.GetInt64(23);
+        var discountClassifications = reader.GetString(23);
         var fiscalGross = reader.GetInt64(24);
-        var payable = reader.GetInt64(25);
-        var statutoryOriginal = NullableLong(reader, 26);
-        var statutoryDiscount = NullableLong(reader, 27);
-        var statutoryFinalPayable = NullableLong(reader, 28);
-        var nonPercentageBenefit = NullableLong(reader, 29);
-        var entitlement = NullableString(reader, 30);
-        var benefit = NullableString(reader, 31);
-        var assignedAt = NullableInstant(reader, 32);
-        var reprintCopy = NullableLong(reader, 33);
-        var reprintAt = NullableInstant(reader, 34);
-        var originalParkingFee = statutoryOriginal ?? lineNet;
+        var lineDiscount = reader.GetInt64(25);
+        var payable = reader.GetInt64(26);
+        var statutoryOriginal = NullableLong(reader, 27);
+        var statutoryDiscount = NullableLong(reader, 28);
+        var statutoryFinalPayable = NullableLong(reader, 29);
+        var nonPercentageBenefit = NullableLong(reader, 30);
+        var entitlement = NullableString(reader, 31);
+        var benefit = NullableString(reader, 32);
+        var assignedAt = NullableInstant(reader, 33);
+        var reprintCopy = NullableLong(reader, 34);
+        var reprintAt = NullableInstant(reader, 35);
+        var originalParkingFee = statutoryOriginal ??
+            (lineDiscount == 0 && discount == 0 ? payable : null);
+        var commercialDiscounts = entitlement is null
+            ? CommercialDiscounts(discountClassifications, discount)
+            : [];
         var finalPayable = statutoryFinalPayable ?? payable;
         var lguFullFeeWaiver = string.Equals(benefit, "free_parking", StringComparison.OrdinalIgnoreCase) &&
                                statutoryOriginal is not null && statutoryFinalPayable is not null
@@ -278,7 +294,8 @@ public sealed class PostgresAuditTrailRepository(NpgsqlDataSource dataSource) : 
                 tender,
                 entitlement is null ? null : statutoryDiscount ?? discount,
                 lguFullFeeWaiver,
-                entitlement)),
+                entitlement,
+                commercialDiscounts)),
             "fiscal_document_voided" => $"SI No.:\n{invoice}\nResult:VOID",
             "fiscal_document_reprint_recorded" => $"SI No.:\n{invoice}\nCopy:REPRINT{(reprintCopy is null ? string.Empty : $" {reprintCopy}")}\nOriginal:\n{FormatPht(assignedAt ?? reprintAt ?? occurredAt)}",
             "x_reading_committed" => ReportDescription("X READING", businessDate, reportTransactions, reportNet, reportReference),
@@ -379,6 +396,19 @@ public sealed class PostgresAuditTrailRepository(NpgsqlDataSource dataSource) : 
 
     private static string ReportDescription(string name, DateOnly? businessDate, long? transactions, long? net, string? reference) =>
         $"{name}\nFiscal Business Date:\n{businessDate:yyyy-MM-dd}\nTransactions:{transactions ?? 0}\nNet:{Money(net ?? 0)}\nReference:\n{reference}";
+
+    private static IReadOnlyList<AuditTrailCommercialDiscount> CommercialDiscounts(string json, long total)
+    {
+        using var document = JsonDocument.Parse(json);
+        var result = document.RootElement.EnumerateObject()
+            .Select(item => new AuditTrailCommercialDiscount(item.Name, item.Value.GetInt64()))
+            .Where(item => item.AmountMinorUnits > 0)
+            .OrderBy(item => item.Classification, StringComparer.Ordinal)
+            .ToArray();
+        return result.Length > 0 || total == 0
+            ? result
+            : [new("unclassified", total)];
+    }
 
     private static string DisplayKind(string value) => value.Trim().ToUpperInvariant().Replace('_', ' ');
     private static string Money(long minorUnits) => $"P {Decimal(minorUnits)}";

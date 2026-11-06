@@ -11,8 +11,12 @@ public sealed class PostgresAuditTrailRepositoryTests
             "src", "ExitPass.PosServer.Persistence.Postgres", "FiscalReports", "PostgresAuditTrailRepository.cs"));
 
         Assert.Contains("pos.fiscal_document_lines", source, StringComparison.Ordinal);
-        Assert.Contains("sum(line.net_amount_minor_units)", source, StringComparison.Ordinal);
         Assert.Contains("sum(line.gross_amount_minor_units)", source, StringComparison.Ordinal);
+        Assert.Contains("sum(line.discount_amount_minor_units)", source, StringComparison.Ordinal);
+        Assert.Contains("jsonb_object_agg(classified.classification", source, StringComparison.Ordinal);
+        Assert.Contains("CommercialDiscounts(discountClassifications, discount)", source, StringComparison.Ordinal);
+        Assert.Contains("lineDiscount == 0 && discount == 0 ? payable : null", source, StringComparison.Ordinal);
+        Assert.DoesNotContain("lineNet", source, StringComparison.Ordinal);
         Assert.Contains("pos.fiscal_totals", source, StringComparison.Ordinal);
         Assert.Contains("total_type.code_key='payable_total'", source, StringComparison.Ordinal);
         Assert.Contains("pos.fiscal_document_applied_statutory_facts", source, StringComparison.Ordinal);

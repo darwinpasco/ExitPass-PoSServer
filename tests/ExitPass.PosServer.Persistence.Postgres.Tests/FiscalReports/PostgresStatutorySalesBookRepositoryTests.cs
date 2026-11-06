@@ -39,8 +39,11 @@ public sealed class PostgresStatutorySalesBookRepositoryTests
         Assert.DoesNotContain("d.channel_terminal_id=@terminal", source, StringComparison.Ordinal);
         Assert.Contains("pos.x_z_reports", source, StringComparison.Ordinal);
         Assert.Contains("lower(request_status.code_key)='committed'", source, StringComparison.Ordinal);
-        Assert.Contains("transaction_timestamp() AT TIME ZONE site.reporting_timezone_name", source, StringComparison.Ordinal);
-        Assert.Contains("requestedMonth < currentSiteMonth", source, StringComparison.Ordinal);
+        Assert.Contains("LEFT JOIN pg_timezone_names timezone ON timezone.name=site.reporting_timezone_name", source, StringComparison.Ordinal);
+        Assert.Contains("transaction_timestamp() AT TIME ZONE timezone.name", source, StringComparison.Ordinal);
+        Assert.Contains("reader.IsDBNull(4)", source, StringComparison.Ordinal);
+        Assert.Contains("StatutorySalesBookConfigurationException", source, StringComparison.Ordinal);
+        Assert.Contains("reporting timezone configuration is unavailable", source, StringComparison.Ordinal);
         Assert.DoesNotContain("INSERT INTO", source, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("UPDATE pos.", source, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("DELETE FROM", source, StringComparison.OrdinalIgnoreCase);

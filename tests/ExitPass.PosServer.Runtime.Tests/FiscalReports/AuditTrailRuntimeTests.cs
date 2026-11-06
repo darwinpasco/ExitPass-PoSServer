@@ -43,6 +43,30 @@ public sealed class AuditTrailRuntimeTests
     }
 
     [Fact]
+    public void CommercialDiscountDoesNotManufactureAnOriginalParkingFee()
+    {
+        var text = AuditTrailSalesDescription.Format(new(
+            "CPN1234", DateTimeOffset.Parse("2026-11-06T01:40:00Z"),
+            null, 4_464, 4_500, 4_500, "qrph", CommercialDiscounts:
+            [
+                new("coupon", 300),
+                new("promotional", 200),
+                new("corporate_rate", 100)
+            ]));
+
+        Assert.Contains("Original Parking Fee:UNAVAILABLE (PRE-DISCOUNT AMOUNT NOT PROVEN)", text, StringComparison.Ordinal);
+        Assert.Contains("Fiscal Gross Sales:PHP 44.64", text, StringComparison.Ordinal);
+        Assert.Contains("Commercial Discount (COUPON):PHP 3.00", text, StringComparison.Ordinal);
+        Assert.Contains("Commercial Discount (PROMOTIONAL):PHP 2.00", text, StringComparison.Ordinal);
+        Assert.Contains("Commercial Discount (CORPORATE RATE):PHP 1.00", text, StringComparison.Ordinal);
+        Assert.Contains("Final Payable:PHP 45.00", text, StringComparison.Ordinal);
+        Assert.Contains("Amount Paid:PHP 45.00", text, StringComparison.Ordinal);
+        Assert.Contains("Payment:QRPH", text, StringComparison.Ordinal);
+        Assert.DoesNotContain("Statutory Discount", text, StringComparison.Ordinal);
+        Assert.DoesNotContain("LGU Full-Fee Waiver", text, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void FiscalAdjustmentUsesAdjustmentCategoryAndDoesNotExposeRecovery()
     {
         var definition = Assert.Single(
