@@ -10,6 +10,37 @@ public sealed class PostgresStatutorySalesBookRepository(
     IStatutoryBeneficiaryIdentityProtector protector) : IStatutorySalesBookRepository
 {
     private static readonly Guid ZReadingKindId = Guid.Parse("1c628bc2-49c3-53e8-ae83-2082bcf28467");
+    private const string PeriodStatusSql = """
+        SELECT COUNT(*)::integer,
+               COUNT(*) FILTER (WHERE lower(status.code_key)='closed')::integer,
+               COUNT(*) FILTER (
+                   WHERE lower(status.code_key)='closed'
+                     AND EXISTS (
+                         SELECT 1
+                         FROM pos.x_z_reports z
+                         JOIN pos.fiscal_report_requests request
+                           ON request.fiscal_report_request_id=z.fiscal_report_request_id
+                         JOIN pos.controlled_codes request_status
+                           ON request_status.controlled_code_id=request.report_status_code_id
+                         WHERE z.fiscal_reporting_period_id=period.fiscal_reporting_period_id
+                           AND z.report_kind_code_id=@z_kind
+                           AND lower(request_status.code_key)='committed'
+                     )
+               )::integer,
+               (SELECT site.reporting_timezone_name
+                FROM pos.site_pos_servers site
+                WHERE site.site_pos_server_id=@site),
+               (SELECT CASE WHEN timezone.name IS NULL THEN NULL
+                            ELSE (transaction_timestamp() AT TIME ZONE timezone.name)::date END
+                FROM pos.site_pos_servers site
+                LEFT JOIN pg_timezone_names timezone ON timezone.name=site.reporting_timezone_name
+                WHERE site.site_pos_server_id=@site)
+        FROM pos.fiscal_reporting_periods period
+        JOIN pos.controlled_codes status ON status.controlled_code_id=period.period_status_code_id
+        WHERE period.site_pos_server_id=@site AND period.fiscal_identity_id=@identity
+          AND period.currency_code=@currency AND period.business_day_date>=@month_start
+          AND period.business_day_date<@month_end
+        """;
 
     public async Task<StatutorySalesBookResult> ReadAsync(StatutorySalesBookQuery query, CancellationToken cancellationToken = default)
     {
@@ -72,6 +103,11 @@ public sealed class PostgresStatutorySalesBookRepository(
         {
             return new(StatutorySalesBookOutcome.PersistenceFailure, SafeMessage: "The statutory sales-book source read failed safely.");
         }
+        catch (StatutorySalesBookConfigurationException)
+        {
+            return new(StatutorySalesBookOutcome.PersistenceFailure,
+                SafeMessage: "The statutory sales-book reporting timezone configuration is unavailable.");
+        }
         catch (System.Security.Cryptography.CryptographicException)
         {
             return new(StatutorySalesBookOutcome.PersistenceFailure, SafeMessage: "The statutory beneficiary snapshot could not be opened safely.");
@@ -80,30 +116,7 @@ public sealed class PostgresStatutorySalesBookRepository(
 
     private static async Task<PeriodStatus> ReadPeriodStatusAsync(NpgsqlConnection c, NpgsqlTransaction t, StatutorySalesBookQuery q, CancellationToken ct)
     {
-        const string sql = """
-        SELECT COUNT(*)::integer,
-               COUNT(*) FILTER (WHERE lower(status.code_key)='closed')::integer,
-               COUNT(*) FILTER (
-                   WHERE lower(status.code_key)='closed'
-                     AND EXISTS (
-                         SELECT 1
-                         FROM pos.x_z_reports z
-                         JOIN pos.fiscal_report_requests request
-                           ON request.fiscal_report_request_id=z.fiscal_report_request_id
-                         JOIN pos.controlled_codes request_status
-                           ON request_status.controlled_code_id=request.report_status_code_id
-                         WHERE z.fiscal_reporting_period_id=period.fiscal_reporting_period_id
-                           AND z.report_kind_code_id=@z_kind
-                           AND lower(request_status.code_key)='committed'
-                     )
-               )::integer
-        FROM pos.fiscal_reporting_periods period
-        JOIN pos.controlled_codes status ON status.controlled_code_id=period.period_status_code_id
-        WHERE period.site_pos_server_id=@site AND period.fiscal_identity_id=@identity
-          AND period.currency_code=@currency AND period.business_day_date>=@month_start
-          AND period.business_day_date<@month_end
-        """;
-        await using var cmd = new NpgsqlCommand(sql, c, t);
+        await using var cmd = new NpgsqlCommand(PeriodStatusSql, c, t);
         BindScope(cmd, q);
         cmd.Parameters.AddWithValue("z_kind", ZReadingKindId);
         await using var reader = await cmd.ExecuteReaderAsync(ct).ConfigureAwait(false);
@@ -111,7 +124,13 @@ public sealed class PostgresStatutorySalesBookRepository(
         var total = reader.GetInt32(0);
         var closed = reader.GetInt32(1);
         var committedZ = reader.GetInt32(2);
-        return new(StatutorySalesBookStatuses.Resolve(total, closed, committedZ), total, closed, committedZ);
+        var reportingTimezone = reader.IsDBNull(3) ? null : reader.GetString(3);
+        var currentSiteDate = reader.IsDBNull(4) ? (DateOnly?)null : reader.GetFieldValue<DateOnly>(4);
+        if (string.IsNullOrWhiteSpace(reportingTimezone) || currentSiteDate is null)
+            throw new StatutorySalesBookConfigurationException();
+        return new(StatutorySalesBookStatuses.Resolve(
+            q.CalendarYear, q.CalendarMonth, currentSiteDate.Value, total, closed, committedZ),
+            total, closed, committedZ);
     }
 
     private static async Task<StatutorySalesBookHeader?> ReadHeaderAsync(NpgsqlConnection c, NpgsqlTransaction t, StatutorySalesBookQuery q, CancellationToken ct)
@@ -293,4 +312,5 @@ public sealed class PostgresStatutorySalesBookRepository(
     }
 
     private sealed record PeriodStatus(string Status, int TotalCount, int ClosedCount, int CommittedZCount);
+    private sealed class StatutorySalesBookConfigurationException : Exception { }
 }

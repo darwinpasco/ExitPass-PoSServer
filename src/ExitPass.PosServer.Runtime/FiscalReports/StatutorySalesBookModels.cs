@@ -301,10 +301,21 @@ public static class StatutorySalesBookStatuses
     public const string Preliminary = "PRELIMINARY";
     public const string Final = "FINAL";
 
-    public static string Resolve(int scopedPeriods, int closedPeriods, int committedZPeriods) =>
-        scopedPeriods > 0 && scopedPeriods == closedPeriods && scopedPeriods == committedZPeriods
+    public static string Resolve(
+        int calendarYear,
+        int calendarMonth,
+        DateOnly currentSiteDate,
+        int scopedPeriods,
+        int closedPeriods,
+        int committedZPeriods)
+    {
+        var requestedMonth = new DateOnly(calendarYear, calendarMonth, 1);
+        var currentSiteMonth = new DateOnly(currentSiteDate.Year, currentSiteDate.Month, 1);
+        return requestedMonth < currentSiteMonth && scopedPeriods > 0 &&
+               scopedPeriods == closedPeriods && scopedPeriods == committedZPeriods
             ? Final
             : Preliminary;
+    }
 }
 
 public static class StatutorySalesBookQualification
