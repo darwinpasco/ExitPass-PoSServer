@@ -99,6 +99,10 @@ public sealed class PostgresAnnexE1Repository(
             await AcquireLockAsync(connection, transaction, $"annex-e1-workbook:v1:{command.SitePosServerId:D}:{command.FiscalIdentityId:D}:{command.CurrencyCode}:{command.CalendarYear:D4}{command.CalendarMonth:D2}:{command.Profile}", cancellationToken).ConfigureAwait(false);
             var sources = await ReadSourcesAsync(connection, transaction, command, cancellationToken).ConfigureAwait(false);
             if (sources.Count == 0) return FailureWorkbook(AnnexE1Outcome.MissingAuthoritativeSource, "No committed Z-bound BIR Sales Summary exists for the governed month.");
+            AnnexE1IdentityCompatibility.ValidateMonthlySources(sources.Select(source => new AnnexE1MachineIdentity(
+                source.TaxpayerName, source.TaxpayerAddress, source.Tin,
+                source.PosSerialNumber, source.MachineIdentificationNumber, source.SiteCode,
+                source.SoftwareName, source.SoftwareVersion)).ToArray());
 
             var generatedAt = await ClockAsync(connection, transaction, cancellationToken).ConfigureAwait(false);
             var sourceFacts = new List<(Source Source, IReadOnlyDictionary<string, AnnexE1PeriodFactRecord> Facts)>(sources.Count);
@@ -110,14 +114,8 @@ public sealed class PostgresAnnexE1Repository(
             var segments = sourceFacts
                 .GroupBy(entry => new
                 {
-                    entry.Source.TaxpayerName,
-                    entry.Source.TaxpayerAddress,
-                    entry.Source.Tin,
                     entry.Source.PosSerialNumber,
-                    entry.Source.MachineIdentificationNumber,
-                    entry.Source.SiteCode,
-                    entry.Source.SoftwareName,
-                    entry.Source.SoftwareVersion
+                    entry.Source.MachineIdentificationNumber
                 })
                 .OrderBy(group => group.Min(entry => entry.Source.PeriodSequence))
                 .Select(group =>

@@ -128,6 +128,37 @@ public sealed record AnnexE1Header(
     string GeneratedByRef,
     string? GeneratedByDisplayName = null);
 
+public sealed record AnnexE1MachineIdentity(
+    string TaxpayerName,
+    string TaxpayerAddress,
+    string Tin,
+    string PosSerialNumber,
+    string MachineIdentificationNumber,
+    string PosServerCode,
+    string SoftwareName,
+    string SoftwareVersion);
+
+public static class AnnexE1IdentityCompatibility
+{
+    public const string IncompatibleIdentityMessage =
+        "The governed Annex E-1 month contains incompatible taxpayer, Site POS Server, or software identity facts.";
+
+    public static void ValidateMonthlySources(IReadOnlyList<AnnexE1MachineIdentity> identities)
+    {
+        if (identities.Count == 0) return;
+
+        var first = identities[0];
+        if (identities.Any(identity =>
+                identity.TaxpayerName != first.TaxpayerName ||
+                identity.TaxpayerAddress != first.TaxpayerAddress ||
+                identity.Tin != first.Tin ||
+                identity.PosServerCode != first.PosServerCode ||
+                identity.SoftwareName != first.SoftwareName ||
+                identity.SoftwareVersion != first.SoftwareVersion))
+            throw new AnnexE1SafeException(AnnexE1Outcome.UnsupportedClassification, IncompatibleIdentityMessage);
+    }
+}
+
 public sealed record AnnexE1RowInputs(
     Guid FiscalReportingPeriodId,
     long PeriodSequence,
