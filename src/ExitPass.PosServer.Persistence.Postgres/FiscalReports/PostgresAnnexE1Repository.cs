@@ -99,17 +99,37 @@ public sealed class PostgresAnnexE1Repository(
             await AcquireLockAsync(connection, transaction, $"annex-e1-workbook:v1:{command.SitePosServerId:D}:{command.FiscalIdentityId:D}:{command.CurrencyCode}:{command.CalendarYear:D4}{command.CalendarMonth:D2}:{command.Profile}", cancellationToken).ConfigureAwait(false);
             var sources = await ReadSourcesAsync(connection, transaction, command, cancellationToken).ConfigureAwait(false);
             if (sources.Count == 0) return FailureWorkbook(AnnexE1Outcome.MissingAuthoritativeSource, "No committed Z-bound BIR Sales Summary exists for the governed month.");
+            AnnexE1IdentityCompatibility.ValidateMonthlySources(sources.Select(source => new AnnexE1MachineIdentity(
+                source.TaxpayerName, source.TaxpayerAddress, source.Tin,
+                source.PosSerialNumber, source.MachineIdentificationNumber, source.SiteCode,
+                source.SoftwareName, source.SoftwareVersion)).ToArray());
 
             var generatedAt = await ClockAsync(connection, transaction, cancellationToken).ConfigureAwait(false);
-            var header = BuildHeader(sources, generatedAt, command.RequestedByRef, command.RequestedByDisplayName);
             var sourceFacts = new List<(Source Source, IReadOnlyDictionary<string, AnnexE1PeriodFactRecord> Facts)>(sources.Count);
             foreach (var source in sources)
             {
                 var facts = await ReadCurrentFactsAsync(connection, transaction, source.PeriodId, cancellationToken).ConfigureAwait(false);
                 sourceFacts.Add((source, facts));
             }
-            var inputs = sourceFacts.Select(entry => ToInputs(entry.Source, entry.Facts)).ToArray();
-            semanticHash = AnnexE1SemanticHasher.ComputeWorkbook(command, inputs, header);
+            var segments = sourceFacts
+                .GroupBy(entry => new
+                {
+                    entry.Source.PosSerialNumber,
+                    entry.Source.MachineIdentificationNumber
+                })
+                .OrderBy(group => group.Min(entry => entry.Source.PeriodSequence))
+                .Select(group =>
+                {
+                    var entries = group.OrderBy(entry => entry.Source.PeriodSequence).ToArray();
+                    var header = BuildHeader(entries.Select(entry => entry.Source).ToArray(), generatedAt, command.RequestedByRef, command.RequestedByDisplayName);
+                    var rows = entries.Select(entry => calculationEngine.Calculate(ToInputs(entry.Source, entry.Facts))).ToArray();
+                    return new AnnexE1WorkbookSegment(header, rows);
+                })
+                .ToArray();
+            ValidateSegmentReconciliation(segments, sources.Count);
+            var header = segments[0].Header;
+            var rows = segments.SelectMany(segment => segment.Rows).OrderBy(row => row.Source.PeriodSequence).ToArray();
+            semanticHash = AnnexE1SemanticHasher.ComputeWorkbook(command, segments);
 
             var operation = await ReadWorkbookByOperationAsync(connection, transaction, command.SitePosServerId, command.OperationKey, cancellationToken).ConfigureAwait(false);
             if (operation is not null)
@@ -118,7 +138,6 @@ public sealed class PostgresAnnexE1Repository(
                     : FailureWorkbook(AnnexE1Outcome.Conflict, "The Annex E-1 operation is already bound to different source semantics.");
 
             var current = await ReadCurrentWorkbookAsync(connection, transaction, command, cancellationToken).ConfigureAwait(false);
-            var rows = inputs.Select(calculationEngine.Calculate).ToArray();
             var persistenceCommand = command;
             if (command.SupersedesWorkbookId is null)
             {
@@ -139,7 +158,7 @@ public sealed class PostgresAnnexE1Repository(
             else if (current is null || current.WorkbookId != command.SupersedesWorkbookId)
                 return FailureWorkbook(AnnexE1Outcome.Conflict, "The correction must supersede the current workbook in the exact governed scope.");
 
-            var bytes = renderer.Render(header, rows);
+            var bytes = renderer.Render(segments);
             var artifactSha = Convert.ToHexString(SHA256.HashData(bytes)).ToLowerInvariant();
             var artifactKey = await artifactStore.PublishAsync(bytes, artifactSha, cancellationToken).ConfigureAwait(false);
             var revision = current is null ? 1 : checked(current.Revision + 1);
@@ -154,7 +173,7 @@ public sealed class PostgresAnnexE1Repository(
                 ?? throw new AnnexE1SafeException(AnnexE1Outcome.PersistenceFailure, "The Annex E-1 workbook was not readable in its transaction.");
             await InsertAuditAsync(connection,transaction,command.SitePosServerId,command.RequestedByRef,command.ServiceIdentityRef,command.CorrelationId,generatedAt,cancellationToken).ConfigureAwait(false);
             await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
-            return new(AnnexE1Outcome.Created, record);
+            return new(AnnexE1Outcome.Created, record with { IdentitySegments = segments });
         }
         catch (AnnexE1SafeException exception) { return FailureWorkbook(exception.Outcome, exception.Message); }
         catch (OverflowException) { return FailureWorkbook(AnnexE1Outcome.ArithmeticOverflow, "Annex E-1 checked minor-unit arithmetic exceeded supported bounds."); }
@@ -274,6 +293,14 @@ public sealed class PostgresAnnexE1Repository(
         return new(first.TaxpayerName,first.TaxpayerAddress,first.Tin,first.SoftwareName,first.SoftwareVersion,AnnexE1Contract.ReleaseNumber,AnnexE1Contract.ReleaseDate,first.PosSerialNumber,first.MachineIdentificationNumber,first.SiteCode,at,actor,actorDisplayName);
     }
 
+    private static void ValidateSegmentReconciliation(IReadOnlyList<AnnexE1WorkbookSegment> segments, int sourceCount)
+    {
+        var rows = segments.SelectMany(segment => segment.Rows).ToArray();
+        if (rows.Length != sourceCount ||
+            rows.Select(row => row.Source.FiscalReportingPeriodId).Distinct().Count() != sourceCount)
+            throw new AnnexE1SafeException(AnnexE1Outcome.ReconciliationFailure, "The Annex E-1 identity segments do not reconcile to the governed monthly periods.");
+    }
+
     private static string BuildFileName(string fiscalIdentityCode,string min,int year,int month)
     {
         static string Safe(string value) { var result = new string(value.Select(c => char.IsAsciiLetterOrDigit(c) || c is '-' or '_' or '.' ? c : '_').ToArray()).Trim('_','.'); return string.IsNullOrEmpty(result) ? "UNAVAILABLE" : result[..Math.Min(result.Length,64)]; }
@@ -370,7 +397,33 @@ public sealed class PostgresAnnexE1Repository(
     {
         const string sql="""SELECT w.annex_e1_workbook_id,w.annex_e_reference,w.operation_key,w.profile_ref,w.calculation_profile_ref,w.renderer_version,w.site_pos_server_id,w.fiscal_identity_id,w.currency_code,w.calendar_year,w.calendar_month,w.revision,w.semantic_hash,w.artifact_sha256,w.artifact_byte_length,w.mime_type,w.file_name,w.taxpayer_name,w.taxpayer_address,w.tin,w.software_name,w.software_version,w.release_number,w.release_date,w.pos_serial_number,w.machine_identification_number,w.pos_terminal_number,w.generated_at,w.generated_by_ref,w.supersedes_workbook_id,w.correction_reason_code_id,w.correction_approval_reference,w.committed_at,w.correlation_id,(SELECT child.annex_e_reference FROM pos.annex_e1_workbooks child WHERE child.supersedes_workbook_id=w.annex_e1_workbook_id),w.generated_by_display_name FROM pos.annex_e1_workbooks w WHERE w.annex_e1_workbook_id=@id""";
         await using var cmd=Command(c,t,sql);cmd.Parameters.AddWithValue("id",id);AnnexE1WorkbookRecord? shell;await using(var r=await cmd.ExecuteReaderAsync(ct).ConfigureAwait(false)){if(!await r.ReadAsync(ct).ConfigureAwait(false))return null;var header=new AnnexE1Header(r.GetString(17),r.GetString(18),r.GetString(19),r.GetString(20),r.GetString(21),r.GetString(22),r.GetString(23),r.GetString(24),r.GetString(25),r.GetString(26),r.GetFieldValue<DateTimeOffset>(27),r.GetString(28),r.IsDBNull(35)?null:r.GetString(35));shell=new(r.GetGuid(0),r.GetString(1),r.GetString(2),r.GetString(3),r.GetString(4),r.GetString(5),r.GetGuid(6),r.GetGuid(7),r.GetString(8),r.GetInt32(9),r.GetInt32(10),r.GetInt32(11),r.GetString(12),r.GetString(13),r.GetInt64(14),r.GetString(15),r.GetString(16),header,Array.Empty<AnnexE1Row>(),r.IsDBNull(29)?null:r.GetGuid(29),r.IsDBNull(34)?null:r.GetString(34),r.IsDBNull(30)?null:"controlled",r.IsDBNull(31)?null:r.GetString(31),r.GetFieldValue<DateTimeOffset>(27),r.GetFieldValue<DateTimeOffset>(32),r.GetString(33));}
-        var rows=await ReadRowsAsync(c,t,id,ct).ConfigureAwait(false);return shell with{Rows=rows};
+        var rows=await ReadRowsAsync(c,t,id,ct).ConfigureAwait(false);
+        var segments=await ReadIdentitySegmentsAsync(c,t,id,rows,shell.Header,ct).ConfigureAwait(false);
+        return shell with{Rows=rows,IdentitySegments=segments};
+    }
+
+    private static async Task<IReadOnlyList<AnnexE1WorkbookSegment>> ReadIdentitySegmentsAsync(
+        NpgsqlConnection c,NpgsqlTransaction? t,Guid workbook,IReadOnlyList<AnnexE1Row> rows,AnnexE1Header storedHeader,CancellationToken ct)
+    {
+        const string sql="""
+        SELECT r.fiscal_reporting_period_id,b.pos_serial_number,b.machine_identification_number
+        FROM pos.annex_e_reports r
+        JOIN pos.bir_sales_summary_reports b ON b.bir_sales_summary_report_id=r.related_bir_sales_summary_report_id
+        WHERE r.annex_e1_workbook_id=@workbook
+        ORDER BY r.row_sequence
+        """;
+        await using var cmd=Command(c,t,sql);cmd.Parameters.AddWithValue("workbook",workbook);
+        var facts=new List<SegmentHeaderFact>();
+        await using(var reader=await cmd.ExecuteReaderAsync(ct).ConfigureAwait(false))
+            while(await reader.ReadAsync(ct).ConfigureAwait(false))
+                facts.Add(new(reader.GetGuid(0),reader.GetString(1),reader.GetString(2)));
+        if(facts.Count==0)return [new(storedHeader,rows)];
+        var rowsByPeriod=rows.ToDictionary(row=>row.Source.FiscalReportingPeriodId);
+        return facts.GroupBy(fact=>new{fact.PosSerialNumber,fact.MachineIdentificationNumber})
+            .Select(group=>new AnnexE1WorkbookSegment(
+                storedHeader with{PosSerialNumber=group.Key.PosSerialNumber,MachineIdentificationNumber=group.Key.MachineIdentificationNumber},
+                group.Select(fact=>rowsByPeriod[fact.PeriodId]).OrderBy(row=>row.Source.PeriodSequence).ToArray()))
+            .OrderBy(segment=>segment.Rows[0].Source.PeriodSequence).ToArray();
     }
 
     private static async Task<IReadOnlyList<AnnexE1Row>> ReadRowsAsync(NpgsqlConnection c,NpgsqlTransaction? t,Guid workbook,CancellationToken ct)
@@ -431,4 +484,5 @@ public sealed class PostgresAnnexE1Repository(
     private static AnnexE1WorkbookResult FailureWorkbook(AnnexE1Outcome outcome,string message)=>new(outcome,SafeMessage:message);
 
     private sealed record Source(Guid PeriodId,long PeriodSequence,DateOnly BusinessDate,Guid ZId,string ZReference,Guid BirId,string BirSemanticHash,string? BeginningNumber,string? EndingNumber,long PreviousGta,long ResultingGta,long GrossSales,long NetSales,long VatableSales,long VatAmount,long VatExemptSales,long ZeroRatedSales,long ScDiscount,long PwdDiscount,long OtherStatutoryDiscount,long VatExemptionAmount,long CouponDiscount,long PromotionalDiscount,long VoidAmount,long ReturnAmount,long RefundAmount,long AdjustmentAmount,long ServiceChargeAmount,long ResetCounter,long ZCounter,long TransactionCount,long RangeCount,long GapCount,long ScVatAdjustment,long PwdVatAdjustment,long ParkingVatExemptionAmount,string FiscalIdentityCode,string TaxpayerName,string TaxpayerAddress,string Tin,string PosSerialNumber,string MachineIdentificationNumber,string SiteCode,string SoftwareName,string SoftwareVersion);
+    private sealed record SegmentHeaderFact(Guid PeriodId,string PosSerialNumber,string MachineIdentificationNumber);
 }

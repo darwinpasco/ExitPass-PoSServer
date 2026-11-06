@@ -20,11 +20,22 @@ public sealed class PostgresStatutorySalesBookRepository(
             await using (var readOnly = new NpgsqlCommand("SET TRANSACTION READ ONLY", connection, transaction))
                 await readOnly.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
 
-            var header = await ReadHeaderAsync(connection, transaction, query, cancellationToken).ConfigureAwait(false);
-            if (header is null) return new(StatutorySalesBookOutcome.ScopeNotFound, SafeMessage: "The statutory sales-book scope is unavailable.");
+            var fallbackHeader = await ReadHeaderAsync(connection, transaction, query, cancellationToken).ConfigureAwait(false);
+            if (fallbackHeader is null) return new(StatutorySalesBookOutcome.ScopeNotFound, SafeMessage: "The statutory sales-book scope is unavailable.");
             var rows = await ReadRowsAsync(connection, transaction, query, cancellationToken).ConfigureAwait(false);
             if (rows.MissingSnapshotReference is not null)
                 return new(StatutorySalesBookOutcome.MissingBeneficiarySnapshot, SafeMessage: $"E2_E3_REQUIRED_BENEFICIARY_SNAPSHOT_MISSING:{rows.MissingSnapshotReference}");
+            if (rows.MissingHeaderSnapshotReference is not null)
+                return new(StatutorySalesBookOutcome.ReconciliationFailure, SafeMessage: $"E2_E3_REQUIRED_FISCAL_HEADER_SNAPSHOT_MISSING:{rows.MissingHeaderSnapshotReference}");
+            var resolvedHeader = rows.HeaderFacts.FirstOrDefault();
+
+            var header = resolvedHeader is null
+                ? fallbackHeader
+                : new(resolvedHeader.TaxpayerName, resolvedHeader.TaxpayerAddress, resolvedHeader.Tin,
+                    resolvedHeader.SoftwareName, resolvedHeader.SoftwareVersion,
+                    StatutorySalesBookContract.ReleaseNumber, StatutorySalesBookContract.ReleaseDate,
+                    resolvedHeader.SerialNumber, resolvedHeader.MachineIdentificationNumber,
+                    resolvedHeader.PosServerCode, fallbackHeader.GeneratedAt, query.RequestedByRef, query.RequestedByDisplayName);
 
             var ordered = rows.Rows.OrderBy(x => x.TransactionTimestamp).ThenBy(x => x.FiscalSequence).ThenBy(x => x.FiscalDocumentId).ToArray();
             if (!StatutorySalesBookReconciliation.HasUniqueFiscalEvidence(ordered) ||
@@ -43,8 +54,19 @@ public sealed class PostgresStatutorySalesBookRepository(
                 Sum(ordered, x => x.OriginalParkingFeeVatInclusiveMinorUnits),
                 Sum(ordered, x => x.LguWaiverVatInclusiveMinorUnits),
                 Sum(ordered, x => x.LguFinalPayableVatInclusiveMinorUnits));
+            StatutorySalesBookReport report;
+            try
+            {
+                var draft = new StatutorySalesBookReport(header, summary, ordered);
+                report = draft with { IdentitySections = StatutorySalesBookSectionPlanner.Resolve(draft) };
+            }
+            catch (InvalidOperationException exception)
+            {
+                return new(StatutorySalesBookOutcome.ReconciliationFailure, SafeMessage: exception.Message);
+            }
+
             await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
-            return new(StatutorySalesBookOutcome.Succeeded, new(header, summary, ordered));
+            return new(StatutorySalesBookOutcome.Succeeded, report);
         }
         catch (NpgsqlException)
         {
@@ -146,11 +168,15 @@ public sealed class PostgresStatutorySalesBookRepository(
                COALESCE((SELECT SUM(td.tax_amount_minor_units)
                          FROM pos.fiscal_tax_details td
                           WHERE td.fiscal_document_id=d.fiscal_document_id),0),
-                COALESCE(
+               COALESCE(
                     NULLIF(BTRIM(f.policy_code), ''),
                     NULLIF(BTRIM(f.ordinance_reference), ''),
                     f.policy_version_id::text,
-                    f.applied_policy_reference_id::text)
+                    f.applied_policy_reference_id::text),
+               h.registered_business_name,h.registered_business_address,h.tin,
+               h.pos_serial_number,h.machine_identification_number,site.site_pos_server_code,
+               COALESCE(NULLIF(BTRIM(fi.software_name),''), @software),
+               COALESCE(NULLIF(BTRIM(fi.software_version),''), @version)
         FROM pos.fiscal_documents d
         JOIN pos.channel_terminals terminal
           ON terminal.channel_terminal_id=d.channel_terminal_id
@@ -164,6 +190,9 @@ public sealed class PostgresStatutorySalesBookRepository(
         JOIN pos.controlled_codes basis ON basis.controlled_code_id=f.policy_resolution_basis_code_id
         JOIN pos.controlled_codes benefit ON benefit.controlled_code_id=f.benefit_classification_code_id
         LEFT JOIN pos.fiscal_document_statutory_beneficiary_snapshots s ON s.fiscal_document_id=d.fiscal_document_id
+        LEFT JOIN pos.fiscal_document_header_snapshots h ON h.fiscal_document_id=d.fiscal_document_id
+        JOIN pos.fiscal_identities fi ON fi.fiscal_identity_id=d.fiscal_identity_id
+        JOIN pos.site_pos_servers site ON site.site_pos_server_id=d.site_pos_server_id
         WHERE d.site_pos_server_id=@site AND d.fiscal_identity_id=@identity
           AND d.currency_code=@currency AND d.business_day_date>=@month_start AND d.business_day_date<@month_end
           AND d.fiscal_document_number IS NOT NULL AND d.fiscal_sequence_value IS NOT NULL AND d.is_active
@@ -173,8 +202,11 @@ public sealed class PostgresStatutorySalesBookRepository(
         await using var cmd = new NpgsqlCommand(sql, c, t);
         BindScope(cmd, q);
         cmd.Parameters.AddWithValue("entitlement", StatutorySalesBookContract.Entitlement(q.Type));
+        cmd.Parameters.AddWithValue("software", StatutorySalesBookContract.SoftwareName);
+        cmd.Parameters.AddWithValue("version", StatutorySalesBookContract.SoftwareVersion);
         var result = new List<StatutorySalesBookRow>();
         var warnings = new HashSet<string>(StringComparer.Ordinal);
+        var headerFacts = new List<StatutorySalesBookFiscalHeaderFact>();
         await using var r = await cmd.ExecuteReaderAsync(ct).ConfigureAwait(false);
         while (await r.ReadAsync(ct).ConfigureAwait(false))
         {
@@ -196,6 +228,11 @@ public sealed class PostgresStatutorySalesBookRepository(
             if (!isPercentage && !isFullFeeExemption)
                 continue;
             if (r.IsDBNull(16)) return new([], documentNumber, warnings.ToArray());
+            if (r.IsDBNull(28)) return new([], null, warnings.ToArray(), documentNumber);
+            var fiscalHeader = new StatutorySalesBookFiscalHeaderFact(
+                r.GetString(28), r.GetString(29), r.GetString(30), r.GetString(31),
+                r.GetString(32), r.GetString(33), r.GetString(34), r.GetString(35));
+            headerFacts.Add(fiscalHeader);
             var decisionId = r.GetGuid(5);
             var identity = protector.Unprotect(documentId, decisionId, new(
                 (byte[])r.GetValue(16), r.GetString(17), r.GetString(18), r.GetInt16(19)));
@@ -213,16 +250,19 @@ public sealed class PostgresStatutorySalesBookRepository(
             var lguWaiver = isFullFeeExemption
                 ? checked(originalParkingFee - lguFinalPayable)
                 : 0;
-            result.Add(new(documentId, r.GetFieldValue<DateOnly>(1), r.GetFieldValue<DateTimeOffset>(2), r.GetInt64(3),
+            result.Add(new StatutorySalesBookRow(documentId, r.GetFieldValue<DateOnly>(1), r.GetFieldValue<DateTimeOffset>(2), r.GetInt64(3),
                 identity.BeneficiaryFullName, identity.StatutoryIdType, identity.StatutoryIdNumber, identity.BeneficiaryTin,
                 documentNumber, originalAmount, originalVatAmount, r.GetInt64(15), rate == 500 ? discount : 0,
                 rate == 2000 ? discount : 0, finalPayableAmount, r.IsDBNull(8) ? string.Empty : r.GetString(8), rate ?? 0,
                 benefitClassification, r.IsDBNull(21) ? null : r.GetString(21), r.GetInt64(22),
                 effectiveNonPercentageBenefit, r.GetInt64(25), r.GetInt64(26), finalPayableAmount,
                 isFullFeeExemption ? "FULL_FEE_EXEMPTION" : null, null,
-                originalParkingFee, lguWaiver, lguFinalPayable, policyReference));
+                originalParkingFee, lguWaiver, lguFinalPayable, policyReference)
+            {
+                FiscalHeader = fiscalHeader
+            });
         }
-        return new(result, null, warnings.ToArray());
+        return new(result, null, warnings.ToArray(), null, headerFacts);
     }
 
     private static void BindScope(NpgsqlCommand command, StatutorySalesBookQuery query)
@@ -245,7 +285,12 @@ public sealed class PostgresStatutorySalesBookRepository(
     private sealed record RowReadResult(
         IReadOnlyList<StatutorySalesBookRow> Rows,
         string? MissingSnapshotReference,
-        IReadOnlyList<string> Warnings);
+        IReadOnlyList<string> Warnings,
+        string? MissingHeaderSnapshotReference = null,
+        IReadOnlyList<StatutorySalesBookFiscalHeaderFact>? FiscalHeaderFacts = null)
+    {
+        public IReadOnlyList<StatutorySalesBookFiscalHeaderFact> HeaderFacts => FiscalHeaderFacts ?? [];
+    }
 
     private sealed record PeriodStatus(string Status, int TotalCount, int ClosedCount, int CommittedZCount);
 }

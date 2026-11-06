@@ -15,6 +15,7 @@ public sealed class PostgresStatutorySalesBookRepositoryTests
         Assert.Contains("document_status.code_key='issued'", source, StringComparison.Ordinal);
         Assert.Contains("pos.fiscal_document_applied_statutory_facts", source, StringComparison.Ordinal);
         Assert.Contains("pos.fiscal_document_statutory_beneficiary_snapshots", source, StringComparison.Ordinal);
+        Assert.Contains("pos.fiscal_document_header_snapshots", source, StringComparison.Ordinal);
         Assert.Contains("JOIN pos.controlled_codes benefit", source, StringComparison.Ordinal);
         Assert.Contains("IsQualifyingFullFeeExemptionRow", source, StringComparison.Ordinal);
         Assert.Contains("f.non_percentage_benefit_amount_minor_units", source, StringComparison.Ordinal);
@@ -54,6 +55,9 @@ public sealed class PostgresStatutorySalesBookRepositoryTests
         Assert.Contains("StatutorySalesBookReconciliation.HasUniqueFiscalEvidence", source, StringComparison.Ordinal);
         Assert.Contains("StatutorySalesBookReconciliation.IsValid", source, StringComparison.Ordinal);
         Assert.Contains("ReconciliationFailure", source, StringComparison.Ordinal);
+        Assert.Contains("E2_E3_REQUIRED_FISCAL_HEADER_SNAPSHOT_MISSING", source, StringComparison.Ordinal);
+        Assert.Contains("FiscalHeader = fiscalHeader", source, StringComparison.Ordinal);
+        Assert.Contains("StatutorySalesBookSectionPlanner.Resolve", source, StringComparison.Ordinal);
     }
 
     private static string FindSource(params string[] parts)

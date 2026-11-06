@@ -59,6 +59,74 @@ public sealed class AnnexE1RuntimeTests
     }
 
     [Fact]
+    public void MixedEffectiveDatedMachineIdentitiesRenderAsReconciledWorkbookSegments()
+    {
+        var engine=new AnnexE1CalculationEngine();
+        var firstRow=engine.Calculate(ZeroInput());
+        var secondRow=engine.Calculate(Input() with
+        {
+            FiscalReportingPeriodId=Guid.NewGuid(),GoverningZReportId=Guid.NewGuid(),BirSalesSummaryReportId=Guid.NewGuid(),
+            PeriodSequence=2,BusinessDayDate=new(2026,8,2)
+        });
+        var oldHeader=Header() with{PosSerialNumber="SN-OLD"};
+        var newHeader=Header() with{PosSerialNumber="SN-NEW"};
+        AnnexE1WorkbookSegment[] segments=[new(oldHeader,[firstRow]),new(newHeader,[secondRow])];
+
+        var bytes=new AnnexE1DeterministicXlsxRenderer().Render(segments);
+        using var archive=new ZipArchive(new MemoryStream(bytes),ZipArchiveMode.Read);
+        Assert.Equal(13,archive.Entries.Count);
+        var workbookXml=Read(archive,"xl/workbook.xml");
+        Assert.Contains("name=\"E-1 1\"",workbookXml);Assert.Contains("name=\"E-1 2\"",workbookXml);
+        Assert.Contains("SN-OLD",Read(archive,"xl/worksheets/sheet1.xml"));
+        Assert.Contains("SN-NEW",Read(archive,"xl/worksheets/sheet2.xml"));
+        Assert.Contains("NO_ACTIVITY",Read(archive,"xl/worksheets/sheet1.xml"));
+        Assert.Contains("2026-08-01",Read(archive,"xl/worksheets/sheet1.xml"));
+        Assert.Contains("2026-08-02",Read(archive,"xl/worksheets/sheet2.xml"));
+
+        var record=Workbook() with{Rows=[firstRow,secondRow],IdentitySegments=segments};
+        var pdf=new AnnexE1PdfRenderer().Render(record);
+        var text=Encoding.Latin1.GetString(pdf.Bytes);
+        Assert.Equal(2,Count(text,"/Type /Page "));
+        Assert.Contains("SN-OLD",text);Assert.Contains("SN-NEW",text);
+        Assert.Equal(2,record.EffectiveSegments.Sum(segment=>segment.Rows.Count));
+    }
+
+    [Fact]
+    public void MonthlyIdentityCompatibilityPermitsSerialAndMinTransitions()
+    {
+        var historical=MachineIdentity() with{PosSerialNumber="SN-TEST-PITX-L3-001",MachineIdentificationNumber="MIN-OLD"};
+        var current=historical with{PosSerialNumber="0026_B728_3B2F_8505",MachineIdentificationNumber="MIN-NEW"};
+
+        AnnexE1IdentityCompatibility.ValidateMonthlySources([historical,current]);
+    }
+
+    [Theory]
+    [InlineData("taxpayer_name")]
+    [InlineData("taxpayer_address")]
+    [InlineData("tin")]
+    [InlineData("pos_server")]
+    [InlineData("software_name")]
+    [InlineData("software_version")]
+    public void MonthlyIdentityCompatibilityRejectsIncompatibleCommonFacts(string changedFact)
+    {
+        var historical=MachineIdentity();
+        var incompatible=changedFact switch
+        {
+            "taxpayer_name"=>historical with{TaxpayerName="Different Taxpayer"},
+            "taxpayer_address"=>historical with{TaxpayerAddress="Different Address"},
+            "tin"=>historical with{Tin="111-111-111-000"},
+            "pos_server"=>historical with{PosServerCode="OTHER-POS"},
+            "software_name"=>historical with{SoftwareName="Different POS"},
+            _=>historical with{SoftwareVersion="V2.0.0"}
+        };
+
+        var exception=Assert.Throws<AnnexE1SafeException>(()=>
+            AnnexE1IdentityCompatibility.ValidateMonthlySources([historical,incompatible]));
+        Assert.Equal(AnnexE1Outcome.UnsupportedClassification,exception.Outcome);
+        Assert.Equal(AnnexE1IdentityCompatibility.IncompatibleIdentityMessage,exception.Message);
+    }
+
+    [Fact]
     public void PdfIsDeterministicAndPreservesCanonicalWorksheetGeometryAndValues()
     {
         var workbook=Workbook(10);var renderer=new AnnexE1PdfRenderer();
@@ -104,6 +172,20 @@ public sealed class AnnexE1RuntimeTests
         var source=Input();var command=Generation();var header=Header();var first=AnnexE1SemanticHasher.ComputeWorkbook(command,[source],header);
         var second=AnnexE1SemanticHasher.ComputeWorkbook(command with{OperationKey="retry",RequestedByRef="other",CorrelationId="other"},[source],header with{GeneratedAt=header.GeneratedAt.AddDays(1),GeneratedByRef="other"});
         Assert.Equal(first,second);Assert.Matches("^[0-9a-f]{64}$",first);
+    }
+
+    [Fact]
+    public void SegmentedSemanticHashIsIdempotentAndIncludesHistoricalMachineIdentity()
+    {
+        var firstRow=new AnnexE1CalculationEngine().Calculate(Input());
+        var secondRow=new AnnexE1CalculationEngine().Calculate(Input() with
+        {FiscalReportingPeriodId=Guid.NewGuid(),GoverningZReportId=Guid.NewGuid(),BirSalesSummaryReportId=Guid.NewGuid(),PeriodSequence=2});
+        AnnexE1WorkbookSegment[] segments=[new(Header() with{PosSerialNumber="SN-OLD"},[firstRow]),new(Header() with{PosSerialNumber="SN-NEW"},[secondRow])];
+        var command=Generation();
+        var first=AnnexE1SemanticHasher.ComputeWorkbook(command,segments);
+        var replay=AnnexE1SemanticHasher.ComputeWorkbook(command with{OperationKey="retry",CorrelationId="retry"},segments);
+        var changed=AnnexE1SemanticHasher.ComputeWorkbook(command,[segments[0],segments[1] with{Header=segments[1].Header with{PosSerialNumber="SN-CHANGED"}}]);
+        Assert.Equal(first,replay);Assert.NotEqual(first,changed);
     }
 
     [Fact]
@@ -185,6 +267,7 @@ public sealed class AnnexE1RuntimeTests
         FiscalRangeCount:1,FiscalGapCount:0,FactIds:Enumerable.Range(0,7).Select(_=>Guid.NewGuid()).ToArray(),
         FactSemanticHashes:Enumerable.Range(0,7).Select(_=>new string('b',64)).ToArray());
     private static AnnexE1Header Header()=>new("Synthetic Taxpayer","Synthetic Address","000-000-000","ExitPass POS Server","V1.0.0","Z-012B","2026-08-10","SERIAL","MIN","PITX-L3-POS-01",DateTimeOffset.Parse("2026-08-10T00:00:00Z"),"actor","Juan Dela Cruz");
+    private static AnnexE1MachineIdentity MachineIdentity()=>new("Synthetic Taxpayer","Synthetic Address","000-000-000","SERIAL","MIN","PITX-L3-POS-01","ExitPass POS Server","V1.0.0");
     private static AnnexE1WorkbookRecord Workbook(int rowCount=1)=>new(
         Guid.Parse("613af721-3b65-4bc4-9ce3-d2a032c26ab3"),"AE1-202608-TEST-R002","operation",AnnexE1Contract.Profile,
         AnnexE1Contract.CalculationProfile,AnnexE1Contract.RendererVersion,Guid.NewGuid(),Guid.NewGuid(),"PHP",2026,8,2,

@@ -80,20 +80,23 @@ public sealed class AnnexE1PdfRenderer
     {
         ArgumentNullException.ThrowIfNull(workbook);
         var pdf = new A4FiscalReportPdf();
-        var page = pdf.AddPage(LandscapeWidth, LandscapeHeight);
-        var y = DrawHeader(pdf, page, workbook);
-        y = DrawTableHeader(pdf, page, y);
-
-        foreach (var row in workbook.Rows.OrderBy(item => item.Source.PeriodSequence))
+        foreach (var segment in workbook.EffectiveSegments)
         {
-            if (y - DataRowHeight < 18)
-            {
-                page = pdf.AddPage(LandscapeWidth, LandscapeHeight);
-                y = DrawContinuationHeader(pdf, page, workbook);
-                y = DrawTableHeader(pdf, page, y);
-            }
+            var page = pdf.AddPage(LandscapeWidth, LandscapeHeight);
+            var y = DrawHeader(pdf, page, segment.Header);
+            y = DrawTableHeader(pdf, page, y);
 
-            y = DrawRow(pdf, page, row, y);
+            foreach (var row in segment.Rows.OrderBy(item => item.Source.PeriodSequence))
+            {
+                if (y - DataRowHeight < 18)
+                {
+                    page = pdf.AddPage(LandscapeWidth, LandscapeHeight);
+                    y = DrawContinuationHeader(pdf, page);
+                    y = DrawTableHeader(pdf, page, y);
+                }
+
+                y = DrawRow(pdf, page, row, y);
+            }
         }
 
         var bytes = pdf.Build();
@@ -106,21 +109,21 @@ public sealed class AnnexE1PdfRenderer
             Convert.ToHexString(SHA256.HashData(bytes)).ToLowerInvariant());
     }
 
-    private static double DrawHeader(A4FiscalReportPdf pdf, int page, AnnexE1WorkbookRecord workbook)
+    private static double DrawHeader(A4FiscalReportPdf pdf, int page, AnnexE1Header header)
     {
         var y = LandscapeHeight - Margin - 7;
         var lines = new[]
         {
-            workbook.Header.TaxpayerName,
-            workbook.Header.TaxpayerAddress,
-            workbook.Header.Tin,
+            header.TaxpayerName,
+            header.TaxpayerAddress,
+            header.Tin,
             string.Empty,
-            $"{workbook.Header.SoftwareName} {workbook.Header.SoftwareVersion} / {workbook.Header.ReleaseNumber} / {workbook.Header.ReleaseDate}",
-            workbook.Header.PosSerialNumber,
-            workbook.Header.MachineIdentificationNumber,
-            workbook.Header.PosTerminalNumber,
-            workbook.Header.GeneratedAt.ToUniversalTime().ToString("yyyy-MM-dd HH:mm:ss 'UTC'", CultureInfo.InvariantCulture),
-            workbook.Header.GeneratedByDisplayName ?? workbook.Header.GeneratedByRef
+            $"{header.SoftwareName} {header.SoftwareVersion} / {header.ReleaseNumber} / {header.ReleaseDate}",
+            header.PosSerialNumber,
+            header.MachineIdentificationNumber,
+            header.PosTerminalNumber,
+            header.GeneratedAt.ToUniversalTime().ToString("yyyy-MM-dd HH:mm:ss 'UTC'", CultureInfo.InvariantCulture),
+            header.GeneratedByDisplayName ?? header.GeneratedByRef
         };
         foreach (var line in lines)
         {
@@ -138,7 +141,7 @@ public sealed class AnnexE1PdfRenderer
         return y - 12;
     }
 
-    private static double DrawContinuationHeader(A4FiscalReportPdf pdf, int page, AnnexE1WorkbookRecord workbook)
+    private static double DrawContinuationHeader(A4FiscalReportPdf pdf, int page)
     {
         var y = LandscapeHeight - Margin - 8;
         pdf.CenterText(page, LandscapeWidth / 2, y, "BIR SALES SUMMARY REPORT", 9, true);

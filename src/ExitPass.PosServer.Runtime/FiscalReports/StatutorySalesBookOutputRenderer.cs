@@ -24,17 +24,22 @@ public sealed class StatutorySalesBookOutputRenderer
 
     private static byte[] RenderXlsx(StatutorySalesBookReport report)
     {
+        var sections = report.EffectiveSections;
+        var sectionReports = sections.Select(SectionReport).ToArray();
         using var stream = new MemoryStream();
         using (var archive = new ZipArchive(stream, ZipArchiveMode.Create, true, Encoding.UTF8))
         {
-            Add(archive, "[Content_Types].xml", ContentTypes());
+            Add(archive, "[Content_Types].xml", ContentTypes(sectionReports.Length));
             Add(archive, "_rels/.rels", RootRelationships());
-            Add(archive, "docProps/app.xml", AppProperties(report));
+            Add(archive, "docProps/app.xml", AppProperties(report, sectionReports.Length));
             Add(archive, "docProps/core.xml", CoreProperties());
-            Add(archive, "xl/workbook.xml", Workbook(report));
-            Add(archive, "xl/_rels/workbook.xml.rels", WorkbookRelationships());
+            Add(archive, "xl/workbook.xml", Workbook(report, sectionReports));
+            Add(archive, "xl/_rels/workbook.xml.rels", WorkbookRelationships(sectionReports.Length));
             Add(archive, "xl/styles.xml", Styles());
-            Add(archive, "xl/worksheets/sheet1.xml", Worksheet(report));
+            for (var index = 0; index < sectionReports.Length; index++)
+                Add(archive, $"xl/worksheets/sheet{index + 1}.xml", Worksheet(
+                    sectionReports[index],
+                    sectionReports.Length > 1 && index == sectionReports.Length - 1 ? report.Summary : null));
         }
         return stream.ToArray();
     }
@@ -49,25 +54,41 @@ public sealed class StatutorySalesBookOutputRenderer
         var columns = new[] { 42d, 96d, 62d, 54d, 62d, 52d, 44d, 50d, 34d, 34d, 48d, 66d, 48d, 52d, 52d, 48d };
         var scale = (right - left) / columns.Sum();
         columns = columns.Select(value => value * scale).ToArray();
+        const int rowsPerPage = 10;
+        var sections = report.EffectiveSections;
+        var sectionReports = sections.Select(SectionReport).ToArray();
+        var sectionPageCounts = sectionReports
+            .Select(section => Math.Max(1, (int)Math.Ceiling(Math.Max(1, section.Rows.Count) / (double)rowsPerPage)))
+            .ToArray();
+        var pageCount = sectionPageCounts.Sum();
+        var renderedPage = 0;
         var pdf = new A4FiscalReportPdf();
-        var rowsPerPage = 10;
-        var pageCount = Math.Max(1, (int)Math.Ceiling(Math.Max(1, report.Rows.Count) / (double)rowsPerPage));
-        for (var pageNo = 0; pageNo < pageCount; pageNo++)
+        for (var sectionIndex = 0; sectionIndex < sectionReports.Length; sectionIndex++)
         {
-            var page = pdf.AddPage(width, height);
-            DrawPdfHeader(pdf, page, report, width, pageNo > 0);
-            var top = 410d;
-            DrawPdfColumns(pdf, page, left, top, columns, headerHeight, report.Summary.Type);
-            var y = top - headerHeight;
-            foreach (var row in report.Rows.Skip(pageNo * rowsPerPage).Take(rowsPerPage))
+            var section = sectionReports[sectionIndex];
+            for (var sectionPage = 0; sectionPage < sectionPageCounts[sectionIndex]; sectionPage++)
             {
-                DrawPdfRow(pdf, page, left, y, columns, 28, row);
-                y -= 28;
+                var page = pdf.AddPage(width, height);
+                DrawPdfHeader(pdf, page, section, width, sectionPage > 0);
+                var top = 410d;
+                DrawPdfColumns(pdf, page, left, top, columns, headerHeight, section.Summary.Type);
+                var y = top - headerHeight;
+                foreach (var row in section.Rows.Skip(sectionPage * rowsPerPage).Take(rowsPerPage))
+                {
+                    DrawPdfRow(pdf, page, left, y, columns, 28, row);
+                    y -= 28;
+                }
+                if (sectionPage == sectionPageCounts[sectionIndex] - 1)
+                {
+                    DrawPdfTotals(pdf, page, left, y, columns, 28, section.Summary);
+                    y -= 28;
+                    if (sectionReports.Length > 1 && sectionIndex == sectionReports.Length - 1)
+                        DrawPdfTotals(pdf, page, left, y, columns, 28, report.Summary, "MONTHLY TOTAL");
+                }
+                pdf.Text(page, left, 14, $"Status: {report.Summary.ReportStatus} | Period: {report.Summary.CalendarYear:0000}-{report.Summary.CalendarMonth:00} | {(report.Summary.IsEmpty ? "No qualifying transactions" : $"{report.Summary.QualifyingTransactionCount} qualifying transaction(s)")}", 6.5);
+                pdf.RightText(page, right, 14, $"Page {renderedPage + 1} of {pageCount}", 6.5);
+                renderedPage++;
             }
-            if (pageNo == pageCount - 1)
-                DrawPdfTotals(pdf, page, left, y, columns, 28, report.Summary);
-            pdf.Text(page, left, 14, $"Status: {report.Summary.ReportStatus} | Period: {report.Summary.CalendarYear:0000}-{report.Summary.CalendarMonth:00} | {(report.Summary.IsEmpty ? "No qualifying transactions" : $"{report.Summary.QualifyingTransactionCount} qualifying transaction(s)")}", 6.5);
-            pdf.RightText(page, right, 14, $"Page {pageNo + 1} of {pageCount}", 6.5);
         }
         return pdf.Build();
     }
@@ -183,7 +204,7 @@ public sealed class StatutorySalesBookOutputRenderer
         }
     }
 
-    private static void DrawPdfTotals(A4FiscalReportPdf pdf, int page, double x, double y, double[] widths, double height, StatutorySalesBookSummary summary)
+    private static void DrawPdfTotals(A4FiscalReportPdf pdf, int page, double x, double y, double[] widths, double height, StatutorySalesBookSummary summary, string label = "TOTAL")
     {
         if (summary.IsEmpty)
         {
@@ -220,7 +241,7 @@ public sealed class StatutorySalesBookOutputRenderer
 
         var values = new[]
         {
-            "TOTAL", "", "", "", "",
+            label, "", "", "", "",
             Money(summary.SalesInclusiveVatMinorUnits), Money(summary.VatAmountMinorUnits), Money(summary.VatExemptSalesMinorUnits),
             Money(summary.Discount5MinorUnits), Money(summary.Discount20MinorUnits), Money(summary.NetSalesMinorUnits),
             "", "", Money(summary.LguOriginalParkingFeeVatInclusiveMinorUnits),
@@ -236,12 +257,12 @@ public sealed class StatutorySalesBookOutputRenderer
         }
     }
 
-    private static string Worksheet(StatutorySalesBookReport report)
+    private static string Worksheet(StatutorySalesBookReport report, StatutorySalesBookSummary? monthlySummary = null)
     {
         var h = report.Header;
         var type = report.Summary.Type;
         var totalsRow = 17 + report.Rows.Count;
-        var last = Math.Max(25, totalsRow);
+        var last = Math.Max(25, totalsRow + (monthlySummary is null ? 0 : 1));
         var b = new StringBuilder(24000);
         b.Append("<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?><worksheet xmlns=\"http://schemas.openxmlformats.org/spreadsheetml/2006/main\"><sheetPr><pageSetUpPr fitToPage=\"1\"/></sheetPr><dimension ref=\"A1:P").Append(last).Append("\"/><sheetViews><sheetView workbookViewId=\"0\"/></sheetViews><sheetFormatPr defaultRowHeight=\"15\"/><cols>");
         var widths = type == StatutorySalesBookType.AnnexE2
@@ -262,6 +283,7 @@ public sealed class StatutorySalesBookOutputRenderer
         var rowNo = 17;
         foreach (var row in report.Rows) DataRow(b, rowNo++, row);
         TotalRow(b, rowNo++, report.Summary);
+        if (monthlySummary is not null) TotalRow(b, rowNo++, monthlySummary, "MONTHLY TOTAL");
         while (rowNo <= last) BlankRow(b, rowNo++);
         b.Append("</sheetData><mergeCells count=\"").Append(report.Summary.IsEmpty ? 23 : 22).Append("\"><mergeCell ref=\"A1:P1\"/><mergeCell ref=\"A2:P2\"/><mergeCell ref=\"A3:P3\"/><mergeCell ref=\"A12:P12\"/><mergeCell ref=\"A13:A16\"/><mergeCell ref=\"B13:B16\"/><mergeCell ref=\"C13:C16\"/><mergeCell ref=\"D13:D16\"/><mergeCell ref=\"E13:E16\"/><mergeCell ref=\"F13:F16\"/><mergeCell ref=\"G13:G16\"/><mergeCell ref=\"H13:H16\"/><mergeCell ref=\"I13:J13\"/><mergeCell ref=\"I14:I16\"/><mergeCell ref=\"J14:J16\"/><mergeCell ref=\"K13:K16\"/><mergeCell ref=\"L13:P13\"/><mergeCell ref=\"L14:L16\"/><mergeCell ref=\"M14:M16\"/><mergeCell ref=\"N14:N16\"/><mergeCell ref=\"O14:O16\"/><mergeCell ref=\"P14:P16\"/>");
         if (report.Summary.IsEmpty) b.Append("<mergeCell ref=\"A").Append(totalsRow).Append(":E").Append(totalsRow).Append("\"/>");
@@ -290,10 +312,10 @@ public sealed class StatutorySalesBookOutputRenderer
         MoneyCell(b, "F", r, row.SalesInclusiveVatMinorUnits); MoneyCell(b, "G", r, row.VatAmountMinorUnits); MoneyCell(b, "H", r, row.VatExemptSalesMinorUnits); MoneyCell(b, "I", r, row.Discount5MinorUnits); MoneyCell(b, "J", r, row.Discount20MinorUnits); MoneyCell(b, "K", r, row.NetSalesMinorUnits);
         TextCell(b, "L", r, row.LguPrivilegeType ?? string.Empty, 5); DecimalCell(b, "M", r, row.FreeHoursGranted); MoneyCell(b, "N", r, row.OriginalParkingFeeVatInclusiveMinorUnits); MoneyCell(b, "O", r, row.LguWaiverVatInclusiveMinorUnits); MoneyCell(b, "P", r, row.LguFinalPayableVatInclusiveMinorUnits); b.Append("</row>");
     }
-    private static void TotalRow(StringBuilder b, int r, StatutorySalesBookSummary summary)
+    private static void TotalRow(StringBuilder b, int r, StatutorySalesBookSummary summary, string label = "TOTAL")
     {
         b.Append("<row r=\"").Append(r).Append("\" ht=\"18\">");
-        TextCell(b, "A", r, summary.IsEmpty ? "TOTAL - NO QUALIFYING TRANSACTIONS" : "TOTAL", 7);
+        TextCell(b, "A", r, summary.IsEmpty ? "TOTAL - NO QUALIFYING TRANSACTIONS" : label, 7);
         for (var column = 'B'; column <= 'E'; column++) TextCell(b, column.ToString(), r, string.Empty, 7);
         MoneyCell(b, "F", r, summary.SalesInclusiveVatMinorUnits, 6); MoneyCell(b, "G", r, summary.VatAmountMinorUnits, 6);
         MoneyCell(b, "H", r, summary.VatExemptSalesMinorUnits, 6); MoneyCell(b, "I", r, summary.Discount5MinorUnits, 6);
@@ -308,20 +330,53 @@ public sealed class StatutorySalesBookOutputRenderer
     private static void MoneyCell(StringBuilder b,string c,int r,long value,int style=4)=>b.Append("<c r=\"").Append(c).Append(r).Append("\" s=\"").Append(style).Append("\"><v>").Append(Money(value)).Append("</v></c>");
     private static void DecimalCell(StringBuilder b,string c,int r,decimal? value,int style=4){if(value.HasValue)b.Append("<c r=\"").Append(c).Append(r).Append("\" s=\"").Append(style).Append("\"><v>").Append(value.Value.ToString("0.##",CultureInfo.InvariantCulture)).Append("</v></c>");else TextCell(b,c,r,string.Empty,5);}
     private static string Styles() => "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?><styleSheet xmlns=\"http://schemas.openxmlformats.org/spreadsheetml/2006/main\"><fonts count=\"4\"><font><sz val=\"9\"/><name val=\"Arial\"/></font><font><b/><sz val=\"10\"/><name val=\"Arial\"/></font><font><b/><sz val=\"9\"/><name val=\"Arial\"/></font><font><b/><color rgb=\"FFFFFFFF\"/><sz val=\"9\"/><name val=\"Arial\"/></font></fonts><fills count=\"12\"><fill><patternFill patternType=\"none\"/></fill><fill><patternFill patternType=\"gray125\"/></fill><fill><patternFill patternType=\"solid\"><fgColor rgb=\"FFA6A6A6\"/></patternFill></fill><fill><patternFill patternType=\"solid\"><fgColor rgb=\"FF00B0F0\"/></patternFill></fill><fill><patternFill patternType=\"solid\"><fgColor rgb=\"FFFFFF00\"/></patternFill></fill><fill><patternFill patternType=\"solid\"><fgColor rgb=\"FF9999FF\"/></patternFill></fill><fill><patternFill patternType=\"solid\"><fgColor rgb=\"FFFFC000\"/></patternFill></fill><fill><patternFill patternType=\"solid\"><fgColor rgb=\"FF92D050\"/></patternFill></fill><fill><patternFill patternType=\"solid\"><fgColor rgb=\"FFED7D31\"/></patternFill></fill><fill><patternFill patternType=\"solid\"><fgColor rgb=\"FFE7E6E6\"/></patternFill></fill><fill><patternFill patternType=\"solid\"><fgColor rgb=\"FFFFD966\"/></patternFill></fill><fill><patternFill patternType=\"solid\"><fgColor rgb=\"FF375623\"/></patternFill></fill></fills><borders count=\"2\"><border/><border><left style=\"thin\"><color auto=\"1\"/></left><right style=\"thin\"><color auto=\"1\"/></right><top style=\"thin\"><color auto=\"1\"/></top><bottom style=\"thin\"><color auto=\"1\"/></bottom></border></borders><cellStyleXfs count=\"1\"><xf numFmtId=\"0\" fontId=\"0\" fillId=\"0\" borderId=\"0\"/></cellStyleXfs><cellXfs count=\"17\"><xf numFmtId=\"0\" fontId=\"0\" fillId=\"0\" borderId=\"0\"/><xf numFmtId=\"0\" fontId=\"0\" fillId=\"0\" borderId=\"0\" applyAlignment=\"1\"><alignment horizontal=\"center\"/></xf><xf numFmtId=\"0\" fontId=\"1\" fillId=\"0\" borderId=\"0\" applyAlignment=\"1\"><alignment horizontal=\"center\"/></xf><xf numFmtId=\"0\" fontId=\"2\" fillId=\"0\" borderId=\"0\" applyAlignment=\"1\"><alignment horizontal=\"right\"/></xf><xf numFmtId=\"4\" fontId=\"0\" fillId=\"0\" borderId=\"1\" applyAlignment=\"1\"><alignment horizontal=\"right\"/></xf><xf numFmtId=\"0\" fontId=\"0\" fillId=\"0\" borderId=\"1\" applyAlignment=\"1\"><alignment horizontal=\"center\" vertical=\"center\" wrapText=\"1\"/></xf><xf numFmtId=\"4\" fontId=\"2\" fillId=\"2\" borderId=\"1\"/><xf numFmtId=\"0\" fontId=\"2\" fillId=\"2\" borderId=\"1\" applyAlignment=\"1\"><alignment horizontal=\"center\" vertical=\"center\" wrapText=\"1\"/></xf><xf numFmtId=\"0\" fontId=\"2\" fillId=\"3\" borderId=\"1\" applyAlignment=\"1\"><alignment horizontal=\"center\" vertical=\"center\" wrapText=\"1\"/></xf><xf numFmtId=\"0\" fontId=\"2\" fillId=\"4\" borderId=\"1\" applyAlignment=\"1\"><alignment horizontal=\"center\" vertical=\"center\" wrapText=\"1\"/></xf><xf numFmtId=\"0\" fontId=\"2\" fillId=\"5\" borderId=\"1\" applyAlignment=\"1\"><alignment horizontal=\"center\" vertical=\"center\" wrapText=\"1\"/></xf><xf numFmtId=\"0\" fontId=\"2\" fillId=\"6\" borderId=\"1\" applyAlignment=\"1\"><alignment horizontal=\"center\" vertical=\"center\" wrapText=\"1\"/></xf><xf numFmtId=\"0\" fontId=\"2\" fillId=\"7\" borderId=\"1\" applyAlignment=\"1\"><alignment horizontal=\"center\" vertical=\"center\" wrapText=\"1\"/></xf><xf numFmtId=\"0\" fontId=\"2\" fillId=\"8\" borderId=\"1\" applyAlignment=\"1\"><alignment horizontal=\"center\" vertical=\"center\" wrapText=\"1\"/></xf><xf numFmtId=\"0\" fontId=\"2\" fillId=\"9\" borderId=\"1\" applyAlignment=\"1\"><alignment horizontal=\"center\" vertical=\"center\" wrapText=\"1\"/></xf><xf numFmtId=\"0\" fontId=\"2\" fillId=\"10\" borderId=\"1\" applyAlignment=\"1\"><alignment horizontal=\"center\" vertical=\"center\" wrapText=\"1\"/></xf><xf numFmtId=\"0\" fontId=\"3\" fillId=\"11\" borderId=\"1\" applyAlignment=\"1\"><alignment horizontal=\"center\" vertical=\"center\" wrapText=\"1\"/></xf></cellXfs><cellStyles count=\"1\"><cellStyle name=\"Normal\" xfId=\"0\" builtinId=\"0\"/></cellStyles></styleSheet>";
-    private static string Workbook(StatutorySalesBookReport report)
+    private static string Workbook(StatutorySalesBookReport report, IReadOnlyList<StatutorySalesBookReport> sections)
     {
         var primary = report.Summary.Type == StatutorySalesBookType.AnnexE2 ? "E-2" : "E-3";
-        return $"<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?><workbook xmlns=\"http://schemas.openxmlformats.org/spreadsheetml/2006/main\" xmlns:r=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships\"><bookViews><workbookView/></bookViews><sheets><sheet name=\"{primary}\" sheetId=\"1\" r:id=\"rId1\"/></sheets><definedNames><definedName name=\"_xlnm.Print_Area\" localSheetId=\"0\">'{primary}'!$A$1:$P${Math.Max(25, 17 + report.Rows.Count)}</definedName></definedNames><calcPr calcId=\"0\" calcMode=\"manual\"/></workbook>";
+        var names = Enumerable.Range(0, sections.Count)
+            .Select(index => sections.Count == 1 ? primary : $"{primary} {index + 1}")
+            .ToArray();
+        var b = new StringBuilder("<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?><workbook xmlns=\"http://schemas.openxmlformats.org/spreadsheetml/2006/main\" xmlns:r=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships\"><bookViews><workbookView/></bookViews><sheets>");
+        for (var index = 0; index < sections.Count; index++)
+            b.Append("<sheet name=\"").Append(names[index]).Append("\" sheetId=\"").Append(index + 1).Append("\" r:id=\"rId").Append(index + 1).Append("\"/>");
+        b.Append("</sheets><definedNames>");
+        for (var index = 0; index < sections.Count; index++)
+        {
+            var last = Math.Max(25, 17 + sections[index].Rows.Count + (sections.Count > 1 && index == sections.Count - 1 ? 1 : 0));
+            b.Append("<definedName name=\"_xlnm.Print_Area\" localSheetId=\"").Append(index).Append("\">'")
+                .Append(names[index]).Append("'!$A$1:$P$").Append(last).Append("</definedName>");
+        }
+        return b.Append("</definedNames><calcPr calcId=\"0\" calcMode=\"manual\"/></workbook>").ToString();
     }
 
-    private static string WorkbookRelationships() => "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?><Relationships xmlns=\"http://schemas.openxmlformats.org/package/2006/relationships\"><Relationship Id=\"rId1\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet\" Target=\"worksheets/sheet1.xml\"/><Relationship Id=\"rId2\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles\" Target=\"styles.xml\"/></Relationships>";
-    private static string ContentTypes() => "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?><Types xmlns=\"http://schemas.openxmlformats.org/package/2006/content-types\"><Default Extension=\"rels\" ContentType=\"application/vnd.openxmlformats-package.relationships+xml\"/><Default Extension=\"xml\" ContentType=\"application/xml\"/><Override PartName=\"/xl/workbook.xml\" ContentType=\"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml\"/><Override PartName=\"/xl/worksheets/sheet1.xml\" ContentType=\"application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml\"/><Override PartName=\"/xl/styles.xml\" ContentType=\"application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml\"/><Override PartName=\"/docProps/core.xml\" ContentType=\"application/vnd.openxmlformats-package.core-properties+xml\"/><Override PartName=\"/docProps/app.xml\" ContentType=\"application/vnd.openxmlformats-officedocument.extended-properties+xml\"/></Types>";
+    private static string WorkbookRelationships(int sheetCount)
+    {
+        var b = new StringBuilder("<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?><Relationships xmlns=\"http://schemas.openxmlformats.org/package/2006/relationships\">");
+        for (var index = 0; index < sheetCount; index++)
+            b.Append("<Relationship Id=\"rId").Append(index + 1).Append("\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet\" Target=\"worksheets/sheet").Append(index + 1).Append(".xml\"/>");
+        return b.Append("<Relationship Id=\"rId").Append(sheetCount + 1).Append("\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles\" Target=\"styles.xml\"/></Relationships>").ToString();
+    }
+
+    private static string ContentTypes(int sheetCount)
+    {
+        var b = new StringBuilder("<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?><Types xmlns=\"http://schemas.openxmlformats.org/package/2006/content-types\"><Default Extension=\"rels\" ContentType=\"application/vnd.openxmlformats-package.relationships+xml\"/><Default Extension=\"xml\" ContentType=\"application/xml\"/><Override PartName=\"/xl/workbook.xml\" ContentType=\"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml\"/>");
+        for (var index = 0; index < sheetCount; index++)
+            b.Append("<Override PartName=\"/xl/worksheets/sheet").Append(index + 1).Append(".xml\" ContentType=\"application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml\"/>");
+        return b.Append("<Override PartName=\"/xl/styles.xml\" ContentType=\"application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml\"/><Override PartName=\"/docProps/core.xml\" ContentType=\"application/vnd.openxmlformats-package.core-properties+xml\"/><Override PartName=\"/docProps/app.xml\" ContentType=\"application/vnd.openxmlformats-officedocument.extended-properties+xml\"/></Types>").ToString();
+    }
     private static string RootRelationships() => "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?><Relationships xmlns=\"http://schemas.openxmlformats.org/package/2006/relationships\"><Relationship Id=\"rId1\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument\" Target=\"xl/workbook.xml\"/><Relationship Id=\"rId2\" Type=\"http://schemas.openxmlformats.org/package/2006/relationships/metadata/core-properties\" Target=\"docProps/core.xml\"/><Relationship Id=\"rId3\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/extended-properties\" Target=\"docProps/app.xml\"/></Relationships>";
-    private static string AppProperties(StatutorySalesBookReport report)
+    private static string AppProperties(StatutorySalesBookReport report, int sheetCount)
     {
         var primary = report.Summary.Type == StatutorySalesBookType.AnnexE2 ? "E-2" : "E-3";
-        return $"<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?><Properties xmlns=\"http://schemas.openxmlformats.org/officeDocument/2006/extended-properties\" xmlns:vt=\"http://schemas.openxmlformats.org/officeDocument/2006/docPropsVTypes\"><Application>ExitPass POS Server</Application><TitlesOfParts><vt:vector size=\"1\" baseType=\"lpstr\"><vt:lpstr>{primary}</vt:lpstr></vt:vector></TitlesOfParts></Properties>";
+        var b = new StringBuilder("<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?><Properties xmlns=\"http://schemas.openxmlformats.org/officeDocument/2006/extended-properties\" xmlns:vt=\"http://schemas.openxmlformats.org/officeDocument/2006/docPropsVTypes\"><Application>ExitPass POS Server</Application><TitlesOfParts><vt:vector size=\"")
+            .Append(sheetCount).Append("\" baseType=\"lpstr\">");
+        for (var index = 0; index < sheetCount; index++)
+            b.Append("<vt:lpstr>").Append(sheetCount == 1 ? primary : $"{primary} {index + 1}").Append("</vt:lpstr>");
+        return b.Append("</vt:vector></TitlesOfParts></Properties>").ToString();
     }
+
+    private static StatutorySalesBookReport SectionReport(StatutorySalesBookSection section) =>
+        new(section.Header, section.Summary, section.Rows) { IdentitySections = [section] };
     private static string CoreProperties() => "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?><cp:coreProperties xmlns:cp=\"http://schemas.openxmlformats.org/package/2006/metadata/core-properties\" xmlns:dc=\"http://purl.org/dc/elements/1.1/\" xmlns:dcterms=\"http://purl.org/dc/terms/\" xmlns:xsi=\"http://www.w3.org/2001/XMLSchema-instance\"><dc:creator>ExitPass POS Server</dc:creator><cp:lastModifiedBy>ExitPass POS Server</cp:lastModifiedBy><dcterms:created xsi:type=\"dcterms:W3CDTF\">2000-01-01T00:00:00Z</dcterms:created><dcterms:modified xsi:type=\"dcterms:W3CDTF\">2000-01-01T00:00:00Z</dcterms:modified></cp:coreProperties>";
     private static void Add(ZipArchive archive,string name,string content){var entry=archive.CreateEntry(name,CompressionLevel.NoCompression);entry.LastWriteTime=FixedZipTime;using var writer=new StreamWriter(entry.Open(),new UTF8Encoding(false)){NewLine="\n"};writer.Write(content);}
     private static DateTimeOffset Pht(DateTimeOffset value) => TimeZoneInfo.ConvertTime(value, ResolvePht());

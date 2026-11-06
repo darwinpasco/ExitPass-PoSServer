@@ -29,6 +29,16 @@ public sealed record StatutorySalesBookHeader(
     string UserId,
     string? UserDisplayName = null);
 
+public sealed record StatutorySalesBookFiscalHeaderFact(
+    string TaxpayerName,
+    string TaxpayerAddress,
+    string Tin,
+    string SerialNumber,
+    string MachineIdentificationNumber,
+    string PosServerCode,
+    string SoftwareName,
+    string SoftwareVersion);
+
 public sealed record StatutorySalesBookRow(
     Guid FiscalDocumentId,
     DateOnly TransactionDate,
@@ -59,7 +69,10 @@ public sealed record StatutorySalesBookRow(
     long OriginalParkingFeeVatInclusiveMinorUnits = 0,
     long LguWaiverVatInclusiveMinorUnits = 0,
     long LguFinalPayableVatInclusiveMinorUnits = 0,
-    string? LguPolicyReference = null);
+    string? LguPolicyReference = null)
+{
+    public StatutorySalesBookFiscalHeaderFact? FiscalHeader { get; init; }
+}
 
 public sealed record StatutorySalesBookSummary(
     StatutorySalesBookType Type,
@@ -87,10 +100,23 @@ public sealed record StatutorySalesBookSummary(
     long LguWaiverVatInclusiveMinorUnits = 0,
     long LguFinalPayableVatInclusiveMinorUnits = 0);
 
-public sealed record StatutorySalesBookReport(
+public sealed record StatutorySalesBookSection(
     StatutorySalesBookHeader Header,
     StatutorySalesBookSummary Summary,
     IReadOnlyList<StatutorySalesBookRow> Rows);
+
+public sealed record StatutorySalesBookReport(
+    StatutorySalesBookHeader Header,
+    StatutorySalesBookSummary Summary,
+    IReadOnlyList<StatutorySalesBookRow> Rows)
+{
+    public IReadOnlyList<StatutorySalesBookSection>? IdentitySections { get; init; }
+
+    public IReadOnlyList<StatutorySalesBookSection> EffectiveSections =>
+        IdentitySections is { Count: > 0 }
+            ? IdentitySections
+            : StatutorySalesBookSectionPlanner.Resolve(this);
+}
 
 public sealed record StatutorySalesBookResult(
     StatutorySalesBookOutcome Outcome,
@@ -116,7 +142,7 @@ public static class StatutorySalesBookContract
     public const string ReleaseNumber = "v1.3";
     public const string ReleaseDate = "2026-10-17";
     public const string ArtifactScopeVersion = "pos-server-v2";
-    public const string ArtifactLayoutVersion = "annex-e2-e3-16-column-v1";
+    public const string ArtifactLayoutVersion = "annex-e2-e3-16-column-identity-sections-v1";
     public const string ArtifactContractProfile = "pos-server-statutory-sales-book-rmo24-2023:pos-server-scope-v2:" + ArtifactLayoutVersion;
 
     public static string Entitlement(StatutorySalesBookType type) => type == StatutorySalesBookType.AnnexE2 ? "SENIOR_CITIZEN" : "PWD";
@@ -168,8 +194,106 @@ public static class StatutorySalesBookContract
                 report.Summary.LguWaiverVatInclusiveMinorUnits,
                 report.Summary.LguFinalPayableVatInclusiveMinorUnits
             },
-            report.Rows
+            Sections = report.EffectiveSections.Select(section => new
+            {
+                Header = new
+                {
+                    section.Header.TaxpayerName,
+                    section.Header.TaxpayerAddress,
+                    section.Header.Tin,
+                    section.Header.SoftwareName,
+                    section.Header.SoftwareVersion,
+                    section.Header.SerialNumber,
+                    section.Header.MachineIdentificationNumber,
+                    section.Header.PosServerCode
+                },
+                Rows = section.Rows
+            })
         });
+}
+
+public static class StatutorySalesBookSectionPlanner
+{
+    public static IReadOnlyList<StatutorySalesBookSection> Resolve(StatutorySalesBookReport report)
+    {
+        if (report.Rows.Count == 0)
+            return [new(report.Header, report.Summary, report.Rows)];
+
+        var fallback = new StatutorySalesBookFiscalHeaderFact(
+            report.Header.TaxpayerName, report.Header.TaxpayerAddress, report.Header.Tin,
+            report.Header.SerialNumber, report.Header.MachineIdentificationNumber, report.Header.PosServerCode,
+            report.Header.SoftwareName, report.Header.SoftwareVersion);
+        var attributed = report.Rows.Select(row => (Row: row, Header: row.FiscalHeader ?? fallback)).ToArray();
+        var common = attributed[0].Header;
+        if (attributed.Any(item =>
+                item.Header.TaxpayerName != common.TaxpayerName ||
+                item.Header.TaxpayerAddress != common.TaxpayerAddress ||
+                item.Header.Tin != common.Tin ||
+                item.Header.PosServerCode != common.PosServerCode ||
+                item.Header.SoftwareName != common.SoftwareName ||
+                item.Header.SoftwareVersion != common.SoftwareVersion))
+            throw new InvalidOperationException("The statutory sales-book transactions span incompatible taxpayer or fiscal identity scopes.");
+
+        var sections = attributed
+            .GroupBy(item => new { item.Header.SerialNumber, item.Header.MachineIdentificationNumber })
+            .OrderBy(group => group.Min(item => item.Row.TransactionTimestamp))
+            .Select(group =>
+            {
+                var rows = group.Select(item => item.Row)
+                    .OrderBy(row => row.TransactionTimestamp).ThenBy(row => row.FiscalSequence).ThenBy(row => row.FiscalDocumentId)
+                    .ToArray();
+                var header = report.Header with
+                {
+                    TaxpayerName = common.TaxpayerName,
+                    TaxpayerAddress = common.TaxpayerAddress,
+                    Tin = common.Tin,
+                    SoftwareName = common.SoftwareName,
+                    SoftwareVersion = common.SoftwareVersion,
+                    SerialNumber = group.Key.SerialNumber,
+                    MachineIdentificationNumber = group.Key.MachineIdentificationNumber,
+                    PosServerCode = common.PosServerCode
+                };
+                return new StatutorySalesBookSection(header, Summary(report.Summary, rows), rows);
+            })
+            .ToArray();
+
+        if (!StatutorySalesBookReconciliation.HasUniqueFiscalEvidence(sections.SelectMany(section => section.Rows).ToArray()) ||
+            sections.Sum(section => section.Rows.Count) != report.Rows.Count ||
+            !TotalsEqual(report.Summary, sections.Select(section => section.Summary)))
+            throw new InvalidOperationException("The statutory sales-book identity sections do not reconcile to the monthly fiscal evidence.");
+        return sections;
+    }
+
+    private static StatutorySalesBookSummary Summary(StatutorySalesBookSummary source, IReadOnlyList<StatutorySalesBookRow> rows) =>
+        source with
+        {
+            QualifyingTransactionCount = rows.Count,
+            SalesInclusiveVatMinorUnits = rows.Sum(row => row.SalesInclusiveVatMinorUnits),
+            VatAmountMinorUnits = rows.Sum(row => row.VatAmountMinorUnits),
+            VatExemptSalesMinorUnits = rows.Sum(row => row.VatExemptSalesMinorUnits),
+            Discount5MinorUnits = rows.Sum(row => row.Discount5MinorUnits),
+            Discount20MinorUnits = rows.Sum(row => row.Discount20MinorUnits),
+            NetSalesMinorUnits = rows.Sum(row => row.NetSalesMinorUnits),
+            IsEmpty = rows.Count == 0,
+            LguOriginalParkingFeeVatInclusiveMinorUnits = rows.Sum(row => row.OriginalParkingFeeVatInclusiveMinorUnits),
+            LguWaiverVatInclusiveMinorUnits = rows.Sum(row => row.LguWaiverVatInclusiveMinorUnits),
+            LguFinalPayableVatInclusiveMinorUnits = rows.Sum(row => row.LguFinalPayableVatInclusiveMinorUnits)
+        };
+
+    private static bool TotalsEqual(StatutorySalesBookSummary monthly, IEnumerable<StatutorySalesBookSummary> sections)
+    {
+        var values = sections.ToArray();
+        return values.Sum(section => section.QualifyingTransactionCount) == monthly.QualifyingTransactionCount &&
+               values.Sum(section => section.SalesInclusiveVatMinorUnits) == monthly.SalesInclusiveVatMinorUnits &&
+               values.Sum(section => section.VatAmountMinorUnits) == monthly.VatAmountMinorUnits &&
+               values.Sum(section => section.VatExemptSalesMinorUnits) == monthly.VatExemptSalesMinorUnits &&
+               values.Sum(section => section.Discount5MinorUnits) == monthly.Discount5MinorUnits &&
+               values.Sum(section => section.Discount20MinorUnits) == monthly.Discount20MinorUnits &&
+               values.Sum(section => section.NetSalesMinorUnits) == monthly.NetSalesMinorUnits &&
+               values.Sum(section => section.LguOriginalParkingFeeVatInclusiveMinorUnits) == monthly.LguOriginalParkingFeeVatInclusiveMinorUnits &&
+               values.Sum(section => section.LguWaiverVatInclusiveMinorUnits) == monthly.LguWaiverVatInclusiveMinorUnits &&
+               values.Sum(section => section.LguFinalPayableVatInclusiveMinorUnits) == monthly.LguFinalPayableVatInclusiveMinorUnits;
+    }
 }
 
 public static class StatutorySalesBookStatuses
