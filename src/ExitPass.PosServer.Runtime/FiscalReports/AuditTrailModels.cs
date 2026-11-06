@@ -71,6 +71,56 @@ public sealed record AuditTrailRow(
     string? CorrelationReference,
     IReadOnlyDictionary<string, string?> SafeMetadata);
 
+public sealed record AuditTrailSalesFacts(
+    string? PlateNumber,
+    DateTimeOffset? EntryAt,
+    long OriginalParkingFeeMinorUnits,
+    long FiscalGrossSalesMinorUnits,
+    long FinalPayableMinorUnits,
+    long AmountPaidMinorUnits,
+    string? PaymentMethod,
+    long? StatutoryDiscountMinorUnits = null,
+    long? LguFullFeeWaiverMinorUnits = null,
+    string? EntitlementType = null);
+
+public static class AuditTrailSalesDescription
+{
+    private static readonly TimeSpan PhilippineOffset = TimeSpan.FromHours(8);
+
+    public static string Format(AuditTrailSalesFacts facts)
+    {
+        var lines = new List<string>
+        {
+            $"Plate:{facts.PlateNumber ?? string.Empty}",
+            "Entry:",
+            facts.EntryAt?.ToOffset(PhilippineOffset).ToString("yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture) ?? string.Empty,
+            facts.EntryAt?.ToOffset(PhilippineOffset).ToString("HH:mm:ss", System.Globalization.CultureInfo.InvariantCulture) ?? string.Empty,
+            $"Original Parking Fee:{Money(facts.OriginalParkingFeeMinorUnits)}",
+            $"Fiscal Gross Sales:{Money(facts.FiscalGrossSalesMinorUnits)}"
+        };
+        if (facts.StatutoryDiscountMinorUnits is not null)
+            lines.Add($"Statutory Discount:{Money(facts.StatutoryDiscountMinorUnits.Value)}");
+        if (facts.LguFullFeeWaiverMinorUnits is not null)
+            lines.Add($"LGU Full-Fee Waiver:{Money(facts.LguFullFeeWaiverMinorUnits.Value)}");
+        lines.Add($"Final Payable:{Money(facts.FinalPayableMinorUnits)}");
+        lines.Add($"Amount Paid:{Money(facts.AmountPaidMinorUnits)}");
+        lines.Add($"Payment:{Payment(facts)}");
+        if (!string.IsNullOrWhiteSpace(facts.EntitlementType))
+            lines.Add($"Entitlement:{facts.EntitlementType.Trim().ToUpperInvariant().Replace('_', ' ')}");
+        return string.Join('\n', lines);
+    }
+
+    private static string Payment(AuditTrailSalesFacts facts) =>
+        facts.FinalPayableMinorUnits == 0 && facts.AmountPaidMinorUnits == 0
+            ? "NO PAYMENT REQUIRED"
+            : string.IsNullOrWhiteSpace(facts.PaymentMethod)
+                ? "UNAVAILABLE"
+                : facts.PaymentMethod.Trim().ToUpperInvariant();
+
+    private static string Money(long minorUnits) =>
+        $"PHP {(minorUnits / 100m).ToString("N2", System.Globalization.CultureInfo.InvariantCulture)}";
+}
+
 public sealed record AuditTrailReport(
     string ContractVersion,
     Guid SitePosServerId,

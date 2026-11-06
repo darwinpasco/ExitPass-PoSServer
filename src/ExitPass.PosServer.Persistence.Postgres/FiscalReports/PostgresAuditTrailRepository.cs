@@ -158,7 +158,12 @@ public sealed class PostgresAuditTrailRepository(NpgsqlDataSource dataSource) : 
                    h.terminal_id,xz.report_number,xz.transaction_count,xz.net_sales_amount_minor_units,
                    bir.bir_sales_summary_report_id,bir.transaction_count,bir.net_sales_amount_minor_units,
                    COALESCE(tender.code_key,''),COALESCE(tender.amount_minor_units,0),
-                   COALESCE(discounts.discount_amount_minor_units,0),d.fiscal_number_assigned_at,
+                   COALESCE(discounts.discount_amount_minor_units,0),COALESCE(lines.net_amount_minor_units,0),
+                   COALESCE(lines.gross_amount_minor_units,0),
+                   COALESCE(payable.amount_minor_units,statutory.final_payable_amount_minor_units,tender.amount_minor_units,0),
+                   statutory.original_amount_minor_units,statutory.statutory_discount_amount_minor_units,
+                   statutory.final_payable_amount_minor_units,statutory.non_percentage_benefit_amount_minor_units,
+                   entitlement.code_key,benefit.code_key,d.fiscal_number_assigned_at,
                    reprint.copy_sequence,reprint.requested_at
             FROM pos.electronic_journal_records ej
             JOIN pos.controlled_codes event_type ON event_type.controlled_code_id=ej.journal_record_type_code_id
@@ -173,6 +178,25 @@ public sealed class PostgresAuditTrailRepository(NpgsqlDataSource dataSource) : 
                 SELECT sum(p.discount_amount_minor_units) AS discount_amount_minor_units
                 FROM pos.fiscal_discount_privilege_details p WHERE p.fiscal_document_id=d.fiscal_document_id
             ) discounts ON true
+            LEFT JOIN LATERAL (
+                SELECT sum(line.net_amount_minor_units) AS net_amount_minor_units,
+                       sum(line.gross_amount_minor_units) AS gross_amount_minor_units
+                FROM pos.fiscal_document_lines line
+                WHERE line.fiscal_document_id=d.fiscal_document_id AND line.is_active
+            ) lines ON true
+            LEFT JOIN LATERAL (
+                SELECT total.amount_minor_units
+                FROM pos.fiscal_totals total
+                JOIN pos.controlled_codes total_type ON total_type.controlled_code_id=total.total_type_code_id
+                WHERE total.fiscal_document_id=d.fiscal_document_id AND total_type.code_key='payable_total'
+                LIMIT 1
+            ) payable ON true
+            LEFT JOIN pos.fiscal_document_applied_statutory_facts statutory
+              ON statutory.fiscal_document_id=d.fiscal_document_id
+            LEFT JOIN pos.controlled_codes entitlement
+              ON entitlement.controlled_code_id=statutory.entitlement_type_code_id
+            LEFT JOIN pos.controlled_codes benefit
+              ON benefit.controlled_code_id=statutory.benefit_classification_code_id
             LEFT JOIN pos.x_z_reports xz ON xz.x_z_report_id=ej.x_z_report_id
             LEFT JOIN pos.bir_sales_summary_reports bir ON bir.bir_sales_summary_report_id=ej.bir_sales_summary_report_id
             LEFT JOIN pos.reprint_requests reprint ON reprint.reprint_request_id=ej.reprint_request_id
@@ -217,9 +241,24 @@ public sealed class PostgresAuditTrailRepository(NpgsqlDataSource dataSource) : 
         var tender = reader.GetString(20);
         var tenderAmount = reader.GetInt64(21);
         var discount = reader.GetInt64(22);
-        var assignedAt = NullableInstant(reader, 23);
-        var reprintCopy = NullableLong(reader, 24);
-        var reprintAt = NullableInstant(reader, 25);
+        var lineNet = reader.GetInt64(23);
+        var fiscalGross = reader.GetInt64(24);
+        var payable = reader.GetInt64(25);
+        var statutoryOriginal = NullableLong(reader, 26);
+        var statutoryDiscount = NullableLong(reader, 27);
+        var statutoryFinalPayable = NullableLong(reader, 28);
+        var nonPercentageBenefit = NullableLong(reader, 29);
+        var entitlement = NullableString(reader, 30);
+        var benefit = NullableString(reader, 31);
+        var assignedAt = NullableInstant(reader, 32);
+        var reprintCopy = NullableLong(reader, 33);
+        var reprintAt = NullableInstant(reader, 34);
+        var originalParkingFee = statutoryOriginal ?? lineNet;
+        var finalPayable = statutoryFinalPayable ?? payable;
+        var lguFullFeeWaiver = string.Equals(benefit, "free_parking", StringComparison.OrdinalIgnoreCase) &&
+                               statutoryOriginal is not null && statutoryFinalPayable is not null
+            ? checked(statutoryOriginal.Value - statutoryFinalPayable.Value)
+            : (long?)null;
 
         var cashier = Json(documentContext, "reference_context", "cashier_display_name");
         var human = !string.IsNullOrWhiteSpace(cashier) && !cashier.Equals("System", StringComparison.OrdinalIgnoreCase);
@@ -229,7 +268,17 @@ public sealed class PostgresAuditTrailRepository(NpgsqlDataSource dataSource) : 
         var category = AuditTrailActionCatalog.Category(code);
         var description = code switch
         {
-            "fiscal_document_committed" => SalesDescription(documentContext, tender, tenderAmount, discount),
+            "fiscal_document_committed" => AuditTrailSalesDescription.Format(new(
+                Json(documentContext, "reference_context", "plate_number"),
+                Instant(Json(documentContext, "reference_context", "entry_time")),
+                originalParkingFee,
+                fiscalGross,
+                finalPayable,
+                tenderAmount,
+                tender,
+                entitlement is null ? null : statutoryDiscount ?? discount,
+                lguFullFeeWaiver,
+                entitlement)),
             "fiscal_document_voided" => $"SI No.:\n{invoice}\nResult:VOID",
             "fiscal_document_reprint_recorded" => $"SI No.:\n{invoice}\nCopy:REPRINT{(reprintCopy is null ? string.Empty : $" {reprintCopy}")}\nOriginal:\n{FormatPht(assignedAt ?? reprintAt ?? occurredAt)}",
             "x_reading_committed" => ReportDescription("X READING", businessDate, reportTransactions, reportNet, reportReference),
@@ -247,7 +296,10 @@ public sealed class PostgresAuditTrailRepository(NpgsqlDataSource dataSource) : 
             {
                 ["eventReference"] = eventReference,
                 ["businessDate"] = businessDate?.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture),
-                ["paymentMethod"] = string.IsNullOrEmpty(tender) ? null : tender.ToUpperInvariant()
+                ["paymentMethod"] = string.IsNullOrEmpty(tender) ? null : tender.ToUpperInvariant(),
+                ["entitlementType"] = entitlement,
+                ["benefitClassification"] = benefit,
+                ["nonPercentageBenefitMinorUnits"] = nonPercentageBenefit?.ToString(CultureInfo.InvariantCulture)
             });
     }
 
@@ -323,22 +375,6 @@ public sealed class PostgresAuditTrailRepository(NpgsqlDataSource dataSource) : 
                 null, null, null, "-", (NullableString(reader, 3) ?? "allowed").ToUpperInvariant(), "SYSTEM", NullableString(reader, 5), "FISCAL REPORT",
                 subject, null, null, NullableString(reader, 6), new Dictionary<string, string?> { ["reportKind"] = kind, ["format"] = format, ["contentSha256"] = Json(context, "contentSha256") }));
         }
-    }
-
-    private static string SalesDescription(JsonDocument? context, string tender, long amount, long discount)
-    {
-        var entry = Instant(Json(context, "reference_context", "entry_time"));
-        return string.Join('\n', new[]
-        {
-            $"Plate:{Json(context, "reference_context", "plate_number") ?? string.Empty}",
-            "Entry:",
-            entry?.ToOffset(TimeSpan.FromHours(8)).ToString("yyyy-MM-dd", CultureInfo.InvariantCulture) ?? string.Empty,
-            entry?.ToOffset(TimeSpan.FromHours(8)).ToString("HH:mm:ss", CultureInfo.InvariantCulture) ?? string.Empty,
-            $"Gross:{Decimal(amount)}",
-            $"Net:{Money(amount)}",
-            $"Discount:{Money(discount)}",
-            $"Payment:{tender.ToUpperInvariant()}"
-        });
     }
 
     private static string ReportDescription(string name, DateOnly? businessDate, long? transactions, long? net, string? reference) =>

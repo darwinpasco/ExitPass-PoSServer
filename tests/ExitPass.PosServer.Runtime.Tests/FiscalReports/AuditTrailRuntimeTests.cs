@@ -8,6 +8,41 @@ namespace ExitPass.PosServer.Runtime.Tests.FiscalReports;
 public sealed class AuditTrailRuntimeTests
 {
     [Fact]
+    public void RegularSalesDescriptionKeepsGrossPayableAndPaidAmountsDistinct()
+    {
+        var text = AuditTrailSalesDescription.Format(new(
+            "ABC1234", DateTimeOffset.Parse("2026-11-06T01:40:00Z"),
+            5_000, 4_464, 5_000, 5_000, "cash"));
+
+        Assert.Contains("Original Parking Fee:PHP 50.00", text, StringComparison.Ordinal);
+        Assert.Contains("Fiscal Gross Sales:PHP 44.64", text, StringComparison.Ordinal);
+        Assert.Contains("Final Payable:PHP 50.00", text, StringComparison.Ordinal);
+        Assert.Contains("Amount Paid:PHP 50.00", text, StringComparison.Ordinal);
+        Assert.Contains("Payment:CASH", text, StringComparison.Ordinal);
+        Assert.DoesNotContain("Statutory Discount", text, StringComparison.Ordinal);
+        Assert.DoesNotContain("LGU Full-Fee Waiver", text, StringComparison.Ordinal);
+    }
+
+    [Theory]
+    [InlineData("SENIOR_CITIZEN", "SENIOR CITIZEN")]
+    [InlineData("PWD", "PWD")]
+    public void FullFeeStatutorySalesDescriptionUsesCommittedFiscalFacts(string entitlement, string display)
+    {
+        var text = AuditTrailSalesDescription.Format(new(
+            "PWD1234", DateTimeOffset.Parse("2026-11-06T01:40:00Z"),
+            5_000, 4_464, 0, 0, null, 4_464, 5_000, entitlement));
+
+        Assert.Contains("Original Parking Fee:PHP 50.00", text, StringComparison.Ordinal);
+        Assert.Contains("Fiscal Gross Sales:PHP 44.64", text, StringComparison.Ordinal);
+        Assert.Contains("Statutory Discount:PHP 44.64", text, StringComparison.Ordinal);
+        Assert.Contains("LGU Full-Fee Waiver:PHP 50.00", text, StringComparison.Ordinal);
+        Assert.Contains("Final Payable:PHP 0.00", text, StringComparison.Ordinal);
+        Assert.Contains("Amount Paid:PHP 0.00", text, StringComparison.Ordinal);
+        Assert.Contains("Payment:NO PAYMENT REQUIRED", text, StringComparison.Ordinal);
+        Assert.Contains($"Entitlement:{display}", text, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void FiscalAdjustmentUsesAdjustmentCategoryAndDoesNotExposeRecovery()
     {
         var definition = Assert.Single(

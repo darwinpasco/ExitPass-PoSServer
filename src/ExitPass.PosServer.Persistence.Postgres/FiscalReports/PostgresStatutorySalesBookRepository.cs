@@ -96,7 +96,10 @@ public sealed class PostgresStatutorySalesBookRepository(
                            AND z.report_kind_code_id=@z_kind
                            AND lower(request_status.code_key)='committed'
                      )
-               )::integer
+               )::integer,
+               (SELECT (transaction_timestamp() AT TIME ZONE site.reporting_timezone_name)::date
+                FROM pos.site_pos_servers site
+                WHERE site.site_pos_server_id=@site)
         FROM pos.fiscal_reporting_periods period
         JOIN pos.controlled_codes status ON status.controlled_code_id=period.period_status_code_id
         WHERE period.site_pos_server_id=@site AND period.fiscal_identity_id=@identity
@@ -111,7 +114,10 @@ public sealed class PostgresStatutorySalesBookRepository(
         var total = reader.GetInt32(0);
         var closed = reader.GetInt32(1);
         var committedZ = reader.GetInt32(2);
-        return new(StatutorySalesBookStatuses.Resolve(total, closed, committedZ), total, closed, committedZ);
+        var currentSiteDate = reader.GetFieldValue<DateOnly>(3);
+        var requestedMonth = new DateOnly(q.CalendarYear, q.CalendarMonth, 1);
+        var currentSiteMonth = new DateOnly(currentSiteDate.Year, currentSiteDate.Month, 1);
+        return new(StatutorySalesBookStatuses.Resolve(requestedMonth < currentSiteMonth, total, closed, committedZ), total, closed, committedZ);
     }
 
     private static async Task<StatutorySalesBookHeader?> ReadHeaderAsync(NpgsqlConnection c, NpgsqlTransaction t, StatutorySalesBookQuery q, CancellationToken ct)

@@ -392,18 +392,20 @@ public sealed class StatutorySalesBookRuntimeTests
     }
 
     [Theory]
-    [InlineData(0, 0, 0, StatutorySalesBookStatuses.Preliminary)]
-    [InlineData(1, 0, 0, StatutorySalesBookStatuses.Preliminary)]
-    [InlineData(1, 1, 0, StatutorySalesBookStatuses.Preliminary)]
-    [InlineData(2, 2, 1, StatutorySalesBookStatuses.Preliminary)]
-    [InlineData(2, 2, 2, StatutorySalesBookStatuses.Final)]
-    public void FinalStatusRequiresEveryScopedPeriodToHaveCommittedZEvidence(
+    [InlineData(false, 2, 2, 2, StatutorySalesBookStatuses.Preliminary)]
+    [InlineData(true, 0, 0, 0, StatutorySalesBookStatuses.Preliminary)]
+    [InlineData(true, 1, 0, 0, StatutorySalesBookStatuses.Preliminary)]
+    [InlineData(true, 1, 1, 0, StatutorySalesBookStatuses.Preliminary)]
+    [InlineData(true, 2, 2, 1, StatutorySalesBookStatuses.Preliminary)]
+    [InlineData(true, 2, 2, 2, StatutorySalesBookStatuses.Final)]
+    public void FinalStatusRequiresCompletedMonthlyCoverageAndCommittedZEvidence(
+        bool reportingMonthComplete,
         int scoped,
         int closed,
         int committedZ,
         string expected)
     {
-        Assert.Equal(expected, StatutorySalesBookStatuses.Resolve(scoped, closed, committedZ));
+        Assert.Equal(expected, StatutorySalesBookStatuses.Resolve(reportingMonthComplete, scoped, closed, committedZ));
     }
 
     [Fact]
@@ -427,6 +429,12 @@ public sealed class StatutorySalesBookRuntimeTests
         Assert.Equal(StatutorySalesBookContract.SourceFingerprint(report), StatutorySalesBookContract.SourceFingerprint(regenerated));
         Assert.NotEqual(StatutorySalesBookContract.SourceFingerprint(report), StatutorySalesBookContract.SourceFingerprint(changed));
         Assert.NotEqual(StatutorySalesBookContract.SourceFingerprint(report), StatutorySalesBookContract.SourceFingerprint(changedLguEvidence));
+        Assert.NotEqual(
+            StatutorySalesBookContract.SourceFingerprint(report),
+            StatutorySalesBookContract.SourceFingerprint(report with
+            {
+                Summary = report.Summary with { ReportStatus = StatutorySalesBookStatuses.Preliminary }
+            }));
     }
 
     [Fact]

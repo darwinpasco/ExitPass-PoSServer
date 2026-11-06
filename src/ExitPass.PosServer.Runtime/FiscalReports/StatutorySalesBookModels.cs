@@ -301,8 +301,8 @@ public static class StatutorySalesBookStatuses
     public const string Preliminary = "PRELIMINARY";
     public const string Final = "FINAL";
 
-    public static string Resolve(int scopedPeriods, int closedPeriods, int committedZPeriods) =>
-        scopedPeriods > 0 && scopedPeriods == closedPeriods && scopedPeriods == committedZPeriods
+    public static string Resolve(bool reportingMonthComplete, int scopedPeriods, int closedPeriods, int committedZPeriods) =>
+        reportingMonthComplete && scopedPeriods > 0 && scopedPeriods == closedPeriods && scopedPeriods == committedZPeriods
             ? Final
             : Preliminary;
 }
