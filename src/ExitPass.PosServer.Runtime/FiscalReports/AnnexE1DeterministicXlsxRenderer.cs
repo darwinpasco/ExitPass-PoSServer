@@ -30,6 +30,36 @@ public sealed class AnnexE1DeterministicXlsxRenderer
         return stream.ToArray();
     }
 
+    public byte[] Render(IReadOnlyList<AnnexE1WorkbookSegment> segments)
+    {
+        if (segments.Count == 0)
+            throw new AnnexE1SafeException(AnnexE1Outcome.MissingAuthoritativeSource, "No Annex E-1 identity segment is available.");
+        if (segments.Count == 1)
+            return Render(segments[0].Header, segments[0].Rows);
+        if (segments.Any(segment => segment.Rows.Count is < 1 or > 366))
+            throw new AnnexE1SafeException(AnnexE1Outcome.UnsupportedClassification, "An Annex E-1 identity segment row count is outside the bounded monthly profile.");
+
+        using var stream = new MemoryStream();
+        using (var archive = new ZipArchive(stream, ZipArchiveMode.Create, leaveOpen: true, entryNameEncoding: Encoding.UTF8))
+        {
+            Add(archive, "[Content_Types].xml", ContentTypes(segments.Count));
+            Add(archive, "_rels/.rels", RootRelationships());
+            Add(archive, "docProps/app.xml", AppProperties());
+            Add(archive, "docProps/core.xml", CoreProperties());
+            Add(archive, "xl/workbook.xml", WorkbookXml(segments));
+            Add(archive, "xl/_rels/workbook.xml.rels", WorkbookRelationships(segments.Count));
+            Add(archive, "xl/styles.xml", StylesXml());
+            for (var index = 0; index < segments.Count; index++)
+            {
+                var number = index + 1;
+                Add(archive, $"xl/worksheets/sheet{number}.xml", WorksheetXml(segments[index].Header, segments[index].Rows));
+                Add(archive, $"xl/worksheets/_rels/sheet{number}.xml.rels", SheetRelationships(number));
+                Add(archive, $"xl/drawings/drawing{number}.xml", DrawingXml());
+            }
+        }
+        return stream.ToArray();
+    }
+
     private static void Add(ZipArchive archive, string name, string content)
     {
         var entry = archive.CreateEntry(name, CompressionLevel.NoCompression);
@@ -115,12 +145,37 @@ public sealed class AnnexE1DeterministicXlsxRenderer
     private static readonly string[] Merges = ["A1:AF1", "A2:AF2", "A3:AF3", "A12:AF12", "L13:S13", "T13:Y13", "L14:P14", "T14:V14", "A13:A15", "B13:B15", "C13:C15", "D13:D15", "E13:E15", "F13:F15", "G13:G15", "H13:H15", "I13:I15", "J13:J15", "K13:K15", "Q14:Q15", "R14:R15", "S14:S15", "W14:W15", "X14:X15", "Y14:Y15", "Z13:Z15", "AA13:AA15", "AB13:AB15", "AC13:AC15", "AD13:AD15", "AE13:AE15", "AF13:AF15"];
 
     private static string ContentTypes() => "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?><Types xmlns=\"http://schemas.openxmlformats.org/package/2006/content-types\"><Default Extension=\"rels\" ContentType=\"application/vnd.openxmlformats-package.relationships+xml\"/><Default Extension=\"xml\" ContentType=\"application/xml\"/><Override PartName=\"/xl/workbook.xml\" ContentType=\"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml\"/><Override PartName=\"/xl/worksheets/sheet1.xml\" ContentType=\"application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml\"/><Override PartName=\"/xl/styles.xml\" ContentType=\"application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml\"/><Override PartName=\"/xl/drawings/drawing1.xml\" ContentType=\"application/vnd.openxmlformats-officedocument.drawing+xml\"/><Override PartName=\"/docProps/core.xml\" ContentType=\"application/vnd.openxmlformats-package.core-properties+xml\"/><Override PartName=\"/docProps/app.xml\" ContentType=\"application/vnd.openxmlformats-officedocument.extended-properties+xml\"/></Types>";
+    private static string ContentTypes(int segmentCount)
+    {
+        var b = new StringBuilder("<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?><Types xmlns=\"http://schemas.openxmlformats.org/package/2006/content-types\"><Default Extension=\"rels\" ContentType=\"application/vnd.openxmlformats-package.relationships+xml\"/><Default Extension=\"xml\" ContentType=\"application/xml\"/><Override PartName=\"/xl/workbook.xml\" ContentType=\"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml\"/>");
+        for (var i = 1; i <= segmentCount; i++)
+            b.Append("<Override PartName=\"/xl/worksheets/sheet").Append(i).Append(".xml\" ContentType=\"application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml\"/><Override PartName=\"/xl/drawings/drawing").Append(i).Append(".xml\" ContentType=\"application/vnd.openxmlformats-officedocument.drawing+xml\"/>");
+        return b.Append("<Override PartName=\"/xl/styles.xml\" ContentType=\"application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml\"/><Override PartName=\"/docProps/core.xml\" ContentType=\"application/vnd.openxmlformats-package.core-properties+xml\"/><Override PartName=\"/docProps/app.xml\" ContentType=\"application/vnd.openxmlformats-officedocument.extended-properties+xml\"/></Types>").ToString();
+    }
     private static string RootRelationships() => "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?><Relationships xmlns=\"http://schemas.openxmlformats.org/package/2006/relationships\"><Relationship Id=\"rId1\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument\" Target=\"xl/workbook.xml\"/><Relationship Id=\"rId2\" Type=\"http://schemas.openxmlformats.org/package/2006/relationships/metadata/core-properties\" Target=\"docProps/core.xml\"/><Relationship Id=\"rId3\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/extended-properties\" Target=\"docProps/app.xml\"/></Relationships>";
     private static string AppProperties() => "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?><Properties xmlns=\"http://schemas.openxmlformats.org/officeDocument/2006/extended-properties\" xmlns:vt=\"http://schemas.openxmlformats.org/officeDocument/2006/docPropsVTypes\"><Application>ExitPass POS Server</Application><AppVersion>1.3</AppVersion></Properties>";
     private static string CoreProperties() => "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?><cp:coreProperties xmlns:cp=\"http://schemas.openxmlformats.org/package/2006/metadata/core-properties\" xmlns:dc=\"http://purl.org/dc/elements/1.1/\" xmlns:dcterms=\"http://purl.org/dc/terms/\" xmlns:xsi=\"http://www.w3.org/2001/XMLSchema-instance\"><dc:creator>ExitPass POS Server</dc:creator><cp:lastModifiedBy>ExitPass POS Server</cp:lastModifiedBy><dcterms:created xsi:type=\"dcterms:W3CDTF\">2000-01-01T00:00:00Z</dcterms:created><dcterms:modified xsi:type=\"dcterms:W3CDTF\">2000-01-01T00:00:00Z</dcterms:modified></cp:coreProperties>";
     private static string WorkbookXml(int rowCount) => $"<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?><workbook xmlns=\"http://schemas.openxmlformats.org/spreadsheetml/2006/main\" xmlns:r=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships\"><fileVersion appName=\"xl\"/><workbookPr/><bookViews><workbookView windowWidth=\"23040\" windowHeight=\"9000\"/></bookViews><sheets><sheet name=\"E-1\" sheetId=\"1\" r:id=\"rId1\"/></sheets><definedNames><definedName name=\"_xlnm.Print_Area\" localSheetId=\"0\">'E-1'!$A$1:$AF${16 + rowCount}</definedName></definedNames><calcPr calcMode=\"manual\" calcId=\"191029\"/></workbook>";
+    private static string WorkbookXml(IReadOnlyList<AnnexE1WorkbookSegment> segments)
+    {
+        var b = new StringBuilder("<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?><workbook xmlns=\"http://schemas.openxmlformats.org/spreadsheetml/2006/main\" xmlns:r=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships\"><fileVersion appName=\"xl\"/><workbookPr/><bookViews><workbookView windowWidth=\"23040\" windowHeight=\"9000\"/></bookViews><sheets>");
+        for (var i = 0; i < segments.Count; i++)
+            b.Append("<sheet name=\"E-1 ").Append(i + 1).Append("\" sheetId=\"").Append(i + 1).Append("\" r:id=\"rId").Append(i + 1).Append("\"/>");
+        b.Append("</sheets><definedNames>");
+        for (var i = 0; i < segments.Count; i++)
+            b.Append("<definedName name=\"_xlnm.Print_Area\" localSheetId=\"").Append(i).Append("\">'E-1 ").Append(i + 1).Append("'!$A$1:$AF$").Append(16 + segments[i].Rows.Count).Append("</definedName>");
+        return b.Append("</definedNames><calcPr calcMode=\"manual\" calcId=\"191029\"/></workbook>").ToString();
+    }
     private static string WorkbookRelationships() => "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?><Relationships xmlns=\"http://schemas.openxmlformats.org/package/2006/relationships\"><Relationship Id=\"rId1\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet\" Target=\"worksheets/sheet1.xml\"/><Relationship Id=\"rId2\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles\" Target=\"styles.xml\"/></Relationships>";
+    private static string WorkbookRelationships(int segmentCount)
+    {
+        var b = new StringBuilder("<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?><Relationships xmlns=\"http://schemas.openxmlformats.org/package/2006/relationships\">");
+        for (var i = 1; i <= segmentCount; i++)
+            b.Append("<Relationship Id=\"rId").Append(i).Append("\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet\" Target=\"worksheets/sheet").Append(i).Append(".xml\"/>");
+        return b.Append("<Relationship Id=\"rId").Append(segmentCount + 1).Append("\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles\" Target=\"styles.xml\"/></Relationships>").ToString();
+    }
     private static string SheetRelationships() => "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?><Relationships xmlns=\"http://schemas.openxmlformats.org/package/2006/relationships\"><Relationship Id=\"rId1\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/drawing\" Target=\"../drawings/drawing1.xml\"/></Relationships>";
+    private static string SheetRelationships(int drawingNumber) => $"<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?><Relationships xmlns=\"http://schemas.openxmlformats.org/package/2006/relationships\"><Relationship Id=\"rId1\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/drawing\" Target=\"../drawings/drawing{drawingNumber}.xml\"/></Relationships>";
     private static string DrawingXml() => "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?><xdr:wsDr xmlns:xdr=\"http://schemas.openxmlformats.org/drawingml/2006/spreadsheetDrawing\" xmlns:a=\"http://schemas.openxmlformats.org/drawingml/2006/main\"><xdr:twoCellAnchor><xdr:from><xdr:col>29</xdr:col><xdr:colOff>685800</xdr:colOff><xdr:row>0</xdr:row><xdr:rowOff>47625</xdr:rowOff></xdr:from><xdr:to><xdr:col>31</xdr:col><xdr:colOff>714375</xdr:colOff><xdr:row>2</xdr:row><xdr:rowOff>3810</xdr:rowOff></xdr:to><xdr:sp><xdr:nvSpPr><xdr:cNvPr id=\"4\" name=\"Annex E-1\"/><xdr:cNvSpPr txBox=\"1\"/></xdr:nvSpPr><xdr:spPr><a:prstGeom prst=\"rect\"><a:avLst/></a:prstGeom><a:solidFill><a:srgbClr val=\"FFFFFF\"/></a:solidFill><a:ln><a:solidFill><a:srgbClr val=\"000000\"/></a:solidFill></a:ln></xdr:spPr><xdr:txBody><a:bodyPr wrap=\"square\"/><a:lstStyle/><a:p><a:pPr algn=\"ctr\"/><a:r><a:rPr lang=\"en-PH\" sz=\"1600\" b=\"1\"/><a:t>ANNEX E-1</a:t></a:r></a:p></xdr:txBody></xdr:sp><xdr:clientData/></xdr:twoCellAnchor></xdr:wsDr>";
     private static string StylesXml() => "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?><styleSheet xmlns=\"http://schemas.openxmlformats.org/spreadsheetml/2006/main\"><numFmts count=\"2\"><numFmt numFmtId=\"164\" formatCode=\"0.00\"/><numFmt numFmtId=\"165\" formatCode=\"yyyy-mm-dd\"/></numFmts><fonts count=\"3\"><font><sz val=\"10\"/><name val=\"Arial\"/></font><font><b/><sz val=\"14\"/><name val=\"Arial\"/></font><font><b/><sz val=\"8\"/><name val=\"Arial\"/></font></fonts><fills count=\"2\"><fill><patternFill patternType=\"none\"/></fill><fill><patternFill patternType=\"gray125\"/></fill></fills><borders count=\"2\"><border><left/><right/><top/><bottom/><diagonal/></border><border><left style=\"thin\"/><right style=\"thin\"/><top style=\"thin\"/><bottom style=\"thin\"/><diagonal/></border></borders><cellStyleXfs count=\"1\"><xf numFmtId=\"0\" fontId=\"0\" fillId=\"0\" borderId=\"0\"/></cellStyleXfs><cellXfs count=\"7\"><xf numFmtId=\"0\" fontId=\"0\" fillId=\"0\" borderId=\"0\" xfId=\"0\"/><xf numFmtId=\"0\" fontId=\"1\" fillId=\"0\" borderId=\"0\" xfId=\"0\" applyAlignment=\"1\"><alignment horizontal=\"center\"/></xf><xf numFmtId=\"0\" fontId=\"0\" fillId=\"0\" borderId=\"0\" xfId=\"0\"/><xf numFmtId=\"0\" fontId=\"2\" fillId=\"0\" borderId=\"1\" xfId=\"0\" applyAlignment=\"1\"><alignment horizontal=\"center\" vertical=\"center\" wrapText=\"1\"/></xf><xf numFmtId=\"164\" fontId=\"0\" fillId=\"0\" borderId=\"1\" xfId=\"0\" applyNumberFormat=\"1\" applyAlignment=\"1\"><alignment horizontal=\"right\"/></xf><xf numFmtId=\"0\" fontId=\"0\" fillId=\"0\" borderId=\"1\" xfId=\"0\" applyAlignment=\"1\"><alignment horizontal=\"center\"/></xf><xf numFmtId=\"0\" fontId=\"0\" fillId=\"0\" borderId=\"0\" xfId=\"0\" applyAlignment=\"1\"><alignment horizontal=\"center\"/></xf></cellXfs><cellStyles count=\"1\"><cellStyle name=\"Normal\" xfId=\"0\" builtinId=\"0\"/></cellStyles></styleSheet>";
 }

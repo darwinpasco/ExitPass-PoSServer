@@ -208,6 +208,7 @@ public sealed record AnnexE1Row(
 
 public sealed record AnnexE1PositionValue(string Position, string SemanticName, string? TextValue, long? MinorUnitsValue, long? IntegerValue);
 public sealed record AnnexE1Reconciliation(string Rule, long DifferenceMinorUnits, bool Passed);
+public sealed record AnnexE1WorkbookSegment(AnnexE1Header Header, IReadOnlyList<AnnexE1Row> Rows);
 
 public sealed record AnnexE1WorkbookRecord(
     Guid WorkbookId,
@@ -237,7 +238,13 @@ public sealed record AnnexE1WorkbookRecord(
     DateTimeOffset CommittedAt,
     string CorrelationId,
     string Status = "COMMITTED",
-    bool Immutable = true);
+    bool Immutable = true)
+{
+    public IReadOnlyList<AnnexE1WorkbookSegment>? IdentitySegments { get; init; }
+
+    public IReadOnlyList<AnnexE1WorkbookSegment> EffectiveSegments =>
+        IdentitySegments is { Count: > 0 } ? IdentitySegments : [new(Header, Rows)];
+}
 
 public enum AnnexE1Outcome
 {

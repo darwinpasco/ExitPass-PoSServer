@@ -59,6 +59,39 @@ public sealed class AnnexE1RuntimeTests
     }
 
     [Fact]
+    public void MixedEffectiveDatedMachineIdentitiesRenderAsReconciledWorkbookSegments()
+    {
+        var engine=new AnnexE1CalculationEngine();
+        var firstRow=engine.Calculate(ZeroInput());
+        var secondRow=engine.Calculate(Input() with
+        {
+            FiscalReportingPeriodId=Guid.NewGuid(),GoverningZReportId=Guid.NewGuid(),BirSalesSummaryReportId=Guid.NewGuid(),
+            PeriodSequence=2,BusinessDayDate=new(2026,8,2)
+        });
+        var oldHeader=Header() with{PosSerialNumber="SN-OLD"};
+        var newHeader=Header() with{PosSerialNumber="SN-NEW"};
+        AnnexE1WorkbookSegment[] segments=[new(oldHeader,[firstRow]),new(newHeader,[secondRow])];
+
+        var bytes=new AnnexE1DeterministicXlsxRenderer().Render(segments);
+        using var archive=new ZipArchive(new MemoryStream(bytes),ZipArchiveMode.Read);
+        Assert.Equal(13,archive.Entries.Count);
+        var workbookXml=Read(archive,"xl/workbook.xml");
+        Assert.Contains("name=\"E-1 1\"",workbookXml);Assert.Contains("name=\"E-1 2\"",workbookXml);
+        Assert.Contains("SN-OLD",Read(archive,"xl/worksheets/sheet1.xml"));
+        Assert.Contains("SN-NEW",Read(archive,"xl/worksheets/sheet2.xml"));
+        Assert.Contains("NO_ACTIVITY",Read(archive,"xl/worksheets/sheet1.xml"));
+        Assert.Contains("2026-08-01",Read(archive,"xl/worksheets/sheet1.xml"));
+        Assert.Contains("2026-08-02",Read(archive,"xl/worksheets/sheet2.xml"));
+
+        var record=Workbook() with{Rows=[firstRow,secondRow],IdentitySegments=segments};
+        var pdf=new AnnexE1PdfRenderer().Render(record);
+        var text=Encoding.Latin1.GetString(pdf.Bytes);
+        Assert.Equal(2,Count(text,"/Type /Page "));
+        Assert.Contains("SN-OLD",text);Assert.Contains("SN-NEW",text);
+        Assert.Equal(2,record.EffectiveSegments.Sum(segment=>segment.Rows.Count));
+    }
+
+    [Fact]
     public void PdfIsDeterministicAndPreservesCanonicalWorksheetGeometryAndValues()
     {
         var workbook=Workbook(10);var renderer=new AnnexE1PdfRenderer();
@@ -104,6 +137,20 @@ public sealed class AnnexE1RuntimeTests
         var source=Input();var command=Generation();var header=Header();var first=AnnexE1SemanticHasher.ComputeWorkbook(command,[source],header);
         var second=AnnexE1SemanticHasher.ComputeWorkbook(command with{OperationKey="retry",RequestedByRef="other",CorrelationId="other"},[source],header with{GeneratedAt=header.GeneratedAt.AddDays(1),GeneratedByRef="other"});
         Assert.Equal(first,second);Assert.Matches("^[0-9a-f]{64}$",first);
+    }
+
+    [Fact]
+    public void SegmentedSemanticHashIsIdempotentAndIncludesHistoricalMachineIdentity()
+    {
+        var firstRow=new AnnexE1CalculationEngine().Calculate(Input());
+        var secondRow=new AnnexE1CalculationEngine().Calculate(Input() with
+        {FiscalReportingPeriodId=Guid.NewGuid(),GoverningZReportId=Guid.NewGuid(),BirSalesSummaryReportId=Guid.NewGuid(),PeriodSequence=2});
+        AnnexE1WorkbookSegment[] segments=[new(Header() with{PosSerialNumber="SN-OLD"},[firstRow]),new(Header() with{PosSerialNumber="SN-NEW"},[secondRow])];
+        var command=Generation();
+        var first=AnnexE1SemanticHasher.ComputeWorkbook(command,segments);
+        var replay=AnnexE1SemanticHasher.ComputeWorkbook(command with{OperationKey="retry",CorrelationId="retry"},segments);
+        var changed=AnnexE1SemanticHasher.ComputeWorkbook(command,[segments[0],segments[1] with{Header=segments[1].Header with{PosSerialNumber="SN-CHANGED"}}]);
+        Assert.Equal(first,replay);Assert.NotEqual(first,changed);
     }
 
     [Fact]

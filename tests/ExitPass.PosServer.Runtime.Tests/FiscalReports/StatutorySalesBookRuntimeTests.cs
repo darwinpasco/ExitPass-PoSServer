@@ -8,6 +8,86 @@ namespace ExitPass.PosServer.Runtime.Tests.FiscalReports;
 public sealed class StatutorySalesBookRuntimeTests
 {
     [Theory]
+    [InlineData(StatutorySalesBookType.AnnexE2, "SI-00000000000176", "SI-00000000000179")]
+    [InlineData(StatutorySalesBookType.AnnexE3, "SI-00000000000177", "SI-00000000000180")]
+    public void NovemberSerialTransitionProducesAttributedReconciledXlsxAndPdfSections(
+        StatutorySalesBookType type,
+        string historicalInvoice,
+        string currentInvoice)
+    {
+        var report = NovemberTransitionReport(type, historicalInvoice, currentInvoice);
+        var sections = report.EffectiveSections;
+
+        Assert.Equal(2, sections.Count);
+        Assert.Equal("SN-TEST-PITX-L3-001", sections[0].Header.SerialNumber);
+        Assert.Equal("0026_B728_3B2F_8505", sections[1].Header.SerialNumber);
+        Assert.Equal([historicalInvoice], sections[0].Rows.Select(row => row.SalesInvoiceNumber));
+        Assert.Equal([currentInvoice], sections[1].Rows.Select(row => row.SalesInvoiceNumber));
+        Assert.All(sections, section =>
+        {
+            Assert.Equal(1, section.Summary.QualifyingTransactionCount);
+            Assert.Equal(5_000, section.Summary.SalesInclusiveVatMinorUnits);
+            Assert.Equal(5_000, section.Summary.LguWaiverVatInclusiveMinorUnits);
+            Assert.Equal(0, section.Summary.NetSalesMinorUnits);
+        });
+        Assert.Equal(10_000, sections.Sum(section => section.Summary.SalesInclusiveVatMinorUnits));
+        Assert.Equal(report.Summary.LguWaiverVatInclusiveMinorUnits, sections.Sum(section => section.Summary.LguWaiverVatInclusiveMinorUnits));
+
+        var renderer = new StatutorySalesBookOutputRenderer();
+        var xlsx = renderer.Render(report, StatutorySalesBookFormat.Xlsx);
+        using (var stream = new MemoryStream(xlsx.Bytes))
+        using (var document = SpreadsheetDocument.Open(stream, false))
+        {
+            var workbook = Assert.IsType<Workbook>(Assert.IsType<WorkbookPart>(document.WorkbookPart).Workbook);
+            Assert.Equal(
+                type == StatutorySalesBookType.AnnexE2 ? ["E-2 1", "E-2 2"] : ["E-3 1", "E-3 2"],
+                Assert.IsType<Sheets>(workbook.Sheets).Elements<Sheet>().Select(sheet => sheet.Name!.Value).ToArray());
+            Assert.Equal(2, Assert.IsType<WorkbookPart>(document.WorkbookPart).WorksheetParts.Count());
+        }
+        using (var archive = new System.IO.Compression.ZipArchive(new MemoryStream(xlsx.Bytes)))
+        {
+            using var historicalReader = new StreamReader(archive.GetEntry("xl/worksheets/sheet1.xml")!.Open());
+            using var currentReader = new StreamReader(archive.GetEntry("xl/worksheets/sheet2.xml")!.Open());
+            var historicalXml = historicalReader.ReadToEnd();
+            var currentXml = currentReader.ReadToEnd();
+            Assert.Contains("Serial No.: SN-TEST-PITX-L3-001", historicalXml);
+            Assert.Contains(historicalInvoice, historicalXml);
+            Assert.DoesNotContain(currentInvoice, historicalXml);
+            Assert.Contains("Serial No.: 0026_B728_3B2F_8505", currentXml);
+            Assert.Contains(currentInvoice, currentXml);
+            Assert.DoesNotContain(historicalInvoice, currentXml);
+            Assert.Contains("MONTHLY TOTAL", currentXml);
+            Assert.Contains("<c r=\"F19\" s=\"6\"><v>100.00</v></c>", currentXml);
+            Assert.Contains("<c r=\"O19\" s=\"6\"><v>100.00</v></c>", currentXml);
+        }
+
+        var pdf = renderer.Render(report, StatutorySalesBookFormat.Pdf);
+        var pdfText = System.Text.Encoding.Latin1.GetString(pdf.Bytes);
+        Assert.Contains("Serial No.: SN-TEST-PITX-L3-001", pdfText);
+        Assert.Contains("Serial No.: 0026_B728_3B2F_8505", pdfText);
+        Assert.Contains(historicalInvoice, pdfText);
+        Assert.Contains(currentInvoice, pdfText);
+        Assert.Contains("MONTHLY TOTAL", pdfText);
+        Assert.Contains("Page 1 of 2", pdfText);
+        Assert.Contains("Page 2 of 2", pdfText);
+    }
+
+    [Theory]
+    [InlineData(StatutorySalesBookType.AnnexE2)]
+    [InlineData(StatutorySalesBookType.AnnexE3)]
+    public void StatutorySalesBookFailsClosedForIncompatibleTaxpayerScopes(StatutorySalesBookType type)
+    {
+        var report = NovemberTransitionReport(type, "SI-HISTORICAL", "SI-CURRENT");
+        var incompatible = report.Rows[1] with
+        {
+            FiscalHeader = report.Rows[1].FiscalHeader! with { TaxpayerName = "Different Taxpayer" }
+        };
+
+        Assert.Throws<InvalidOperationException>(() =>
+            StatutorySalesBookSectionPlanner.Resolve(report with { Rows = [report.Rows[0], incompatible] }));
+    }
+
+    [Theory]
     [InlineData(StatutorySalesBookType.AnnexE2, "E-2", "Senior Citizen Sales Book/Report", "ANNEX \"E-2\"")]
     [InlineData(StatutorySalesBookType.AnnexE3, "E-3", "Persons with Disability Sales Book/Report", "ANNEX \"E-3\"")]
     public void XlsxPreservesPrescribedColumnsAndAppendsAgreedLguPrivilegeDetail(StatutorySalesBookType type, string sheetName, string title, string annex)
@@ -337,16 +417,16 @@ public sealed class StatutorySalesBookRuntimeTests
         };
         var changed = report with
         {
-            Rows = [report.Rows[0] with { NetSalesMinorUnits = report.Rows[0].NetSalesMinorUnits + 1 }]
+            Rows = [report.Rows[0] with { SalesInvoiceNumber = report.Rows[0].SalesInvoiceNumber + "-CHANGED" }]
         };
-        var changedLguBenefit = report with
+        var changedLguEvidence = report with
         {
-            Rows = [report.Rows[0] with { LguWaiverVatInclusiveMinorUnits = 1 }]
+            Rows = [report.Rows[0] with { LguPolicyReference = "DIFFERENT-AUTHORITATIVE-POLICY" }]
         };
 
         Assert.Equal(StatutorySalesBookContract.SourceFingerprint(report), StatutorySalesBookContract.SourceFingerprint(regenerated));
         Assert.NotEqual(StatutorySalesBookContract.SourceFingerprint(report), StatutorySalesBookContract.SourceFingerprint(changed));
-        Assert.NotEqual(StatutorySalesBookContract.SourceFingerprint(report), StatutorySalesBookContract.SourceFingerprint(changedLguBenefit));
+        Assert.NotEqual(StatutorySalesBookContract.SourceFingerprint(report), StatutorySalesBookContract.SourceFingerprint(changedLguEvidence));
     }
 
     [Fact]
@@ -366,6 +446,49 @@ public sealed class StatutorySalesBookRuntimeTests
             rows.Sum(x => x.SalesInclusiveVatMinorUnits), rows.Sum(x => x.VatAmountMinorUnits), rows.Sum(x => x.VatExemptSalesMinorUnits), rows.Sum(x => x.Discount5MinorUnits), rows.Sum(x => x.Discount20MinorUnits), rows.Sum(x => x.NetSalesMinorUnits), DateTimeOffset.Parse("2026-10-17T08:00:00Z"), [], StatutorySalesBookStatuses.Final, rows.Count == 0, 31, 31, 31,
             rows.Sum(x => x.OriginalParkingFeeVatInclusiveMinorUnits), rows.Sum(x => x.LguWaiverVatInclusiveMinorUnits), rows.Sum(x => x.LguFinalPayableVatInclusiveMinorUnits));
         return new(new("Professional Parking Management Corporation", "PITX, Paranaque City", "999-999-999-000", "ExitPass POS Server", "V1.0.0", "v1.3", "2026-10-17", "SN-TEST", "MIN-TEST", "PITX-L3-POS-01", summary.ReportAsOf, "operator-1", "Juan Dela Cruz"), summary, rows);
+    }
+
+    private static StatutorySalesBookReport NovemberTransitionReport(
+        StatutorySalesBookType type,
+        string historicalInvoice,
+        string currentInvoice)
+    {
+        var historicalHeader = new StatutorySalesBookFiscalHeaderFact(
+            "Professional Parking Management Corporation", "PITX, Paranaque City", "999-999-999-000",
+            "SN-TEST-PITX-L3-001", "MIN-TEST-PITX-L3-001", "PITX-L3-POS-01",
+            "ExitPass POS Server", "V1.0.0");
+        var currentHeader = historicalHeader with { SerialNumber = "0026_B728_3B2F_8505" };
+        var historical = FullFeeRow(type) with
+        {
+            TransactionDate = new DateOnly(2026, 11, 3),
+            TransactionTimestamp = DateTimeOffset.Parse("2026-11-03T08:00:00Z"),
+            FiscalSequence = type == StatutorySalesBookType.AnnexE2 ? 176 : 177,
+            SalesInvoiceNumber = historicalInvoice,
+            FiscalHeader = historicalHeader
+        };
+        var current = FullFeeRow(type) with
+        {
+            TransactionDate = new DateOnly(2026, 11, 5),
+            TransactionTimestamp = DateTimeOffset.Parse("2026-11-05T08:00:00Z"),
+            FiscalSequence = type == StatutorySalesBookType.AnnexE2 ? 179 : 180,
+            SalesInvoiceNumber = currentInvoice,
+            FiscalHeader = currentHeader
+        };
+        var report = Report(type, [historical, current]);
+        return report with
+        {
+            Header = report.Header with
+            {
+                SerialNumber = historicalHeader.SerialNumber,
+                MachineIdentificationNumber = historicalHeader.MachineIdentificationNumber,
+                GeneratedAt = DateTimeOffset.Parse("2026-11-30T08:00:00Z")
+            },
+            Summary = report.Summary with
+            {
+                CalendarMonth = 11,
+                ReportAsOf = DateTimeOffset.Parse("2026-11-30T08:00:00Z")
+            }
+        };
     }
 
     private static StatutorySalesBookRow Row(StatutorySalesBookType type, int rate) => new(Guid.NewGuid(), new(2026, 10, 17), DateTimeOffset.Parse("2026-10-17T08:00:00Z"), rate, "Synthetic Beneficiary", type == StatutorySalesBookType.AnnexE2 ? "OSCA_ID" : "PWD_ID", "SYN-001", null, $"SI-{rate}", 10_000, 1_071, 0, rate == 500 ? 1_000 : 0, rate == 2000 ? 1_000 : 0, 9_000, "SYNTHETIC-LGU-PERCENTAGE", rate);
