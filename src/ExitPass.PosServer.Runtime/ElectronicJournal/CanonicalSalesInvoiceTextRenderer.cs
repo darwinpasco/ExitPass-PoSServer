@@ -18,11 +18,12 @@ public sealed class CanonicalSalesInvoiceTextRenderer
     private const string ClosingText = "THANK YOU FOR CHOOSING OUR SERVICE";
 
     public CanonicalSalesInvoiceTextOutput Render(DigitalSalesInvoiceRenderModel invoice) =>
-        Render(invoice, invoice.CopyDesignation);
+        Render(invoice, invoice.CopyDesignation, reprintedAt: null);
 
     internal CanonicalSalesInvoiceTextOutput Render(
         DigitalSalesInvoiceRenderModel invoice,
-        string copyDesignation)
+        string copyDesignation,
+        DateTimeOffset? reprintedAt)
     {
         ArgumentNullException.ThrowIfNull(invoice);
         var header = invoice.SalesInvoiceHeaderSnapshot ??
@@ -93,6 +94,12 @@ public sealed class CanonicalSalesInvoiceTextRenderer
         lines.Add(Separator);
         AddCentered(lines, header.SalesInvoiceLegalStatement);
         AddValue(lines, "PRINT DATE", LocalTimestamp(invoice.FiscalNumberAssignedAt.Value));
+        if (string.Equals(copyDesignation, "REPRINT", StringComparison.Ordinal))
+        {
+            if (!reprintedAt.HasValue)
+                throw new InvalidOperationException("A committed reprint timestamp is required for a Sales Invoice reprint.");
+            AddValue(lines, "REPRINT DATE", LocalTimestamp(reprintedAt.Value));
+        }
 
         var customer = invoice.InvoiceCustomerInformation;
         lines.Add(string.Empty);
@@ -315,7 +322,7 @@ public sealed class SalesInvoicePrinterPayloadRenderer(CanonicalSalesInvoiceText
             !string.Equals(reprint.ReprintStatus, "committed", StringComparison.Ordinal) ||
             !reprint.ReprintLabelApplied)
             throw new InvalidOperationException("A committed matching governed reprint record is required.");
-        return canonicalRenderer.Render(invoice, "REPRINT");
+        return canonicalRenderer.Render(invoice, "REPRINT", reprint.CommittedAt);
     }
 }
 

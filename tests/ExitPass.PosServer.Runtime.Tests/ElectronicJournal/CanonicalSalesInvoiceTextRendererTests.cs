@@ -409,20 +409,27 @@ public sealed class CanonicalSalesInvoiceTextRendererTests
         var invoice = Invoice();
         var renderer = new SalesInvoicePrinterPayloadRenderer(new CanonicalSalesInvoiceTextRenderer());
         var original = renderer.RenderVisibleText(invoice).Text;
+        var committedAt = DateTimeOffset.Parse("2026-09-10T03:15:00Z");
         var reprintRecord = new FiscalDocumentReprintRecord(
             Guid.Parse("aaaaaaaa-0000-4000-8000-000000000101"), "REPRINT-0001", invoice.FiscalDocumentId,
             invoice.FiscalDocumentNumber!, 1, Guid.Parse("aaaaaaaa-0000-4000-8000-000000000102"),
             Guid.Parse("aaaaaaaa-0000-4000-8000-000000000103"), "PHP",
             Guid.Parse("aaaaaaaa-0000-4000-8000-000000000104"), Guid.Parse("aaaaaaaa-0000-4000-8000-000000000105"),
             invoice.BusinessDayDate!.Value, 1, "fiscal_document_copy", "committed", "customer_request", "output-001",
-            "print", true, invoice.FiscalNumberAssignedAt!.Value, invoice.FiscalNumberAssignedAt.Value, "operator", "pos-server", "correlation", "operation",
+            "print", true, invoice.FiscalNumberAssignedAt!.Value, committedAt, "operator", "pos-server", "correlation", "operation",
             "EJ-REPRINT-001");
         var reprint = renderer.RenderReprintVisibleText(invoice, reprintRecord).Text;
 
         Assert.Contains("ORIGINAL", original, StringComparison.Ordinal);
         Assert.DoesNotContain("REPRINT", original, StringComparison.Ordinal);
+        Assert.DoesNotContain("REPRINT DATE", original, StringComparison.Ordinal);
+        Assert.Contains("PRINT DATE", reprint, StringComparison.Ordinal);
+        Assert.Contains("REPRINT DATE", reprint, StringComparison.Ordinal);
+        Assert.Contains("2026-09-10 11:15", reprint, StringComparison.Ordinal);
         Assert.Contains("REPRINT", reprint, StringComparison.Ordinal);
         Assert.DoesNotContain("ORIGINAL", reprint, StringComparison.Ordinal);
+        Assert.Equal(reprint, renderer.RenderReprintVisibleText(invoice, reprintRecord).Text);
+        Assert.Equal(invoice.FiscalDocumentNumber, reprintRecord.FiscalDocumentNumber);
         Assert.Throws<InvalidOperationException>(() =>
             renderer.RenderReprintVisibleText(invoice, reprintRecord with { ReprintLabelApplied = false }));
     }
