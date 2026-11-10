@@ -12,12 +12,56 @@ public sealed class AnnexE1RuntimeTests
     [Fact]
     public void ApprovedProfileIdentityAndExactCalculationsAreFrozen()
     {
-        Assert.Equal("36bbba7f014f5713955d50fe2fdab63f0cb6e80aab77713fe5fef45fbe7c1a4f",AnnexE1Contract.CalculationProfileSha256);
+        Assert.Equal("pos-server-annex-e1-accounting-calculation:v1.1",AnnexE1Contract.CalculationProfile);
+        Assert.Equal("02ba18516878ee46364e7c35639fcb89d2976fab18e3a57babd705a3d01bfebb",AnnexE1Contract.CalculationProfileSha256);
         var row=new AnnexE1CalculationEngine().Calculate(Input());var p=row.Positions.ToDictionary(x=>x.Position);
-        Assert.Equal(15_000,p["D07"].MinorUnitsValue);Assert.Equal(2_000,p["D16"].MinorUnitsValue);
+        Assert.Equal(17_000,p["D07"].MinorUnitsValue);Assert.Equal(2_000,p["D16"].MinorUnitsValue);
         Assert.Equal(4_000,p["D19"].MinorUnitsValue);Assert.Equal(500,p["D25"].MinorUnitsValue);
-        Assert.Equal(2_000,p["D26"].MinorUnitsValue);Assert.Equal(9_000,p["D27"].MinorUnitsValue);
-        Assert.Equal(9_700,p["D29"].MinorUnitsValue);Assert.Equal(32,row.Positions.Count);Assert.All(row.Reconciliations,r=>Assert.True(r.Passed));
+        Assert.Equal(2_000,p["D26"].MinorUnitsValue);Assert.Equal(11_000,p["D27"].MinorUnitsValue);
+        Assert.Equal(11_700,p["D29"].MinorUnitsValue);Assert.Equal(32,row.Positions.Count);Assert.All(row.Reconciliations,r=>Assert.True(r.Passed));
+    }
+
+    [Theory]
+    [InlineData("2026-11-08",22_320,2_144,0,4_464,0,20_000,24_464,17_856)]
+    [InlineData("2026-11-09",58_032,3_752,17_856,8_928,20_000,35_000,61_784,31_248)]
+    [InlineData("2026-11-10",44_640,3_216,8_928,8_928,55_000,30_000,47_856,26_784)]
+    public void NovemberClosedPeriodsUseIndependentVatInclusiveGrossAndNetSalesExpectations(
+        string date,long birGross,long vat,long seniorDiscount,long pwdDiscount,long previousGta,long collections,long expectedD07,long expectedD27)
+    {
+        var input=Input() with
+        {
+            BusinessDayDate=DateOnly.Parse(date),BirGrossSales=birGross,VatAmount=vat,VatableSales=expectedD27,
+            SeniorCitizenDiscount=seniorDiscount,PwdDiscount=pwdDiscount,OtherStatutoryDiscount=0,
+            CouponDiscount=0,PromotionalDiscount=0,SeniorCitizenVatAdjustment=0,PwdVatAdjustment=0,
+            ManualNetIncome=0,OverflowNetIncome=0,VoidAmount=0,PreviousGta=previousGta,
+            ResultingGta=checked(previousGta+collections)
+        };
+
+        var row=new AnnexE1CalculationEngine().Calculate(input);
+        var positions=row.Positions.ToDictionary(position=>position.Position);
+
+        Assert.Equal(expectedD07,positions["D07"].MinorUnitsValue);
+        Assert.Equal(vat,positions["D09"].MinorUnitsValue);
+        Assert.Equal(expectedD27,positions["D27"].MinorUnitsValue);
+        Assert.Equal(collections,input.ResultingGta-input.PreviousGta);
+        Assert.All(row.Reconciliations,reconciliation=>Assert.True(reconciliation.Passed));
+    }
+
+    [Fact]
+    public void PaidZeroPayableVatExemptAndZeroRatedSourcesRemoveRecordedVatExactlyOnce()
+    {
+        var engine=new AnnexE1CalculationEngine();
+        var paid=engine.Calculate(AccountingCase(birGross:4_464,vat:536,vatable:4_464));
+        Assert.Equal(5_000,Position(paid,"D07"));Assert.Equal(4_464,Position(paid,"D27"));
+
+        var zeroPayable=engine.Calculate(AccountingCase(birGross:4_464,vat:0,vatable:0,pwdDiscount:4_464,collections:0));
+        Assert.Equal(4_464,Position(zeroPayable,"D07"));Assert.Equal(4_464,Position(zeroPayable,"D19"));Assert.Equal(0,Position(zeroPayable,"D27"));
+
+        var vatExempt=engine.Calculate(AccountingCase(birGross:5_000,vat:0,vatable:0,vatExempt:5_000));
+        Assert.Equal(5_000,Position(vatExempt,"D07"));Assert.Equal(5_000,Position(vatExempt,"D27"));
+
+        var zeroRated=engine.Calculate(AccountingCase(birGross:5_000,vat:0,vatable:0,zeroRated:5_000));
+        Assert.Equal(5_000,Position(zeroRated,"D07"));Assert.Equal(5_000,Position(zeroRated,"D27"));
     }
 
     [Fact]
@@ -27,7 +71,7 @@ public sealed class AnnexE1RuntimeTests
         Assert.Equal(AnnexE1Outcome.MissingAccountingFact,Assert.Throws<AnnexE1SafeException>(()=>engine.Calculate(Input() with{FactIds=[],FactSemanticHashes=[]})).Outcome);
         Assert.Equal(AnnexE1Outcome.UnsupportedPrivilege,Assert.Throws<AnnexE1SafeException>(()=>engine.Calculate(Input() with{NaacDiscount=1})).Outcome);
         Assert.Equal(AnnexE1Outcome.UnsupportedClassification,Assert.Throws<AnnexE1SafeException>(()=>engine.Calculate(Input() with{RefundAmount=1})).Outcome);
-        Assert.Equal(AnnexE1Outcome.ArithmeticOverflow,Assert.Throws<AnnexE1SafeException>(()=>engine.Calculate(Input() with{ActiveGross=long.MaxValue,VoidAmount=1})).Outcome);
+        Assert.Equal(AnnexE1Outcome.ArithmeticOverflow,Assert.Throws<AnnexE1SafeException>(()=>engine.Calculate(Input() with{BirGrossSales=long.MaxValue,VatAmount=1})).Outcome);
     }
 
     [Fact]
@@ -140,7 +184,7 @@ public sealed class AnnexE1RuntimeTests
         Assert.DoesNotContain("ANNEX E-1 PDF PRESENTATION",text);Assert.DoesNotContain("TECHNICAL UAT",text);
         foreach(var heading in new[]{"Date","Beginning","Ending","SI/OR","Grand","Accum.","Gross","Deductions","Adjustment","VAT","Payable","Net","Sales","Overrun","/Overflow","Total","Income","Reset","Counter","Z","-Counter","Remarks"})
             Assert.Contains(heading,text);
-        Assert.Contains("2026-08",text);Assert.Contains("-01",text);Assert.Contains("SI-1",text);Assert.Contains("150.00",text);
+        Assert.Contains("2026-08",text);Assert.Contains("-01",text);Assert.Contains("SI-1",text);Assert.Contains("170.00",text);
         Assert.Equal(10,workbook.Rows.Count);Assert.All(workbook.Rows,row=>Assert.Equal(32,row.Positions.Count));
     }
 
@@ -255,11 +299,32 @@ public sealed class AnnexE1RuntimeTests
         Assert.Equal(AnnexE1RevisionDecision.ExplicitCorrectionRequired,AnnexE1RevisionPlanner.Decide(current,new string('e',64),[changedRow]));
     }
 
+    [Fact]
+    public void VatBasisCorrectionRequiresGovernedSupersessionAndPreservesHistoricalRows()
+    {
+        var corrected=new AnnexE1CalculationEngine().Calculate(Input());
+        var vat=corrected.Source.VatAmount;
+        var historical=corrected with
+        {
+            Positions=corrected.Positions.Select(position=>position.Position switch
+            {
+                "D07" or "D27" or "D29"=>position with{MinorUnitsValue=position.MinorUnitsValue-vat},
+                _=>position
+            }).ToArray()
+        };
+        var current=Workbook() with{Rows=[historical]};
+
+        Assert.Equal(AnnexE1RevisionDecision.ExplicitCorrectionRequired,
+            AnnexE1RevisionPlanner.Decide(current,new string('e',64),[corrected]));
+        Assert.Equal(15_000,Position(historical,"D07"));
+        Assert.Equal(17_000,Position(corrected,"D07"));
+    }
+
     private static AnnexE1RowInputs Input()=>new(
         FiscalReportingPeriodId:Guid.NewGuid(),PeriodSequence:1,GoverningZReportId:Guid.NewGuid(),GoverningZReference:"Z-1",
         BirSalesSummaryReportId:Guid.NewGuid(),BirSalesSummarySemanticHash:new string('a',64),BusinessDayDate:new(2026,8,1),
         BeginningFiscalNumber:"SI-1",EndingFiscalNumber:"SI-1",PreviousGta:1_000,ResultingGta:11_000,ManualNetIncome:500,
-        ActiveGross:14_000,ReturnAmount:0,VoidAmount:1_000,VatableSales:10_000,VatAmount:2_000,VatExemptSales:0,
+        BirGrossSales:14_000,ReturnAmount:0,VoidAmount:1_000,VatableSales:10_000,VatAmount:2_000,VatExemptSales:0,
         ZeroRatedSales:0,SeniorCitizenDiscount:1_000,PwdDiscount:0,NaacDiscount:0,SoloParentDiscount:0,
         OtherStatutoryDiscount:2_000,CouponDiscount:0,PromotionalDiscount:0,SeniorCitizenVatAdjustment:300,
         PwdVatAdjustment:200,OtherVatAdjustment:0,VatOnReturns:0,ResidualVatAdjustment:0,OverflowNetIncome:200,
@@ -276,7 +341,15 @@ public sealed class AnnexE1RuntimeTests
         Enumerable.Range(0,rowCount).Select(index=>new AnnexE1CalculationEngine().Calculate(Input() with{PeriodSequence=index+1})).ToArray(),
         Guid.NewGuid(),null,"presentation_correction","approval",DateTimeOffset.Parse("2026-09-01T00:00:00Z"),
         DateTimeOffset.Parse("2026-09-01T00:00:00Z"),"correlation");
-    private static AnnexE1RowInputs ZeroInput()=>Input() with{TransactionCount=0,ActiveGross=0,ReturnAmount=0,VoidAmount=0,VatableSales=0,VatAmount=0,VatExemptSales=0,ZeroRatedSales=0,SeniorCitizenDiscount=0,PwdDiscount=0,NaacDiscount=0,SoloParentDiscount=0,OtherStatutoryDiscount=0,CouponDiscount=0,PromotionalDiscount=0,SeniorCitizenVatAdjustment=0,PwdVatAdjustment=0,OtherVatAdjustment=0,VatOnReturns=0,ResidualVatAdjustment=0,ManualNetIncome=0,OverflowNetIncome=0,PreviousGta=0,ResultingGta=0,FiscalRangeCount=0,FiscalGapCount=0,BeginningFiscalNumber=null,EndingFiscalNumber=null};
+    private static AnnexE1RowInputs ZeroInput()=>Input() with{TransactionCount=0,BirGrossSales=0,ReturnAmount=0,VoidAmount=0,VatableSales=0,VatAmount=0,VatExemptSales=0,ZeroRatedSales=0,SeniorCitizenDiscount=0,PwdDiscount=0,NaacDiscount=0,SoloParentDiscount=0,OtherStatutoryDiscount=0,CouponDiscount=0,PromotionalDiscount=0,SeniorCitizenVatAdjustment=0,PwdVatAdjustment=0,OtherVatAdjustment=0,VatOnReturns=0,ResidualVatAdjustment=0,ManualNetIncome=0,OverflowNetIncome=0,PreviousGta=0,ResultingGta=0,FiscalRangeCount=0,FiscalGapCount=0,BeginningFiscalNumber=null,EndingFiscalNumber=null};
+    private static AnnexE1RowInputs AccountingCase(long birGross,long vat,long vatable,long pwdDiscount=0,long vatExempt=0,long zeroRated=0,long collections=5_000)=>Input() with
+    {
+        BirGrossSales=birGross,VatAmount=vat,VatableSales=vatable,VatExemptSales=vatExempt,ZeroRatedSales=zeroRated,
+        SeniorCitizenDiscount=0,PwdDiscount=pwdDiscount,OtherStatutoryDiscount=0,CouponDiscount=0,PromotionalDiscount=0,
+        SeniorCitizenVatAdjustment=0,PwdVatAdjustment=0,ManualNetIncome=0,OverflowNetIncome=0,VoidAmount=0,
+        PreviousGta=0,ResultingGta=collections
+    };
+    private static long Position(AnnexE1Row row,string position)=>row.Positions.Single(value=>value.Position==position).MinorUnitsValue!.Value;
     private static AnnexE1PeriodFactCommand Fact()=>new("fact",Guid.NewGuid(),Guid.NewGuid(),"PHP",Guid.NewGuid(),AnnexE1FactTypes.ManualSiOrNetIncome,AnnexE1FactStatuses.Recorded,100,1,"MANUAL-1","MANUAL-1",null,"approval",null,null,"actor","service","correlation");
     private static AnnexE1AutomaticSourceEvidence AutomaticSource()=>new(Guid.NewGuid(),Guid.NewGuid(),new string('a',64),1_000,11_000,12_000,10_000,0,500,300,200,0,0,0,0,0);
     private static AnnexE1PeriodFactRecord PeriodFact(string type,long amount)=>new(Guid.NewGuid(),"fact",Guid.NewGuid(),Guid.NewGuid(),"PHP",Guid.NewGuid(),new(2026,8,1),type,AnnexE1FactStatuses.Recorded,amount,1,"SRC-1","SRC-1",type==AnnexE1FactTypes.SalesOverrunOverflowNetIncome?"EVENT-1":null,"approval",new string('b',64),null,null,DateTimeOffset.UtcNow,DateTimeOffset.UtcNow,"actor","service","correlation");
