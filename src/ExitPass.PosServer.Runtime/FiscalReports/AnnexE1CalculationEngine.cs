@@ -7,7 +7,8 @@ public sealed class AnnexE1CalculationEngine
         try
         {
             ValidateSource(input);
-            var d07 = checked(input.ActiveGross + input.ReturnAmount + input.VoidAmount);
+            var activeGrossIncludingRecordedVat = checked(input.BirGrossSales + input.VatAmount);
+            var d07 = checked(activeGrossIncludingRecordedVat + input.ReturnAmount + input.VoidAmount);
             var d16 = checked(input.OtherStatutoryDiscount + input.CouponDiscount + input.PromotionalDiscount);
             var d19 = checked(input.SeniorCitizenDiscount + input.PwdDiscount + input.NaacDiscount +
                               input.SoloParentDiscount + d16 + input.ReturnAmount + input.VoidAmount);
@@ -22,7 +23,7 @@ public sealed class AnnexE1CalculationEngine
             var noActivity = input.TransactionCount == 0;
             if (noActivity)
             {
-                var amountTotal = checked(input.ActiveGross + input.ReturnAmount + input.VoidAmount + input.VatableSales +
+                var amountTotal = checked(input.BirGrossSales + input.ReturnAmount + input.VoidAmount + input.VatableSales +
                     input.VatAmount + input.VatExemptSales + input.ZeroRatedSales + input.SeniorCitizenDiscount +
                     input.PwdDiscount + input.NaacDiscount + input.SoloParentDiscount + d16 + d25 +
                     input.ManualNetIncome + input.OverflowNetIncome);
@@ -57,7 +58,7 @@ public sealed class AnnexE1CalculationEngine
 
             var reconciliations = new[]
             {
-                Rule("R01_D07", checked(d07 - input.ReturnAmount - input.VoidAmount - input.ActiveGross)),
+                Rule("R01_D07", checked(d07 - input.ReturnAmount - input.VoidAmount - activeGrossIncludingRecordedVat)),
                 Rule("R02_D16", checked(d16 - input.OtherStatutoryDiscount - input.CouponDiscount - input.PromotionalDiscount)),
                 Rule("R03_D19", checked(d19 - input.SeniorCitizenDiscount - input.PwdDiscount - input.NaacDiscount - input.SoloParentDiscount - d16 - input.ReturnAmount - input.VoidAmount)),
                 Rule("R04_D25", checked(d25 - input.SeniorCitizenVatAdjustment - input.PwdVatAdjustment - input.OtherVatAdjustment - input.VatOnReturns - input.ResidualVatAdjustment)),
@@ -77,7 +78,7 @@ public sealed class AnnexE1CalculationEngine
 
     private static void ValidateSource(AnnexE1RowInputs input)
     {
-        foreach (var amount in new[] { input.PreviousGta, input.ResultingGta, input.ManualNetIncome, input.ActiveGross,
+        foreach (var amount in new[] { input.PreviousGta, input.ResultingGta, input.ManualNetIncome, input.BirGrossSales,
             input.ReturnAmount, input.VoidAmount, input.VatableSales, input.VatAmount, input.VatExemptSales,
             input.ZeroRatedSales, input.SeniorCitizenDiscount, input.PwdDiscount, input.NaacDiscount,
             input.SoloParentDiscount, input.OtherStatutoryDiscount, input.CouponDiscount, input.PromotionalDiscount,

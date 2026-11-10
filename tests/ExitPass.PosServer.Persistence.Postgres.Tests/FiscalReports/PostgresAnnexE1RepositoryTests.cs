@@ -23,6 +23,17 @@ public sealed class PostgresAnnexE1RepositoryTests
         Assert.DoesNotContain("entry.Source.SoftwareName", groupingKey, StringComparison.Ordinal);
     }
 
+    [Fact]
+    public void WorkbookReadbackUsesCommittedBirGrossSalesSource()
+    {
+        var source = File.ReadAllText(FindSource(
+            "src", "ExitPass.PosServer.Persistence.Postgres", "FiscalReports", "PostgresAnnexE1Repository.cs"));
+
+        Assert.Contains("b.gross_sales_amount_minor_units", source, StringComparison.Ordinal);
+        Assert.Contains("BirGrossSales:r.GetInt64(38)", source, StringComparison.Ordinal);
+        Assert.DoesNotContain("ActiveGross:r.GetInt64(12)-r.GetInt64(22)-r.GetInt64(23)", source, StringComparison.Ordinal);
+    }
+
     private static string FindSource(params string[] parts)
     {
         var directory = new DirectoryInfo(AppContext.BaseDirectory);

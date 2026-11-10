@@ -3,8 +3,8 @@ namespace ExitPass.PosServer.Runtime.FiscalReports;
 public static class AnnexE1Contract
 {
     public const string Profile = "pos-server-bir-annex-e1-rmo24-2023:v1";
-    public const string CalculationProfile = "pos-server-annex-e1-accounting-calculation:v1";
-    public const string CalculationProfileSha256 = "36bbba7f014f5713955d50fe2fdab63f0cb6e80aab77713fe5fef45fbe7c1a4f";
+    public const string CalculationProfile = "pos-server-annex-e1-accounting-calculation:v1.1";
+    public const string CalculationProfileSha256 = "02ba18516878ee46364e7c35639fcb89d2976fab18e3a57babd705a3d01bfebb";
     public const string SemanticHashVersion = "pos-server-annex-e1-request:sha256:v1";
     public const string FactSemanticHashVersion = "pos-server-annex-e1-period-fact:sha256:v1";
     public const string RendererVersion = "pos-server-annex-e1-openxml-renderer:v1";
@@ -172,7 +172,7 @@ public sealed record AnnexE1RowInputs(
     long PreviousGta,
     long ResultingGta,
     long ManualNetIncome,
-    long ActiveGross,
+    long BirGrossSales,
     long ReturnAmount,
     long VoidAmount,
     long VatableSales,

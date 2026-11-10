@@ -561,7 +561,7 @@ public sealed class AnnexE1V17IsolatedExecutionTests
                 DateOnly.ParseExact(Text(z, "business_date"), "yyyy-MM-dd", CultureInfo.InvariantCulture),
                 NullableText(z, "first_document_number"), NullableText(z, "last_document_number"),
                 Long(z, "previous_grand_total_minor_units"), Long(z, "resulting_grand_total_minor_units"),
-                Fact("manual_si_or_net_income"), Long(z, "gross_sales_minor_units"), 0, Long(z, "void_amount_minor_units"),
+                Fact("manual_si_or_net_income"), Long(bir, "gross_sales_minor_units"), 0, Long(z, "void_amount_minor_units"),
                 Long(z, "vatable_sales_minor_units"), Long(z, "vat_amount_minor_units"), Long(z, "vat_exempt_sales_minor_units"),
                 Long(z, "zero_rated_sales_minor_units"), Long(z, "senior_citizen_discount_minor_units"),
                 Long(z, "pwd_discount_minor_units"), Long(z, "naac_discount_minor_units"), Long(z, "solo_parent_discount_minor_units"),
@@ -575,7 +575,13 @@ public sealed class AnnexE1V17IsolatedExecutionTests
             foreach (var position in actual.Positions)
             {
                 var expectedValue = expectedDetails[position.Position].GetProperty("v");
-                if (position.MinorUnitsValue is not null) Assert.Equal(position.MinorUnitsValue.Value, expectedValue.GetInt64());
+                if (position.MinorUnitsValue is not null)
+                {
+                    var expectedMinorUnits = expectedValue.GetInt64();
+                    if (position.Position is "D07" or "D27")
+                        expectedMinorUnits = checked(expectedMinorUnits + Long(bir, "vat_minor_units"));
+                    Assert.Equal(position.MinorUnitsValue.Value, expectedMinorUnits);
+                }
                 else if (position.IntegerValue is not null) Assert.Equal(position.IntegerValue.Value, expectedValue.GetInt64());
                 else Assert.Equal(position.TextValue, expectedValue.GetString());
             }
