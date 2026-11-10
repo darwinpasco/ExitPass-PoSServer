@@ -53,7 +53,15 @@ CREATE TABLE IF NOT EXISTS pos.annex_e1_workbooks (
     CONSTRAINT uq_annex_e1_workbooks__scope_operation UNIQUE (site_pos_server_id, operation_key),
     CONSTRAINT uq_annex_e1_workbooks__scope_revision UNIQUE (site_pos_server_id, fiscal_identity_id, currency_code, calendar_year, calendar_month, profile_ref, revision),
     CONSTRAINT uq_annex_e1_workbooks__supersedes UNIQUE (supersedes_workbook_id),
-    CONSTRAINT ck_annex_e1_workbooks__profile CHECK (profile_ref='pos-server-bir-annex-e1-rmo24-2023:v1' AND calculation_profile_ref='pos-server-annex-e1-accounting-calculation:v1' AND calculation_profile_sha256='36bbba7f014f5713955d50fe2fdab63f0cb6e80aab77713fe5fef45fbe7c1a4f'),
+    CONSTRAINT ck_annex_e1_workbooks__profile CHECK (
+        profile_ref='pos-server-bir-annex-e1-rmo24-2023:v1'
+        AND (
+            (calculation_profile_ref='pos-server-annex-e1-accounting-calculation:v1'
+                AND calculation_profile_sha256='36bbba7f014f5713955d50fe2fdab63f0cb6e80aab77713fe5fef45fbe7c1a4f')
+            OR (calculation_profile_ref='pos-server-annex-e1-accounting-calculation:v1.1'
+                AND calculation_profile_sha256='02ba18516878ee46364e7c35639fcb89d2976fab18e3a57babd705a3d01bfebb')
+        )
+    ),
     CONSTRAINT ck_annex_e1_workbooks__template CHECK (template_sha256='7e46f34ae8779b303baa903f01bde794a519732de881d78109f79047d5a44197'),
     CONSTRAINT ck_annex_e1_workbooks__status CHECK (workbook_status_code_id='f5c2b69b-7d60-5fcb-a532-728d179de646'),
     CONSTRAINT ck_annex_e1_workbooks__correction_reason CHECK (correction_reason_code_id IS NULL OR correction_reason_code_id IN ('bca6e858-3c1a-5641-afbb-35cfba91caa2','3324411d-f392-501c-8b97-924fd19e5f7c')),
