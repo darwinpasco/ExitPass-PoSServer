@@ -184,6 +184,47 @@ public sealed class FiscalReportPresentationTests
         Assert.Equal(ZRecord().CounterSnapshot.ResultingZCounterValue, service.Present(ZRecord()).Presentation?.Counters?.ResultingZCounterValue);
     }
 
+    [Theory]
+    [InlineData(1, "0001", "0000")]
+    [InlineData(4, "0004", "0003")]
+    [InlineData(99, "0099", "0098")]
+    [InlineData(999, "0999", "0998")]
+    [InlineData(9999, "9999", "9998")]
+    public void ZReadingPdfPrintsCurrentAndPreviousCountersAsFourDigits(
+        long counter,
+        string expectedCurrent,
+        string expectedPrevious)
+    {
+        var source = ZRecord();
+        var record = source with
+        {
+            CounterSnapshot = source.CounterSnapshot with
+            {
+                PreviousZCounterValue = counter - 1,
+                ResultingZCounterValue = counter
+            }
+        };
+        var presentation = new FiscalReportPresentationService().Present(record).Presentation!;
+        var renderer = new FiscalReportOutputRenderer();
+        var receipt = Text(renderer, presentation);
+        var json = Encoding.UTF8.GetString(renderer.CreateExport(presentation, FiscalReportOutputFormat.Json).Content);
+        var csv = Encoding.UTF8.GetString(renderer.CreateExport(presentation, FiscalReportOutputFormat.Csv).Content);
+
+        var counterLine = Assert.Single(receipt.Split('\n'), line => line.StartsWith("Z Counter:", StringComparison.Ordinal));
+        var previousCounterLine = Assert.Single(receipt.Split('\n'), line => line.StartsWith("Last Z Counter:", StringComparison.Ordinal));
+        var resetCounterLine = Assert.Single(receipt.Split('\n'), line => line.StartsWith("Reset Counter:", StringComparison.Ordinal));
+        Assert.EndsWith(expectedCurrent, counterLine, StringComparison.Ordinal);
+        Assert.EndsWith(expectedPrevious, previousCounterLine, StringComparison.Ordinal);
+        Assert.EndsWith("3", resetCounterLine, StringComparison.Ordinal);
+        Assert.False(resetCounterLine.EndsWith("0003", StringComparison.Ordinal));
+        Assert.Equal(counter, presentation.Counters?.ResultingZCounterValue);
+        Assert.Equal(counter - 1, presentation.Counters?.PreviousZCounterValue);
+        Assert.Contains($"\"resultingZCounterValue\":{counter}", json, StringComparison.Ordinal);
+        Assert.Contains($"\"previousZCounterValue\":{counter - 1}", json, StringComparison.Ordinal);
+        Assert.Contains($"counter,resulting_z,,{counter},,,", csv, StringComparison.Ordinal);
+        Assert.Contains($"counter,previous_z,,{counter - 1},,,", csv, StringComparison.Ordinal);
+    }
+
     [Fact]
     public void WalletMethodsRemainDistinctAndUndifferentiatedWalletsAreNotInvented()
     {
