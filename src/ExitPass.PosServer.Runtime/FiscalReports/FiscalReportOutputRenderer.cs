@@ -341,8 +341,8 @@ public sealed class FiscalReportOutputRenderer
         else if (presentation.Counters is { } counters)
         {
             AddSection(lines, "COUNTERS", width);
-            AddValue(lines, "Z Counter", counters.ResultingZCounterValue.ToString(CultureInfo.InvariantCulture), width);
-            AddValue(lines, "Last Z Counter", counters.PreviousZCounterValue.ToString(CultureInfo.InvariantCulture), width);
+            AddValue(lines, "Z Counter", counters.ResultingZCounterValue.ToString("D4", CultureInfo.InvariantCulture), width);
+            AddValue(lines, "Last Z Counter", counters.PreviousZCounterValue.ToString("D4", CultureInfo.InvariantCulture), width);
             AddValue(lines, "Reset Counter", counters.ResultingResetCounterValue.ToString(CultureInfo.InvariantCulture), width);
             AddOptionalValue(lines, "Beginning Invoice", beginningInvoice, width);
             AddOptionalValue(lines, "Ending Invoice", endingInvoice, width);
