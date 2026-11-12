@@ -143,7 +143,7 @@ public sealed class PostgresAnnexE1Repository(
             {
                 if (current is not null)
                 {
-                    switch (AnnexE1RevisionPlanner.Decide(current, semanticHash, rows))
+                    switch (AnnexE1RevisionPlanner.Decide(current, semanticHash, header, rows))
                     {
                         case AnnexE1RevisionDecision.Replay:
                             return new(AnnexE1Outcome.Replayed, current);

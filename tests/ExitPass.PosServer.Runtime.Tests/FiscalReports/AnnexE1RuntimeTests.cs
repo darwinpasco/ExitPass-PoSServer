@@ -287,18 +287,29 @@ public sealed class AnnexE1RuntimeTests
     public void RevisionPlannerReplaysUnchangedContentAndOnlyAutoSupersedesNewlyClosedPeriods()
     {
         var firstRow=new AnnexE1CalculationEngine().Calculate(Input());
-        var current=Workbook() with{SemanticHash=new string('c',64),Rows=[firstRow]};
-        Assert.Equal(AnnexE1RevisionDecision.Replay,AnnexE1RevisionPlanner.Decide(current,new string('c',64),[firstRow]));
-        Assert.Equal(AnnexE1RevisionDecision.Replay,AnnexE1RevisionPlanner.Decide(current,new string('e',64),[firstRow]));
+        var workbook=Workbook();
+        var current=workbook with
+        {
+            SemanticHash=new string('c',64),Rows=[firstRow],
+            Header=workbook.Header with{ReleaseNumber="Z-012B",ReleaseDate="2026-08-10"}
+        };
+        Assert.Equal(AnnexE1RevisionDecision.Replay,AnnexE1RevisionPlanner.Decide(current,new string('c',64),current.Header,[firstRow]));
+        Assert.Equal(AnnexE1RevisionDecision.Replay,AnnexE1RevisionPlanner.Decide(current,new string('e',64),current.Header,[firstRow]));
+
+        var releaseHeader=current.Header with{ReleaseNumber="RC1.0",ReleaseDate="2026-11-12"};
+        Assert.Equal(AnnexE1RevisionDecision.AutomaticSuccessor,
+            AnnexE1RevisionPlanner.Decide(current,new string('e',64),releaseHeader,[firstRow]));
+        Assert.Equal(AnnexE1RevisionDecision.Replay,
+            AnnexE1RevisionPlanner.Decide(current,new string('e',64),releaseHeader with{SoftwareVersion="V2.0.0"},[firstRow]));
 
         var nextRow=new AnnexE1CalculationEngine().Calculate(Input() with
         {
             FiscalReportingPeriodId=Guid.NewGuid(),PeriodSequence=2,GoverningZReportId=Guid.NewGuid(),
             BirSalesSummaryReportId=Guid.NewGuid(),BusinessDayDate=new(2026,8,2)
         });
-        Assert.Equal(AnnexE1RevisionDecision.AutomaticSuccessor,AnnexE1RevisionPlanner.Decide(current,new string('e',64),[firstRow,nextRow]));
+        Assert.Equal(AnnexE1RevisionDecision.AutomaticSuccessor,AnnexE1RevisionPlanner.Decide(current,new string('e',64),current.Header,[firstRow,nextRow]));
         var changedRow=new AnnexE1CalculationEngine().Calculate(Input() with{ManualNetIncome=1});
-        Assert.Equal(AnnexE1RevisionDecision.ExplicitCorrectionRequired,AnnexE1RevisionPlanner.Decide(current,new string('e',64),[changedRow]));
+        Assert.Equal(AnnexE1RevisionDecision.ExplicitCorrectionRequired,AnnexE1RevisionPlanner.Decide(current,new string('e',64),current.Header,[changedRow]));
     }
 
     [Fact]
@@ -317,7 +328,7 @@ public sealed class AnnexE1RuntimeTests
         var current=Workbook() with{Rows=[historical]};
 
         Assert.Equal(AnnexE1RevisionDecision.ExplicitCorrectionRequired,
-            AnnexE1RevisionPlanner.Decide(current,new string('e',64),[corrected]));
+            AnnexE1RevisionPlanner.Decide(current,new string('e',64),current.Header,[corrected]));
         Assert.Equal(15_000,Position(historical,"D07"));
         Assert.Equal(17_000,Position(corrected,"D07"));
     }
