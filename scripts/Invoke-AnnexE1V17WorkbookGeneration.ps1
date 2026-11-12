@@ -67,7 +67,16 @@ try {
         throw 'The isolated execution report digest does not match the merged v1.7 baseline.'
     }
 
-    Invoke-CheckedNative 'build workbook tests' 'dotnet' @('build',$testProject,'--configuration','Release','--no-restore') | Out-Host
+    Invoke-CheckedNative 'build workbook tests' 'dotnet' @(
+        'build',
+        $testProject,
+        '--configuration',
+        'Release',
+        '--no-restore',
+        '-p:ManagePackageVersionsCentrally=false',
+        '-p:ImportDirectoryBuildProps=false',
+        '-p:ImportDirectoryBuildTargets=false'
+    ) | Out-Host
     $env:ANNEX_E1_V17_WORKBOOK_DATASET_PATH = $datasetPath
     $env:ANNEX_E1_V17_WORKBOOK_OUTPUT_PATH = $workbookOutput
     $env:ANNEX_E1_V17_WORKBOOK_REPORT_PATH = $reportPath
