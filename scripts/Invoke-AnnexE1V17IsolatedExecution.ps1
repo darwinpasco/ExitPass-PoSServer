@@ -186,7 +186,16 @@ function Assert-NegativeDatasetRejected {
 try {
     if (-not (Test-Path -LiteralPath $datasetPath -PathType Leaf)) { throw "Committed v1.7 dataset is missing." }
     Invoke-CheckedNative 'validate committed Annex E-1 v1.7 dataset' 'powershell.exe' @('-NoProfile','-ExecutionPolicy','Bypass','-File',$validatorPath) | Out-Host
-    Invoke-CheckedNative 'build isolated execution test project' 'dotnet' @('build',$testProject,'--configuration','Release','--no-restore') | Out-Host
+    Invoke-CheckedNative 'build isolated execution test project' 'dotnet' @(
+        'build',
+        $testProject,
+        '--configuration',
+        'Release',
+        '--no-restore',
+        '-p:ManagePackageVersionsCentrally=false',
+        '-p:ImportDirectoryBuildProps=false',
+        '-p:ImportDirectoryBuildTargets=false'
+    ) | Out-Host
 
     $datasetLines = [IO.File]::ReadAllLines($datasetPath, [Text.Encoding]::UTF8)
     $corruptLines = [string[]]$datasetLines.Clone()
