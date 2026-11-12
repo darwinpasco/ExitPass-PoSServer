@@ -284,7 +284,7 @@ public sealed class AnnexE1RuntimeTests
     }
 
     [Fact]
-    public void RevisionPlannerReplaysUnchangedContentAndOnlyAutoSupersedesNewlyClosedPeriods()
+    public void RevisionPlannerReplaysUnchangedContentAndAutoSupersedesNewPeriodsOrReleaseMetadata()
     {
         var firstRow=new AnnexE1CalculationEngine().Calculate(Input());
         var workbook=Workbook();
