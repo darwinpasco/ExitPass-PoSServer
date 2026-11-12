@@ -13,8 +13,8 @@ public static class AnnexE1Contract
     public const string ReportKind = "ANNEX_E";
     public const string SoftwareName = "ExitPass POS Server";
     public const string SoftwareVersion = "V1.0.0";
-    public const string ReleaseNumber = "Z-012B";
-    public const string ReleaseDate = "2026-08-10";
+    public const string ReleaseNumber = "RC1.0";
+    public const string ReleaseDate = "2026-11-12";
 }
 
 public static class AnnexE1FactTypes

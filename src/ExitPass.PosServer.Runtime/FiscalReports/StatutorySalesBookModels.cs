@@ -139,8 +139,8 @@ public static class StatutorySalesBookContract
     public const string PdfContentType = "application/pdf";
     public const string SoftwareName = "ExitPass POS Server";
     public const string SoftwareVersion = "V1.0.0";
-    public const string ReleaseNumber = "v1.3";
-    public const string ReleaseDate = "2026-10-17";
+    public const string ReleaseNumber = "RC1.0";
+    public const string ReleaseDate = "2026-11-12";
     public const string ArtifactScopeVersion = "pos-server-v2";
     public const string ArtifactLayoutVersion = "annex-e2-e3-16-column-identity-sections-v1";
     public const string ArtifactContractProfile = "pos-server-statutory-sales-book-rmo24-2023:pos-server-scope-v2:" + ArtifactLayoutVersion;

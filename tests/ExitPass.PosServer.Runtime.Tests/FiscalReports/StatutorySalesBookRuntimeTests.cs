@@ -121,7 +121,7 @@ public sealed class StatutorySalesBookRuntimeTests
         Assert.Contains(type == StatutorySalesBookType.AnnexE2 ? "ht=\"21\"" : "ht=\"24.75\"", worksheetXml);
         Assert.Contains("orientation=\"landscape\"", worksheetXml);
         Assert.Contains("fitToWidth=\"1\"", worksheetXml);
-        Assert.Contains("Software Name and Version No. plus Release No./Release Date: ExitPass POS Server V1.0.0 / v1.3 / 2026-10-17", worksheetXml);
+        Assert.Contains("Software Name and Version No. plus Release No./Release Date: ExitPass POS Server V1.0.0 / RC1.0 / 2026-11-12", worksheetXml);
         Assert.Contains("Serial No.: SN-TEST", worksheetXml);
         Assert.Contains("Machine Identification Number: MIN-TEST", worksheetXml);
         Assert.Contains("POS Server: PITX-L3-POS-01", worksheetXml);
@@ -282,6 +282,7 @@ public sealed class StatutorySalesBookRuntimeTests
             ? "Senior Citizen Sales Book/Report"
             : "Persons with Disability Sales Book/Report", text);
         Assert.Contains("Software Name and Version No. plus Release No./Release Date", text);
+        Assert.Contains("ExitPass POS Server V1.0.0 / RC1.0 / 2026-11-12", text);
         Assert.Contains("Discount", text);
         Assert.Contains("5%", text);
         Assert.Contains("20%", text);
@@ -470,7 +471,7 @@ public sealed class StatutorySalesBookRuntimeTests
         var summary = new StatutorySalesBookSummary(type, Guid.NewGuid(), Guid.NewGuid(), "PHP", 2026, 10, "PITX-L3-POS-01", rows.Count,
             rows.Sum(x => x.SalesInclusiveVatMinorUnits), rows.Sum(x => x.VatAmountMinorUnits), rows.Sum(x => x.VatExemptSalesMinorUnits), rows.Sum(x => x.Discount5MinorUnits), rows.Sum(x => x.Discount20MinorUnits), rows.Sum(x => x.NetSalesMinorUnits), DateTimeOffset.Parse("2026-10-17T08:00:00Z"), [], StatutorySalesBookStatuses.Final, rows.Count == 0, 31, 31, 31,
             rows.Sum(x => x.OriginalParkingFeeVatInclusiveMinorUnits), rows.Sum(x => x.LguWaiverVatInclusiveMinorUnits), rows.Sum(x => x.LguFinalPayableVatInclusiveMinorUnits));
-        return new(new("Professional Parking Management Corporation", "PITX, Paranaque City", "999-999-999-000", "ExitPass POS Server", "V1.0.0", "v1.3", "2026-10-17", "SN-TEST", "MIN-TEST", "PITX-L3-POS-01", summary.ReportAsOf, "operator-1", "Juan Dela Cruz"), summary, rows);
+        return new(new("Professional Parking Management Corporation", "PITX, Paranaque City", "999-999-999-000", StatutorySalesBookContract.SoftwareName, StatutorySalesBookContract.SoftwareVersion, StatutorySalesBookContract.ReleaseNumber, StatutorySalesBookContract.ReleaseDate, "SN-TEST", "MIN-TEST", "PITX-L3-POS-01", summary.ReportAsOf, "operator-1", "Juan Dela Cruz"), summary, rows);
     }
 
     private static StatutorySalesBookReport NovemberTransitionReport(
