@@ -286,30 +286,146 @@ public sealed class AnnexE1RuntimeTests
     [Fact]
     public void RevisionPlannerReplaysUnchangedContentAndAutoSupersedesNewPeriodsOrReleaseMetadata()
     {
-        var firstRow=new AnnexE1CalculationEngine().Calculate(Input());
-        var workbook=Workbook();
-        var current=workbook with
+        var firstRow = new AnnexE1CalculationEngine().Calculate(Input());
+        var workbook = Workbook();
+        var current = workbook with
         {
-            SemanticHash=new string('c',64),Rows=[firstRow],
-            Header=workbook.Header with{ReleaseNumber="Z-012B",ReleaseDate="2026-08-10"}
+            SemanticHash = new string('c', 64),
+            Rows = [firstRow],
+            Header = workbook.Header with { ReleaseNumber = "Z-012B", ReleaseDate = "2026-08-10" }
         };
-        Assert.Equal(AnnexE1RevisionDecision.Replay,AnnexE1RevisionPlanner.Decide(current,new string('c',64),current.Header,[firstRow]));
-        Assert.Equal(AnnexE1RevisionDecision.Replay,AnnexE1RevisionPlanner.Decide(current,new string('e',64),current.Header,[firstRow]));
-
-        var releaseHeader=current.Header with{ReleaseNumber="RC1.0",ReleaseDate="2026-11-12"};
-        Assert.Equal(AnnexE1RevisionDecision.AutomaticSuccessor,
-            AnnexE1RevisionPlanner.Decide(current,new string('e',64),releaseHeader,[firstRow]));
+        var sameSegments = new[] { new AnnexE1WorkbookSegment(current.Header, [firstRow]) };
         Assert.Equal(AnnexE1RevisionDecision.Replay,
-            AnnexE1RevisionPlanner.Decide(current,new string('e',64),releaseHeader with{SoftwareVersion="V2.0.0"},[firstRow]));
+            AnnexE1RevisionPlanner.Decide(current, new string('c', 64), sameSegments, [firstRow]));
+        Assert.Equal(AnnexE1RevisionDecision.Replay,
+            AnnexE1RevisionPlanner.Decide(current, new string('e', 64), sameSegments, [firstRow]));
 
-        var nextRow=new AnnexE1CalculationEngine().Calculate(Input() with
+        var releaseHeader = current.Header with { ReleaseNumber = "RC1.0", ReleaseDate = "2026-11-12" };
+        Assert.Equal(AnnexE1RevisionDecision.AutomaticSuccessor,
+            AnnexE1RevisionPlanner.Decide(current, new string('e', 64),
+                [new(releaseHeader, [firstRow])], [firstRow]));
+        Assert.Equal(AnnexE1RevisionDecision.ExplicitCorrectionRequired,
+            AnnexE1RevisionPlanner.Decide(current, new string('e', 64),
+                [new(releaseHeader with { SoftwareVersion = "V2.0.0" }, [firstRow])], [firstRow]));
+
+        var nextRow = new AnnexE1CalculationEngine().Calculate(Input() with
         {
-            FiscalReportingPeriodId=Guid.NewGuid(),PeriodSequence=2,GoverningZReportId=Guid.NewGuid(),
-            BirSalesSummaryReportId=Guid.NewGuid(),BusinessDayDate=new(2026,8,2)
+            FiscalReportingPeriodId = Guid.NewGuid(), PeriodSequence = 2,
+            GoverningZReportId = Guid.NewGuid(), BirSalesSummaryReportId = Guid.NewGuid(),
+            BusinessDayDate = new(2026, 8, 2)
         });
-        Assert.Equal(AnnexE1RevisionDecision.AutomaticSuccessor,AnnexE1RevisionPlanner.Decide(current,new string('e',64),current.Header,[firstRow,nextRow]));
-        var changedRow=new AnnexE1CalculationEngine().Calculate(Input() with{ManualNetIncome=1});
-        Assert.Equal(AnnexE1RevisionDecision.ExplicitCorrectionRequired,AnnexE1RevisionPlanner.Decide(current,new string('e',64),current.Header,[changedRow]));
+        Assert.Equal(AnnexE1RevisionDecision.AutomaticSuccessor,
+            AnnexE1RevisionPlanner.Decide(current, new string('e', 64),
+                [new(current.Header, [firstRow, nextRow])], [firstRow, nextRow]));
+
+        var changedRow = new AnnexE1CalculationEngine().Calculate(Input() with { ManualNetIncome = 1 });
+        Assert.Equal(AnnexE1RevisionDecision.ExplicitCorrectionRequired,
+            AnnexE1RevisionPlanner.Decide(current, new string('e', 64),
+                [new(current.Header, [changedRow])], [changedRow]));
+    }
+
+    [Fact]
+    public void ReleaseNumberOrDateChangeAloneCreatesAutomaticSuccessor()
+    {
+        var row = new AnnexE1CalculationEngine().Calculate(Input());
+        var current = Workbook() with { Rows = [row], SemanticHash = new string('c', 64) };
+        var header = current.Header;
+        AnnexE1Header[] candidates =
+        [
+            header with { ReleaseNumber = "RC1.1" },
+            header with { ReleaseDate = "2026-11-13" },
+            header with { ReleaseNumber = "RC1.1", ReleaseDate = "2026-11-13" }
+        ];
+        foreach (var changed in candidates)
+            Assert.Equal(AnnexE1RevisionDecision.AutomaticSuccessor,
+                AnnexE1RevisionPlanner.Decide(current, new string('e', 64),
+                    [new(changed, [row])], [row]));
+    }
+
+    [Theory]
+    [InlineData("TaxpayerName")]
+    [InlineData("TaxpayerAddress")]
+    [InlineData("Tin")]
+    [InlineData("SoftwareName")]
+    [InlineData("SoftwareVersion")]
+    [InlineData("PosSerialNumber")]
+    [InlineData("MachineIdentificationNumber")]
+    [InlineData("PosTerminalNumber")]
+    public void NonReleaseMaterialHeaderChangeRequiresGovernedCorrection(string field)
+    {
+        var row = new AnnexE1CalculationEngine().Calculate(Input());
+        var current = Workbook() with { Rows = [row], SemanticHash = new string('c', 64) };
+        var header = current.Header;
+        var changed = field switch
+        {
+            "TaxpayerName" => header with { TaxpayerName = "Changed Taxpayer" },
+            "TaxpayerAddress" => header with { TaxpayerAddress = "Changed Address" },
+            "Tin" => header with { Tin = "111-111-111-000" },
+            "SoftwareName" => header with { SoftwareName = "Other Software" },
+            "SoftwareVersion" => header with { SoftwareVersion = "V2.0.0" },
+            "PosSerialNumber" => header with { PosSerialNumber = "Different Serial" },
+            "MachineIdentificationNumber" => header with { MachineIdentificationNumber = "Different MIN" },
+            "PosTerminalNumber" => header with { PosTerminalNumber = "Different Terminal" },
+            _ => throw new ArgumentOutOfRangeException(nameof(field))
+        };
+        Assert.Equal(AnnexE1RevisionDecision.ExplicitCorrectionRequired,
+            AnnexE1RevisionPlanner.Decide(current, new string('e', 64),
+                [new(changed, [row])], [row]));
+    }
+
+    [Fact]
+    public void OperationalHeaderChangesDoNotTriggerCorrection()
+    {
+        var row = new AnnexE1CalculationEngine().Calculate(Input());
+        var current = Workbook() with { Rows = [row], SemanticHash = new string('c', 64) };
+        var changed = current.Header with
+        {
+            GeneratedAt = current.Header.GeneratedAt.AddDays(1),
+            GeneratedByRef = "different-actor",
+            GeneratedByDisplayName = "Another Operator"
+        };
+        Assert.Equal(AnnexE1RevisionDecision.Replay,
+            AnnexE1RevisionPlanner.Decide(current, new string('e', 64),
+                [new(changed, [row])], [row]));
+    }
+
+    [Fact]
+    public void LaterIdentitySegmentMaterialChangesRequireCorrectionButReleaseOnlyChangesCreateSuccessor()
+    {
+        var engine = new AnnexE1CalculationEngine();
+        var firstRow = engine.Calculate(Input());
+        var secondRow = engine.Calculate(Input() with
+        {
+            FiscalReportingPeriodId = Guid.NewGuid(), GoverningZReportId = Guid.NewGuid(),
+            BirSalesSummaryReportId = Guid.NewGuid(), PeriodSequence = 2,
+            BusinessDayDate = new(2026, 8, 2)
+        });
+        var firstHeader = Header() with { PosSerialNumber = "SN-FIRST", MachineIdentificationNumber = "MIN-FIRST" };
+        var secondHeader = firstHeader with { PosSerialNumber = "SN-SECOND", MachineIdentificationNumber = "MIN-SECOND" };
+        AnnexE1WorkbookSegment[] originalSegments =
+            [new(firstHeader, [firstRow]), new(secondHeader, [secondRow])];
+        var current = Workbook() with
+        {
+            Header = firstHeader,
+            Rows = [firstRow, secondRow],
+            IdentitySegments = originalSegments,
+            SemanticHash = new string('c', 64)
+        };
+
+        Assert.Equal(AnnexE1RevisionDecision.ExplicitCorrectionRequired,
+            AnnexE1RevisionPlanner.Decide(current, new string('e', 64),
+                [originalSegments[0], new(secondHeader with { PosTerminalNumber = "DIFFERENT" }, [secondRow])],
+                [firstRow, secondRow]));
+
+        Assert.Equal(AnnexE1RevisionDecision.AutomaticSuccessor,
+            AnnexE1RevisionPlanner.Decide(current, new string('e', 64),
+                [new(firstHeader with { ReleaseDate = "2026-11-13" }, [firstRow]),
+                 new(secondHeader with { ReleaseNumber = "RC1.1" }, [secondRow])],
+                [firstRow, secondRow]));
+
+        Assert.Equal(AnnexE1RevisionDecision.ExplicitCorrectionRequired,
+            AnnexE1RevisionPlanner.Decide(current, new string('e', 64),
+                [originalSegments[0]], [firstRow, secondRow]));
     }
 
     [Fact]
@@ -328,7 +444,7 @@ public sealed class AnnexE1RuntimeTests
         var current=Workbook() with{Rows=[historical]};
 
         Assert.Equal(AnnexE1RevisionDecision.ExplicitCorrectionRequired,
-            AnnexE1RevisionPlanner.Decide(current,new string('e',64),current.Header,[corrected]));
+            AnnexE1RevisionPlanner.Decide(current,new string('e',64),[new(current.Header,[corrected])],[corrected]));
         Assert.Equal(15_000,Position(historical,"D07"));
         Assert.Equal(17_000,Position(corrected,"D07"));
     }
