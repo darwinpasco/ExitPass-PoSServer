@@ -9,6 +9,7 @@ using Microsoft.AspNetCore.Hosting.Server;
 using Microsoft.AspNetCore.Hosting.Server.Features;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Hosting;
 using Npgsql;
 using Xunit;
 using Xunit.Abstractions;
@@ -19,6 +20,12 @@ public sealed class FiscalDocumentApiPostgresSmokeTests
 {
     private const string ConnectionStringEnvironmentVariable = "POSSERVER_API_SMOKE_DB_URL";
     private const string SmokeApiKey = "synthetic-fiscal-document-smoke-key";
+    private const string WrongSiteApiKey = "synthetic-fiscal-document-wrong-site-key";
+    private const string WrongIdentityApiKey = "synthetic-fiscal-document-wrong-identity-key";
+    private const string MissingSiteScopeApiKey = "synthetic-fiscal-document-missing-site-key";
+    private const string MissingIdentityScopeApiKey = "synthetic-fiscal-document-missing-identity-key";
+    private const string WildcardScopeApiKey = "synthetic-fiscal-document-wildcard-key";
+    private const string UnauthorizedAuthorityApiKey = "synthetic-fiscal-document-development-authority-key";
     private static readonly Guid SitePosServerId = Guid.Parse("10000000-0000-0000-0000-000000000001");
     private static readonly Guid SiteId = Guid.Parse("21000000-0000-4000-8000-000000000006");
     private static readonly Guid ChannelTerminalId = Guid.Parse("10000000-0000-0000-0000-000000000002");
@@ -304,6 +311,12 @@ public sealed class FiscalDocumentApiPostgresSmokeTests
         Assert.Null(getBody.Document.InvoiceCustomerInformation.StatutoryIdNumber);
         Assert.Equal("vatable", getBody.Document.TaxDetails.Single().TaxClassificationCodeKey);
 
+        using var digitalResponse = await client.GetAsync($"/v1/fiscal-documents/{fiscalDocumentId}/digital-sales-invoice");
+        var digitalBody = await digitalResponse.Content.ReadFromJsonAsync<GetDigitalSalesInvoiceResponse>();
+        Assert.Equal(HttpStatusCode.OK, digitalResponse.StatusCode);
+        Assert.True(digitalBody?.Succeeded);
+        Assert.Equal(fiscalDocumentId, digitalBody?.Render?.FiscalDocumentId);
+
         using var presentationResponse = await client.GetAsync($"/v1/fiscal-documents/{fiscalDocumentId}/digital-sales-invoice/presentation");
         var presentationBody = await presentationResponse.Content.ReadFromJsonAsync<GetDigitalSalesInvoicePresentationResponse>();
         Assert.Equal(HttpStatusCode.OK, presentationResponse.StatusCode);
@@ -326,6 +339,20 @@ public sealed class FiscalDocumentApiPostgresSmokeTests
             headerSection.Rows,
             row => row.Key == "salesInvoiceHeaderSnapshot.terminalSerialNumber" &&
                    row.DisplayValue == "APT-HARDWARE-SMOKE-001");
+
+        foreach (var deniedApiKey in new[]
+        {
+            WrongSiteApiKey,
+            WrongIdentityApiKey,
+            MissingSiteScopeApiKey,
+            MissingIdentityScopeApiKey,
+            WildcardScopeApiKey,
+            UnauthorizedAuthorityApiKey
+        })
+        {
+            using var deniedClient = CreateClient(app, deniedApiKey);
+            await AssertFiscalDocumentReadsAreConcealedAsync(deniedClient, fiscalDocumentId);
+        }
 
         using var replayResponse = await client.PostAsJsonAsync("/v1/fiscal-documents/", request);
         var replayBody = await replayResponse.Content.ReadFromJsonAsync<CreateFiscalDocumentResponse>();
@@ -1726,7 +1753,7 @@ public sealed class FiscalDocumentApiPostgresSmokeTests
                 '1a6f7021-bc84-5c01-afaa-c5d6685633c8',
                 current_date,
                 transaction_timestamp() - interval '1 hour',
-                transaction_timestamp() + interval '1 hour',
+                null,
                 'Etc/UTC',
                 '00:00:00',
                 'PHP',
@@ -1915,7 +1942,10 @@ public sealed class FiscalDocumentApiPostgresSmokeTests
 
     private static async Task<WebApplication> StartApiAsync(string connectionString)
     {
-        var builder = WebApplication.CreateBuilder();
+        var builder = WebApplication.CreateBuilder(new WebApplicationOptions
+        {
+            EnvironmentName = Environments.Production
+        });
         builder.WebHost.UseKestrel();
         builder.WebHost.UseUrls("http://127.0.0.1:0");
         builder.Configuration.AddInMemoryCollection(new Dictionary<string, string?>
@@ -1938,7 +1968,41 @@ public sealed class FiscalDocumentApiPostgresSmokeTests
             ["PosServer:Admin:ApiKeys:smoke:SitePosServerIds:0"] = SitePosServerId.ToString("D"),
             ["PosServer:Admin:ApiKeys:smoke:FiscalIdentityIds:0"] = FiscalIdentityId.ToString("D"),
             ["PosServer:Admin:ApiKeys:smoke:CurrencyCodes:0"] = "PHP",
-            ["PosServer:Admin:ApiKeys:smoke:AuthorityClass"] = BirSalesSummaryAuthorization.ProductionAuthorityClass
+            ["PosServer:Admin:ApiKeys:smoke:AuthorityClass"] = BirSalesSummaryAuthorization.ProductionAuthorityClass,
+            ["PosServer:Admin:ApiKeys:wrongSite:Principal"] = "fiscal-document-wrong-site",
+            ["PosServer:Admin:ApiKeys:wrongSite:Key"] = WrongSiteApiKey,
+            ["PosServer:Admin:ApiKeys:wrongSite:Permissions:0"] = FiscalDocumentAuthorization.ReadPermission,
+            ["PosServer:Admin:ApiKeys:wrongSite:SitePosServerIds:0"] = Guid.Parse("20000000-0000-0000-0000-000000000001").ToString("D"),
+            ["PosServer:Admin:ApiKeys:wrongSite:FiscalIdentityIds:0"] = FiscalIdentityId.ToString("D"),
+            ["PosServer:Admin:ApiKeys:wrongSite:AuthorityClass"] = BirSalesSummaryAuthorization.ProductionAuthorityClass,
+            ["PosServer:Admin:ApiKeys:wrongIdentity:Principal"] = "fiscal-document-wrong-identity",
+            ["PosServer:Admin:ApiKeys:wrongIdentity:Key"] = WrongIdentityApiKey,
+            ["PosServer:Admin:ApiKeys:wrongIdentity:Permissions:0"] = FiscalDocumentAuthorization.ReadPermission,
+            ["PosServer:Admin:ApiKeys:wrongIdentity:SitePosServerIds:0"] = SitePosServerId.ToString("D"),
+            ["PosServer:Admin:ApiKeys:wrongIdentity:FiscalIdentityIds:0"] = Guid.Parse("20000000-0000-0000-0000-000000000002").ToString("D"),
+            ["PosServer:Admin:ApiKeys:wrongIdentity:AuthorityClass"] = BirSalesSummaryAuthorization.ProductionAuthorityClass,
+            ["PosServer:Admin:ApiKeys:missingSite:Principal"] = "fiscal-document-missing-site",
+            ["PosServer:Admin:ApiKeys:missingSite:Key"] = MissingSiteScopeApiKey,
+            ["PosServer:Admin:ApiKeys:missingSite:Permissions:0"] = FiscalDocumentAuthorization.ReadPermission,
+            ["PosServer:Admin:ApiKeys:missingSite:FiscalIdentityIds:0"] = FiscalIdentityId.ToString("D"),
+            ["PosServer:Admin:ApiKeys:missingSite:AuthorityClass"] = BirSalesSummaryAuthorization.ProductionAuthorityClass,
+            ["PosServer:Admin:ApiKeys:missingIdentity:Principal"] = "fiscal-document-missing-identity",
+            ["PosServer:Admin:ApiKeys:missingIdentity:Key"] = MissingIdentityScopeApiKey,
+            ["PosServer:Admin:ApiKeys:missingIdentity:Permissions:0"] = FiscalDocumentAuthorization.ReadPermission,
+            ["PosServer:Admin:ApiKeys:missingIdentity:SitePosServerIds:0"] = SitePosServerId.ToString("D"),
+            ["PosServer:Admin:ApiKeys:missingIdentity:AuthorityClass"] = BirSalesSummaryAuthorization.ProductionAuthorityClass,
+            ["PosServer:Admin:ApiKeys:wildcard:Principal"] = "fiscal-document-wildcard",
+            ["PosServer:Admin:ApiKeys:wildcard:Key"] = WildcardScopeApiKey,
+            ["PosServer:Admin:ApiKeys:wildcard:Permissions:0"] = FiscalDocumentAuthorization.ReadPermission,
+            ["PosServer:Admin:ApiKeys:wildcard:SitePosServerIds:0"] = "*",
+            ["PosServer:Admin:ApiKeys:wildcard:FiscalIdentityIds:0"] = "*",
+            ["PosServer:Admin:ApiKeys:wildcard:AuthorityClass"] = BirSalesSummaryAuthorization.ProductionAuthorityClass,
+            ["PosServer:Admin:ApiKeys:developmentAuthority:Principal"] = "fiscal-document-development-authority",
+            ["PosServer:Admin:ApiKeys:developmentAuthority:Key"] = UnauthorizedAuthorityApiKey,
+            ["PosServer:Admin:ApiKeys:developmentAuthority:Permissions:0"] = FiscalDocumentAuthorization.ReadPermission,
+            ["PosServer:Admin:ApiKeys:developmentAuthority:SitePosServerIds:0"] = SitePosServerId.ToString("D"),
+            ["PosServer:Admin:ApiKeys:developmentAuthority:FiscalIdentityIds:0"] = FiscalIdentityId.ToString("D"),
+            ["PosServer:Admin:ApiKeys:developmentAuthority:AuthorityClass"] = BirSalesSummaryAuthorization.DevelopmentAuthorityClass
         });
         builder.Services.AddPosServerFiscalDocumentApi(builder.Configuration);
 
@@ -1951,7 +2015,7 @@ public sealed class FiscalDocumentApiPostgresSmokeTests
         return app;
     }
 
-    private static HttpClient CreateClient(WebApplication app)
+    private static HttpClient CreateClient(WebApplication app, string apiKey = SmokeApiKey)
     {
         var addresses = app.Services.GetRequiredService<IServer>()
             .Features
@@ -1961,8 +2025,31 @@ public sealed class FiscalDocumentApiPostgresSmokeTests
             throw new InvalidOperationException("Could not resolve smoke API server address.");
 
         var client = new HttpClient { BaseAddress = new Uri(address) };
-        client.DefaultRequestHeaders.Add(SalesInvoiceHeaderProfileAdminAuthorization.ApiKeyHeaderName, SmokeApiKey);
+        client.DefaultRequestHeaders.Add(SalesInvoiceHeaderProfileAdminAuthorization.ApiKeyHeaderName, apiKey);
         return client;
+    }
+
+    private static async Task AssertFiscalDocumentReadsAreConcealedAsync(
+        HttpClient client,
+        Guid fiscalDocumentId)
+    {
+        foreach (var route in new[]
+        {
+            $"/v1/fiscal-documents/{fiscalDocumentId:D}",
+            $"/v1/fiscal-documents/{fiscalDocumentId:D}/digital-sales-invoice",
+            $"/v1/fiscal-documents/{fiscalDocumentId:D}/digital-sales-invoice/presentation"
+        })
+        {
+            using var response = await client.GetAsync(route);
+            var body = await response.Content.ReadAsStringAsync();
+
+            Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
+            Assert.Contains("fiscal_document_not_found", body, StringComparison.Ordinal);
+            Assert.DoesNotContain("Juan Dela Cruz", body, StringComparison.Ordinal);
+            Assert.DoesNotContain("123-456-789", body, StringComparison.Ordinal);
+            Assert.DoesNotContain("SI-00000000000001-A", body, StringComparison.Ordinal);
+            Assert.DoesNotContain("evidence-ref-success", body, StringComparison.Ordinal);
+        }
     }
 
     private static CreateFiscalDocumentRequest CreateValidRequest(string suffix) =>

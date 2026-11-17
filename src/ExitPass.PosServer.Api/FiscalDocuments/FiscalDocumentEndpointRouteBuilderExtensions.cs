@@ -89,9 +89,16 @@ public static class FiscalDocumentEndpointRouteBuilderExtensions
         group.MapGet("/{fiscalDocumentId:guid}", async (
             Guid fiscalDocumentId,
             FiscalDocumentReadService service,
+            HttpContext context,
+            IHostEnvironment environment,
             CancellationToken cancellationToken) =>
         {
-            var response = await FiscalDocumentReadEndpoint.GetByIdAsync(fiscalDocumentId, service, cancellationToken)
+            var response = await FiscalDocumentReadEndpoint.GetByIdAsync(
+                    fiscalDocumentId,
+                    service,
+                    context,
+                    environment,
+                    cancellationToken)
                 .ConfigureAwait(false);
 
             return Results.Json(response, statusCode: response.HttpStatusCode);
@@ -127,11 +134,15 @@ public static class FiscalDocumentEndpointRouteBuilderExtensions
         group.MapGet("/{fiscalDocumentId:guid}/digital-sales-invoice", async (
             Guid fiscalDocumentId,
             DigitalSalesInvoiceRenderService service,
+            HttpContext context,
+            IHostEnvironment environment,
             CancellationToken cancellationToken) =>
         {
             var response = await DigitalSalesInvoiceEndpoint.GetByFiscalDocumentIdAsync(
                     fiscalDocumentId,
                     service,
+                    context,
+                    environment,
                     cancellationToken)
                 .ConfigureAwait(false);
 
@@ -142,12 +153,16 @@ public static class FiscalDocumentEndpointRouteBuilderExtensions
             Guid fiscalDocumentId,
             DigitalSalesInvoiceRenderService renderService,
             DigitalSalesInvoicePresentationAdapter presentationAdapter,
+            HttpContext context,
+            IHostEnvironment environment,
             CancellationToken cancellationToken) =>
         {
             var response = await DigitalSalesInvoicePresentationEndpoint.GetByFiscalDocumentIdAsync(
                     fiscalDocumentId,
                     renderService,
                     presentationAdapter,
+                    context,
+                    environment,
                     cancellationToken)
                 .ConfigureAwait(false);
 

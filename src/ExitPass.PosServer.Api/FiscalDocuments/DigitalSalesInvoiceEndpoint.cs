@@ -7,11 +7,22 @@ public static class DigitalSalesInvoiceEndpoint
     public static async Task<GetDigitalSalesInvoiceResponse> GetByFiscalDocumentIdAsync(
         Guid fiscalDocumentId,
         DigitalSalesInvoiceRenderService service,
+        HttpContext context,
+        IHostEnvironment environment,
         CancellationToken cancellationToken = default)
     {
         try
         {
             var result = await service.RenderAsync(fiscalDocumentId, cancellationToken).ConfigureAwait(false);
+            if (result.Render is { } render &&
+                !FiscalDocumentAuthorization.IsReadAllowed(
+                    context.User,
+                    environment,
+                    render.SitePosServerId,
+                    render.FiscalIdentityId))
+            {
+                result = DigitalSalesInvoiceRenderResult.NotFound(fiscalDocumentId);
+            }
             return MapResult(result);
         }
         catch (FiscalDocumentPersistenceNotConfiguredException ex)

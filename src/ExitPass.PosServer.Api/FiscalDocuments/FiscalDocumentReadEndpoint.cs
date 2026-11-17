@@ -7,11 +7,22 @@ public static class FiscalDocumentReadEndpoint
     public static async Task<GetFiscalDocumentResponse> GetByIdAsync(
         Guid fiscalDocumentId,
         FiscalDocumentReadService service,
+        HttpContext context,
+        IHostEnvironment environment,
         CancellationToken cancellationToken = default)
     {
         try
         {
             var result = await service.GetByIdAsync(fiscalDocumentId, cancellationToken).ConfigureAwait(false);
+            if (result.Document is { } document &&
+                !FiscalDocumentAuthorization.IsReadAllowed(
+                    context.User,
+                    environment,
+                    document.SitePosServerId,
+                    document.FiscalIdentityId))
+            {
+                result = FiscalDocumentReadResult.NotFound(fiscalDocumentId);
+            }
             return MapResult(result);
         }
         catch (FiscalDocumentPersistenceNotConfiguredException ex)

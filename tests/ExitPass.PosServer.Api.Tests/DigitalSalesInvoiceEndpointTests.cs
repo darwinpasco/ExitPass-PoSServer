@@ -23,7 +23,7 @@ public sealed class DigitalSalesInvoiceEndpointTests
         var document = ValidReadModel(assignedNumber: true);
         var service = new DigitalSalesInvoiceRenderService(new FiscalDocumentReadService(new StubFiscalDocumentReader(document)));
 
-        var response = await DigitalSalesInvoiceEndpoint.GetByFiscalDocumentIdAsync(document.FiscalDocumentId, service);
+        var response = await GetDigitalSalesInvoiceAsync(document.FiscalDocumentId, service);
 
         Assert.True(response.Succeeded);
         Assert.Equal("rendered", response.Code);
@@ -56,7 +56,7 @@ public sealed class DigitalSalesInvoiceEndpointTests
         var document = ValidReadModel(assignedNumber: true);
         var service = new DigitalSalesInvoiceRenderService(new FiscalDocumentReadService(new StubFiscalDocumentReader(document)));
 
-        var response = await DigitalSalesInvoiceEndpoint.GetByFiscalDocumentIdAsync(document.FiscalDocumentId, service);
+        var response = await GetDigitalSalesInvoiceAsync(document.FiscalDocumentId, service);
 
         Assert.NotNull(response.TemplateContract);
         var sectionNames = response.TemplateContract.Sections.Select(section => section.Name).ToArray();
@@ -91,7 +91,7 @@ public sealed class DigitalSalesInvoiceEndpointTests
         var document = ValidReadModel(assignedNumber: false);
         var service = new DigitalSalesInvoiceRenderService(new FiscalDocumentReadService(new StubFiscalDocumentReader(document)));
 
-        var response = await DigitalSalesInvoiceEndpoint.GetByFiscalDocumentIdAsync(document.FiscalDocumentId, service);
+        var response = await GetDigitalSalesInvoiceAsync(document.FiscalDocumentId, service);
 
         Assert.True(response.Succeeded);
         Assert.Equal(StatusCodes.Status200OK, response.HttpStatusCode);
@@ -112,7 +112,7 @@ public sealed class DigitalSalesInvoiceEndpointTests
         var documentId = Guid.Parse("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa");
         var service = new DigitalSalesInvoiceRenderService(new FiscalDocumentReadService(new StubFiscalDocumentReader(null)));
 
-        var response = await DigitalSalesInvoiceEndpoint.GetByFiscalDocumentIdAsync(documentId, service);
+        var response = await GetDigitalSalesInvoiceAsync(documentId, service);
 
         Assert.False(response.Succeeded);
         Assert.Equal("fiscal_document_not_found", response.Code);
@@ -128,7 +128,7 @@ public sealed class DigitalSalesInvoiceEndpointTests
         var service = new DigitalSalesInvoiceRenderService(
             new FiscalDocumentReadService(new PersistenceNotConfiguredFiscalDocumentReader()));
 
-        var response = await DigitalSalesInvoiceEndpoint.GetByFiscalDocumentIdAsync(Guid.NewGuid(), service);
+        var response = await GetDigitalSalesInvoiceAsync(Guid.NewGuid(), service);
 
         Assert.False(response.Succeeded);
         Assert.Equal("persistence_not_configured", response.Code);
@@ -215,7 +215,7 @@ public sealed class DigitalSalesInvoiceEndpointTests
         var document = ValidReadModel(assignedNumber: true);
         var service = new DigitalSalesInvoiceRenderService(new FiscalDocumentReadService(new StubFiscalDocumentReader(document)));
 
-        var response = await DigitalSalesInvoiceEndpoint.GetByFiscalDocumentIdAsync(document.FiscalDocumentId, service);
+        var response = await GetDigitalSalesInvoiceAsync(document.FiscalDocumentId, service);
 
         Assert.NotNull(response.TemplateContract);
         Assert.NotNull(response.Render);
@@ -240,7 +240,7 @@ public sealed class DigitalSalesInvoiceEndpointTests
         var service = new DigitalSalesInvoiceRenderService(new FiscalDocumentReadService(new StubFiscalDocumentReader(document)));
         var adapter = new DigitalSalesInvoicePresentationAdapter();
 
-        var response = await DigitalSalesInvoicePresentationEndpoint.GetByFiscalDocumentIdAsync(document.FiscalDocumentId, service, adapter);
+        var response = await GetPresentationAsync(document.FiscalDocumentId, service, adapter);
 
         Assert.True(response.Succeeded);
         Assert.Equal("presented", response.Code);
@@ -309,7 +309,7 @@ public sealed class DigitalSalesInvoiceEndpointTests
         var service = new DigitalSalesInvoiceRenderService(
             new FiscalDocumentReadService(new StubFiscalDocumentReader(document)));
 
-        var response = await DigitalSalesInvoicePresentationEndpoint.GetByFiscalDocumentIdAsync(
+        var response = await GetPresentationAsync(
             document.FiscalDocumentId,
             service,
             new DigitalSalesInvoicePresentationAdapter());
@@ -342,7 +342,7 @@ public sealed class DigitalSalesInvoiceEndpointTests
         var service = new DigitalSalesInvoiceRenderService(
             new FiscalDocumentReadService(new StubFiscalDocumentReader(document)));
 
-        var response = await DigitalSalesInvoicePresentationEndpoint.GetByFiscalDocumentIdAsync(
+        var response = await GetPresentationAsync(
             document.FiscalDocumentId,
             service,
             new DigitalSalesInvoicePresentationAdapter());
@@ -369,7 +369,7 @@ public sealed class DigitalSalesInvoiceEndpointTests
         var service = new DigitalSalesInvoiceRenderService(
             new FiscalDocumentReadService(new StubFiscalDocumentReader(document)));
 
-        var response = await DigitalSalesInvoicePresentationEndpoint.GetByFiscalDocumentIdAsync(
+        var response = await GetPresentationAsync(
             document.FiscalDocumentId,
             service,
             new DigitalSalesInvoicePresentationAdapter());
@@ -438,7 +438,7 @@ public sealed class DigitalSalesInvoiceEndpointTests
         var service = new DigitalSalesInvoiceRenderService(new FiscalDocumentReadService(new StubFiscalDocumentReader(document)));
         var adapter = new DigitalSalesInvoicePresentationAdapter();
 
-        var response = await DigitalSalesInvoicePresentationEndpoint.GetByFiscalDocumentIdAsync(document.FiscalDocumentId, service, adapter);
+        var response = await GetPresentationAsync(document.FiscalDocumentId, service, adapter);
 
         Assert.True(response.Succeeded);
         Assert.NotNull(response.Presentation);
@@ -460,7 +460,7 @@ public sealed class DigitalSalesInvoiceEndpointTests
         var service = new DigitalSalesInvoiceRenderService(new FiscalDocumentReadService(new StubFiscalDocumentReader(null)));
         var adapter = new DigitalSalesInvoicePresentationAdapter();
 
-        var response = await DigitalSalesInvoicePresentationEndpoint.GetByFiscalDocumentIdAsync(documentId, service, adapter);
+        var response = await GetPresentationAsync(documentId, service, adapter);
 
         Assert.False(response.Succeeded);
         Assert.Equal("fiscal_document_not_found", response.Code);
@@ -479,7 +479,7 @@ public sealed class DigitalSalesInvoiceEndpointTests
         var service = new DigitalSalesInvoiceRenderService(new FiscalDocumentReadService(reader));
         var adapter = new DigitalSalesInvoicePresentationAdapter();
 
-        var response = await DigitalSalesInvoicePresentationEndpoint.GetByFiscalDocumentIdAsync(document.FiscalDocumentId, service, adapter);
+        var response = await GetPresentationAsync(document.FiscalDocumentId, service, adapter);
 
         Assert.True(response.Succeeded);
         Assert.Equal(1, reader.ReadCount);
@@ -496,7 +496,7 @@ public sealed class DigitalSalesInvoiceEndpointTests
             new FiscalDocumentReadService(new PersistenceNotConfiguredFiscalDocumentReader()));
         var adapter = new DigitalSalesInvoicePresentationAdapter();
 
-        var response = await DigitalSalesInvoicePresentationEndpoint.GetByFiscalDocumentIdAsync(Guid.NewGuid(), service, adapter);
+        var response = await GetPresentationAsync(Guid.NewGuid(), service, adapter);
 
         Assert.False(response.Succeeded);
         Assert.Equal("persistence_not_configured", response.Code);
@@ -513,7 +513,7 @@ public sealed class DigitalSalesInvoiceEndpointTests
         var service = new DigitalSalesInvoiceRenderService(new FiscalDocumentReadService(new StubFiscalDocumentReader(document)));
         var adapter = new DigitalSalesInvoicePresentationAdapter();
 
-        var response = await DigitalSalesInvoicePresentationEndpoint.GetByFiscalDocumentIdAsync(document.FiscalDocumentId, service, adapter);
+        var response = await GetPresentationAsync(document.FiscalDocumentId, service, adapter);
 
         Assert.NotNull(response.Presentation);
         Assert.DoesNotContain(
@@ -534,7 +534,7 @@ public sealed class DigitalSalesInvoiceEndpointTests
             Guid.Parse("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"),
             Guid.Parse("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb"),
             Guid.Parse("99999999-9999-9999-9999-999999999999"),
-            assignedNumber ? Guid.Parse("eeeeeeee-eeee-eeee-eeee-eeeeeeeeeeee") : null,
+            Guid.Parse("eeeeeeee-eeee-eeee-eeee-eeeeeeeeeeee"),
             Guid.Parse("cccccccc-cccc-cccc-cccc-cccccccccccc"),
             "sales_invoice",
             Guid.Parse("dddddddd-dddd-dddd-dddd-dddddddddddd"),
@@ -648,6 +648,30 @@ public sealed class DigitalSalesInvoiceEndpointTests
                     DateTimeOffset.Parse("2026-07-01T08:00:00Z"),
                     DateTimeOffset.Parse("2026-07-01T08:00:00Z"))
             ]);
+
+    private static Task<GetDigitalSalesInvoiceResponse> GetDigitalSalesInvoiceAsync(
+        Guid fiscalDocumentId,
+        DigitalSalesInvoiceRenderService service) =>
+        DigitalSalesInvoiceEndpoint.GetByFiscalDocumentIdAsync(
+            fiscalDocumentId,
+            service,
+            FiscalDocumentReadAuthorizationTestSupport.AuthorizedContext(
+                Guid.Parse("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb"),
+                Guid.Parse("eeeeeeee-eeee-eeee-eeee-eeeeeeeeeeee")),
+            FiscalDocumentReadAuthorizationTestSupport.DevelopmentHost);
+
+    private static Task<GetDigitalSalesInvoicePresentationResponse> GetPresentationAsync(
+        Guid fiscalDocumentId,
+        DigitalSalesInvoiceRenderService service,
+        DigitalSalesInvoicePresentationAdapter adapter) =>
+        DigitalSalesInvoicePresentationEndpoint.GetByFiscalDocumentIdAsync(
+            fiscalDocumentId,
+            service,
+            adapter,
+            FiscalDocumentReadAuthorizationTestSupport.AuthorizedContext(
+                Guid.Parse("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb"),
+                Guid.Parse("eeeeeeee-eeee-eeee-eeee-eeeeeeeeeeee")),
+            FiscalDocumentReadAuthorizationTestSupport.DevelopmentHost);
 
     private static SalesInvoiceHeaderSnapshot ValidHeaderSnapshot() =>
         new(

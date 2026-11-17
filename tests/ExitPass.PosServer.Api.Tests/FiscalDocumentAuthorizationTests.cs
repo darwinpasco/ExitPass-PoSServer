@@ -41,6 +41,32 @@ public sealed class FiscalDocumentAuthorizationTests
     }
 
     [Fact]
+    public async Task AuthenticatedCallerWithoutReadPermissionIsForbiddenBeforeBusinessHandling()
+    {
+        await using var factory = new WebApplicationFactory<Program>().WithWebHostBuilder(builder =>
+            builder.ConfigureAppConfiguration((_, configuration) => configuration.AddInMemoryCollection(
+                new Dictionary<string, string?>
+                {
+                    ["ConnectionStrings:PosServer"] = "Host=127.0.0.1;Database=pos_test;Username=pos_test;Password=not-used",
+                    ["PosServer:Admin:ApiKeys:0:Principal"] = "create-only",
+                    ["PosServer:Admin:ApiKeys:0:Key"] = "create-only-test-key",
+                    ["PosServer:Admin:ApiKeys:0:Permissions:0"] = FiscalDocumentAuthorization.CreatePermission
+                })));
+        using var client = factory.CreateClient();
+        client.DefaultRequestHeaders.Add(
+            SalesInvoiceHeaderProfileAdminAuthorization.ApiKeyHeaderName,
+            "create-only-test-key");
+        var id = Guid.Parse("00000000-0000-4000-8000-000000000099");
+
+        using var read = await client.GetAsync($"/v1/fiscal-documents/{id:D}");
+        using var digital = await client.GetAsync($"/v1/fiscal-documents/{id:D}/digital-sales-invoice");
+        using var presentation = await client.GetAsync($"/v1/fiscal-documents/{id:D}/digital-sales-invoice/presentation");
+
+        Assert.All([read, digital, presentation], response =>
+            Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode));
+    }
+
+    [Fact]
     public void FiscalDocumentRoutesRequireNamedServicePolicies()
     {
         var source = File.ReadAllText(FindSourceFile("FiscalDocumentEndpointRouteBuilderExtensions.cs"));

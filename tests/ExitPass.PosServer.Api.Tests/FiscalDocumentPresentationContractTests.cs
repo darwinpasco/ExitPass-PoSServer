@@ -12,7 +12,6 @@ public sealed class FiscalDocumentPresentationContractTests
 
     [Theory]
     [InlineData("recorded-assigned-cash")]
-    [InlineData("recorded-not-assigned-cash")]
     [InlineData("voided-assigned-cash")]
     public async Task FiscalDocumentPresentationEndpointMatchesGovernedFixture(string caseId)
     {
@@ -28,6 +27,21 @@ public sealed class FiscalDocumentPresentationContractTests
     }
 
     [Fact]
+    public async Task FiscalDocumentPresentationEndpointConcealsFixtureWithoutFiscalIdentity()
+    {
+        using var fixture = ReadFixture();
+        var fixtureCase = FindCase(fixture, "recorded-not-assigned-cash");
+        var document = BuildDocument(fixtureCase.GetProperty("storedFiscalDocument"));
+
+        var response = await InvokeAsync(document);
+
+        Assert.Equal(StatusCodes.Status404NotFound, response.HttpStatusCode);
+        Assert.Equal("fiscal_document_not_found", response.Code);
+        Assert.Null(response.Presentation);
+        Assert.Null(response.CanonicalText);
+    }
+
+    [Fact]
     public async Task FiscalDocumentPresentationEndpointRepeatedReadsAreSideEffectFree()
     {
         using var fixture = ReadFixture();
@@ -40,11 +54,19 @@ public sealed class FiscalDocumentPresentationContractTests
         var first = await DigitalSalesInvoicePresentationEndpoint.GetByFiscalDocumentIdAsync(
             document.FiscalDocumentId,
             service,
-            adapter);
+            adapter,
+            FiscalDocumentReadAuthorizationTestSupport.AuthorizedContext(
+                document.SitePosServerId,
+                document.FiscalIdentityId ?? FiscalDocumentReadAuthorizationTestSupport.FiscalIdentityId),
+            FiscalDocumentReadAuthorizationTestSupport.DevelopmentHost);
         var second = await DigitalSalesInvoicePresentationEndpoint.GetByFiscalDocumentIdAsync(
             document.FiscalDocumentId,
             service,
-            adapter);
+            adapter,
+            FiscalDocumentReadAuthorizationTestSupport.AuthorizedContext(
+                document.SitePosServerId,
+                document.FiscalIdentityId ?? FiscalDocumentReadAuthorizationTestSupport.FiscalIdentityId),
+            FiscalDocumentReadAuthorizationTestSupport.DevelopmentHost);
 
         Assert.Equal(2, reader.ReadCount);
         Assert.Equal(
@@ -90,7 +112,11 @@ public sealed class FiscalDocumentPresentationContractTests
         return await DigitalSalesInvoicePresentationEndpoint.GetByFiscalDocumentIdAsync(
             document.FiscalDocumentId,
             service,
-            adapter);
+            adapter,
+            FiscalDocumentReadAuthorizationTestSupport.AuthorizedContext(
+                document.SitePosServerId,
+                document.FiscalIdentityId ?? FiscalDocumentReadAuthorizationTestSupport.FiscalIdentityId),
+            FiscalDocumentReadAuthorizationTestSupport.DevelopmentHost);
     }
 
     private static void AssertTopLevelFields(
