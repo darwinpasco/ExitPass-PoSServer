@@ -70,10 +70,28 @@
     "effective_to",
     "recorded_from",
     "recorded_to",
-    "correlation_reference"
+    "correlation_reference",
+    "after_sequence"
   ],
   "pagination": {
     "kind": "stream_sequence_keyset_with_high_water",
+    "after_sequence": {
+      "type": "int64",
+      "optional": true,
+      "applies_to": "GET /v1/electronic-journal/events",
+      "semantics": "exclusive_lower_bound",
+      "default_when_omitted": 0,
+      "fresh_request_only": true,
+      "validation": [
+        "must_be_non_negative",
+        "must_not_exceed_current_stream_head",
+        "must_not_exceed_through_sequence",
+        "must_not_be_combined_with_cursor"
+      ]
+    },
+    "high_water_semantics": "ThroughSequence defaults to the current stream head for a fresh request and remains fixed across opaque cursor continuations.",
+    "continuation_semantics": "Continuation requests use Cursor without resubmitting AfterSequence; events committed above the captured ThroughSequence are returned by a later fresh polling cycle.",
+    "backward_compatibility": "Omitting AfterSequence preserves the existing read behavior.",
     "default_page_size": 100,
     "maximum_page_size": 200,
     "maximum_export_events": 10000,

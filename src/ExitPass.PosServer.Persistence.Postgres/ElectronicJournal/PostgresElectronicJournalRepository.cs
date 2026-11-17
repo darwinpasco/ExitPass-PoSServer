@@ -14,7 +14,7 @@ public sealed class PostgresElectronicJournalRepository(NpgsqlDataSource dataSou
     {
         var validation = Validate(query);
         if (validation is not null) return validation;
-        if (!TryDecodeCursor(query.Cursor, out var afterSequence, out var cursorThrough))
+        if (!TryDecodeCursor(query.Cursor, out var cursorSequence, out var cursorThrough))
             return new(ElectronicJournalOutcome.MalformedCursor, SafeMessage: "The Electronic Journal cursor is malformed.");
         try
         {
@@ -24,6 +24,9 @@ public sealed class PostgresElectronicJournalRepository(NpgsqlDataSource dataSou
             var through = query.ThroughSequence ?? cursorThrough ?? stream.Value.LastSequence;
             if (through < 0 || through > stream.Value.LastSequence || (cursorThrough is not null && query.ThroughSequence is not null && cursorThrough != query.ThroughSequence))
                 return new(ElectronicJournalOutcome.MalformedCursor, SafeMessage: "The Electronic Journal cursor is inconsistent with the requested range.");
+            var afterSequence = query.Cursor is null ? query.AfterSequence ?? 0 : cursorSequence;
+            if (afterSequence > stream.Value.LastSequence || afterSequence > through)
+                return new(ElectronicJournalOutcome.InvalidRequest, SafeMessage: "The Electronic Journal after-sequence is outside the requested stream range.");
 
             var events = await ReadEventsAsync(connection, query, stream.Value.StreamId, afterSequence, through, query.PageSize + 1, cancellationToken).ConfigureAwait(false);
             var hasMore = events.Count > query.PageSize;
@@ -152,6 +155,9 @@ public sealed class PostgresElectronicJournalRepository(NpgsqlDataSource dataSou
         if (q.SitePosServerId == Guid.Empty || q.FiscalIdentityId == Guid.Empty || q.CurrencyCode.Length != 3 ||
             q.CurrencyCode.Any(ch => ch is < 'A' or > 'Z') || q.PageSize < 1 || q.PageSize > ElectronicJournalContract.MaximumExportEvents)
             return new(ElectronicJournalOutcome.InvalidRequest, SafeMessage: "The Electronic Journal query is invalid.");
+        if (q.AfterSequence < 0 || q.AfterSequence is not null && q.Cursor is not null ||
+            q.AfterSequence is not null && q.ThroughSequence is not null && q.AfterSequence > q.ThroughSequence)
+            return new(ElectronicJournalOutcome.InvalidRequest, SafeMessage: "The Electronic Journal after-sequence is invalid.");
         if (!ValidRange(q.EffectiveFrom, q.EffectiveTo) || !ValidRange(q.RecordedFrom, q.RecordedTo))
             return new(ElectronicJournalOutcome.RangeTooLarge, SafeMessage: "The Electronic Journal time range is invalid or exceeds 31 days.");
         return null;
@@ -163,7 +169,8 @@ public sealed class PostgresElectronicJournalRepository(NpgsqlDataSource dataSou
     private static bool HasIntegrityUnsupportedFilters(ElectronicJournalQuery q) =>
         q.FiscalReportingPeriodId is not null || q.FiscalDocumentReference is not null || q.FiscalDocumentNumber is not null ||
         q.ZReadingReference is not null || q.EventType is not null || q.EffectiveFrom is not null || q.EffectiveTo is not null ||
-        q.RecordedFrom is not null || q.RecordedTo is not null || q.CorrelationReference is not null || q.Cursor is not null;
+        q.RecordedFrom is not null || q.RecordedTo is not null || q.CorrelationReference is not null || q.Cursor is not null ||
+        q.AfterSequence is not null;
 
     private static async Task<(Guid StreamId, long LastSequence, string LastHash)?> ReadStreamAsync(
         NpgsqlConnection connection, ElectronicJournalQuery query, CancellationToken ct)
