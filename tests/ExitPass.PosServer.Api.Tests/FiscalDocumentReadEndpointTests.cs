@@ -17,7 +17,7 @@ public sealed class FiscalDocumentReadEndpointTests
         var document = ValidReadModel();
         var service = new FiscalDocumentReadService(new StubFiscalDocumentReader(document));
 
-        var response = await FiscalDocumentReadEndpoint.GetByIdAsync(document.FiscalDocumentId, service);
+        var response = await ReadAsync(document, service);
 
         Assert.True(response.Succeeded);
         Assert.Equal("found", response.Code);
@@ -56,7 +56,7 @@ public sealed class FiscalDocumentReadEndpointTests
         };
         var service = new FiscalDocumentReadService(new StubFiscalDocumentReader(document));
 
-        var response = await FiscalDocumentReadEndpoint.GetByIdAsync(document.FiscalDocumentId, service);
+        var response = await ReadAsync(document, service);
 
         Assert.True(response.Succeeded);
         Assert.NotNull(response.Document);
@@ -85,18 +85,18 @@ public sealed class FiscalDocumentReadEndpointTests
     }
 
     [Fact]
-    public async Task ExistingDocumentCanReturnNullFiscalNumberingFields()
+    public async Task ExistingDocumentCanReturnNullFiscalSequenceFields()
     {
         var document = ValidReadModel();
         var service = new FiscalDocumentReadService(new StubFiscalDocumentReader(document));
 
-        var response = await FiscalDocumentReadEndpoint.GetByIdAsync(document.FiscalDocumentId, service);
+        var response = await ReadAsync(document, service);
 
         Assert.True(response.Succeeded);
         Assert.NotNull(response.Document);
         Assert.Equal("not_assigned", response.FiscalNumberAssignmentState);
         Assert.Null(response.FiscalIssuanceEvidenceStatus);
-        Assert.Null(response.Document.FiscalIdentityId);
+        Assert.Equal(Guid.Parse("eeeeeeee-eeee-eeee-eeee-eeeeeeeeeeee"), response.Document.FiscalIdentityId);
         Assert.Null(response.Document.FiscalSequencePolicyId);
         Assert.Null(response.Document.FiscalSequenceValue);
         Assert.Null(response.Document.FiscalDocumentNumber);
@@ -119,7 +119,7 @@ public sealed class FiscalDocumentReadEndpointTests
         var documentId = Guid.Parse("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa");
         var service = new FiscalDocumentReadService(new StubFiscalDocumentReader(null));
 
-        var response = await FiscalDocumentReadEndpoint.GetByIdAsync(documentId, service);
+        var response = await ReadAsync(documentId, service);
 
         Assert.False(response.Succeeded);
         Assert.Equal("fiscal_document_not_found", response.Code);
@@ -133,7 +133,7 @@ public sealed class FiscalDocumentReadEndpointTests
     {
         var service = new FiscalDocumentReadService(new PersistenceNotConfiguredFiscalDocumentReader());
 
-        var response = await FiscalDocumentReadEndpoint.GetByIdAsync(Guid.NewGuid(), service);
+        var response = await ReadAsync(Guid.NewGuid(), service);
 
         Assert.False(response.Succeeded);
         Assert.Equal("persistence_not_configured", response.Code);
@@ -145,7 +145,7 @@ public sealed class FiscalDocumentReadEndpointTests
     {
         var service = new FiscalDocumentReadService(new InvalidPersistenceConfigurationFiscalDocumentReader());
 
-        var response = await FiscalDocumentReadEndpoint.GetByIdAsync(Guid.NewGuid(), service);
+        var response = await ReadAsync(Guid.NewGuid(), service);
 
         Assert.False(response.Succeeded);
         Assert.Equal("invalid_persistence_configuration", response.Code);
@@ -159,7 +159,7 @@ public sealed class FiscalDocumentReadEndpointTests
     {
         var service = new FiscalDocumentReadService(new FailingFiscalDocumentReader());
 
-        var response = await FiscalDocumentReadEndpoint.GetByIdAsync(Guid.NewGuid(), service);
+        var response = await ReadAsync(Guid.NewGuid(), service);
 
         Assert.False(response.Succeeded);
         Assert.Equal("persistence_read_failed", response.Code);
@@ -259,7 +259,7 @@ public sealed class FiscalDocumentReadEndpointTests
             Guid.Parse("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"),
             Guid.Parse("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb"),
             null,
-            null,
+            Guid.Parse("eeeeeeee-eeee-eeee-eeee-eeeeeeeeeeee"),
             Guid.Parse("cccccccc-cccc-cccc-cccc-cccccccccccc"),
             null,
             Guid.Parse("dddddddd-dddd-dddd-dddd-dddddddddddd"),
@@ -298,6 +298,28 @@ public sealed class FiscalDocumentReadEndpointTests
             [],
             [],
             []);
+
+    private static Task<GetFiscalDocumentResponse> ReadAsync(
+        FiscalDocumentReadModel document,
+        FiscalDocumentReadService service) =>
+        FiscalDocumentReadEndpoint.GetByIdAsync(
+            document.FiscalDocumentId,
+            service,
+            FiscalDocumentReadAuthorizationTestSupport.AuthorizedContext(
+                document.SitePosServerId,
+                document.FiscalIdentityId!.Value),
+            FiscalDocumentReadAuthorizationTestSupport.DevelopmentHost);
+
+    private static Task<GetFiscalDocumentResponse> ReadAsync(
+        Guid fiscalDocumentId,
+        FiscalDocumentReadService service) =>
+        FiscalDocumentReadEndpoint.GetByIdAsync(
+            fiscalDocumentId,
+            service,
+            FiscalDocumentReadAuthorizationTestSupport.AuthorizedContext(
+                Guid.Parse("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb"),
+                Guid.Parse("eeeeeeee-eeee-eeee-eeee-eeeeeeeeeeee")),
+            FiscalDocumentReadAuthorizationTestSupport.DevelopmentHost);
 
     private sealed class StubFiscalDocumentReader : IFiscalDocumentReader
     {

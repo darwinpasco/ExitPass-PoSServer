@@ -16,11 +16,22 @@ public static class DigitalSalesInvoicePresentationEndpoint
         Guid fiscalDocumentId,
         DigitalSalesInvoiceRenderService renderService,
         DigitalSalesInvoicePresentationAdapter presentationAdapter,
+        HttpContext context,
+        IHostEnvironment environment,
         CancellationToken cancellationToken = default)
     {
         try
         {
             var renderResult = await renderService.RenderAsync(fiscalDocumentId, cancellationToken).ConfigureAwait(false);
+            if (renderResult.Render is { } render &&
+                !FiscalDocumentAuthorization.IsReadAllowed(
+                    context.User,
+                    environment,
+                    render.SitePosServerId,
+                    render.FiscalIdentityId))
+            {
+                renderResult = DigitalSalesInvoiceRenderResult.NotFound(fiscalDocumentId);
+            }
             return MapResult(renderResult, presentationAdapter, fiscalDocumentId);
         }
         catch (FiscalDocumentPersistenceNotConfiguredException ex)
