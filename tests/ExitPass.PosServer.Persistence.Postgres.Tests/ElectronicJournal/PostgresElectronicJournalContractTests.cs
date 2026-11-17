@@ -6,6 +6,18 @@ namespace ExitPass.PosServer.Persistence.Postgres.Tests.ElectronicJournal;
 public sealed class PostgresElectronicJournalContractTests
 {
     [Fact]
+    public void ReaderAppliesAfterSequenceThroughExistingExclusiveKeysetPredicate()
+    {
+        var source = File.ReadAllText(Find("PostgresElectronicJournalRepository.cs"));
+
+        Assert.Contains("query.Cursor is null ? query.AfterSequence ?? 0 : cursorSequence", source, StringComparison.Ordinal);
+        Assert.Contains("e.stream_sequence_value>@after AND e.stream_sequence_value<=@through", source, StringComparison.Ordinal);
+        Assert.Contains("ORDER BY e.stream_sequence_value LIMIT @limit", source, StringComparison.Ordinal);
+        Assert.Contains("query.AfterSequence", source, StringComparison.Ordinal);
+        Assert.DoesNotContain("UPDATE pos.electronic_journal_records", source, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
     public void WriterUsesStreamRowLockExactlyOnceIdentityAndAtomicTransactionInputs()
     {
         var source = File.ReadAllText(Find("PostgresElectronicJournalWriter.cs"));

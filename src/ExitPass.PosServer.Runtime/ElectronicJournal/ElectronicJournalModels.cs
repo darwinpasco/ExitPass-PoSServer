@@ -1,3 +1,5 @@
+using System.Text.Json.Serialization;
+
 namespace ExitPass.PosServer.Runtime.ElectronicJournal;
 
 public static class ElectronicJournalContract
@@ -88,7 +90,8 @@ public sealed record ElectronicJournalQuery(
     string? CorrelationReference = null,
     int PageSize = ElectronicJournalContract.DefaultPageSize,
     string? Cursor = null,
-    long? ThroughSequence = null);
+    long? ThroughSequence = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] long? AfterSequence = null);
 
 public sealed record ElectronicJournalPage(
     IReadOnlyList<ElectronicJournalEvent> Events,

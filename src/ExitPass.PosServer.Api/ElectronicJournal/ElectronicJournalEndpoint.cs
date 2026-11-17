@@ -23,6 +23,7 @@ public sealed class ElectronicJournalFilterRequest
     public int? PageSize { get; init; }
     public string? Cursor { get; init; }
     public long? ThroughSequence { get; init; }
+    public long? AfterSequence { get; init; }
 }
 
 public sealed record ElectronicJournalErrorResponse(bool Succeeded, string Code, string CorrelationId, string SupportReference, string Message);
@@ -118,9 +119,9 @@ public static class ElectronicJournalEndpoint
         IHostEnvironment environment,
         CancellationToken cancellationToken)
     {
-        var preflight = Preflight(request, context, environment, ElectronicJournalContract.MaximumPageSize);
+        var preflight = Preflight(request, context, environment, ElectronicJournalContract.MaximumPageSize, allowAfterSequence: true);
         if (preflight.Error is not null) return preflight.Error;
-        var query = ToQuery(request);
+        var query = ToQuery(request, includeAfterSequence: true);
         var result = await service.ReadAsync(query, cancellationToken).ConfigureAwait(false);
         var support = Support();
         if (result.Page is null) return MapFailure(context, result.Outcome, result.SafeMessage, preflight.Correlation!, support);
@@ -220,7 +221,8 @@ public static class ElectronicJournalEndpoint
     }
 
     private static (string? Correlation, string? Actor, IResult? Error) Preflight(
-        ElectronicJournalFilterRequest request, HttpContext context, IHostEnvironment environment, int maxPage)
+        ElectronicJournalFilterRequest request, HttpContext context, IHostEnvironment environment, int maxPage,
+        bool allowAfterSequence = false)
     {
         var correlation = Correlation(context);
         if (correlation is null) return (null, null, Error(context, "missing_correlation_id", "A single safe X-Correlation-Id header is required.", "unavailable", Support(), 400));
@@ -233,6 +235,9 @@ public static class ElectronicJournalEndpoint
             return (correlation, null, Hidden(context, correlation));
         if (pageSize < 1 || pageSize > maxPage)
             return (correlation, null, Error(context, "electronic_journal_page_size_invalid", "The Electronic Journal page size is outside the governed limit.", correlation, Support(), 400));
+        if (request.AfterSequence is not null && (!allowAfterSequence || request.AfterSequence < 0 || request.Cursor is not null ||
+            request.ThroughSequence is not null && request.AfterSequence > request.ThroughSequence))
+            return (correlation, null, Error(context, "electronic_journal_request_invalid", "The Electronic Journal request is invalid.", correlation, Support(), 400));
         if (new[] { request.FiscalDocumentReference, request.FiscalDocumentNumber, request.ZReadingReference, request.EventType, request.CorrelationReference }
             .Any(value => value?.Length > 200 || value?.Contains('\r') == true || value?.Contains('\n') == true))
             return (correlation, null, Error(context, "electronic_journal_filter_invalid", "An Electronic Journal filter is invalid.", correlation, Support(), 400));
@@ -242,11 +247,12 @@ public static class ElectronicJournalEndpoint
         return (correlation, context.User.FindFirstValue(ClaimTypes.NameIdentifier) ?? "unavailable", null);
     }
 
-    private static ElectronicJournalQuery ToQuery(ElectronicJournalFilterRequest r) => new(
+    private static ElectronicJournalQuery ToQuery(ElectronicJournalFilterRequest r, bool includeAfterSequence = false) => new(
         r.SitePosServerId, r.FiscalIdentityId, r.CurrencyCode!.Trim().ToUpperInvariant(), r.FiscalReportingPeriodId,
         r.FiscalDocumentReference, r.FiscalDocumentNumber, r.ZReadingReference, r.EventType,
         r.EffectiveFrom, r.EffectiveTo, r.RecordedFrom, r.RecordedTo, r.CorrelationReference,
-        r.PageSize ?? ElectronicJournalContract.DefaultPageSize, r.Cursor, r.ThroughSequence);
+        r.PageSize ?? ElectronicJournalContract.DefaultPageSize, r.Cursor, r.ThroughSequence,
+        includeAfterSequence ? r.AfterSequence : null);
 
     private static IResult MapFailure(HttpContext c, ElectronicJournalOutcome outcome, string? message, string correlation, string support) => outcome switch
     {

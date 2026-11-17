@@ -82,6 +82,53 @@ public sealed class ElectronicJournalApiTests
         }, service, TestFiscalReportArtifacts.Service(), context, new Host(Environments.Production), default);
 
         Assert.Equal(ElectronicJournalContract.DefaultPageSize, repository.LastQuery?.PageSize);
+        Assert.Null(repository.LastQuery?.AfterSequence);
+    }
+
+    [Fact]
+    public async Task EventsReadForwardsAfterSequenceWithoutChangingOtherQueryDefaults()
+    {
+        var repository = new FakeRepository();
+        var service = new ElectronicJournalService(repository, new ElectronicJournalExportRenderer());
+        var context = Context(Principal(ElectronicJournalAuthorization.ReadPermission, Site.ToString("D"), Identity.ToString("D"), "PHP"));
+        await ElectronicJournalEndpoint.ReadAsync(new ElectronicJournalFilterRequest
+        {
+            SitePosServerId = Site, FiscalIdentityId = Identity, CurrencyCode = "PHP", AfterSequence = 95
+        }, service, TestFiscalReportArtifacts.Service(), context, new Host(Environments.Production), default);
+
+        Assert.Equal(95, repository.LastQuery?.AfterSequence);
+        Assert.Null(repository.LastQuery?.ThroughSequence);
+        Assert.Null(repository.LastQuery?.Cursor);
+    }
+
+    [Theory]
+    [InlineData(-1L, null, null)]
+    [InlineData(11L, null, 10L)]
+    [InlineData(10L, "opaque-cursor", null)]
+    public async Task InvalidAfterSequenceCombinationsAreRejectedBeforeRepositoryRead(
+        long afterSequence, string? cursor, long? throughSequence)
+    {
+        var repository = new FakeRepository();
+        var service = new ElectronicJournalService(repository, new ElectronicJournalExportRenderer());
+        var context = Context(Principal(ElectronicJournalAuthorization.ReadPermission, Site.ToString("D"), Identity.ToString("D"), "PHP"));
+        var result = await ElectronicJournalEndpoint.ReadAsync(new ElectronicJournalFilterRequest
+        {
+            SitePosServerId = Site, FiscalIdentityId = Identity, CurrencyCode = "PHP",
+            AfterSequence = afterSequence, Cursor = cursor, ThroughSequence = throughSequence
+        }, service, TestFiscalReportArtifacts.Service(), context, new Host(Environments.Production), default);
+
+        Assert.NotNull(result);
+        Assert.Equal(0, repository.ReadCount);
+    }
+
+    [Fact]
+    public void OmittedAfterSequencePreservesSerializedQueryShape()
+    {
+        var existing = new ElectronicJournalQuery(Site, Identity, "PHP");
+        var incremental = existing with { AfterSequence = 95 };
+
+        Assert.DoesNotContain("AfterSequence", JsonSerializer.Serialize(existing), StringComparison.Ordinal);
+        Assert.Contains("\"AfterSequence\":95", JsonSerializer.Serialize(incremental), StringComparison.Ordinal);
     }
 
     [Fact]
@@ -110,6 +157,12 @@ public sealed class ElectronicJournalApiTests
             root.GetProperty("supported_semantic_hash_versions").EnumerateArray().Select(value => value.GetString()));
         Assert.Equal(ElectronicJournalContract.MaximumPageSize, root.GetProperty("pagination").GetProperty("maximum_page_size").GetInt32());
         Assert.Equal(ElectronicJournalContract.MaximumExportEvents, root.GetProperty("pagination").GetProperty("maximum_export_events").GetInt32());
+        Assert.Contains(root.GetProperty("read_filters").EnumerateArray(), value => value.GetString() == "after_sequence");
+        var afterSequence = root.GetProperty("pagination").GetProperty("after_sequence");
+        Assert.Equal("int64", afterSequence.GetProperty("type").GetString());
+        Assert.Equal("exclusive_lower_bound", afterSequence.GetProperty("semantics").GetString());
+        Assert.Equal(0, afterSequence.GetProperty("default_when_omitted").GetInt64());
+        Assert.Contains(afterSequence.GetProperty("validation").EnumerateArray(), value => value.GetString() == "must_not_be_combined_with_cursor");
         Assert.Contains(root.GetProperty("routes").EnumerateArray(), route =>
             route.GetProperty("path").GetString() == "/v1/electronic-journal/events" &&
             route.GetProperty("permission").GetString() == ElectronicJournalAuthorization.ReadPermission);

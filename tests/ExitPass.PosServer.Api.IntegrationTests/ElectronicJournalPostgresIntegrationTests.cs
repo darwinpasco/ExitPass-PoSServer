@@ -29,6 +29,8 @@ public sealed class ElectronicJournalPostgresIntegrationTests
     private static readonly Guid ReportingPeriodId = Guid.Parse("73000000-0000-4000-8000-000000000010");
     private static readonly Guid SequencePolicyId = Guid.Parse("73000000-0000-4000-8000-000000000003");
     private static readonly DateTimeOffset ObservedAt = DateTimeOffset.Parse("2026-08-03T12:00:00Z");
+    private static readonly string ArtifactRoot = Path.Combine(
+        Path.GetTempPath(), $"exitpass-dep01-electronic-journal-artifacts-{Guid.NewGuid():N}");
 
     [Fact]
     public async Task CanonicalJournalIsAtomicOrderedReplaySafeDeterministicAndTamperEvident()
@@ -49,7 +51,8 @@ public sealed class ElectronicJournalPostgresIntegrationTests
         {
             var firstRequest = new GenerateFiscalXReadingRequest("ej-proof-x-001", SiteId, IdentityId, ObservedAt);
             using var first = await xClient.PostAsJsonAsync("/v1/fiscal-reports/x-readings/", firstRequest);
-            Assert.Equal(HttpStatusCode.Created, first.StatusCode);
+            Assert.True(first.StatusCode == HttpStatusCode.Created,
+                $"Expected the fixture X Reading to be created, but received {first.StatusCode}: {await first.Content.ReadAsStringAsync()}");
             using var replay = await xClient.PostAsJsonAsync("/v1/fiscal-reports/x-readings/", firstRequest);
             Assert.Equal(HttpStatusCode.OK, replay.StatusCode);
             Assert.Equal(1, await CanonicalEventCountAsync(connectionString));
@@ -95,6 +98,14 @@ public sealed class ElectronicJournalPostgresIntegrationTests
             Assert.NotNull(pageOne.Page.NextCursor);
             Assert.Equal(13, pageOne.Page.ThroughSequence);
 
+            using var incrementalPageOneResponse = await readClient.GetAsync(Query(pageSize: 2, after: 10));
+            Assert.Equal(HttpStatusCode.OK, incrementalPageOneResponse.StatusCode);
+            var incrementalPageOne = await incrementalPageOneResponse.Content.ReadFromJsonAsync<ElectronicJournalReadResponse>();
+            Assert.NotNull(incrementalPageOne);
+            Assert.Equal(new long[] { 11, 12 }, incrementalPageOne.Page.Events.Select(item => item.StreamSequence));
+            Assert.Equal(13, incrementalPageOne.Page.ThroughSequence);
+            Assert.NotNull(incrementalPageOne.Page.NextCursor);
+
             using (var later = await xClient.PostAsJsonAsync("/v1/fiscal-reports/x-readings/",
                        new GenerateFiscalXReadingRequest("ej-proof-after-cursor", SiteId, IdentityId, ObservedAt.AddMinutes(10))))
                 Assert.Equal(HttpStatusCode.Created, later.StatusCode);
@@ -103,6 +114,41 @@ public sealed class ElectronicJournalPostgresIntegrationTests
             Assert.Equal(HttpStatusCode.OK, pageTwoResponse.StatusCode);
             Assert.Equal(11, pageTwo?.Page.Events.Count);
             Assert.All(pageTwo!.Page.Events, item => Assert.True(item.StreamSequence <= 13));
+
+            using var incrementalPageTwoResponse = await readClient.GetAsync(Query(
+                pageSize: 2, cursor: incrementalPageOne.Page.NextCursor, through: incrementalPageOne.Page.ThroughSequence));
+            Assert.Equal(HttpStatusCode.OK, incrementalPageTwoResponse.StatusCode);
+            var incrementalPageTwo = await incrementalPageTwoResponse.Content.ReadFromJsonAsync<ElectronicJournalReadResponse>();
+            Assert.NotNull(incrementalPageTwo);
+            Assert.Equal(new long[] { 13 }, incrementalPageTwo.Page.Events.Select(item => item.StreamSequence));
+            Assert.Equal(13, incrementalPageTwo.Page.ThroughSequence);
+            Assert.Null(incrementalPageTwo.Page.NextCursor);
+
+            using var nextCycleResponse = await readClient.GetAsync(Query(after: 13));
+            Assert.Equal(HttpStatusCode.OK, nextCycleResponse.StatusCode);
+            var nextCycle = await nextCycleResponse.Content.ReadFromJsonAsync<ElectronicJournalReadResponse>();
+            Assert.NotNull(nextCycle);
+            Assert.Equal(new long[] { 14 }, nextCycle.Page.Events.Select(item => item.StreamSequence));
+            Assert.Equal(14, nextCycle.Page.ThroughSequence);
+
+            using var atHeadResponse = await readClient.GetAsync(Query(after: 14));
+            Assert.Equal(HttpStatusCode.OK, atHeadResponse.StatusCode);
+            var atHead = await atHeadResponse.Content.ReadFromJsonAsync<ElectronicJournalReadResponse>();
+            Assert.NotNull(atHead);
+            Assert.Empty(atHead.Page.Events);
+            Assert.Equal(14, atHead.Page.ThroughSequence);
+            Assert.Null(atHead.Page.NextCursor);
+
+            using var negativeAfter = await readClient.GetAsync(Query(after: -1));
+            Assert.Equal(HttpStatusCode.BadRequest, negativeAfter.StatusCode);
+            using var afterBeyondHead = await readClient.GetAsync(Query(after: 15));
+            Assert.Equal(HttpStatusCode.BadRequest, afterBeyondHead.StatusCode);
+            using var afterBeyondThrough = await readClient.GetAsync(Query(after: 11, through: 10));
+            Assert.Equal(HttpStatusCode.BadRequest, afterBeyondThrough.StatusCode);
+            using var cursorAndAfter = await readClient.GetAsync(Query(cursor: pageOne.Page.NextCursor, after: 1));
+            Assert.Equal(HttpStatusCode.BadRequest, cursorAndAfter.StatusCode);
+            Assert.True(await ScalarAsync<long>(connectionString,
+                "SELECT count(*) FROM pos.electronic_journal_access_audit WHERE action_code_id=(SELECT controlled_code_id FROM pos.controlled_codes WHERE code_key='read')") >= 6);
 
             var beforeReadOnly = await FiscalManifestAsync(connectionString);
             var jsonBytes = await ExportAsync(exportClient, "json");
@@ -141,6 +187,7 @@ public sealed class ElectronicJournalPostgresIntegrationTests
             app = await StartApiAsync(connectionString);
             exportClient = CreateClient(app, ProductionKey, ElectronicJournalAuthorization.ExportPermission);
             reprintClient = CreateClient(app, ProductionKey, FiscalDocumentReprintAuthorization.RecordPermission);
+            readClient = CreateClient(app, ProductionKey, ElectronicJournalAuthorization.ReadPermission);
             var restartedJsonBytes = await ExportAsync(exportClient, "json");
             Assert.Equal(jsonBytes, restartedJsonBytes);
             Assert.Equal(reprintJson, await ExportReprintsAsync(exportClient, "json"));
@@ -150,8 +197,21 @@ public sealed class ElectronicJournalPostgresIntegrationTests
             Assert.Equal(7, await CanonicalReprintCountAsync(connectionString));
             Assert.Equal(14, await CanonicalEventCountAsync(connectionString));
 
+            using var restartedIncrementalResponse = await readClient.GetAsync(Query(after: 13));
+            Assert.Equal(HttpStatusCode.OK, restartedIncrementalResponse.StatusCode);
+            var restartedIncremental = await restartedIncrementalResponse.Content.ReadFromJsonAsync<ElectronicJournalReadResponse>();
+            Assert.Equal(new long[] { 14 }, restartedIncremental?.Page.Events.Select(item => item.StreamSequence));
+
             integrityClient = CreateClient(app, ProductionKey, ElectronicJournalAuthorization.IntegrityPermission);
             await ProveDatabaseImmutabilityAndTamperDetectionAsync(connectionString, integrityClient);
+
+            await AppendForCurrencyAsync(connectionString, pageOne.Page.Events[0], "USD");
+            using var independentStreamResponse = await readClient.GetAsync(Query(after: 0, currency: "USD"));
+            Assert.Equal(HttpStatusCode.OK, independentStreamResponse.StatusCode);
+            var independentStream = await independentStreamResponse.Content.ReadFromJsonAsync<ElectronicJournalReadResponse>();
+            Assert.NotNull(independentStream);
+            Assert.Equal(new long[] { 1 }, independentStream.Page.Events.Select(item => item.StreamSequence));
+            Assert.Equal(1, independentStream.Page.ThroughSequence);
         }
         finally
         {
@@ -720,10 +780,31 @@ public sealed class ElectronicJournalPostgresIntegrationTests
         return eventReference;
     }
 
-    private static string Query(int pageSize = 100, string? cursor = null, long? through = null) =>
-        $"/v1/electronic-journal/events?SitePosServerId={SiteId:D}&FiscalIdentityId={IdentityId:D}&CurrencyCode=PHP&PageSize={pageSize}" +
+    private static async Task AppendForCurrencyAsync(
+        string connectionString, ElectronicJournalEvent source, string currencyCode)
+    {
+        var request = new ElectronicJournalAppendRequest(
+            source.SitePosServerId, source.FiscalIdentityId, currencyCode, source.FiscalReportingPeriodId,
+            source.EventType, $"dep01-{currencyCode.ToLowerInvariant()}-{source.SourceTransitionReference}",
+            source.SourceTransitionVersion, source.EffectiveAt, source.ActorReference, source.ServiceIdentityReference,
+            $"dep01-{currencyCode.ToLowerInvariant()}-correlation", source.Facts, source.FiscalDocumentId,
+            source.FiscalReportRequestId, source.XZReportId, source.BirSalesSummaryReportId,
+            source.FiscalSequencePolicyId, source.BusinessDayDate, null, source.ReprintRequestId,
+            source.PrintableSalesInvoiceText);
+        await using var connection = new NpgsqlConnection(connectionString);
+        await connection.OpenAsync();
+        await using var transaction = await connection.BeginTransactionAsync();
+        await PostgresElectronicJournalWriter.AppendAsync(connection, transaction, request, default);
+        await transaction.CommitAsync();
+    }
+
+    private static string Query(
+        int pageSize = 100, string? cursor = null, long? through = null, long? after = null,
+        string currency = "PHP") =>
+        $"/v1/electronic-journal/events?SitePosServerId={SiteId:D}&FiscalIdentityId={IdentityId:D}&CurrencyCode={currency}&PageSize={pageSize}" +
         (cursor is null ? string.Empty : $"&Cursor={Uri.EscapeDataString(cursor)}") +
-        (through is null ? string.Empty : $"&ThroughSequence={through}");
+        (through is null ? string.Empty : $"&ThroughSequence={through}") +
+        (after is null ? string.Empty : $"&AfterSequence={after}");
 
     private static string QueryExport(string format) =>
         $"/v1/electronic-journal/exports/{format}?SitePosServerId={SiteId:D}&FiscalIdentityId={IdentityId:D}&CurrencyCode=PHP&PageSize=100";
@@ -735,12 +816,14 @@ public sealed class ElectronicJournalPostgresIntegrationTests
         var values = new Dictionary<string, string?>
         {
             ["ConnectionStrings:PosServer"] = connectionString,
+            ["PosServer:FiscalReports:ArtifactRoot"] = ArtifactRoot,
             ["PosServer:Admin:ApiKeys:0:Principal"] = "ej-production-service",
             ["PosServer:Admin:ApiKeys:0:Key"] = ProductionKey,
             ["PosServer:Admin:ApiKeys:0:AuthorityClass"] = "PRODUCTION",
             ["PosServer:Admin:ApiKeys:0:SitePosServerIds:0"] = SiteId.ToString("D"),
             ["PosServer:Admin:ApiKeys:0:FiscalIdentityIds:0"] = IdentityId.ToString("D"),
             ["PosServer:Admin:ApiKeys:0:CurrencyCodes:0"] = "PHP",
+            ["PosServer:Admin:ApiKeys:0:CurrencyCodes:1"] = "USD",
             ["PosServer:Admin:ApiKeys:0:Permissions:0"] = FiscalXReadingAuthorization.GeneratePermission,
             ["PosServer:Admin:ApiKeys:0:Permissions:1"] = ElectronicJournalAuthorization.ReadPermission,
             ["PosServer:Admin:ApiKeys:0:Permissions:2"] = ElectronicJournalAuthorization.ExportPermission,
